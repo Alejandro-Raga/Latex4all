@@ -8,6 +8,7 @@ import {
   highlightActiveLine,
   highlightActiveLineGutter,
   scrollPastEnd,
+  tooltips,
 } from "@codemirror/view";
 import {
   defaultKeymap,
@@ -35,8 +36,15 @@ import {
   acceptChunk,
   rejectChunk,
 } from "@codemirror/merge";
-import { latex, latexLinter } from "codemirror-lang-latex";
+import {
+  latex,
+  latexLinter,
+  latexCompletionSource as builtinLatexCompletionSource,
+  completionKeymap,
+} from "codemirror-lang-latex";
+import { autocompletion } from "@codemirror/autocomplete";
 import { bibtex } from "./lang-bibtex";
+import { latexCompletionSource } from "./latex-completion";
 import {
   linter,
   lintGutter,
@@ -639,7 +647,17 @@ export function LatexEditor() {
           ...defaultKeymap,
           ...historyKeymap,
         ]),
-        activeFile?.type === "bib" ? bibtex() : latex({ enableLinting: false }),
+        activeFile?.type === "bib"
+          ? bibtex()
+          : latex({ enableLinting: false, enableAutocomplete: false }),
+        tooltips({ parent: document.body }),
+        autocompletion({
+          override: [builtinLatexCompletionSource(true), latexCompletionSource],
+          defaultKeymap: true,
+          activateOnTyping: true,
+          icons: true,
+        }),
+        keymap.of(completionKeymap),
         ...(activeFile?.type === "tex"
           ? [
               linter((view) => {

@@ -127,7 +127,7 @@ export function TemplatePreview() {
       setProjectName("");
       setProjectNameError("");
       setRefFilesOpen(false);
-      setLocationOpen(false);
+      setLocationOpen(true);
     }
   }, [previewTemplateId]);
 

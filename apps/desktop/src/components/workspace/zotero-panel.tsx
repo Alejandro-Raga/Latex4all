@@ -12,9 +12,15 @@ import {
   LibraryIcon,
   CheckIcon,
   XIcon,
+  ChevronRightIcon,
+  ChevronDownIcon,
 } from "lucide-react";
 import { useZoteroStore, type CollectionSyncInfo } from "@/stores/zotero-store";
 import { useDocumentStore } from "@/stores/document-store";
+import {
+  buildCollectionTree,
+  type ZoteroCollectionNode,
+} from "@/lib/zotero-collection-tree";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,13 +65,23 @@ export function ZoteroPanel() {
   const removeCollection = useZoteroStore((s) => s.removeCollection);
 
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const { apiKey } = useZoteroStore.getState();
     if (apiKey) revalidate();
   }, [revalidate]);
 
-  const topCollections = collections.filter((c) => c.parentKey === false);
+  const toggleExpanded = (key: string) => {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const collectionTree = buildCollectionTree(collections);
 
   return (
     <div className="flex h-full flex-col">
@@ -111,7 +127,7 @@ export function ZoteroPanel() {
               disabled={!!isSyncing}
             />
 
-            {topCollections.length > 0 && (
+            {collectionTree.length > 0 && (
               <div className="mx-2 my-0.5 border-sidebar-border border-t" />
             )}
 
@@ -121,19 +137,18 @@ export function ZoteroPanel() {
                 Loading...
               </div>
             ) : (
-              topCollections.map((col) => (
-                <CollectionRow
-                  key={col.key}
-                  collectionKey={col.key}
-                  name={col.name}
-                  icon={<FolderIcon className="size-3.5" />}
-                  itemCount={col.itemCount}
-                  syncInfo={syncedCollections[col.key]}
-                  isSyncing={isSyncing === col.key}
-                  onImport={() => importCollectionToBib(col.key, col.name)}
-                  onSync={() => syncCollectionBib(col.key)}
-                  onRemove={() => removeCollection(col.key)}
+              collectionTree.map((node) => (
+                <CollectionTree
+                  key={node.key}
+                  node={node}
+                  expandedKeys={expandedKeys}
+                  onToggleExpand={toggleExpanded}
+                  syncedCollections={syncedCollections}
+                  isSyncing={isSyncing}
                   disabled={!!isSyncing}
+                  onImport={importCollectionToBib}
+                  onSync={syncCollectionBib}
+                  onRemove={removeCollection}
                 />
               ))
             )}
@@ -264,6 +279,70 @@ function NotConnectedView({
   );
 }
 
+// ─── Collection Tree (recursive) ───
+
+function CollectionTree({
+  node,
+  expandedKeys,
+  onToggleExpand,
+  syncedCollections,
+  isSyncing,
+  disabled,
+  onImport,
+  onSync,
+  onRemove,
+}: {
+  node: ZoteroCollectionNode;
+  expandedKeys: Set<string>;
+  onToggleExpand: (key: string) => void;
+  syncedCollections: Record<string, CollectionSyncInfo>;
+  isSyncing: string | null;
+  disabled: boolean;
+  onImport: (collectionKey: string, name: string) => void;
+  onSync: (collectionKey: string) => void;
+  onRemove: (collectionKey: string) => void;
+}) {
+  const hasChildren = node.children.length > 0;
+  const expanded = expandedKeys.has(node.key);
+
+  return (
+    <>
+      <CollectionRow
+        collectionKey={node.key}
+        name={node.name}
+        icon={<FolderIcon className="size-3.5" />}
+        itemCount={node.totalItemCount}
+        depth={node.depth}
+        hasChildren={hasChildren}
+        expanded={expanded}
+        onToggleExpand={() => onToggleExpand(node.key)}
+        syncInfo={syncedCollections[node.key]}
+        isSyncing={isSyncing === node.key}
+        onImport={() => onImport(node.key, node.name)}
+        onSync={() => onSync(node.key)}
+        onRemove={() => onRemove(node.key)}
+        disabled={disabled}
+      />
+      {hasChildren &&
+        expanded &&
+        node.children.map((child) => (
+          <CollectionTree
+            key={child.key}
+            node={child}
+            expandedKeys={expandedKeys}
+            onToggleExpand={onToggleExpand}
+            syncedCollections={syncedCollections}
+            isSyncing={isSyncing}
+            disabled={disabled}
+            onImport={onImport}
+            onSync={onSync}
+            onRemove={onRemove}
+          />
+        ))}
+    </>
+  );
+}
+
 // ─── Collection Row ───
 
 function CollectionRow({
@@ -271,6 +350,10 @@ function CollectionRow({
   name,
   icon,
   itemCount,
+  depth = 0,
+  hasChildren = false,
+  expanded = false,
+  onToggleExpand,
   syncInfo,
   isSyncing,
   onImport,
@@ -282,6 +365,10 @@ function CollectionRow({
   name: string;
   icon: React.ReactNode;
   itemCount?: number;
+  depth?: number;
+  hasChildren?: boolean;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
   syncInfo?: CollectionSyncInfo;
   isSyncing: boolean;
   onImport: () => void;
@@ -292,7 +379,25 @@ function CollectionRow({
   const isSynced = !!syncInfo;
 
   return (
-    <div className="group flex items-center gap-1.5 px-2 py-0.5">
+    <div
+      className="group flex items-center gap-1.5 px-2 py-0.5"
+      style={depth > 0 ? { paddingLeft: `${8 + depth * 14}px` } : undefined}
+    >
+      {hasChildren ? (
+        <button
+          className="flex shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
+          onClick={onToggleExpand}
+          title={expanded ? "Collapse" : "Expand"}
+        >
+          {expanded ? (
+            <ChevronDownIcon className="size-3" />
+          ) : (
+            <ChevronRightIcon className="size-3" />
+          )}
+        </button>
+      ) : (
+        depth > 0 && <span className="w-3 shrink-0" />
+      )}
       <span className="shrink-0 text-muted-foreground">{icon}</span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">

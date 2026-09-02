@@ -10,6 +10,7 @@ import {
   cancelOAuth,
   type ZoteroCollection,
 } from "@/lib/zotero-api";
+import { collectSubtreeKeys } from "@/lib/zotero-collection-tree";
 import { useDocumentStore } from "@/stores/document-store";
 import { createFileOnDisk } from "@/lib/tauri/fs";
 import { createLogger } from "@/lib/debug/logger";
@@ -203,7 +204,7 @@ export const useZoteroStore = create<ZoteroState>()(
       },
 
       importCollectionToBib: async (collectionKey, name) => {
-        const { apiKey, userID } = get();
+        const { apiKey, userID, collections } = get();
         if (!apiKey || !userID) return;
 
         const docStore = useDocumentStore.getState();
@@ -214,10 +215,15 @@ export const useZoteroStore = create<ZoteroState>()(
         set({ isSyncing: sk, syncProgress: null, error: null });
 
         try {
+          // Pull the collection plus every subcollection nested under it,
+          // so items filed only in subfolders aren't silently skipped.
+          const collectionKeys = collectionKey
+            ? collectSubtreeKeys(collections, collectionKey)
+            : null;
           const result = await importCollection(
             apiKey,
             userID,
-            collectionKey,
+            collectionKeys,
             (loaded, total) => {
               set({ syncProgress: { loaded, total } });
             },
@@ -276,7 +282,7 @@ export const useZoteroStore = create<ZoteroState>()(
       },
 
       syncCollectionBib: async (collectionKey) => {
-        const { apiKey, userID, syncedCollections } = get();
+        const { apiKey, userID, syncedCollections, collections } = get();
         if (!apiKey || !userID) return;
 
         const docStore = useDocumentStore.getState();
@@ -296,10 +302,13 @@ export const useZoteroStore = create<ZoteroState>()(
         set({ isSyncing: sk, syncProgress: null, error: null });
 
         try {
+          const collectionKeys = collectionKey
+            ? collectSubtreeKeys(collections, collectionKey)
+            : null;
           const result = await syncCollection(
             apiKey,
             userID,
-            collectionKey,
+            collectionKeys,
             syncInfo.libraryVersion,
             (loaded, total) => {
               set({ syncProgress: { loaded, total } });

@@ -100,86 +100,141 @@ export async function fetchCollections(
   apiKey: string,
   userID: string,
 ): Promise<ZoteroCollection[]> {
-  const response = await zoteroFetch(
-    apiKey,
-    `/users/${userID}/collections?format=json`,
-  );
-  const data = (await response.json()) as {
-    key: string;
-    data: { key: string; name: string; parentCollection: string | false };
-    meta: { numItems: number };
-  }[];
-  return data.map((c) => ({
-    key: c.key,
-    name: c.data.name,
-    parentKey: c.data.parentCollection,
-    itemCount: c.meta.numItems,
-  }));
+  const result: ZoteroCollection[] = [];
+  let start = 0;
+  const limit = 100;
+
+  while (true) {
+    const params = new URLSearchParams({
+      format: "json",
+      limit: String(limit),
+      start: String(start),
+    });
+    const response = await zoteroFetch(
+      apiKey,
+      `/users/${userID}/collections?${params}`,
+    );
+    const data = (await response.json()) as {
+      key: string;
+      data: { key: string; name: string; parentCollection: string | false };
+      meta: { numItems: number };
+    }[];
+    if (data.length === 0) break;
+
+    for (const c of data) {
+      result.push({
+        key: c.key,
+        name: c.data.name,
+        parentKey: c.data.parentCollection,
+        itemCount: c.meta.numItems,
+      });
+    }
+
+    if (data.length < limit) break;
+    start += limit;
+  }
+
+  return result;
 }
 
 // ─── Collection Import (full download) ───
 
 /**
- * Import all items from a specific collection.
- * Pass collectionKey = null to import the entire "My Library" (all top-level items).
+ * Fetches all items (with bibtex) across one or more "items/top" endpoints,
+ * deduplicating by item key (an item can belong to more than one collection
+ * in a subtree, e.g. both a parent and a child collection).
+ */
+async function fetchItemsFromPaths(
+  apiKey: string,
+  basePaths: string[],
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<CollectionImportResult> {
+  const bibtexByKey = new Map<string, string>();
+  const keyMap: Record<string, string> = {};
+  let libraryVersion = 0;
+  let grandTotal = 0;
+  let grandLoaded = 0;
+
+  for (const basePath of basePaths) {
+    let start = 0;
+    const limit = 100;
+    let total = 0;
+
+    while (true) {
+      const params = new URLSearchParams({
+        format: "json",
+        include: "bibtex",
+        limit: String(limit),
+        start: String(start),
+      });
+      const response = await zoteroFetch(apiKey, `${basePath}?${params}`);
+
+      if (start === 0) {
+        total = Number(response.headers.get("Total-Results") ?? 0);
+        grandTotal += total;
+      }
+      const version = Number(
+        response.headers.get("Last-Modified-Version") ?? 0,
+      );
+      if (version > libraryVersion) libraryVersion = version;
+
+      const items = (await response.json()) as {
+        key: string;
+        bibtex?: string;
+      }[];
+      if (items.length === 0) break;
+
+      for (const item of items) {
+        const bibtex = item.bibtex ?? "";
+        if (!bibtex.trim()) continue;
+        if (!bibtexByKey.has(item.key)) {
+          const citekey = extractCitekey(bibtex);
+          if (citekey) keyMap[item.key] = citekey;
+          bibtexByKey.set(item.key, bibtex);
+        }
+      }
+
+      start += limit;
+      grandLoaded += items.length;
+      onProgress?.(Math.min(grandLoaded, grandTotal), grandTotal);
+      if (start >= total) break;
+    }
+  }
+
+  return {
+    bibtex: Array.from(bibtexByKey.values()).join("\n\n"),
+    libraryVersion,
+    keyMap,
+    totalItems: bibtexByKey.size,
+  };
+}
+
+/**
+ * Import all items from one or more collections (e.g. a collection plus all
+ * of its nested subcollections). Pass collectionKeys = null to import the
+ * entire "My Library" (all top-level items across the whole library).
  */
 export async function importCollection(
   apiKey: string,
   userID: string,
-  collectionKey: string | null,
+  collectionKeys: string[] | null,
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<CollectionImportResult> {
-  const basePath = collectionKey
-    ? `/users/${userID}/collections/${collectionKey}/items/top`
-    : `/users/${userID}/items/top`;
+  const basePaths = collectionKeys
+    ? collectionKeys.map(
+        (key) => `/users/${userID}/collections/${key}/items/top`,
+      )
+    : [`/users/${userID}/items/top`];
 
-  let allBibtex = "";
-  const keyMap: Record<string, string> = {};
-  let start = 0;
-  const limit = 100;
-  let total = 0;
-  let libraryVersion = 0;
-
-  while (true) {
-    const params = new URLSearchParams({
-      format: "json",
-      include: "bibtex",
-      limit: String(limit),
-      start: String(start),
-    });
-    const response = await zoteroFetch(apiKey, `${basePath}?${params}`);
-
-    if (start === 0) {
-      total = Number(response.headers.get("Total-Results") ?? 0);
-      libraryVersion = Number(
-        response.headers.get("Last-Modified-Version") ?? 0,
-      );
-    }
-
-    const items = (await response.json()) as { key: string; bibtex?: string }[];
-    if (items.length === 0) break;
-
-    for (const item of items) {
-      const bibtex = item.bibtex ?? "";
-      if (!bibtex.trim()) continue;
-      const citekey = extractCitekey(bibtex);
-      if (citekey) keyMap[item.key] = citekey;
-      allBibtex += (allBibtex ? "\n\n" : "") + bibtex;
-    }
-
-    start += limit;
-    onProgress?.(Math.min(start, total), total);
-    if (start >= total) break;
-  }
-
-  return { bibtex: allBibtex, libraryVersion, keyMap, totalItems: total };
+  return fetchItemsFromPaths(apiKey, basePaths, onProgress);
 }
 
 // ─── Incremental Sync ───
 
 /**
- * Sync changes for a specific collection since lastVersion.
- * collectionKey = null syncs the entire library.
+ * Sync changes for one or more collections (a collection plus its
+ * subcollections) since lastVersion. collectionKeys = null syncs the entire
+ * library.
  *
  * Note: Zotero's `since` param works at the library level (not per-collection),
  * so for collection sync we re-fetch all collection items and diff locally.
@@ -187,21 +242,21 @@ export async function importCollection(
 export async function syncCollection(
   apiKey: string,
   userID: string,
-  collectionKey: string | null,
+  collectionKeys: string[] | null,
   lastVersion: number,
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<CollectionSyncResult> {
   // For "My Library" (all items), we can use the `since` param
-  if (!collectionKey) {
+  if (!collectionKeys) {
     return syncFullLibrary(apiKey, userID, lastVersion, onProgress);
   }
 
-  // For a specific collection, re-fetch all items and diff against keyMap
+  // For a specific collection subtree, re-fetch all items and diff against keyMap
   // (Zotero API doesn't support `since` scoped to a collection)
   const result = await importCollection(
     apiKey,
     userID,
-    collectionKey,
+    collectionKeys,
     onProgress,
   );
 
