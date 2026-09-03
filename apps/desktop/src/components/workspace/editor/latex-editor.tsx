@@ -11,11 +11,15 @@ import {
   tooltips,
 } from "@codemirror/view";
 import {
+  cursorLineDown,
+  cursorLineUp,
   defaultKeymap,
   history,
   historyKeymap,
   indentMore,
   indentLess,
+  selectLineDown,
+  selectLineUp,
   toggleComment,
 } from "@codemirror/commands";
 import { syntaxHighlighting, syntaxTreeAvailable } from "@codemirror/language";
@@ -42,7 +46,11 @@ import {
   latexCompletionSource as builtinLatexCompletionSource,
   completionKeymap,
 } from "codemirror-lang-latex";
-import { autocompletion } from "@codemirror/autocomplete";
+import {
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+} from "@codemirror/autocomplete";
 import { bibtex } from "./lang-bibtex";
 import { latexCompletionSource } from "./latex-completion";
 import {
@@ -69,6 +77,25 @@ import {
 import { useSettingsStore } from "@/stores/settings-store";
 import { EditorToolbar } from "./editor-toolbar";
 import { SelectionToolbar, type ToolbarAction } from "./selection-toolbar";
+import { WordLookupPopover } from "./word-lookup-popover";
+import { matchCase } from "./match-case";
+import {
+  spellcheckExtension,
+  refreshSpellingDecorations,
+  forceSpellcheckRecheck,
+  clearMisspellingEffect,
+} from "./spellcheck-extension";
+import {
+  grammarCheckExtension,
+  grammarField,
+  dismissGrammarIssuesForWord,
+  forceGrammarRecheck,
+  clearGrammarIssues,
+  clearGrammarIssueEffect,
+  type GrammarIssue,
+} from "./grammar-check-extension";
+import { GrammarIssuePopover } from "./grammar-issue-popover";
+import { withAutoBraces } from "./latex-command-braces";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -100,6 +127,39 @@ function getActiveFileContent(): string {
   const state = useDocumentStore.getState();
   const activeFile = state.files.find((f) => f.id === state.activeFileId);
   return activeFile?.content ?? "";
+}
+
+/**
+ * Smallest single replacement that turns `oldText` into `newText`, found by
+ * trimming the common prefix/suffix. Used to sync store content into
+ * CodeMirror without a full-document replace, which would otherwise clear
+ * the mapped selection (cursor snaps to the document start) whenever content
+ * changes outside a CodeMirror transaction (e.g. inserting text from a chat
+ * code block via the store instead of the editor itself).
+ */
+function computeMinimalChange(
+  oldText: string,
+  newText: string,
+): { from: number; to: number; insert: string } {
+  const maxStart = Math.min(oldText.length, newText.length);
+  let start = 0;
+  while (
+    start < maxStart &&
+    oldText.charCodeAt(start) === newText.charCodeAt(start)
+  ) {
+    start++;
+  }
+  let oldEnd = oldText.length;
+  let newEnd = newText.length;
+  while (
+    oldEnd > start &&
+    newEnd > start &&
+    oldText.charCodeAt(oldEnd - 1) === newText.charCodeAt(newEnd - 1)
+  ) {
+    oldEnd--;
+    newEnd--;
+  }
+  return { from: start, to: oldEnd, insert: newText.slice(start, newEnd) };
 }
 
 /** Per-file editor state cache: fileId → { cursor, scrollTop } */
@@ -153,6 +213,8 @@ export function LatexEditor() {
   useEffect(() => {
     setImageScale(1.0);
     setCropMode(false);
+    setWordLookup(null);
+    setGrammarPopup(null);
   }, [activeFileId]);
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -172,9 +234,59 @@ export function LatexEditor() {
   // Only explicit dismiss/send/action should clear the toolbar.
   const toolbarStickyRef = useRef(false);
   const parentRef = useRef<HTMLDivElement>(null);
+  // MouseEvent.detail is the click count (1 = single, 2 = double, 3 = triple).
+  // Captured on mousedown, before CodeMirror's own pointer handling creates the
+  // selection, so the next selectionSet update can tell a double/triple-click
+  // word/line select apart from an actual click-and-drag highlight.
+  const lastMouseDownDetailRef = useRef(1);
+  const [wordLookup, setWordLookup] = useState<{
+    term: string;
+    anchor: { x: number; y: number };
+    from: number;
+    to: number;
+  } | null>(null);
+  const [grammarPopup, setGrammarPopup] = useState<{
+    issue: GrammarIssue;
+    anchor: { x: number; y: number };
+  } | null>(null);
 
   const { resolvedTheme } = useTheme();
   const vimMode = useSettingsStore((s) => s.vimMode);
+  const grammarCheckEnabled = useSettingsStore((s) => s.grammarCheckEnabled);
+  const checkLanguage = useSettingsStore((s) => s.checkLanguage);
+  // Read straight from the store (not a ref synced via useEffect) — these
+  // callbacks can fire synchronously right after a store write (e.g.
+  // "Ignore" calling addIgnoredWord then immediately asking to redecorate),
+  // before React would have re-rendered and updated a ref. getState() is
+  // always current.
+  const isWordIgnored = useCallback(
+    (word: string) =>
+      useSettingsStore.getState().ignoredWords.includes(word.toLowerCase()),
+    [],
+  );
+  useEffect(() => {
+    // Apply immediately rather than waiting for the next edit or file
+    // switch (which would otherwise be the next time these plugins happen
+    // to re-run and notice the language changed).
+    const view = viewRef.current;
+    if (view) {
+      forceSpellcheckRecheck(view);
+      forceGrammarRecheck(view);
+    }
+  }, [checkLanguage]);
+  useEffect(() => {
+    // Same reasoning: flipping the toolbar toggle shouldn't wait for the
+    // next edit — turning it on should start checking immediately, and
+    // turning it off should clear existing underlines immediately instead
+    // of leaving them until the document is next edited.
+    const view = viewRef.current;
+    if (!view) return;
+    if (grammarCheckEnabled) {
+      forceGrammarRecheck(view);
+    } else {
+      clearGrammarIssues(view);
+    }
+  }, [grammarCheckEnabled]);
 
   const compileRef = useRef<() => void>(() => {});
   const isSearchOpenRef = useRef(false);
@@ -386,6 +498,128 @@ export function LatexEditor() {
     }
   };
 
+  // Right-click a word (or an active selection) to look it up in the system dictionary.
+  const handleEditorContextMenu = useCallback((e: React.MouseEvent) => {
+    const view = viewRef.current;
+    if (!view) return;
+
+    const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+    if (pos == null) return;
+
+    // A grammar issue takes priority over the word lookup — it's more
+    // specific (whole-phrase, not just the clicked word) and the two
+    // popovers should never show at once.
+    const grammarIssue = view.state
+      .field(grammarField)
+      .issues.find((issue) => pos >= issue.from && pos <= issue.to);
+    if (grammarIssue) {
+      e.preventDefault();
+      toolbarStickyRef.current = false;
+      setSelectionCoords(null);
+      setSelectionRange(null);
+      setWordLookup(null);
+      setGrammarPopup({
+        issue: grammarIssue,
+        anchor: { x: e.clientX, y: e.clientY },
+      });
+      return;
+    }
+
+    const sel = view.state.selection.main;
+    let from: number;
+    let to: number;
+    if (!sel.empty && pos >= sel.from && pos <= sel.to) {
+      from = sel.from;
+      to = sel.to;
+    } else {
+      const word = view.state.wordAt(pos);
+      if (!word) return;
+      from = word.from;
+      to = word.to;
+    }
+
+    const term = view.state.sliceDoc(from, to).trim();
+    if (!term) return;
+
+    // Claim the event so App.tsx's global contextmenu suppressor leaves it alone.
+    e.preventDefault();
+
+    // A right-click should show just the dictionary lookup — dismiss any
+    // lingering "Enter prompt..." toolbar from a prior drag-selection so the
+    // two floating panels never overlap.
+    toolbarStickyRef.current = false;
+    setSelectionCoords(null);
+    setSelectionRange(null);
+    setGrammarPopup(null);
+
+    setWordLookup({ term, anchor: { x: e.clientX, y: e.clientY }, from, to });
+  }, []);
+
+  // Replace the looked-up word/selection with a chosen synonym.
+  const handleReplaceWordLookup = useCallback(
+    (replacement: string) => {
+      const view = viewRef.current;
+      const lookup = wordLookup;
+      if (!view || !lookup) return;
+
+      const cased = matchCase(lookup.term, replacement);
+      const newTo = lookup.from + cased.length;
+      view.dispatch({
+        changes: { from: lookup.from, to: lookup.to, insert: cased },
+        selection: { anchor: newTo },
+        // Clear immediately — both checkers, since either (or both) may
+        // have flagged this range — instead of waiting for the next
+        // debounced recheck to notice the fix.
+        effects: [
+          clearMisspellingEffect(lookup.from, newTo),
+          clearGrammarIssueEffect(lookup.from, newTo),
+        ],
+      });
+      view.focus();
+      setWordLookup(null);
+    },
+    [wordLookup],
+  );
+
+  // Mark a word as not-a-typo (proper nouns, technical terms, ...) — applies
+  // app-wide immediately, no server round-trip needed to clear it visually.
+  const handleIgnoreWord = useCallback((word: string) => {
+    useSettingsStore.getState().addIgnoredWord(word);
+    const view = viewRef.current;
+    if (view) {
+      refreshSpellingDecorations(view);
+      dismissGrammarIssuesForWord(view, word);
+    }
+    setWordLookup(null);
+    setGrammarPopup(null);
+  }, []);
+
+  // Replace a flagged grammar/spelling phrase with a suggested correction.
+  const handleReplaceGrammarIssue = useCallback(
+    (replacement: string) => {
+      const view = viewRef.current;
+      const popup = grammarPopup;
+      if (!view || !popup) return;
+
+      const cased = matchCase(
+        view.state.sliceDoc(popup.issue.from, popup.issue.to),
+        replacement,
+      );
+      const newTo = popup.issue.from + cased.length;
+      view.dispatch({
+        changes: { from: popup.issue.from, to: popup.issue.to, insert: cased },
+        selection: { anchor: newTo },
+        effects: [
+          clearMisspellingEffect(popup.issue.from, newTo),
+          clearGrammarIssueEffect(popup.issue.from, newTo),
+        ],
+      });
+      view.focus();
+      setGrammarPopup(null);
+    },
+    [grammarPopup],
+  );
+
   // Compile: save all files first, then compile via Tauri command
   compileRef.current = async () => {
     const state = useDocumentStore.getState();
@@ -500,9 +734,14 @@ export function LatexEditor() {
         setCursorPosition(head);
 
         // Compute toolbar position below the selection end
-        // Skip toolbar for "select all" (Cmd+A) to avoid overlay issues
+        // Skip toolbar for "select all" (Cmd+A) and for a double/triple-click
+        // word/line selection — the prompt toolbar should only appear for an
+        // actual click-and-drag highlight, not incidentally alongside the
+        // word lookup a follow-up right-click would show for the same word.
         const isSelectAll = from === 0 && to === update.state.doc.length;
-        if (from !== to && !isSelectAll) {
+        const isMultiClickSelection = lastMouseDownDetailRef.current >= 2;
+        lastMouseDownDetailRef.current = 1; // one-shot: only applies to this update
+        if (from !== to && !isSelectAll && !isMultiClickSelection) {
           setSelectionRange({ start: from, end: to });
           const startCoords = update.view.coordsAtPos(from);
           const endCoords = update.view.coordsAtPos(to);
@@ -630,6 +869,13 @@ export function LatexEditor() {
           key: "Mod-/",
           run: toggleComment,
         },
+        // On macOS, CodeMirror's defaultKeymap binds Mod-ArrowUp/Down to jump to the
+        // very start/end of the document (same as Mod-Home/End). Mod-ArrowUp/Down is
+        // easy to hit by accident (e.g. reaching for Mod-Shift-ArrowUp), so downgrade
+        // it to a normal line move instead — Mod-Home/End still jump to doc start/end
+        // for anyone who wants that deliberately.
+        { key: "Mod-ArrowUp", run: cursorLineUp, shift: selectLineUp },
+        { key: "Mod-ArrowDown", run: cursorLineDown, shift: selectLineDown },
       ]),
     );
 
@@ -644,15 +890,20 @@ export function LatexEditor() {
         history(),
         keymap.of([
           { key: "Tab", run: indentMore, shift: indentLess },
+          ...closeBracketsKeymap,
           ...defaultKeymap,
           ...historyKeymap,
         ]),
+        closeBrackets(),
         activeFile?.type === "bib"
           ? bibtex()
           : latex({ enableLinting: false, enableAutocomplete: false }),
         tooltips({ parent: document.body }),
         autocompletion({
-          override: [builtinLatexCompletionSource(true), latexCompletionSource],
+          override: [
+            withAutoBraces(builtinLatexCompletionSource(true)),
+            latexCompletionSource,
+          ],
           defaultKeymap: true,
           activateOnTyping: true,
           icons: true,
@@ -704,6 +955,16 @@ export function LatexEditor() {
         vimCompartmentRef.current.of([]),
         updateListener,
         EditorView.lineWrapping,
+        spellcheckExtension({
+          language: () => useSettingsStore.getState().checkLanguage,
+          isIgnored: isWordIgnored,
+        }),
+        grammarCheckExtension({
+          enabled: () => useSettingsStore.getState().grammarCheckEnabled,
+          serverUrl: () => useSettingsStore.getState().grammarCheckServerUrl,
+          language: () => useSettingsStore.getState().checkLanguage,
+          isIgnored: isWordIgnored,
+        }),
         scrollPastEnd(),
         EditorView.theme({
           "&": {
@@ -805,6 +1066,21 @@ export function LatexEditor() {
             backgroundColor: "var(--accent, rgba(255,255,255,0.15))",
             borderColor: "var(--foreground, rgba(255,255,255,0.3))",
           },
+          ".cm-misspelled": {
+            textDecoration: "underline wavy #ef4444",
+            textDecorationSkipInk: "none",
+            textUnderlineOffset: "3px",
+          },
+          ".cm-grammar-issue": {
+            textDecoration: "underline wavy #3b82f6",
+            textDecorationSkipInk: "none",
+            textUnderlineOffset: "3px",
+          },
+          ".cm-grammar-issue-spelling": {
+            textDecoration: "underline wavy #ef4444",
+            textDecorationSkipInk: "none",
+            textUnderlineOffset: "3px",
+          },
         }),
       ],
     });
@@ -877,7 +1153,7 @@ export function LatexEditor() {
     const currentContent = view.state.doc.toString();
     if (currentContent !== content) {
       view.dispatch({
-        changes: { from: 0, to: currentContent.length, insert: content },
+        changes: computeMinimalChange(currentContent, content),
       });
     }
   }, [activeFileContent, isTextFile]);
@@ -999,18 +1275,11 @@ export function LatexEditor() {
     }
   }, [selectionRange, activeFile]);
 
-  const toolbarPosition = useMemo(() => {
-    if (!selectionCoords || !parentRef.current) return null;
-    const parentRect = parentRef.current.getBoundingClientRect();
-    const relTop = selectionCoords.top - parentRect.top + 4; // 4px gap below selection
-    const relLeft = Math.max(
-      8,
-      Math.min(
-        selectionCoords.left - parentRect.left,
-        parentRect.width - 272, // 264px toolbar + 8px margin
-      ),
-    );
-    return { top: relTop, left: relLeft };
+  const toolbarAnchor = useMemo(() => {
+    if (!selectionCoords) return null;
+    // selectionCoords.top already holds the bottom-of-selection Y coordinate
+    // (see the updateListener above), i.e. where the toolbar should start.
+    return { x: selectionCoords.left, y: selectionCoords.top };
   }, [selectionCoords]);
 
   const buildSelectionContext =
@@ -1251,17 +1520,30 @@ export function LatexEditor() {
           <>
             <div
               ref={containerRef}
+              onContextMenu={handleEditorContextMenu}
+              onMouseDownCapture={(e) => {
+                // A right- (or middle-) click can itself select the word under
+                // the cursor, same as a native text view — treat that like a
+                // multi-click so it doesn't pop the "Enter prompt" toolbar too.
+                lastMouseDownDetailRef.current = e.button === 0 ? e.detail : 2;
+              }}
               className={reviewingSnapshot ? "hidden" : "absolute inset-0"}
             />
             {reviewingSnapshot && historyDiffResult && (
               <HistoryDiffView diffs={historyDiffResult} />
             )}
-            {toolbarPosition &&
+            {toolbarAnchor &&
               selectionLabel &&
               !isMergeActiveRef.current &&
-              !isSearchOpen && (
+              !isSearchOpen &&
+              // Never render alongside the dictionary/grammar popovers — a
+              // right-click dismisses the prompt toolbar, but state clears
+              // can race with the mousedown that opened it, so also enforce
+              // it here.
+              !wordLookup &&
+              !grammarPopup && (
                 <SelectionToolbar
-                  position={toolbarPosition}
+                  anchor={toolbarAnchor}
                   contextLabel={selectionLabel}
                   actions={editorToolbarActions}
                   onSendPrompt={handleToolbarSendPrompt}
@@ -1269,6 +1551,32 @@ export function LatexEditor() {
                   onDismiss={handleToolbarDismiss}
                 />
               )}
+            {wordLookup && !grammarPopup && (
+              <WordLookupPopover
+                term={wordLookup.term}
+                language={checkLanguage}
+                isIgnored={isWordIgnored(wordLookup.term)}
+                anchor={wordLookup.anchor}
+                onReplace={handleReplaceWordLookup}
+                onIgnore={handleIgnoreWord}
+                onDismiss={() => setWordLookup(null)}
+              />
+            )}
+            {grammarPopup && (
+              <GrammarIssuePopover
+                issue={grammarPopup.issue}
+                flaggedText={
+                  viewRef.current?.state.sliceDoc(
+                    grammarPopup.issue.from,
+                    grammarPopup.issue.to,
+                  ) ?? ""
+                }
+                anchor={grammarPopup.anchor}
+                onReplace={handleReplaceGrammarIssue}
+                onIgnore={handleIgnoreWord}
+                onDismiss={() => setGrammarPopup(null)}
+              />
+            )}
             {activeFileChange && mergeChunkInfo.total > 0 && (
               <div className="absolute top-3 right-3 z-20 flex items-center gap-1 rounded-lg border border-border bg-background/95 px-2 py-1 shadow-lg backdrop-blur-sm">
                 <span className="px-1 font-mono text-muted-foreground text-xs">

@@ -11,11 +11,15 @@ import {
   PanelResizeHandle,
   type ImperativePanelHandle,
 } from "react-resizable-panels";
+import { LibraryIcon } from "lucide-react";
 import { Sidebar } from "./sidebar";
 import { LatexEditor } from "./editor/latex-editor";
 import { PdfPreview } from "./preview/pdf-preview";
+import { QuickReferencePanel } from "./quick-reference-panel";
 import { useDocumentStore } from "@/stores/document-store";
 import { usePreviewStore } from "@/stores/preview-store";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const SIDEBAR_DEFAULT_SIZE = 15;
 const SIDEBAR_MIN_SIZE = 10;
@@ -41,6 +45,7 @@ export function WorkspaceLayout() {
     SIDEBAR_COLLAPSED_SIZE_FALLBACK,
   );
   const [codeVisible, setCodeVisible] = useState(true);
+  const [quickRefOpen, setQuickRefOpen] = useState(false);
 
   const getCollapsedSidebarSize = useCallback(() => {
     const workspaceWidth =
@@ -180,7 +185,7 @@ export function WorkspaceLayout() {
   }
 
   return (
-    <div ref={workspaceRef} className="h-full">
+    <div ref={workspaceRef} className="relative h-full">
       <PanelGroup direction="horizontal" className="h-full">
         <Panel
           ref={sidebarPanelRef}
@@ -238,6 +243,26 @@ export function WorkspaceLayout() {
           </Panel>
         )}
       </PanelGroup>
+
+      <Button
+        variant="secondary"
+        size="icon"
+        className={cn(
+          "absolute z-20 size-8 rounded-full shadow-md transition-opacity",
+          quickRefOpen && "opacity-0",
+        )}
+        style={{ top: "calc(var(--titlebar-height) + 8px)", right: 12 }}
+        onClick={() => setQuickRefOpen(true)}
+        title="Quick Reference — peek at another project"
+        aria-label="Open Quick Reference"
+      >
+        <LibraryIcon className="size-3.5" />
+      </Button>
+
+      <QuickReferencePanel
+        open={quickRefOpen}
+        onClose={() => setQuickRefOpen(false)}
+      />
     </div>
   );
 }

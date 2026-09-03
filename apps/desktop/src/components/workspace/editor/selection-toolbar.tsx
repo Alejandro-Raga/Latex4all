@@ -1,11 +1,7 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { ArrowUpIcon } from "lucide-react";
+import { useViewportAnchoredPosition } from "./use-viewport-anchored-position";
 
 export interface ToolbarAction {
   id: string;
@@ -15,7 +11,8 @@ export interface ToolbarAction {
 }
 
 interface SelectionToolbarProps {
-  position: { top: number; left: number };
+  /** Viewport-relative point (e.g. below the text selection) to anchor near. */
+  anchor: { x: number; y: number };
   contextLabel: string;
   actions: ToolbarAction[];
   onSendPrompt: (prompt: string) => void;
@@ -23,8 +20,10 @@ interface SelectionToolbarProps {
   onDismiss: () => void;
 }
 
+const TOOLBAR_WIDTH = 256;
+
 export function SelectionToolbar({
-  position,
+  anchor,
   contextLabel,
   actions,
   onSendPrompt,
@@ -32,8 +31,7 @@ export function SelectionToolbar({
   onDismiss,
 }: SelectionToolbarProps) {
   const [input, setInput] = useState("");
-  const toolbarRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const { ref: toolbarRef, coords } = useViewportAnchoredPosition(anchor);
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
@@ -79,21 +77,22 @@ export function SelectionToolbar({
       document.removeEventListener("mousedown", handleMouseDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [onDismiss]);
+  }, [onDismiss, toolbarRef]);
 
-  return (
+  return createPortal(
     <div
       ref={toolbarRef}
-      className="absolute z-30 w-64 rounded-lg border border-border bg-background shadow-xl"
+      className="fixed z-50 rounded-lg border border-border bg-background shadow-xl"
       style={{
-        top: position.top,
-        left: position.left,
+        width: TOOLBAR_WIDTH,
+        top: coords ? coords.top : anchor.y,
+        left: coords ? coords.left : anchor.x,
+        visibility: coords ? "visible" : "hidden",
       }}
     >
       {/* Prompt input */}
       <div className="flex items-center gap-1 border-border border-b px-2 py-1.5">
         <input
-          ref={inputRef}
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -140,6 +139,7 @@ export function SelectionToolbar({
           {contextLabel}
         </span>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

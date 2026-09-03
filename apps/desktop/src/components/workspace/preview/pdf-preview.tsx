@@ -389,19 +389,9 @@ export function PdfPreview() {
     window.getSelection()?.removeAllRanges();
   }, []);
 
-  const pdfToolbarPosition = (() => {
-    if (!pdfSelection || !previewContainerRef.current) return null;
-    const containerRect = previewContainerRef.current.getBoundingClientRect();
-    const relTop = pdfSelection.position.top - containerRect.top + 4;
-    const relLeft = Math.max(
-      8,
-      Math.min(
-        pdfSelection.position.left - containerRect.left,
-        containerRect.width - 272,
-      ),
-    );
-    return { top: relTop, left: relLeft };
-  })();
+  const pdfToolbarAnchor = pdfSelection
+    ? { x: pdfSelection.position.left, y: pdfSelection.position.top }
+    : null;
 
   useEffect(() => {
     if (hasInitialCompile.current) return;
@@ -1028,9 +1018,9 @@ export function PdfPreview() {
       </div>
       {renderContent()}
       {/* PDF selection toolbar */}
-      {pdfToolbarPosition && pdfSelection && (
+      {pdfToolbarAnchor && pdfSelection && (
         <SelectionToolbar
-          position={pdfToolbarPosition}
+          anchor={pdfToolbarAnchor}
           contextLabel={pdfContextLabel}
           actions={pdfToolbarActions}
           onSendPrompt={handlePdfToolbarSendPrompt}

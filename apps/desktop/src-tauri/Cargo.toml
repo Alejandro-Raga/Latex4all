@@ -32,7 +32,7 @@ git2 = { version = "0.20", default-features = false, features = ["vendored-libgi
 chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
 which = "7"
-tectonic = { version = "0.16", default-features = true, features = ["external-harfbuzz"] }
+tectonic = { version = "0.15", default-features = true, features = ["external-harfbuzz"] }
 # NOTE: Building tectonic requires external harfbuzz/graphite2/icu/freetype:
 #   macOS:   brew install icu4c harfbuzz pkg-config
 #   Linux:   apt install libicu-dev libgraphite2-dev libharfbuzz-dev libfreetype-dev libfontconfig-dev
@@ -48,8 +48,9 @@ expect_used = "deny"
 tempfile = "3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10.1"
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSImage", "NSRunningApplication"] }
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSImage", "NSRunningApplication", "NSSpellChecker"] }
 objc2-foundation = { version = "0.3", features = ["NSData"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]

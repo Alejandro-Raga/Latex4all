@@ -16,6 +16,7 @@ import {
   PlusIcon,
   BookMarkedIcon,
   ExternalLinkIcon,
+  XIcon,
 } from "lucide-react";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { Button } from "@/components/ui/button";
@@ -33,8 +34,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { refreshSpellingDecorations } from "./spellcheck-extension";
+import { forceGrammarRecheck } from "./grammar-check-extension";
 import { useDocumentStore } from "@/stores/document-store";
-import { useSettingsStore } from "@/stores/settings-store";
+import { CHECK_LANGUAGES, useSettingsStore } from "@/stores/settings-store";
 
 interface EditorInfo {
   id: string;
@@ -93,6 +101,25 @@ export function EditorToolbar({
 }: EditorToolbarProps) {
   const vimMode = useSettingsStore((s) => s.vimMode);
   const setVimMode = useSettingsStore((s) => s.setVimMode);
+  const grammarCheckEnabled = useSettingsStore((s) => s.grammarCheckEnabled);
+  const setGrammarCheckEnabled = useSettingsStore(
+    (s) => s.setGrammarCheckEnabled,
+  );
+  const checkLanguage = useSettingsStore((s) => s.checkLanguage);
+  const setCheckLanguage = useSettingsStore((s) => s.setCheckLanguage);
+  const ignoredWords = useSettingsStore((s) => s.ignoredWords);
+  const removeIgnoredWord = useSettingsStore((s) => s.removeIgnoredWord);
+  const handleRemoveIgnoredWord = useCallback(
+    (word: string) => {
+      removeIgnoredWord(word);
+      const view = editorView.current;
+      if (view) {
+        refreshSpellingDecorations(view);
+        forceGrammarRecheck(view);
+      }
+    },
+    [removeIgnoredWord, editorView],
+  );
 
   const fileName = useDocumentStore((s) => {
     const activeFile = s.files.find((f) => f.id === s.activeFileId);
@@ -268,73 +295,145 @@ export function EditorToolbar({
         </span>
       </div>
       <div className="mx-2 h-4 w-px shrink-0 bg-border" />
-      <TooltipIconButton
-        tooltip="Bold (\\textbf)"
-        onClick={() => insertText("\\textbf{", "}")}
-      >
-        <BoldIcon className="size-4" />
-      </TooltipIconButton>
-      <TooltipIconButton
-        tooltip="Italic (\\textit)"
-        onClick={() => insertText("\\textit{", "}")}
-      >
-        <ItalicIcon className="size-4" />
-      </TooltipIconButton>
-      <TooltipIconButton
-        tooltip="Code (\\texttt)"
-        onClick={() => insertText("\\texttt{", "}")}
-      >
-        <CodeIcon className="size-4" />
-      </TooltipIconButton>
-      <div className="mx-2 h-4 w-px bg-border" />
-      <TooltipIconButton
-        tooltip="Section"
-        onClick={() => insertText("\\section{", "}")}
-      >
-        <Heading1Icon className="size-4" />
-      </TooltipIconButton>
-      <TooltipIconButton
-        tooltip="Subsection"
-        onClick={() => insertText("\\subsection{", "}")}
-      >
-        <Heading2Icon className="size-4" />
-      </TooltipIconButton>
-      <TooltipIconButton
-        tooltip="List item"
-        onClick={() => insertText("\\item ")}
-      >
-        <ListIcon className="size-4" />
-      </TooltipIconButton>
-      <div className="mx-2 h-4 w-px bg-border" />
-      <TooltipIconButton
-        tooltip="Inline math ($...$)"
-        onClick={() => wrapSelection("$")}
-      >
-        <FunctionSquareIcon className="size-4" />
-      </TooltipIconButton>
-      <TooltipIconButton
-        tooltip="Display math (\\[...\\])"
-        onClick={() => insertText("\\[\n  ", "\n\\]")}
-      >
-        <span className="font-mono text-xs">∫</span>
-      </TooltipIconButton>
-      <div className="mx-2 h-4 w-px bg-border" />
-      <TooltipIconButton
-        tooltip="Citation (\\cite)"
-        onClick={() => insertText("\\cite{", "}")}
-      >
-        <BookMarkedIcon className="size-4" />
-      </TooltipIconButton>
-      <div className="mx-2 h-4 w-px bg-border" />
-      <Button
-        variant={vimMode ? "default" : "ghost"}
-        size="sm"
-        className="h-6 px-2 font-mono text-xs"
-        onClick={() => setVimMode(!vimMode)}
-        title="Toggle Vim mode"
-      >
-        VIM
-      </Button>
+      <div className="flex min-w-0 items-center gap-1 overflow-x-auto [&>*]:shrink-0">
+        <TooltipIconButton
+          tooltip="Bold (\\textbf)"
+          onClick={() => insertText("\\textbf{", "}")}
+        >
+          <BoldIcon className="size-4" />
+        </TooltipIconButton>
+        <TooltipIconButton
+          tooltip="Italic (\\textit)"
+          onClick={() => insertText("\\textit{", "}")}
+        >
+          <ItalicIcon className="size-4" />
+        </TooltipIconButton>
+        <TooltipIconButton
+          tooltip="Code (\\texttt)"
+          onClick={() => insertText("\\texttt{", "}")}
+        >
+          <CodeIcon className="size-4" />
+        </TooltipIconButton>
+        <div className="mx-2 h-4 w-px bg-border" />
+        <TooltipIconButton
+          tooltip="Section"
+          onClick={() => insertText("\\section{", "}")}
+        >
+          <Heading1Icon className="size-4" />
+        </TooltipIconButton>
+        <TooltipIconButton
+          tooltip="Subsection"
+          onClick={() => insertText("\\subsection{", "}")}
+        >
+          <Heading2Icon className="size-4" />
+        </TooltipIconButton>
+        <TooltipIconButton
+          tooltip="List item"
+          onClick={() => insertText("\\item ")}
+        >
+          <ListIcon className="size-4" />
+        </TooltipIconButton>
+        <div className="mx-2 h-4 w-px bg-border" />
+        <TooltipIconButton
+          tooltip="Inline math ($...$)"
+          onClick={() => wrapSelection("$")}
+        >
+          <FunctionSquareIcon className="size-4" />
+        </TooltipIconButton>
+        <TooltipIconButton
+          tooltip="Display math (\\[...\\])"
+          onClick={() => insertText("\\[\n  ", "\n\\]")}
+        >
+          <span className="font-mono text-xs">∫</span>
+        </TooltipIconButton>
+        <div className="mx-2 h-4 w-px bg-border" />
+        <TooltipIconButton
+          tooltip="Citation (\\cite)"
+          onClick={() => insertText("\\cite{", "}")}
+        >
+          <BookMarkedIcon className="size-4" />
+        </TooltipIconButton>
+        <div className="mx-2 h-4 w-px bg-border" />
+        <Button
+          variant={vimMode ? "default" : "ghost"}
+          size="sm"
+          className="h-6 px-2 font-mono text-xs"
+          onClick={() => setVimMode(!vimMode)}
+          title="Toggle Vim mode"
+        >
+          VIM
+        </Button>
+        <Button
+          variant={grammarCheckEnabled ? "default" : "ghost"}
+          size="sm"
+          className="h-6 px-2 font-mono text-xs"
+          onClick={() => setGrammarCheckEnabled(!grammarCheckEnabled)}
+          title="Toggle grammar checking (requires a local LanguageTool server at http://localhost:8081 — e.g. `brew install languagetool && brew services start languagetool`)"
+        >
+          GRAMMAR
+        </Button>
+        <Select value={checkLanguage} onValueChange={setCheckLanguage}>
+          <SelectTrigger
+            size="sm"
+            className="h-6! w-auto text-xs"
+            title="Spelling & grammar check language"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {CHECK_LANGUAGES.map((lang) => (
+              <SelectItem key={lang.code} value={lang.code}>
+                {lang.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 font-mono text-xs"
+              title="Words marked as not-a-typo"
+            >
+              IGNORED
+              {ignoredWords.length > 0 ? ` (${ignoredWords.length})` : ""}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-64 p-0">
+            <div className="border-border border-b px-3 py-2">
+              <p className="font-medium text-sm">Ignored words</p>
+              <p className="text-muted-foreground text-xs">
+                Won't be flagged as spelling mistakes.
+              </p>
+            </div>
+            <div className="max-h-64 overflow-y-auto p-1.5">
+              {ignoredWords.length === 0 ? (
+                <p className="px-1.5 py-2 text-muted-foreground text-xs">
+                  No ignored words yet — right-click a misspelled word and
+                  choose "Ignore".
+                </p>
+              ) : (
+                ignoredWords.map((word) => (
+                  <div
+                    key={word}
+                    className="flex items-center justify-between gap-2 rounded px-1.5 py-1 text-sm hover:bg-muted"
+                  >
+                    <span className="truncate">{word}</span>
+                    <button
+                      aria-label={`Stop ignoring "${word}"`}
+                      onClick={() => handleRemoveIgnoredWord(word)}
+                      className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                    >
+                      <XIcon className="size-3.5" />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
       <div data-tauri-drag-region className="flex-1 self-stretch" />
       {editors.length === 1 && (
         <TooltipIconButton

@@ -59,6 +59,9 @@
     }
   },
   "plugins": {
+    "shell": {
+      "open": "((mailto:\\w+)|(tel:\\w+)|(https?://\\w+)|(dict://)).+"
+    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENBNjAzOTI2NzdDQjdBNkMKUldSc2VzdDNKamxneXMzUnZIK0h3TzZ4WVo4QVFVQlRaSFA1TEhCcGtUYW53ZkhNaDluaWgwZWQK",
       "endpoints": [

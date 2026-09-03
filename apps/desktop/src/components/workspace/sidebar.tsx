@@ -1252,7 +1252,12 @@ export function Sidebar({
               title={projectRoot ? "Rename project folder" : undefined}
               aria-label="Rename project folder"
             >
-              <span className="block truncate">{projectName}</span>
+              <span className="flex min-w-0 items-center justify-center gap-1.5">
+                <span className="truncate">{projectName}</span>
+                {projectRoot && (
+                  <PencilIcon className="size-3 shrink-0 opacity-60" />
+                )}
+              </span>
             </button>
             <div className="flex items-center justify-end">
               <LayoutPaneSwitcher

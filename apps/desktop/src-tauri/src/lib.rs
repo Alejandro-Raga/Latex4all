@@ -3,10 +3,13 @@
 mod anthropic_proxy;
 mod claude;
 mod claude_process;
+mod dictionary;
+mod grammar;
 mod history;
 mod latex;
 mod skills;
 mod slash_commands;
+mod spellcheck;
 mod uv;
 mod zotero;
 
@@ -596,6 +599,11 @@ pub fn run() {
             open_in_editor,
             js_log,
             read_clipboard_file_paths,
+            dictionary::lookup_dictionary_definition,
+            spellcheck::check_spelling,
+            spellcheck::get_spelling_suggestions,
+            grammar::check_grammar,
+            grammar::check_grammar_server_available,
             latex::compile_latex,
             latex::synctex_edit,
             latex::detect_texlive,
