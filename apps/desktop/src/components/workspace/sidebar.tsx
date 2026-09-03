@@ -26,6 +26,7 @@ import {
   AppWindowIcon,
   FlaskConicalIcon,
   TerminalIcon,
+  LibraryIcon,
   type LucideIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
@@ -336,6 +337,12 @@ function LayoutPaneSwitcher({
             checked={controls.sidebarVisible}
             onCheckedChange={controls.setSidebarVisible}
           />
+          <LayoutToggleRow
+            icon={LibraryIcon}
+            label="Reference"
+            checked={controls.referenceVisible}
+            onCheckedChange={controls.setReferenceVisible}
+          />
         </div>
       </HoverCardContent>
     </HoverCard>
@@ -395,9 +402,11 @@ interface LayoutControls {
   codeVisible: boolean;
   pdfVisible: boolean;
   sidebarVisible: boolean;
+  referenceVisible: boolean;
   setCodeVisible: (visible: boolean) => void;
   setPdfVisible: (visible: boolean) => void;
   setSidebarVisible: (visible: boolean) => void;
+  setReferenceVisible: (visible: boolean) => void;
 }
 
 export function Sidebar({
@@ -1135,7 +1144,9 @@ export function Sidebar({
 
   const collapsedRail = (
     <div className="flex h-full w-full min-w-0 flex-col items-center bg-sidebar text-sidebar-foreground">
-      <div className="flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] w-full items-center justify-center border-sidebar-border border-b">
+      {/* Reserved, content-free lane for the macOS traffic lights */}
+      <div className="h-[var(--titlebar-height)] w-full shrink-0" />
+      <div className="flex h-[var(--workspace-topbar-height)] w-full shrink-0 items-center justify-center border-sidebar-border border-b">
         <LayoutPaneSwitcher
           controls={layoutControls}
           collapsed={collapsed}
@@ -1225,8 +1236,9 @@ export function Sidebar({
         aria-hidden={collapsed}
       >
         <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
-          {/* Header — padded top for macOS overlay titlebar */}
-          <div className="grid h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-2 border-sidebar-border border-b px-3">
+          {/* Reserved, content-free lane for the macOS traffic lights */}
+          <div className="h-[var(--titlebar-height)] w-full shrink-0" />
+          <div className="grid h-[var(--workspace-topbar-height)] shrink-0 grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-2 border-sidebar-border border-b px-3">
             <div className="flex items-center justify-start">
               <Button
                 variant="ghost"

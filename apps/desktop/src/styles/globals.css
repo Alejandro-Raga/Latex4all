@@ -122,7 +122,7 @@
   html {
     @apply h-full overflow-hidden overscroll-none scroll-smooth;
     /* macOS overlay titlebar inset — traffic lights safe area */
-    --titlebar-height: 18px;
+    --titlebar-height: 30px;
     --traffic-light-width: 70px;
     --workspace-topbar-height: 40px;
   }
@@ -162,6 +162,18 @@
   scrollbar-color: var(--sidebar-border) transparent;
 }
 
+/* Keeps an element scrollable while hiding the scrollbar itself — for thin
+   toolbars where a native scrollbar would be taller than the bar and cover
+   the buttons behind it. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* MuPDF text selection layer */
 .mupdf-text-layer {
   position: absolute;
@@ -174,6 +186,11 @@
   fill: transparent;
   white-space: pre;
   cursor: text;
+  /* WebKit doesn't make SVG <text> selectable by default — without this,
+     click-drag over the text layer does nothing (Safari/WKWebView only;
+     Chromium-based engines select SVG text regardless). */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .mupdf-text-layer text::selection {
@@ -192,4 +209,23 @@
   position: absolute;
   pointer-events: auto;
   cursor: pointer;
+}
+
+/* MuPDF annotation overlay (imported highlights/underlines) — sits below the
+   text layer (unset z-index, painted after the static canvas but before the
+   z-indexed text/link layers) so selectable text still renders on top. */
+.mupdf-annotation-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.mupdf-annotation-highlight {
+  position: absolute;
+  opacity: 0.45;
+}
+
+.mupdf-annotation-underline {
+  position: absolute;
+  opacity: 0.85;
 }

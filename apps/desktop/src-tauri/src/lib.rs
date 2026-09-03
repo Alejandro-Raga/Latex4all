@@ -306,6 +306,11 @@ fn apply_windows_titlebar_theme(window: &tauri::WebviewWindow, dark: bool) -> Re
 }
 
 #[tauri::command]
+fn open_devtools(window: tauri::WebviewWindow) {
+    window.open_devtools();
+}
+
+#[tauri::command]
 fn set_native_window_theme(window: tauri::WebviewWindow, theme: String) -> Result<(), String> {
     let theme = theme.trim().to_ascii_lowercase();
     let dark = theme == "dark";
@@ -593,6 +598,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             create_new_window,
             set_native_window_theme,
+            open_devtools,
             allow_project_directory,
             list_default_projects,
             detect_editors,
@@ -634,6 +640,7 @@ pub fn run() {
             zotero::zotero_start_oauth,
             zotero::zotero_complete_oauth,
             zotero::zotero_cancel_oauth,
+            zotero::zotero_download_attachment,
             history::history_init,
             history::history_snapshot,
             history::history_list,

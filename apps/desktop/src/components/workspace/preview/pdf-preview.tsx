@@ -90,6 +90,8 @@ const ZOOM_OPTIONS = [
 export function PdfPreview() {
   const compilerBackend = useSettingsStore((s) => s.compilerBackend);
   const setCompilerBackend = useSettingsStore((s) => s.setCompilerBackend);
+  const pdfDarkMode = useSettingsStore((s) => s.pdfDarkModeMain);
+  const setPdfDarkMode = useSettingsStore((s) => s.setPdfDarkModeMain);
   const pdfRevision = useDocumentStore((s) => s.pdfRevision);
   const compileError = useDocumentStore((s) => s.compileError);
   const isCompiling = useDocumentStore((s) => s.isCompiling);
@@ -755,6 +757,8 @@ export function PdfPreview() {
                   scale={scale}
                   rootFileId={rootId}
                   isActive={isActive}
+                  darkMode={pdfDarkMode}
+                  onToggleDarkMode={() => setPdfDarkMode(!pdfDarkMode)}
                   onError={isActive ? setPdfError : undefined}
                   onLoadSuccess={isActive ? handleLoadSuccess : undefined}
                   onScaleChange={isActive ? handleScaleChange : undefined}

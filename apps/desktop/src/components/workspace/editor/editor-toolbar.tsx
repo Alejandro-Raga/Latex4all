@@ -295,7 +295,7 @@ export function EditorToolbar({
         </span>
       </div>
       <div className="mx-2 h-4 w-px shrink-0 bg-border" />
-      <div className="flex min-w-0 items-center gap-1 overflow-x-auto [&>*]:shrink-0">
+      <div className="scrollbar-none flex min-w-0 items-center gap-1 overflow-x-auto [&>*]:shrink-0">
         <TooltipIconButton
           tooltip="Bold (\\textbf)"
           onClick={() => insertText("\\textbf{", "}")}

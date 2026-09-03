@@ -3,6 +3,7 @@ import { getMupdfClient } from "@/lib/mupdf/mupdf-client";
 import { createLogger } from "@/lib/debug/logger";
 import { APP_VISIBILITY_RESTORED } from "@/lib/debug/log-store";
 import type { StructuredTextData, LinkData } from "@/lib/mupdf/types";
+import type { PdfAnnotationRect } from "./pdf-viewer";
 
 const log = createLogger("mupdf-page");
 const RENDER_SCALE_DEBOUNCE_MS = 260;
@@ -14,6 +15,7 @@ interface MupdfPageProps {
   pageWidth: number;
   pageHeight: number;
   isVisible: boolean;
+  annotations?: PdfAnnotationRect[];
 }
 
 /** Check if a canvas appears blank (GPU context was silently invalidated).
@@ -40,6 +42,7 @@ export const MupdfPage = memo(function MupdfPage({
   pageWidth,
   pageHeight,
   isVisible,
+  annotations,
 }: MupdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [textData, setTextData] = useState<StructuredTextData | null>(null);
@@ -207,6 +210,61 @@ export const MupdfPage = memo(function MupdfPage({
               <span className="sr-only">Link</span>
             </a>
           ))}
+        </div>
+      )}
+
+      {/* Annotation layer — imported highlights/underlines (e.g. from Zotero).
+          Rects arrive in raw PDF space (origin bottom-left, y up); flip to the
+          top-left/y-down convention the other layers already use. Coordinates
+          are normalized (min/max) rather than assumed pre-ordered, since a
+          reversed pair would otherwise produce a negative — and so invisible
+          — width/height. */}
+      {annotations && annotations.length > 0 && (
+        <div className="mupdf-annotation-layer">
+          {(() => {
+            log.info(
+              `Annotation layer: page ${pageIndex}, pageSize ${pageWidth.toFixed(1)}x${pageHeight.toFixed(1)}, ${annotations.length} marks (${annotations.map((a) => a.type).join(",")})`,
+            );
+            return null;
+          })()}
+          {annotations.map((ann, ai) =>
+            ann.rects.map((rect, ri) => {
+              const x1 = Math.min(rect[0], rect[2]);
+              const x2 = Math.max(rect[0], rect[2]);
+              const y1 = Math.min(rect[1], rect[3]);
+              const y2 = Math.max(rect[1], rect[3]);
+              const left = (x1 / pageWidth) * 100;
+              const top = ((pageHeight - y2) / pageHeight) * 100;
+              const width = ((x2 - x1) / pageWidth) * 100;
+              const fullHeight = ((y2 - y1) / pageHeight) * 100;
+              const isUnderline = ann.type === "underline";
+              const style = {
+                left: `${left}%`,
+                top: isUnderline ? `${top + fullHeight * 0.92}%` : `${top}%`,
+                width: `${width}%`,
+                height: isUnderline
+                  ? `${Math.max(fullHeight * 0.08, 0.3)}%`
+                  : `${fullHeight}%`,
+                backgroundColor: ann.color,
+              };
+              if (ai === 0 && ri === 0) {
+                log.info(
+                  `Mark geometry: page ${pageIndex}, rawRect [${rect.join(", ")}], color ${ann.color}, style left=${style.left} top=${style.top} width=${style.width} height=${style.height}`,
+                );
+              }
+              return (
+                <div
+                  key={`${ai}-${ri}`}
+                  className={
+                    isUnderline
+                      ? "mupdf-annotation-underline"
+                      : "mupdf-annotation-highlight"
+                  }
+                  style={style}
+                />
+              );
+            }),
+          )}
         </div>
       )}
     </div>

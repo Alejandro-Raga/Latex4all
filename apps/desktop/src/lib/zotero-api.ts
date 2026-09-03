@@ -336,3 +336,205 @@ async function syncFullLibrary(
 
   return { updatedEntries, deletedKeys, libraryVersion: newVersion };
 }
+
+// ─── Library Browsing (read-only, for the Quick Reference panel) ───
+
+export interface ZoteroItemSummary {
+  key: string;
+  title: string;
+  creators: string;
+  year: string;
+}
+
+/** Top-level items (not attachments/notes) in a collection, or the whole library when collectionKey is null. */
+export async function fetchLibraryItems(
+  apiKey: string,
+  userID: string,
+  collectionKey: string | null,
+): Promise<ZoteroItemSummary[]> {
+  const basePath = collectionKey
+    ? `/users/${userID}/collections/${collectionKey}/items/top`
+    : `/users/${userID}/items/top`;
+
+  const result: ZoteroItemSummary[] = [];
+  let start = 0;
+  const limit = 100;
+
+  while (true) {
+    const params = new URLSearchParams({
+      format: "json",
+      limit: String(limit),
+      start: String(start),
+    });
+    const response = await zoteroFetch(apiKey, `${basePath}?${params}`);
+    const items = (await response.json()) as {
+      key: string;
+      data: {
+        itemType: string;
+        title?: string;
+        creators?: { lastName?: string; name?: string }[];
+        date?: string;
+      };
+    }[];
+    if (items.length === 0) break;
+
+    for (const item of items) {
+      if (
+        item.data.itemType === "attachment" ||
+        item.data.itemType === "note"
+      ) {
+        continue;
+      }
+      const creators = (item.data.creators ?? [])
+        .map((c) => c.lastName ?? c.name ?? "")
+        .filter(Boolean)
+        .join(", ");
+      result.push({
+        key: item.key,
+        title: item.data.title || "Untitled",
+        creators,
+        year: item.data.date ? item.data.date.slice(0, 4) : "",
+      });
+    }
+
+    if (items.length < limit) break;
+    start += limit;
+  }
+
+  return result;
+}
+
+/** The first PDF attachment directly under an item, if any. */
+export interface ZoteroAttachmentInfo {
+  key: string;
+  filename: string;
+  /**
+   * Only "imported_file"/"imported_url" attachments are stored in Zotero's
+   * cloud and fetchable via the /file endpoint. "linked_file" attachments
+   * just point at a path on the machine that added them, and "linked_url"
+   * attachments point at an external URL — neither has bytes Zotero can serve.
+   */
+  downloadable: boolean;
+}
+
+export async function findPdfAttachment(
+  apiKey: string,
+  userID: string,
+  itemKey: string,
+): Promise<ZoteroAttachmentInfo | null> {
+  const response = await zoteroFetch(
+    apiKey,
+    `/users/${userID}/items/${itemKey}/children?format=json`,
+  );
+  const children = (await response.json()) as {
+    key: string;
+    data: {
+      itemType: string;
+      contentType?: string;
+      filename?: string;
+      linkMode?: string;
+    };
+  }[];
+  const pdf = children.find(
+    (c) =>
+      c.data.itemType === "attachment" &&
+      c.data.contentType === "application/pdf",
+  );
+  if (!pdf) return null;
+  return {
+    key: pdf.key,
+    filename: pdf.data.filename || "document.pdf",
+    downloadable:
+      pdf.data.linkMode === "imported_file" ||
+      pdf.data.linkMode === "imported_url",
+  };
+}
+
+/** Downloads an attachment's file bytes (follows Zotero's redirect to its storage backend). */
+/**
+ * Downloads via the Rust backend rather than the webview's fetch(): the /file
+ * endpoint redirects to Zotero's storage backend, which is either not covered
+ * by — or inconsistently subject to — the webview's CSP connect-src. Rust-side
+ * HTTP isn't CSP-governed at all, so this sidesteps the problem entirely.
+ */
+export async function downloadAttachmentFile(
+  apiKey: string,
+  userID: string,
+  attachmentKey: string,
+): Promise<Uint8Array> {
+  const bytes = await invoke<number[]>("zotero_download_attachment", {
+    apiKey,
+    userId: userID,
+    attachmentKey,
+  });
+  return new Uint8Array(bytes);
+}
+
+export interface ZoteroAnnotation {
+  pageIndex: number;
+  rects: [number, number, number, number][];
+  color: string;
+  type: "highlight" | "underline";
+}
+
+/** Highlight/underline annotations on a PDF attachment (a "child of a child" —
+ * they're nested under the attachment, not the parent bibliographic item). */
+export async function fetchAnnotations(
+  apiKey: string,
+  userID: string,
+  attachmentKey: string,
+): Promise<ZoteroAnnotation[]> {
+  const result: ZoteroAnnotation[] = [];
+  let start = 0;
+  const limit = 100;
+
+  while (true) {
+    const params = new URLSearchParams({
+      format: "json",
+      limit: String(limit),
+      start: String(start),
+    });
+    const response = await zoteroFetch(
+      apiKey,
+      `/users/${userID}/items/${attachmentKey}/children?${params}`,
+    );
+    const children = (await response.json()) as {
+      data: {
+        itemType: string;
+        annotationType?: string;
+        annotationColor?: string;
+        annotationPosition?: string;
+      };
+    }[];
+    if (children.length === 0) break;
+
+    for (const child of children) {
+      if (child.data.itemType !== "annotation") continue;
+      const type = child.data.annotationType;
+      if (type !== "highlight" && type !== "underline") continue;
+      if (!child.data.annotationPosition) continue;
+      try {
+        const position = JSON.parse(child.data.annotationPosition) as {
+          pageIndex: number;
+          rects: [number, number, number, number][];
+        };
+        if (!Array.isArray(position.rects) || position.rects.length === 0) {
+          continue;
+        }
+        result.push({
+          pageIndex: position.pageIndex,
+          rects: position.rects,
+          color: child.data.annotationColor || "#ffd400",
+          type,
+        });
+      } catch {
+        // Malformed annotationPosition JSON — skip just this one annotation.
+      }
+    }
+
+    if (children.length < limit) break;
+    start += limit;
+  }
+
+  return result;
+}

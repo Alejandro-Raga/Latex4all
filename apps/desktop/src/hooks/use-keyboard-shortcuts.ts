@@ -54,6 +54,16 @@ export function useKeyboardShortcuts() {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("toggle-debug-panel"));
       }
+
+      // Cmd+Option+I (macOS) / Ctrl+Shift+I (others): Open native devtools.
+      // The app disables the native right-click menu, so this is otherwise unreachable.
+      if (
+        (e.metaKey && e.altKey && e.key.toLowerCase() === "i") ||
+        (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "i")
+      ) {
+        e.preventDefault();
+        invoke("open_devtools").catch(console.error);
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);

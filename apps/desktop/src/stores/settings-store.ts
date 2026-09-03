@@ -36,6 +36,13 @@ interface SettingsState {
   ignoredWords: string[];
   addIgnoredWord: (word: string) => void;
   removeIgnoredWord: (word: string) => void;
+  /** Kept independent per viewer — toggling dark mode in one shouldn't affect the others. */
+  pdfDarkModeMain: boolean;
+  setPdfDarkModeMain: (enabled: boolean) => void;
+  pdfDarkModeReference: boolean;
+  setPdfDarkModeReference: (enabled: boolean) => void;
+  pdfDarkModeInline: boolean;
+  setPdfDarkModeInline: (enabled: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -68,6 +75,13 @@ export const useSettingsStore = create<SettingsState>()(
             (w) => w !== word.toLowerCase(),
           ),
         })),
+      pdfDarkModeMain: false,
+      setPdfDarkModeMain: (enabled) => set({ pdfDarkModeMain: enabled }),
+      pdfDarkModeReference: false,
+      setPdfDarkModeReference: (enabled) =>
+        set({ pdfDarkModeReference: enabled }),
+      pdfDarkModeInline: false,
+      setPdfDarkModeInline: (enabled) => set({ pdfDarkModeInline: enabled }),
     }),
     {
       name: "claude-prism-settings",

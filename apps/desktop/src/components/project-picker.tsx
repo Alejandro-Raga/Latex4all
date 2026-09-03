@@ -54,6 +54,9 @@ import {
 import { ProjectWizard, type CreationMode } from "./project-wizard";
 import { ClaudeSetup } from "./claude-setup";
 import { cn } from "@/lib/utils";
+import { createLogger } from "@/lib/debug/logger";
+
+const log = createLogger("project-picker");
 
 interface DefaultProject {
   path: string;
@@ -678,6 +681,34 @@ async function loadProjectPreview(
   if (pending) return pending;
 
   const promise = (async () => {
+    try {
+      return await computeProjectPreview(project, cacheKey);
+    } catch (err) {
+      const detail =
+        err instanceof Error ? (err.stack ?? err.message) : String(err);
+      log.warn(`Preview pipeline threw for ${project.path}: ${detail}`);
+      const data: ProjectPreviewData = {
+        kind: "empty",
+        createdAt: await getProjectCreatedAt(project.path).catch(() => null),
+      };
+      projectPreviewCache.set(cacheKey, data);
+      return data;
+    }
+  })();
+
+  projectPreviewRequests.set(cacheKey, promise);
+  try {
+    return await promise;
+  } finally {
+    projectPreviewRequests.delete(cacheKey);
+  }
+}
+
+async function computeProjectPreview(
+  project: RecentProject,
+  cacheKey: string,
+): Promise<ProjectPreviewData> {
+  {
     const createdAt = await getProjectCreatedAt(project.path);
     const pdfPath = await firstExistingPath(project.path, [
       [".prism", "build", "main.pdf"],
@@ -687,13 +718,21 @@ async function loadProjectPreview(
     ]);
 
     if (pdfPath) {
-      const data: ProjectPreviewData = {
-        kind: "pdf",
-        url: await renderPdfThumbnail(pdfPath),
-        createdAt,
-      };
-      projectPreviewCache.set(cacheKey, data);
-      return data;
+      try {
+        const data: ProjectPreviewData = {
+          kind: "pdf",
+          url: await renderPdfThumbnail(pdfPath),
+          createdAt,
+        };
+        projectPreviewCache.set(cacheKey, data);
+        return data;
+      } catch (err) {
+        log.warn(
+          `Failed to render thumbnail for ${project.path}: ${pdfPath} — ${String(err)}`,
+        );
+      }
+    } else {
+      log.info(`No cached PDF found for ${project.path}`);
     }
 
     const texFile = await firstExistingProjectFile(project.path, [
@@ -716,11 +755,9 @@ async function loadProjectPreview(
         projectPreviewCache.set(cacheKey, data);
         return data;
       } catch (err) {
-        console.warn("Failed to compile project preview:", {
-          path: project.path,
-          target: texFile.relativePath,
-          error: err,
-        });
+        log.warn(
+          `Failed to compile preview for ${project.path}/${texFile.relativePath}: ${String(err)}`,
+        );
       }
 
       const fileName = texFile.absolutePath.split(/[\\/]/).pop() ?? "main.tex";
@@ -734,16 +771,10 @@ async function loadProjectPreview(
       return data;
     }
 
+    log.info(`No main.tex/document.tex found for ${project.path}`);
     const data: ProjectPreviewData = { kind: "empty", createdAt };
     projectPreviewCache.set(cacheKey, data);
     return data;
-  })();
-
-  projectPreviewRequests.set(cacheKey, promise);
-  try {
-    return await promise;
-  } finally {
-    projectPreviewRequests.delete(cacheKey);
   }
 }
 
@@ -780,10 +811,7 @@ function ProjectPreviewCard({
         if (!cancelled) setPreview({ status: "ready", data });
       })
       .catch((err) => {
-        console.warn("Failed to load project preview:", {
-          path: project.path,
-          error: err,
-        });
+        log.warn(`Failed to load preview for ${project.path}: ${String(err)}`);
         if (!cancelled) setPreview({ status: "error" });
       });
 

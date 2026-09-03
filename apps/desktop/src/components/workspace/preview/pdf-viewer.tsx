@@ -1,11 +1,12 @@
 import {
   useCallback,
+  useMemo,
   useRef,
   useEffect,
   useLayoutEffect,
   useState,
 } from "react";
-import { LoaderIcon } from "lucide-react";
+import { LoaderIcon, MoonIcon, SunIcon } from "lucide-react";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { ask } from "@tauri-apps/plugin-dialog";
 import {
@@ -17,6 +18,7 @@ import { MupdfPage } from "./mupdf-page";
 import { createLogger } from "@/lib/debug/logger";
 import { APP_VISIBILITY_RESTORED } from "@/lib/debug/log-store";
 import type { PageSize } from "@/lib/mupdf/types";
+import { Button } from "@/components/ui/button";
 
 const log = createLogger("pdf-viewer");
 
@@ -196,6 +198,15 @@ export interface CaptureResult {
   pdfY: number;
 }
 
+/** A highlight/underline mark to overlay on a rendered page — currently sourced
+ * from Zotero annotations, but generic to any 0-based page index + PDF-space rects. */
+export interface PdfAnnotationRect {
+  pageIndex: number;
+  rects: [number, number, number, number][];
+  color: string;
+  type: "highlight" | "underline";
+}
+
 interface PdfViewerProps {
   data: Uint8Array;
   scale: number;
@@ -203,6 +214,12 @@ interface PdfViewerProps {
   rootFileId?: string;
   /** Whether this viewer is currently the active/visible one (for keep-alive). */
   isActive?: boolean;
+  /** Highlight/underline marks to overlay, e.g. imported from Zotero. */
+  annotations?: PdfAnnotationRect[];
+  /** Controlled — each call site owns (and can persist) its own dark-mode state,
+   * so toggling it in one viewer never affects another. */
+  darkMode: boolean;
+  onToggleDarkMode: () => void;
   onError?: (error: string) => void;
   onLoadSuccess?: (numPages: number) => void;
   onScaleChange?: (scale: number) => void;
@@ -223,6 +240,9 @@ export function PdfViewer({
   scale,
   rootFileId,
   isActive = true,
+  annotations,
+  darkMode,
+  onToggleDarkMode,
   onError,
   onLoadSuccess,
   onScaleChange,
@@ -245,6 +265,20 @@ export function PdfViewer({
   const [loading, setLoading] = useState(true);
   const docIdRef = useRef(0);
   const loadGenRef = useRef(0);
+
+  const annotationsByPage = useMemo(() => {
+    const map = new Map<number, PdfAnnotationRect[]>();
+    if (!annotations) return map;
+    for (const ann of annotations) {
+      const list = map.get(ann.pageIndex);
+      if (list) {
+        list.push(ann);
+      } else {
+        map.set(ann.pageIndex, [ann]);
+      }
+    }
+    return map;
+  }, [annotations]);
 
   const scaleRef = useRef(scale);
   scaleRef.current = scale;
@@ -984,12 +1018,7 @@ export function PdfViewer({
         const match = href.match(/#page=(\d+)/);
         if (match) {
           const pageNum = parseInt(match[1], 10);
-          const pageEl = container.querySelector(
-            `[data-page-number="${pageNum}"]`,
-          ) as HTMLElement | null;
-          if (pageEl) {
-            pageEl.scrollIntoView({ behavior: "smooth", block: "start" });
-          }
+          scrollToPage(container, pageNum);
         }
         return;
       }
@@ -1154,49 +1183,67 @@ export function PdfViewer({
       : null;
 
   return (
-    <div
-      ref={containerRef}
-      tabIndex={-1}
-      {...{ [LOCAL_ZOOM_SHORTCUTS_ATTR]: "true" }}
-      className="min-h-0 flex-1 overflow-auto outline-none"
-      style={{
-        cursor: captureMode ? "crosshair" : undefined,
-        touchAction: captureMode ? "none" : "pan-x pan-y",
-      }}
-      onMouseDownCapture={() => containerRef.current?.focus()}
-      onMouseDown={handleCaptureMouseDown}
-      onMouseMove={handleCaptureMouseMove}
-      onMouseUp={handleCaptureMouseUp}
-    >
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <div
-        ref={contentRef}
-        className="flex min-w-fit flex-col items-center gap-4 p-4"
-        onClick={handleTextLayerClick}
+        ref={containerRef}
+        tabIndex={-1}
+        {...{ [LOCAL_ZOOM_SHORTCUTS_ATTR]: "true" }}
+        className="min-h-0 flex-1 overflow-auto outline-none"
+        style={{
+          cursor: captureMode ? "crosshair" : undefined,
+          touchAction: captureMode ? "none" : "pan-x pan-y",
+          filter: darkMode ? "invert(1) hue-rotate(180deg)" : undefined,
+        }}
+        onMouseDownCapture={() => containerRef.current?.focus()}
+        onMouseDown={handleCaptureMouseDown}
+        onMouseMove={handleCaptureMouseMove}
+        onMouseUp={handleCaptureMouseUp}
       >
-        {loading && numPages === 0 && (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <LoaderIcon className="size-4 animate-spin" />
-            Loading PDF...
-          </div>
-        )}
-        {pageSizes.map((size, i) => (
-          <MupdfPage
-            key={i}
-            docId={docIdRef.current}
-            pageIndex={i}
-            scale={scale}
-            pageWidth={size.width}
-            pageHeight={size.height}
-            isVisible={visiblePages.has(i + 1)}
-          />
-        ))}
-      </div>
-      {selRect && (
         <div
-          className="pointer-events-none fixed border-2 border-primary bg-primary/10"
-          style={selRect}
-        />
-      )}
+          ref={contentRef}
+          className="flex min-w-fit flex-col items-center gap-4 p-4"
+          onClick={handleTextLayerClick}
+        >
+          {loading && numPages === 0 && (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <LoaderIcon className="size-4 animate-spin" />
+              Loading PDF...
+            </div>
+          )}
+          {pageSizes.map((size, i) => (
+            <MupdfPage
+              key={i}
+              docId={docIdRef.current}
+              pageIndex={i}
+              scale={scale}
+              pageWidth={size.width}
+              pageHeight={size.height}
+              isVisible={visiblePages.has(i + 1)}
+              annotations={annotationsByPage.get(i)}
+            />
+          ))}
+        </div>
+        {selRect && (
+          <div
+            className="pointer-events-none fixed border-2 border-primary bg-primary/10"
+            style={selRect}
+          />
+        )}
+      </div>
+      <Button
+        variant="secondary"
+        size="icon"
+        className="absolute right-3 bottom-3 z-10 size-8 rounded-full shadow-md"
+        onClick={onToggleDarkMode}
+        title={darkMode ? "Switch to light PDF" : "Switch to dark PDF"}
+        aria-label="Toggle PDF dark mode"
+      >
+        {darkMode ? (
+          <SunIcon className="size-4" />
+        ) : (
+          <MoonIcon className="size-4" />
+        )}
+      </Button>
     </div>
   );
 }

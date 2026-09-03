@@ -372,6 +372,44 @@ pub async fn zotero_cancel_oauth(state: tauri::State<'_, ZoteroOAuthState>) -> R
     Ok(())
 }
 
+/// Downloads an attachment's file bytes from the Rust side. The webview's fetch()
+/// is subject to CSP connect-src, which either doesn't cover — or is inconsistently
+/// enforced across — the storage backend Zotero's /file endpoint redirects to;
+/// doing the request here sidesteps that entirely (Rust-side HTTP isn't CSP-governed).
+#[tauri::command]
+pub async fn zotero_download_attachment(
+    api_key: String,
+    user_id: String,
+    attachment_key: String,
+) -> Result<Vec<u8>, String> {
+    let url = format!(
+        "https://api.zotero.org/users/{}/items/{}/file",
+        user_id, attachment_key
+    );
+
+    let client = reqwest::Client::new();
+    let response = client
+        .get(&url)
+        .header("Zotero-API-Key", api_key)
+        .header("Zotero-API-Version", "3")
+        .send()
+        .await
+        .map_err(|e| format!("Download request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!(
+            "Failed to download attachment: {}",
+            response.status()
+        ));
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read attachment data: {}", e))?;
+    Ok(bytes.to_vec())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

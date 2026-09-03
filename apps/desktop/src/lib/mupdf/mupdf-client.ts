@@ -39,9 +39,11 @@ function createClient(): MupdfClient {
   let nextId = 1;
   let ready: Promise<void>;
   let resolveReady: () => void;
+  let rejectReady: (error: Error) => void;
 
-  ready = new Promise((resolve) => {
+  ready = new Promise((resolve, reject) => {
     resolveReady = resolve;
+    rejectReady = reject;
   });
 
   worker.onmessage = (event: MessageEvent) => {
@@ -70,6 +72,18 @@ function createClient(): MupdfClient {
     log.error("Worker fatal error", { message: event.message });
     // Nullify singleton so next getMupdfClient() creates a fresh worker
     instance = null;
+    // Without this, a failure before the INIT message arrives leaves `ready`
+    // permanently pending — every call() through this client would hang
+    // forever rather than fail, since the timeout only starts once `ready`
+    // resolves. Reject it (harmlessly a no-op if already resolved) and fail
+    // out any requests already in flight.
+    rejectReady(
+      new Error(`MuPDF worker failed to initialize: ${event.message}`),
+    );
+    for (const [id, request] of pending) {
+      pending.delete(id);
+      request.reject(new Error(`MuPDF worker crashed: ${event.message}`));
+    }
   };
 
   const CALL_TIMEOUT_MS = 30_000;

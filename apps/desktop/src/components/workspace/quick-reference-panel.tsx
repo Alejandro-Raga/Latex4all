@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
   ArrowLeftIcon,
   ChevronRightIcon,
@@ -14,10 +22,20 @@ import {
   ImageIcon,
   LibraryIcon,
   Loader2Icon,
+  MinusIcon,
+  PlusIcon,
+  BookOpenIcon,
   XIcon,
+  type LucideIcon,
 } from "lucide-react";
 import { useProjectStore } from "@/stores/project-store";
 import { useDocumentStore } from "@/stores/document-store";
+import { useZoteroStore } from "@/stores/zotero-store";
+import { useSettingsStore } from "@/stores/settings-store";
+import {
+  buildCollectionTree,
+  type ZoteroCollectionNode,
+} from "@/lib/zotero-collection-tree";
 import {
   scanProjectFolder,
   readTexFileContent,
@@ -25,7 +43,14 @@ import {
   type FsProjectFile,
   type ProjectFileType,
 } from "@/lib/tauri/fs";
-import { PdfViewer } from "./preview/pdf-viewer";
+import {
+  fetchLibraryItems,
+  findPdfAttachment,
+  downloadAttachmentFile,
+  fetchAnnotations,
+  type ZoteroItemSummary,
+} from "@/lib/zotero-api";
+import { PdfViewer, type PdfAnnotationRect } from "./preview/pdf-viewer";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
@@ -121,30 +146,46 @@ function fileIcon(kind: ProjectFileType) {
 type Preview =
   | { kind: "loading" }
   | { kind: "text"; content: string; truncated: boolean }
-  | { kind: "pdf"; data: Uint8Array }
+  | {
+      kind: "pdf";
+      data: Uint8Array;
+      annotations?: PdfAnnotationRect[];
+      annotationsError?: string;
+    }
   | { kind: "image"; dataUrl: string }
   | { kind: "unsupported" }
   | { kind: "error"; message: string };
 
-interface SelectedFile {
-  relativePath: string;
-  absolutePath: string;
-  type: ProjectFileType;
-}
+type SelectedFile =
+  | {
+      source: "fs";
+      id: string;
+      label: string;
+      absolutePath: string;
+      type: ProjectFileType;
+    }
+  | {
+      source: "zotero";
+      id: string;
+      label: string;
+      itemKey: string;
+    };
+
+/** Sentinel cache/expand key for "My Library" (all items, no collection filter). */
+const MY_LIBRARY_KEY = "__zotero_my_library__";
 
 function normalizePath(path: string): string {
   return path.replace(/[\\/]+$/, "").toLowerCase();
 }
 
-export function QuickReferencePanel({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   const recentProjects = useProjectStore((s) => s.recentProjects);
   const currentProjectRoot = useDocumentStore((s) => s.projectRoot);
+  const zoteroAuthenticated = useZoteroStore((s) => s.isAuthenticated);
+  const zoteroApiKey = useZoteroStore((s) => s.apiKey);
+  const zoteroUserID = useZoteroStore((s) => s.userID);
+  const zoteroCollections = useZoteroStore((s) => s.collections);
+  const loadZoteroCollections = useZoteroStore((s) => s.loadCollections);
 
   const [refProjectPath, setRefProjectPath] = useState<string | null>(null);
   const [tree, setTree] = useState<TreeNode | null>(null);
@@ -154,8 +195,27 @@ export function QuickReferencePanel({
   const [selectedFile, setSelectedFile] = useState<SelectedFile | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
 
+  const [expandedZoteroCollections, setExpandedZoteroCollections] = useState<
+    Set<string>
+  >(new Set());
+  const [zoteroItemsByCollection, setZoteroItemsByCollection] = useState<
+    Map<string, ZoteroItemSummary[]>
+  >(new Map());
+  const [zoteroLoadingKeys, setZoteroLoadingKeys] = useState<Set<string>>(
+    new Set(),
+  );
+  const [zoteroErrorKeys, setZoteroErrorKeys] = useState<Map<string, string>>(
+    new Map(),
+  );
+
   const treeCache = useRef(new Map<string, TreeNode>());
   const previewCache = useRef(new Map<string, Preview>());
+
+  useEffect(() => {
+    if (zoteroAuthenticated && zoteroCollections.length === 0) {
+      loadZoteroCollections();
+    }
+  }, [zoteroAuthenticated, zoteroCollections.length, loadZoteroCollections]);
 
   const availableProjects = useMemo(() => {
     const currentNormalized = currentProjectRoot
@@ -207,9 +267,9 @@ export function QuickReferencePanel({
   const handleBack = useCallback(() => {
     setRefProjectPath(null);
     setTree(null);
+    setTreeError(null);
     setSelectedFile(null);
     setPreview(null);
-    setTreeError(null);
   }, []);
 
   const toggleFolder = useCallback((relativePath: string) => {
@@ -227,9 +287,76 @@ export function QuickReferencePanel({
   const selectFile = useCallback((node: TreeNode) => {
     if (!node.absolutePath || node.kind === "folder") return;
     setSelectedFile({
-      relativePath: node.relativePath,
+      source: "fs",
+      id: node.absolutePath,
+      label: node.relativePath,
       absolutePath: node.absolutePath,
       type: node.kind,
+    });
+  }, []);
+
+  const loadZoteroItemsForKey = useCallback(
+    async (cacheKey: string, collectionKey: string | null) => {
+      if (zoteroItemsByCollection.has(cacheKey)) return;
+      if (!zoteroApiKey || !zoteroUserID) return;
+
+      setZoteroLoadingKeys((prev) => new Set(prev).add(cacheKey));
+      setZoteroErrorKeys((prev) => {
+        if (!prev.has(cacheKey)) return prev;
+        const next = new Map(prev);
+        next.delete(cacheKey);
+        return next;
+      });
+      try {
+        const items = await fetchLibraryItems(
+          zoteroApiKey,
+          zoteroUserID,
+          collectionKey,
+        );
+        setZoteroItemsByCollection((prev) =>
+          new Map(prev).set(cacheKey, items),
+        );
+      } catch (err) {
+        log.warn("Failed to load Zotero library items", {
+          collectionKey,
+          error: String(err),
+        });
+        setZoteroErrorKeys((prev) =>
+          new Map(prev).set(cacheKey, "Couldn't load items."),
+        );
+      } finally {
+        setZoteroLoadingKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(cacheKey);
+          return next;
+        });
+      }
+    },
+    [zoteroApiKey, zoteroUserID, zoteroItemsByCollection],
+  );
+
+  const toggleZoteroNode = useCallback(
+    (cacheKey: string, collectionKey: string | null) => {
+      setExpandedZoteroCollections((prev) => {
+        const next = new Set(prev);
+        if (next.has(cacheKey)) {
+          next.delete(cacheKey);
+        } else {
+          next.add(cacheKey);
+          loadZoteroItemsForKey(cacheKey, collectionKey);
+        }
+        return next;
+      });
+    },
+    [loadZoteroItemsForKey],
+  );
+
+  const selectZoteroItem = useCallback((item: ZoteroItemSummary) => {
+    setSelectedFile({
+      source: "zotero",
+      id: `zotero:${item.key}`,
+      label: item.title,
+      itemKey: item.key,
     });
   }, []);
 
@@ -238,16 +365,64 @@ export function QuickReferencePanel({
       setPreview(null);
       return;
     }
-    const cached = previewCache.current.get(selectedFile.absolutePath);
-    if (cached) {
-      setPreview(cached);
-      return;
+    // Zotero content (PDFs, and especially annotations) changes outside this
+    // app — never serve a stale snapshot from earlier in the session.
+    if (selectedFile.source === "fs") {
+      const cached = previewCache.current.get(selectedFile.id);
+      if (cached) {
+        setPreview(cached);
+        return;
+      }
     }
 
     let cancelled = false;
     setPreview({ kind: "loading" });
 
     const load = async (): Promise<Preview> => {
+      if (selectedFile.source === "zotero") {
+        if (!zoteroApiKey || !zoteroUserID) {
+          return { kind: "error", message: "Not connected to Zotero." };
+        }
+        const attachment = await findPdfAttachment(
+          zoteroApiKey,
+          zoteroUserID,
+          selectedFile.itemKey,
+        );
+        if (!attachment) return { kind: "unsupported" };
+        if (!attachment.downloadable) {
+          return {
+            kind: "error",
+            message:
+              "This item's PDF is a local file link in Zotero, not uploaded to Zotero cloud storage, so it can't be opened from here.",
+          };
+        }
+        const [data, annotationsResult] = await Promise.all([
+          downloadAttachmentFile(zoteroApiKey, zoteroUserID, attachment.key),
+          fetchAnnotations(zoteroApiKey, zoteroUserID, attachment.key)
+            .then((annotations) => ({ annotations, error: undefined }))
+            .catch((err) => {
+              const message = err instanceof Error ? err.message : String(err);
+              log.warn("Failed to load Zotero annotations", {
+                attachmentKey: attachment.key,
+                error: message,
+              });
+              return { annotations: [] as PdfAnnotationRect[], error: message };
+            }),
+        ]);
+        log.info("Zotero annotations loaded", {
+          attachmentKey: attachment.key,
+          count: annotationsResult.annotations.length,
+          pageIndexes: annotationsResult.annotations.map((a) => a.pageIndex),
+          error: annotationsResult.error,
+        });
+        return {
+          kind: "pdf",
+          data,
+          annotations: annotationsResult.annotations,
+          annotationsError: annotationsResult.error,
+        };
+      }
+
       switch (selectedFile.type) {
         case "pdf": {
           const data = await readFile(selectedFile.absolutePath);
@@ -279,60 +454,58 @@ export function QuickReferencePanel({
     load()
       .then((result) => {
         if (cancelled) return;
-        previewCache.current.set(selectedFile.absolutePath, result);
+        if (selectedFile.source === "fs") {
+          previewCache.current.set(selectedFile.id, result);
+        }
         setPreview(result);
       })
       .catch((err) => {
         if (cancelled) return;
-        log.warn("Failed to load reference file preview", {
-          path: selectedFile.absolutePath,
-          error: String(err),
+        const detail = err instanceof Error ? err.message : String(err);
+        log.warn("Failed to load reference preview", {
+          id: selectedFile.id,
+          error: detail,
         });
-        setPreview({ kind: "error", message: "Couldn't open this file." });
+        setPreview({
+          kind: "error",
+          message: `Couldn't open this file. (${detail})`,
+        });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [selectedFile]);
-
-  // Reset the whole panel when it's closed, so reopening starts at the picker.
-  useEffect(() => {
-    if (!open) {
-      handleBack();
-    }
-  }, [open, handleBack]);
+  }, [selectedFile, zoteroApiKey, zoteroUserID]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && open) onClose();
+      if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
+  }, [onClose]);
 
   const refProjectName = refProjectPath
     ? refProjectPath.split(/[/\\]/).pop() || refProjectPath
     : null;
+  const zoteroCollectionTree = useMemo(
+    () => buildCollectionTree(zoteroCollections),
+    [zoteroCollections],
+  );
+  const selectedZoteroItemKey =
+    selectedFile?.source === "zotero" ? selectedFile.itemKey : null;
 
   return (
-    <div
-      className={cn(
-        "absolute inset-y-0 right-0 z-30 flex w-[380px] max-w-[85%] flex-col border-border border-l bg-background shadow-2xl transition-transform duration-200 ease-out",
-        open ? "translate-x-0" : "translate-x-full",
-      )}
-      style={{ top: "var(--titlebar-height)" }}
-      aria-hidden={!open}
-    >
-      <div className="flex h-10 shrink-0 items-center gap-2 border-border border-b px-3">
+    <div className="flex h-full min-w-0 flex-col bg-background">
+      <div className="flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] shrink-0 items-center gap-2 border-border border-b px-3">
         {refProjectPath ? (
           <Button
             variant="ghost"
             size="icon"
             className="size-6"
             onClick={handleBack}
-            title="Back to projects"
-            aria-label="Back to projects"
+            title="Back"
+            aria-label="Back"
           >
             <ArrowLeftIcon className="size-3.5" />
           </Button>
@@ -355,68 +528,300 @@ export function QuickReferencePanel({
       </div>
 
       {!refProjectPath && (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-2">
-          {availableProjects.length === 0 ? (
-            <p className="p-3 text-muted-foreground text-xs">
-              No other recent projects yet. Open a folder to reference it here.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-0.5">
-              {availableProjects.map((p) => (
-                <button
-                  key={p.path}
-                  type="button"
-                  onClick={() => openReferenceProject(p.path)}
-                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted"
+        <PanelGroup direction="vertical" className="min-h-0 flex-1">
+          <Panel defaultSize={55} minSize={20} className="min-h-0">
+            <div className="h-full overflow-y-auto p-2">
+              {availableProjects.length === 0 ? (
+                <p className="p-3 text-muted-foreground text-xs">
+                  No other recent projects yet. Open a folder to reference it
+                  here.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-0.5">
+                  {availableProjects.map((p) => (
+                    <button
+                      key={p.path}
+                      type="button"
+                      onClick={() => openReferenceProject(p.path)}
+                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted"
+                    >
+                      <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="mt-1 border-border border-t p-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={handleBrowse}
                 >
-                  <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                </button>
-              ))}
+                  Open folder…
+                </Button>
+              </div>
+
+              <div className="mt-3 border-border border-t pt-2">
+                <p className="mb-1 px-2 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+                  Zotero
+                </p>
+                {!zoteroAuthenticated ? (
+                  <p className="px-2 text-muted-foreground text-xs">
+                    Connect Zotero from the sidebar's Zotero tab to browse your
+                    library here.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-0.5">
+                    <ZoteroTreeRow
+                      icon={BookOpenIcon}
+                      label="My Library"
+                      expanded={expandedZoteroCollections.has(MY_LIBRARY_KEY)}
+                      onToggle={() => toggleZoteroNode(MY_LIBRARY_KEY, null)}
+                    />
+                    {expandedZoteroCollections.has(MY_LIBRARY_KEY) && (
+                      <ZoteroNestedGroup>
+                        <ZoteroItemsSlot
+                          items={zoteroItemsByCollection.get(MY_LIBRARY_KEY)}
+                          loading={zoteroLoadingKeys.has(MY_LIBRARY_KEY)}
+                          error={zoteroErrorKeys.get(MY_LIBRARY_KEY)}
+                          selectedItemKey={selectedZoteroItemKey}
+                          onSelectItem={selectZoteroItem}
+                        />
+                      </ZoteroNestedGroup>
+                    )}
+                    {zoteroCollectionTree.map((node) => (
+                      <ZoteroCollectionTree
+                        key={node.key}
+                        node={node}
+                        expandedKeys={expandedZoteroCollections}
+                        onToggleExpand={toggleZoteroNode}
+                        itemsByCollection={zoteroItemsByCollection}
+                        loadingKeys={zoteroLoadingKeys}
+                        errorKeys={zoteroErrorKeys}
+                        selectedItemKey={selectedZoteroItemKey}
+                        onSelectItem={selectZoteroItem}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-          <div className="mt-1 border-border border-t p-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={handleBrowse}
-            >
-              Open folder…
-            </Button>
-          </div>
-        </div>
+          </Panel>
+          <PanelResizeHandle className="h-px bg-border transition-colors hover:bg-ring" />
+          <Panel minSize={15} className="min-h-0">
+            <FilePreview selectedFile={selectedFile} preview={preview} />
+          </Panel>
+        </PanelGroup>
       )}
 
       {refProjectPath && (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-[0_0_45%] overflow-y-auto border-border border-b p-1.5">
-            {treeLoading && (
-              <div className="flex items-center gap-2 p-2 text-muted-foreground text-xs">
-                <Loader2Icon className="size-3.5 animate-spin" />
-                Reading project…
-              </div>
-            )}
-            {treeError && (
-              <p className="p-2 text-destructive text-xs">{treeError}</p>
-            )}
-            {tree && !treeLoading && (
-              <TreeView
-                node={tree}
-                depth={0}
-                expanded={expanded}
-                onToggleFolder={toggleFolder}
-                selectedPath={selectedFile?.relativePath ?? null}
-                onSelectFile={selectFile}
-              />
-            )}
-          </div>
-          <div className="min-h-0 flex-1 overflow-hidden">
+        <PanelGroup direction="vertical" className="min-h-0 flex-1">
+          <Panel defaultSize={45} minSize={15} className="min-h-0">
+            <div className="h-full overflow-y-auto p-1.5">
+              {treeLoading && (
+                <div className="flex items-center gap-2 p-2 text-muted-foreground text-xs">
+                  <Loader2Icon className="size-3.5 animate-spin" />
+                  Reading project…
+                </div>
+              )}
+              {treeError && (
+                <p className="p-2 text-destructive text-xs">{treeError}</p>
+              )}
+              {tree && !treeLoading && (
+                <TreeView
+                  node={tree}
+                  depth={0}
+                  expanded={expanded}
+                  onToggleFolder={toggleFolder}
+                  selectedPath={
+                    selectedFile?.source === "fs" ? selectedFile.label : null
+                  }
+                  onSelectFile={selectFile}
+                />
+              )}
+            </div>
+          </Panel>
+          <PanelResizeHandle className="h-px bg-border transition-colors hover:bg-ring" />
+          <Panel minSize={15} className="min-h-0">
             <FilePreview selectedFile={selectedFile} preview={preview} />
-          </div>
-        </div>
+          </Panel>
+        </PanelGroup>
       )}
     </div>
+  );
+}
+
+/** A single expand/collapse row shared by "My Library" and each collection node. */
+function ZoteroTreeRow({
+  icon: Icon,
+  label,
+  expanded,
+  onToggle,
+}: {
+  icon: LucideIcon;
+  label: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="flex w-full items-center rounded-md hover:bg-muted">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex shrink-0 items-center justify-center px-1 py-1.5"
+        title={expanded ? "Collapse" : "Expand"}
+        aria-label={expanded ? "Collapse" : "Expand"}
+      >
+        {expanded ? (
+          <ChevronDownIcon className="size-3 text-muted-foreground" />
+        ) : (
+          <ChevronRightIcon className="size-3 text-muted-foreground" />
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pr-2 text-left text-sm"
+      >
+        <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+      </button>
+    </div>
+  );
+}
+
+function ZoteroItemRow({
+  item,
+  isSelected,
+  onSelect,
+}: {
+  item: ZoteroItemSummary;
+  isSelected: boolean;
+  onSelect: (item: ZoteroItemSummary) => void;
+}) {
+  const subtitle = [item.creators, item.year].filter(Boolean).join(" · ");
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(item)}
+      className={cn(
+        "flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left text-xs transition-colors hover:bg-muted",
+        isSelected && "bg-muted font-medium",
+      )}
+    >
+      <FileTextIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{item.title}</span>
+        {subtitle && (
+          <span className="block truncate font-normal text-muted-foreground">
+            {subtitle}
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/** Loading/error/items shown under an expanded collection or "My Library". */
+function ZoteroItemsSlot({
+  items,
+  loading,
+  error,
+  selectedItemKey,
+  onSelectItem,
+}: {
+  items: ZoteroItemSummary[] | undefined;
+  loading: boolean;
+  error: string | undefined;
+  selectedItemKey: string | null;
+  onSelectItem: (item: ZoteroItemSummary) => void;
+}) {
+  return (
+    <>
+      {loading && (
+        <div className="flex items-center gap-2 py-1 text-muted-foreground text-xs">
+          <Loader2Icon className="size-3 animate-spin" />
+          Loading…
+        </div>
+      )}
+      {error && <p className="py-1 text-destructive text-xs">{error}</p>}
+      {items?.length === 0 && !loading && !error && (
+        <p className="py-1 text-muted-foreground text-xs">No items here.</p>
+      )}
+      {items?.map((item) => (
+        <ZoteroItemRow
+          key={item.key}
+          item={item}
+          isSelected={selectedItemKey === item.key}
+          onSelect={onSelectItem}
+        />
+      ))}
+    </>
+  );
+}
+
+/** Wraps an expanded node's children in a left guide-line + indent, so nested
+ * collections and their articles visually read as "contained within" their
+ * parent rather than as independent, same-level rows. */
+function ZoteroNestedGroup({ children }: { children: ReactNode }) {
+  return <div className="ml-[9px] border-border border-l pl-3">{children}</div>;
+}
+
+function ZoteroCollectionTree({
+  node,
+  expandedKeys,
+  onToggleExpand,
+  itemsByCollection,
+  loadingKeys,
+  errorKeys,
+  selectedItemKey,
+  onSelectItem,
+}: {
+  node: ZoteroCollectionNode;
+  expandedKeys: Set<string>;
+  onToggleExpand: (cacheKey: string, collectionKey: string | null) => void;
+  itemsByCollection: Map<string, ZoteroItemSummary[]>;
+  loadingKeys: Set<string>;
+  errorKeys: Map<string, string>;
+  selectedItemKey: string | null;
+  onSelectItem: (item: ZoteroItemSummary) => void;
+}) {
+  const isExpanded = expandedKeys.has(node.key);
+
+  return (
+    <>
+      <ZoteroTreeRow
+        icon={FolderIcon}
+        label={node.name}
+        expanded={isExpanded}
+        onToggle={() => onToggleExpand(node.key, node.key)}
+      />
+      {isExpanded && (
+        <ZoteroNestedGroup>
+          <ZoteroItemsSlot
+            items={itemsByCollection.get(node.key)}
+            loading={loadingKeys.has(node.key)}
+            error={errorKeys.get(node.key)}
+            selectedItemKey={selectedItemKey}
+            onSelectItem={onSelectItem}
+          />
+          {node.children.map((child) => (
+            <ZoteroCollectionTree
+              key={child.key}
+              node={child}
+              expandedKeys={expandedKeys}
+              onToggleExpand={onToggleExpand}
+              itemsByCollection={itemsByCollection}
+              loadingKeys={loadingKeys}
+              errorKeys={errorKeys}
+              selectedItemKey={selectedItemKey}
+              onSelectItem={onSelectItem}
+            />
+          ))}
+        </ZoteroNestedGroup>
+      )}
+    </>
   );
 }
 
@@ -495,6 +900,9 @@ function TreeView({
   );
 }
 
+/** Per-file zoom cache, mirroring the main PDF preview's per-root cache. */
+const pdfZoomCache = new Map<string, number>();
+
 function FilePreview({
   selectedFile,
   preview,
@@ -502,6 +910,33 @@ function FilePreview({
   selectedFile: SelectedFile | null;
   preview: Preview | null;
 }) {
+  const [scale, setScale] = useState(1);
+  const pdfDarkMode = useSettingsStore((s) => s.pdfDarkModeReference);
+  const setPdfDarkMode = useSettingsStore((s) => s.setPdfDarkModeReference);
+
+  useEffect(() => {
+    if (selectedFile) {
+      setScale(pdfZoomCache.get(selectedFile.id) ?? 1);
+    }
+  }, [selectedFile]);
+
+  const handleScaleChange = useCallback(
+    (next: number) => {
+      setScale(next);
+      if (selectedFile) pdfZoomCache.set(selectedFile.id, next);
+    },
+    [selectedFile],
+  );
+
+  const zoomIn = useCallback(
+    () => handleScaleChange(Math.min(4, scale + 0.1)),
+    [handleScaleChange, scale],
+  );
+  const zoomOut = useCallback(
+    () => handleScaleChange(Math.max(0.25, scale - 0.1)),
+    [handleScaleChange, scale],
+  );
+
   if (!selectedFile) {
     return (
       <div className="flex h-full items-center justify-center p-4 text-center text-muted-foreground text-xs">
@@ -530,7 +965,9 @@ function FilePreview({
   if (preview.kind === "unsupported") {
     return (
       <div className="flex h-full items-center justify-center p-4 text-center text-muted-foreground text-xs">
-        Preview isn't available for this file type.
+        {selectedFile.source === "zotero"
+          ? "This item doesn't have a PDF attachment."
+          : "Preview isn't available for this file type."}
       </div>
     );
   }
@@ -563,12 +1000,61 @@ function FilePreview({
   }
 
   // preview.kind === "pdf"
+  const annotationCount = preview.annotations?.length ?? 0;
+
   return (
-    <div className="relative h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-8 shrink-0 items-center justify-between gap-1 border-border border-b px-2">
+        {preview.annotationsError ? (
+          <span
+            className="min-w-0 truncate text-destructive text-xs"
+            title={preview.annotationsError}
+          >
+            Annotations: {preview.annotationsError}
+          </span>
+        ) : (
+          <span className="min-w-0 truncate text-muted-foreground text-xs">
+            {annotationCount > 0
+              ? `${annotationCount} annotation${annotationCount === 1 ? "" : "s"}`
+              : "No annotations found"}
+          </span>
+        )}
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            onClick={zoomOut}
+            disabled={scale <= 0.25}
+            title="Zoom out"
+            aria-label="Zoom out"
+          >
+            <MinusIcon className="size-3.5" />
+          </Button>
+          <span className="w-10 text-center text-muted-foreground text-xs tabular-nums">
+            {Math.round(scale * 100)}%
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            onClick={zoomIn}
+            disabled={scale >= 4}
+            title="Zoom in"
+            aria-label="Zoom in"
+          >
+            <PlusIcon className="size-3.5" />
+          </Button>
+        </div>
+      </div>
       <PdfViewer
         data={preview.data}
-        scale={1}
-        rootFileId={selectedFile.absolutePath}
+        scale={scale}
+        rootFileId={selectedFile.id}
+        onScaleChange={handleScaleChange}
+        annotations={preview.annotations}
+        darkMode={pdfDarkMode}
+        onToggleDarkMode={() => setPdfDarkMode(!pdfDarkMode)}
       />
     </div>
   );
