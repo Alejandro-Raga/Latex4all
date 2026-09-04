@@ -11,14 +11,18 @@ import { listen } from "@tauri-apps/api/event";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import {
   AlertCircleIcon,
+  BookMarkedIcon,
   CheckCircle2Icon,
   CircleIcon,
   DownloadIcon,
   FlaskConicalIcon,
   GitBranchIcon,
   KeyRoundIcon,
+  LinkIcon,
   Loader2Icon,
+  PlayIcon,
   RefreshCwIcon,
+  SpellCheckIcon,
   TerminalIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,7 +35,9 @@ import {
 } from "@/components/ui/dialog";
 import { ClaudeSetup } from "@/components/claude-setup";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
+import { useLanguageToolStore } from "@/stores/language-tool-store";
 import { useUvSetupStore } from "@/stores/uv-setup-store";
+import { useZoteroStore } from "@/stores/zotero-store";
 import { cn } from "@/lib/utils";
 
 type SetupItemState = "ready" | "loading" | "blocked" | "error";
@@ -75,6 +81,27 @@ export function EnvironmentOnboarding() {
   const installUv = useUvSetupStore((s) => s.install);
   const finishUvInstall = useUvSetupStore((s) => s._finishInstall);
 
+  // Grammar checking and Zotero are optional conveniences: they are offered
+  // here but deliberately excluded from `needsAttention`, so neither a 250 MB
+  // download nor a Zotero account is ever required to reach the workspace.
+  const grammarStatus = useLanguageToolStore((s) => s.status);
+  const grammarError = useLanguageToolStore((s) => s.error);
+  const grammarProgress = useLanguageToolStore((s) => s.progress);
+  const isGrammarInstalling = useLanguageToolStore((s) => s.isInstalling);
+  const isGrammarStarting = useLanguageToolStore((s) => s.isStarting);
+  const grammarExternallyManaged = useLanguageToolStore(
+    (s) => s.externallyManaged,
+  );
+  const checkGrammarStatus = useLanguageToolStore((s) => s.checkStatus);
+  const installGrammar = useLanguageToolStore((s) => s.install);
+  const startGrammar = useLanguageToolStore((s) => s.start);
+
+  const zoteroConnected = useZoteroStore((s) => s.isAuthenticated);
+  const zoteroUsername = useZoteroStore((s) => s.username);
+  const zoteroValidating = useZoteroStore((s) => s.isValidating);
+  const zoteroError = useZoteroStore((s) => s.error);
+  const connectZotero = useZoteroStore((s) => s.connectWithOAuth);
+
   const checkSkillsStatus = useCallback(async () => {
     setSkillsChecking(true);
     setSkillsError(null);
@@ -98,6 +125,7 @@ export function EnvironmentOnboarding() {
       checkClaudeStatus(),
       checkUvStatus(),
       checkSkillsStatus(),
+      checkGrammarStatus(),
     ]).finally(() => {
       if (!cancelled) {
         setInitialCheckComplete(true);
@@ -107,7 +135,7 @@ export function EnvironmentOnboarding() {
     return () => {
       cancelled = true;
     };
-  }, [checkClaudeStatus, checkSkillsStatus, checkUvStatus]);
+  }, [checkClaudeStatus, checkGrammarStatus, checkSkillsStatus, checkUvStatus]);
 
   useEffect(() => {
     const unlisten = listen<boolean>("uv-install-complete", (event) => {
@@ -380,6 +408,103 @@ export function EnvironmentOnboarding() {
                       }
                 }
               />
+
+              <SetupItem
+                optional
+                state={
+                  isGrammarInstalling ||
+                  isGrammarStarting ||
+                  grammarStatus === "checking"
+                    ? "loading"
+                    : grammarStatus === "error"
+                      ? "error"
+                      : grammarStatus === "ready"
+                        ? "ready"
+                        : "blocked"
+                }
+                icon={SpellCheckIcon}
+                title="Grammar Checker"
+                detail={
+                  isGrammarInstalling
+                    ? (grammarProgress?.message ?? "Downloading...")
+                    : isGrammarStarting
+                      ? "Starting server..."
+                      : grammarStatus === "checking"
+                        ? "Checking..."
+                        : grammarStatus === "error"
+                          ? (grammarError ?? "Setup needs attention")
+                          : grammarStatus === "ready"
+                            ? grammarExternallyManaged
+                              ? "Running (started outside ClaudePrism)"
+                              : "Running"
+                            : grammarStatus === "stopped"
+                              ? "Installed - server not running"
+                              : "Adds grammar and style checks (~250 MB)"
+                }
+                action={
+                  grammarStatus === "ready"
+                    ? {
+                        label: "Check",
+                        icon: RefreshCwIcon,
+                        onClick: checkGrammarStatus,
+                      }
+                    : grammarStatus === "stopped"
+                      ? {
+                          label: isGrammarStarting ? "Starting" : "Start",
+                          icon: isGrammarStarting ? Loader2Icon : PlayIcon,
+                          loading: isGrammarStarting,
+                          onClick: startGrammar,
+                        }
+                      : {
+                          label: isGrammarInstalling ? "Installing" : "Install",
+                          icon: isGrammarInstalling
+                            ? Loader2Icon
+                            : DownloadIcon,
+                          loading: isGrammarInstalling,
+                          onClick: installGrammar,
+                        }
+                }
+              />
+
+              <SetupItem
+                optional
+                state={
+                  zoteroValidating
+                    ? "loading"
+                    : zoteroError
+                      ? "error"
+                      : zoteroConnected
+                        ? "ready"
+                        : "blocked"
+                }
+                icon={BookMarkedIcon}
+                title="Zotero"
+                detail={
+                  zoteroValidating
+                    ? "Waiting for authorization in your browser..."
+                    : zoteroError
+                      ? zoteroError
+                      : zoteroConnected
+                        ? `Connected as ${zoteroUsername || "your account"}`
+                        : "Sync citations from your reference library"
+                }
+                action={
+                  zoteroConnected
+                    ? {
+                        label: "Connected",
+                        icon: CheckCircle2Icon,
+                        disabled: true,
+                      }
+                    : {
+                        label: zoteroValidating ? "Waiting" : "Connect",
+                        icon: zoteroValidating ? Loader2Icon : LinkIcon,
+                        loading: zoteroValidating,
+                        onClick: () => {
+                          connectZotero();
+                        },
+                      }
+                }
+              />
             </div>
           </div>
 
@@ -432,11 +557,14 @@ function SetupItem({
   title,
   detail,
   action,
+  optional = false,
 }: {
   state: SetupItemState;
   icon: typeof TerminalIcon;
   title: string;
   detail: string;
+  /** Nice to have rather than required — never blocks finishing setup. */
+  optional?: boolean;
   action?: {
     label: string;
     icon: typeof TerminalIcon;
@@ -472,9 +600,14 @@ function SetupItem({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate font-semibold text-sm">{title}</span>
-          {state === "blocked" && (
-            <CircleIcon className="size-2.5 shrink-0 text-muted-foreground/50" />
-          )}
+          {state === "blocked" &&
+            (optional ? (
+              <span className="shrink-0 text-muted-foreground/70 text-xs">
+                Optional
+              </span>
+            ) : (
+              <CircleIcon className="size-2.5 shrink-0 text-muted-foreground/50" />
+            ))}
         </div>
         <p
           className={cn(

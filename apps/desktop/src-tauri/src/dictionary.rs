@@ -1,29 +1,46 @@
-//! Look up a word or phrase in the macOS system dictionary (Dictionary Services).
+//! Word lookup for the editor's dictionary/thesaurus popover.
 //!
-//! Uses the public `DCSCopyTextDefinition` API (CoreServices framework), the same
-//! mechanism behind the system-wide "Look Up" feature in Safari, Notes, TextEdit, etc.,
-//! for the definition. `DCSCopyTextDefinition(NULL, ...)` only returns the *first*
-//! matching dictionary though, not a merge of everything active — so if the user's
-//! Thesaurus is enabled it's never actually consulted that way. To get synonyms we
-//! separately enumerate the installed dictionaries (via the undocumented but stable
-//! `DCSCopyAvailableDictionaries`, still shipped in CoreServices) to find the active
-//! Thesaurus and query it directly.
+//! On macOS this uses the public `DCSCopyTextDefinition` API (CoreServices
+//! framework), the same mechanism behind the system-wide "Look Up" feature in
+//! Safari, Notes, TextEdit, etc., for the definition.
+//! `DCSCopyTextDefinition(NULL, ...)` only returns the *first* matching
+//! dictionary though, not a merge of everything active — so if the user's
+//! Thesaurus is enabled it's never actually consulted that way. To get synonyms
+//! we separately enumerate the installed dictionaries (via the undocumented but
+//! stable `DCSCopyAvailableDictionaries`, still shipped in CoreServices) to find
+//! the active Thesaurus and query it directly.
+//!
+//! Windows and Linux have no comparable system dictionary, so they are served
+//! entirely by the bundled WordNet database (see `wordnet.rs`). macOS falls
+//! back to WordNet too, per-field: plenty of Macs have a dictionary enabled but
+//! no Thesaurus, which would otherwise leave the popover with no synonyms at
+//! all.
 
+use crate::wordnet::{self, WordNet};
 use serde::Serialize;
+use std::path::PathBuf;
+use tauri::Manager;
 
 #[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct DictionaryLookupResult {
-    /// Definition text from the user's primary active dictionary, if any.
+    /// Definition text, from the user's primary active dictionary on macOS or
+    /// from WordNet elsewhere.
     definition: Option<String>,
-    /// Raw entry text from the user's active Thesaurus dictionary, if one is
-    /// installed and has an entry for the term. The frontend parses this into
-    /// a synonym list.
+    /// Raw entry text from the user's active macOS Thesaurus dictionary, if one
+    /// is installed and has an entry for the term. The frontend parses this
+    /// into synonym and antonym lists. `None` whenever the structured lists
+    /// below are populated instead.
     synonyms: Option<String>,
+    /// Synonyms as a structured list, from WordNet. When present the frontend
+    /// uses these directly rather than parsing `synonyms` prose.
+    synonym_list: Option<Vec<String>>,
+    /// Antonyms as a structured list, from WordNet.
+    antonym_list: Option<Vec<String>>,
 }
 
 #[cfg(target_os = "macos")]
 mod macos {
-    use super::DictionaryLookupResult;
     use core_foundation::base::{CFRange, TCFType};
     use core_foundation::string::{CFString, CFStringRef};
     use std::os::raw::c_void;
@@ -101,31 +118,68 @@ mod macos {
         }
     }
 
-    pub fn lookup(term: &str) -> DictionaryLookupResult {
+    /// `(definition, raw thesaurus entry)`, either of which may be absent
+    /// depending on which dictionaries the user has enabled.
+    pub fn lookup(term: &str) -> (Option<String>, Option<String>) {
         let cf_term = CFString::new(term);
         let definition = define_with(std::ptr::null(), &cf_term);
         let synonyms = find_thesaurus().and_then(|dict| define_with(dict, &cf_term));
-        DictionaryLookupResult {
-            definition,
-            synonyms,
-        }
+        (definition, synonyms)
     }
 }
 
-/// Look up `term` in the system dictionary. macOS only; returns empty fields elsewhere.
+/// Location of the bundled WordNet database. Resolved through Tauri so it works
+/// both from a packaged bundle and from `tauri dev`, where resources are read
+/// straight out of the source tree.
+fn wordnet_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+    app.path()
+        .resolve("resources/wordnet", tauri::path::BaseDirectory::Resource)
+        .ok()
+}
+
+/// Look up `term`, filling in whatever the platform can provide.
 #[tauri::command]
-pub fn lookup_dictionary_definition(term: String) -> DictionaryLookupResult {
+pub fn lookup_dictionary_definition(app: tauri::AppHandle, term: String) -> DictionaryLookupResult {
     let trimmed = term.trim();
     if trimmed.is_empty() {
         return DictionaryLookupResult::default();
     }
 
     #[cfg(target_os = "macos")]
-    {
-        macos::lookup(trimmed)
-    }
+    let (definition, thesaurus_entry) = macos::lookup(trimmed);
     #[cfg(not(target_os = "macos"))]
-    {
-        DictionaryLookupResult::default()
+    let (definition, thesaurus_entry): (Option<String>, Option<String>) = (None, None);
+
+    // WordNet covers whatever the system dictionary didn't. On Windows and
+    // Linux that's everything; on macOS it's typically just the thesaurus half.
+    let needs_wordnet = definition.is_none() || thesaurus_entry.is_none();
+    let wordnet_entry = if needs_wordnet {
+        wordnet_dir(&app)
+            .and_then(|dir| WordNet::shared(&dir).ok())
+            .map(|wn| wn.lookup(trimmed))
+            .filter(|entry| !entry.is_empty())
+    } else {
+        None
+    };
+
+    let wordnet_definition = wordnet_entry
+        .as_ref()
+        .and_then(|entry| wordnet::format_definition(entry));
+
+    // Only surface the structured lists when the system thesaurus came up
+    // empty — otherwise the frontend would show two competing synonym sets.
+    let (synonym_list, antonym_list) = match (&thesaurus_entry, &wordnet_entry) {
+        (None, Some(entry)) => (
+            Some(entry.synonyms.clone()).filter(|s| !s.is_empty()),
+            Some(entry.antonyms.clone()).filter(|a| !a.is_empty()),
+        ),
+        _ => (None, None),
+    };
+
+    DictionaryLookupResult {
+        definition: definition.or(wordnet_definition),
+        synonyms: thesaurus_entry,
+        synonym_list,
+        antonym_list,
     }
 }

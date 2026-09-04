@@ -23,8 +23,16 @@ interface WordLookupPopoverProps {
 
 interface DictionaryLookupResult {
   definition: string | null;
+  /** Raw macOS Thesaurus prose, parsed client-side. Null when the structured
+   * lists below are populated instead (Windows/Linux, or a Mac with no
+   * Thesaurus enabled — both are served by the bundled WordNet database). */
   synonyms: string | null;
+  synonymList: string[] | null;
+  antonymList: string[] | null;
 }
+
+/** `dict://` is a macOS URL scheme; there is no Dictionary.app elsewhere. */
+const HAS_SYSTEM_DICTIONARY_APP = navigator.userAgent.includes("Macintosh");
 
 /** Definitions from Dictionary Services can run long; keep the popover readable. */
 const MAX_HEIGHT = 360;
@@ -82,12 +90,16 @@ export function WordLookupPopover({
     };
   }, [term, language, isIgnored]);
 
+  // WordNet returns synonyms and antonyms already structured; the macOS
+  // Thesaurus only returns prose, which has to be parsed out.
   const synonyms = useMemo(() => {
+    if (result?.synonymList) return result.synonymList;
     if (!result?.synonyms) return [];
     return parseSynonyms(result.synonyms, term);
   }, [result, term]);
 
   const antonyms = useMemo(() => {
+    if (result?.antonymList) return result.antonymList;
     if (!result?.synonyms) return [];
     return parseAntonyms(result.synonyms, term);
   }, [result, term]);
@@ -125,7 +137,8 @@ export function WordLookupPopover({
   const nothingFound =
     !loading &&
     !result?.definition &&
-    !result?.synonyms &&
+    synonyms.length === 0 &&
+    antonyms.length === 0 &&
     spellingSuggestions.length === 0;
 
   return createPortal(
@@ -247,15 +260,17 @@ export function WordLookupPopover({
         )}
       </div>
 
-      <div className="border-border border-t px-3 py-1.5">
-        <button
-          onClick={handleOpenInDictionary}
-          className="flex items-center gap-1.5 text-muted-foreground text-xs transition-colors hover:text-foreground"
-        >
-          <ExternalLinkIcon className="size-3" />
-          Open in Dictionary
-        </button>
-      </div>
+      {HAS_SYSTEM_DICTIONARY_APP && (
+        <div className="border-border border-t px-3 py-1.5">
+          <button
+            onClick={handleOpenInDictionary}
+            className="flex items-center gap-1.5 text-muted-foreground text-xs transition-colors hover:text-foreground"
+          >
+            <ExternalLinkIcon className="size-3" />
+            Open in Dictionary
+          </button>
+        </div>
+      )}
     </div>,
     document.body,
   );

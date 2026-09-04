@@ -39,6 +39,8 @@ tectonic = { version = "0.15", default-features = true, features = ["external-ha
 #   Windows: vcpkg install harfbuzz[graphite2] freetype icu fontconfig (with TECTONIC_DEP_BACKEND=vcpkg)
 flate2 = "1"
 tar = "0.4"
+# LanguageTool and the Adoptium JRE are both distributed as zips (see languagetool.rs).
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [lints.clippy]
 unwrap_used = "deny"
@@ -56,6 +58,9 @@ objc2-foundation = { version = "0.3", features = ["NSData"] }
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.55"
 windows-sys = { version = "0.61", features = ["Win32_System_Environment"] }
+# Spell checking goes through the ISpellChecker COM API (see spellcheck.rs),
+# which needs the higher-level `windows` bindings for the interface vtables.
+windows = { version = "0.61", features = ["Win32_Globalization", "Win32_System_Com"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"

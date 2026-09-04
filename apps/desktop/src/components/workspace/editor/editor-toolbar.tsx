@@ -1,6 +1,7 @@
 import { RefObject, useCallback, useEffect, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 import {
   BoldIcon,
   ItalicIcon,
@@ -42,6 +43,7 @@ import {
 import { refreshSpellingDecorations } from "./spellcheck-extension";
 import { forceGrammarRecheck } from "./grammar-check-extension";
 import { useDocumentStore } from "@/stores/document-store";
+import { useLanguageToolStore } from "@/stores/language-tool-store";
 import { CHECK_LANGUAGES, useSettingsStore } from "@/stores/settings-store";
 
 interface EditorInfo {
@@ -107,6 +109,61 @@ export function EditorToolbar({
   );
   const checkLanguage = useSettingsStore((s) => s.checkLanguage);
   const setCheckLanguage = useSettingsStore((s) => s.setCheckLanguage);
+  const grammarStatus = useLanguageToolStore((s) => s.status);
+  const checkGrammarStatus = useLanguageToolStore((s) => s.checkStatus);
+  const startGrammarServer = useLanguageToolStore((s) => s.start);
+  const installGrammarServer = useLanguageToolStore((s) => s.install);
+
+  /**
+   * Turning grammar checking on is useless without a server behind it, and the
+   * editor would otherwise just fail silently on every keystroke. So when the
+   * user enables it, make sure something is actually listening: start a server
+   * we already have, or offer the download if we don't. The download is ~250 MB,
+   * so it stays behind an explicit confirmation.
+   */
+  const toggleGrammarCheck = useCallback(async () => {
+    if (grammarCheckEnabled) {
+      setGrammarCheckEnabled(false);
+      return;
+    }
+
+    setGrammarCheckEnabled(true);
+    await checkGrammarStatus();
+    const status = useLanguageToolStore.getState().status;
+
+    if (status === "ready") return;
+
+    if (status === "stopped") {
+      toast.promise(startGrammarServer(), {
+        loading: "Starting the grammar server...",
+        success: "Grammar checking is ready.",
+        error: (err) => `Could not start the grammar server: ${err}`,
+      });
+      return;
+    }
+
+    toast("Grammar checking needs a one-time download", {
+      description:
+        "LanguageTool runs locally on your machine (about 250 MB, plus Java if you don't have it).",
+      duration: 15000,
+      action: {
+        label: "Download",
+        onClick: () => {
+          toast.promise(installGrammarServer(), {
+            loading: "Downloading LanguageTool...",
+            success: "Grammar checking is ready.",
+            error: (err) => `Setup failed: ${err}`,
+          });
+        },
+      },
+    });
+  }, [
+    checkGrammarStatus,
+    grammarCheckEnabled,
+    installGrammarServer,
+    setGrammarCheckEnabled,
+    startGrammarServer,
+  ]);
   const ignoredWords = useSettingsStore((s) => s.ignoredWords);
   const removeIgnoredWord = useSettingsStore((s) => s.removeIgnoredWord);
   const handleRemoveIgnoredWord = useCallback(
@@ -367,8 +424,12 @@ export function EditorToolbar({
           variant={grammarCheckEnabled ? "default" : "ghost"}
           size="sm"
           className="h-6 px-2 font-mono text-xs"
-          onClick={() => setGrammarCheckEnabled(!grammarCheckEnabled)}
-          title="Toggle grammar checking (requires a local LanguageTool server at http://localhost:8081 — e.g. `brew install languagetool && brew services start languagetool`)"
+          onClick={toggleGrammarCheck}
+          title={
+            grammarStatus === "ready"
+              ? "Toggle grammar checking (LanguageTool server running locally)"
+              : "Toggle grammar checking — runs a LanguageTool server on your machine, downloaded on first use"
+          }
         >
           GRAMMAR
         </Button>

@@ -6,11 +6,13 @@ mod claude_process;
 mod dictionary;
 mod grammar;
 mod history;
+mod languagetool;
 mod latex;
 mod skills;
 mod slash_commands;
 mod spellcheck;
 mod uv;
+mod wordnet;
 mod zotero;
 
 use std::path::Path;
@@ -575,6 +577,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(claude::ClaudeProcessState::default())
         .manage(latex::LatexCompilerState::default())
+        .manage(languagetool::LanguageToolProcess::default())
         .manage(zotero::ZoteroOAuthState::default())
         .setup(|app| {
             // Safety net: force-show the main window after a timeout if the
@@ -610,6 +613,10 @@ pub fn run() {
             spellcheck::get_spelling_suggestions,
             grammar::check_grammar,
             grammar::check_grammar_server_available,
+            languagetool::language_tool_status,
+            languagetool::install_language_tool,
+            languagetool::start_language_tool,
+            languagetool::stop_language_tool,
             latex::compile_latex,
             latex::synctex_edit,
             latex::detect_texlive,
@@ -743,6 +750,11 @@ pub fn run() {
                 tauri::async_runtime::spawn(async move {
                     latex::cleanup_all_builds(&state_clone).await;
                 });
+
+                // Stop the grammar server, if this app is the one that started
+                // it — otherwise it would outlive the window that needs it.
+                let language_tool = app_handle.state::<languagetool::LanguageToolProcess>();
+                tauri::async_runtime::block_on(languagetool::shutdown(language_tool.inner()));
             }
             _ => {}
         }
