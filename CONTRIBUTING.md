@@ -63,6 +63,23 @@ pnpm dev:desktop
 pnpm build:desktop
 ```
 
+### Building installers in CI
+
+The **Build Desktop** workflow produces the installers for every platform.
+Running it from the Actions tab (`workflow_dispatch`) takes a `platforms`
+choice, so a fork can build just Windows without needing Apple signing
+credentials. Leave `release_tag` empty for an artifact-only build; the Windows
+installer lands in the `desktop-windows` artifact.
+
+Two secrets are optional:
+
+- `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — only
+  needed for auto-updater artifacts. Without them the build still produces a
+  working installer, just no updater bundle.
+- `ZOTERO_CONSUMER_KEY` / `ZOTERO_CONSUMER_SECRET` — only enable Zotero's
+  one-click OAuth button. Without them, users connect with a personal API key
+  from [zotero.org/settings/keys](https://www.zotero.org/settings/keys).
+
 ## Project Structure
 
 ```
