@@ -717,10 +717,7 @@ mod tests {
 
     #[test]
     fn binary_search_misses_return_none() {
-        let data = fake_index(&[
-            "banana n 1 0 1 0 00000002 ",
-            "cherry n 1 0 1 0 00000003 ",
-        ]);
+        let data = fake_index(&["banana n 1 0 1 0 00000002 ", "cherry n 1 0 1 0 00000003 "]);
         let start = header_end(&data);
         // Before the first entry, between two entries, and after the last.
         for missing in ["apple", "blueberry", "damson"] {
@@ -890,5 +887,74 @@ mod tests {
     #[test]
     fn open_rejects_a_directory_without_the_database() {
         assert!(WordNet::open("/nonexistent/wordnet").is_err());
+    }
+
+    /// The bundled database, when `scripts/fetch-wordnet.mjs` has been run.
+    /// Everything above tests parsing in isolation; this is the only check that
+    /// the whole lookup path holds together against the real files.
+    fn bundled_database() -> Option<WordNet> {
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/wordnet");
+        WordNet::open(dir).ok()
+    }
+
+    #[test]
+    fn lookup_reads_definitions_synonyms_and_antonyms() {
+        let Some(wn) = bundled_database() else {
+            eprintln!("skipping: run `node scripts/fetch-wordnet.mjs` first");
+            return;
+        };
+
+        let entry = wn.lookup("happy");
+        assert!(!entry.senses.is_empty(), "expected senses for 'happy'");
+        assert!(
+            entry
+                .synonyms
+                .iter()
+                .any(|w| w.eq_ignore_ascii_case("glad")),
+            "expected 'glad' among {:?}",
+            entry.synonyms
+        );
+        assert!(
+            entry
+                .antonyms
+                .iter()
+                .any(|w| w.eq_ignore_ascii_case("unhappy")),
+            "expected 'unhappy' among {:?}",
+            entry.antonyms
+        );
+        // Antonyms are lexical pointers, so the word itself must never appear.
+        assert!(!entry
+            .synonyms
+            .iter()
+            .any(|w| w.eq_ignore_ascii_case("happy")));
+    }
+
+    #[test]
+    fn lookup_resolves_inflected_forms_to_their_lemma() {
+        let Some(wn) = bundled_database() else {
+            return;
+        };
+
+        // Irregular plural via the exception table, and a regular participle.
+        for (surface, lemma) in [("geese", "goose"), ("running", "run")] {
+            let entry = wn.lookup(surface);
+            assert!(
+                entry.senses.iter().any(|s| s.lemma == lemma),
+                "{surface} should resolve to {lemma}"
+            );
+        }
+    }
+
+    #[test]
+    fn lookup_handles_collocations_and_unknown_words() {
+        let Some(wn) = bundled_database() else {
+            return;
+        };
+
+        // Spaces map onto WordNet's underscored collocations.
+        assert!(!wn.lookup("New York").senses.is_empty());
+        // A word that isn't in the database yields an empty entry, not an error.
+        assert!(wn.lookup("zzzznotaword").is_empty());
+        assert!(wn.lookup("").is_empty());
     }
 }
