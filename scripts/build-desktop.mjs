@@ -1,5 +1,6 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const env = { ...process.env };
 
@@ -23,6 +24,18 @@ const args = ["--filter=@claude-prism/desktop", "tauri", "build"];
 
 if (!env.TAURI_SIGNING_PRIVATE_KEY) {
   args.push("--config", "src-tauri/tauri.local-build.conf.json");
+}
+
+// The bundled WordNet database (see wordnet.rs) is ~27 MB and isn't committed,
+// so make sure it's on disk before Tauri tries to bundle it as a resource.
+// The fetch script is a no-op once the files are present.
+const wordnet = spawnSync(
+  process.execPath,
+  [join(fileURLToPath(new URL(".", import.meta.url)), "fetch-wordnet.mjs")],
+  { stdio: "inherit" },
+);
+if (wordnet.status !== 0) {
+  process.exit(wordnet.status ?? 1);
 }
 
 const child =

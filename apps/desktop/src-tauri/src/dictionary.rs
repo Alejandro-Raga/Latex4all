@@ -164,7 +164,7 @@ pub fn lookup_dictionary_definition(app: tauri::AppHandle, term: String) -> Dict
 
     let wordnet_definition = wordnet_entry
         .as_ref()
-        .and_then(|entry| wordnet::format_definition(entry));
+        .and_then(wordnet::format_definition);
 
     // Only surface the structured lists when the system thesaurus came up
     // empty — otherwise the frontend would show two competing synonym sets.

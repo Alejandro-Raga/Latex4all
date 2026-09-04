@@ -666,3 +666,229 @@ pub fn format_definition(entry: &Entry) -> Option<String> {
 
     Some(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Builds a fake index file: the 29-line license header WordNet ships,
+    /// followed by sorted entries.
+    fn fake_index(entries: &[&str]) -> Vec<u8> {
+        let mut data = String::new();
+        for i in 1..=HEADER_LINES {
+            data.push_str(&format!("  {i} license text\n"));
+        }
+        for entry in entries {
+            data.push_str(entry);
+            data.push('\n');
+        }
+        data.into_bytes()
+    }
+
+    #[test]
+    fn header_end_skips_the_license_banner() {
+        let data = fake_index(&["apple n 1 0 1 0 00001740 "]);
+        let start = header_end(&data);
+        assert!(data[start..].starts_with(b"apple"));
+    }
+
+    #[test]
+    fn binary_search_finds_first_middle_and_last() {
+        let data = fake_index(&[
+            "apple n 1 0 1 0 00000001 ",
+            "banana n 1 0 1 0 00000002 ",
+            "cherry n 1 0 1 0 00000003 ",
+            "damson n 1 0 1 0 00000004 ",
+            "elderberry n 1 0 1 0 00000005 ",
+        ]);
+        let start = header_end(&data);
+
+        for (lemma, offset) in [
+            ("apple", "00000001"),
+            ("cherry", "00000003"),
+            ("elderberry", "00000005"),
+        ] {
+            let line = binary_search_line(&data, start, lemma.as_bytes());
+            let line = String::from_utf8_lossy(line.unwrap_or_default()).into_owned();
+            assert!(line.starts_with(lemma), "expected {lemma}, got {line}");
+            assert!(line.contains(offset));
+        }
+    }
+
+    #[test]
+    fn binary_search_misses_return_none() {
+        let data = fake_index(&[
+            "banana n 1 0 1 0 00000002 ",
+            "cherry n 1 0 1 0 00000003 ",
+        ]);
+        let start = header_end(&data);
+        // Before the first entry, between two entries, and after the last.
+        for missing in ["apple", "blueberry", "damson"] {
+            assert!(
+                binary_search_line(&data, start, missing.as_bytes()).is_none(),
+                "{missing} should not be found"
+            );
+        }
+    }
+
+    #[test]
+    fn binary_search_does_not_match_a_prefix() {
+        let data = fake_index(&["cherry n 1 0 1 0 00000003 "]);
+        let start = header_end(&data);
+        // "cher" is a prefix of an entry but not an entry itself.
+        assert!(binary_search_line(&data, start, b"cher").is_none());
+    }
+
+    #[test]
+    fn parse_index_line_skips_the_pointer_symbols() {
+        // happy: 4 synsets, 5 pointer symbols, then sense_cnt and tagsense_cnt.
+        let line = "happy a 4 5 ! & ^ = + 4 2 01151786 01052105 02576313 01003861 ";
+        let offsets = parse_index_line(line).unwrap_or_default();
+        assert_eq!(offsets, vec![1151786, 1052105, 2576313, 1003861]);
+    }
+
+    #[test]
+    fn parse_index_line_handles_no_pointers() {
+        let line = "'tween r 1 0 1 0 00252367 ";
+        assert_eq!(parse_index_line(line).unwrap_or_default(), vec![252367]);
+    }
+
+    #[test]
+    fn parse_synset_reads_words_pointers_and_gloss() {
+        let line = "01052105 00 s 02 felicitous 0 happy 0 002 & 01051573 a 0000 \
+                    ! 01151786 a 0201 | marked by good fortune; \"a felicitous life\"";
+        let synset = parse_synset(line).expect("record should parse");
+
+        assert_eq!(synset.words, vec!["felicitous", "happy"]);
+        assert_eq!(synset.gloss, "marked by good fortune");
+        assert_eq!(synset.examples, vec!["a felicitous life"]);
+
+        assert_eq!(synset.pointers.len(), 2);
+        let (symbol, offset, pos, source, target) = &synset.pointers[1];
+        assert_eq!(symbol, "!");
+        assert_eq!(*offset, 1151786);
+        assert_eq!(*pos, Pos::Adj);
+        // "0201": source word 2 ("happy"), target word 1.
+        assert_eq!((*source, *target), (2, 1));
+    }
+
+    #[test]
+    fn parse_synset_strips_adjective_markers_and_underscores() {
+        let line = "00000001 00 a 02 unable(p) 0 new_york 0 000 | a gloss";
+        let synset = parse_synset(line).expect("record should parse");
+        assert_eq!(synset.words, vec!["unable", "new york"]);
+    }
+
+    #[test]
+    fn split_gloss_separates_definition_from_examples() {
+        let (definition, examples) =
+            split_gloss("enjoying or showing joy; \"a happy smile\"; \"happy days\"");
+        assert_eq!(definition, "enjoying or showing joy");
+        assert_eq!(examples, vec!["a happy smile", "happy days"]);
+    }
+
+    #[test]
+    fn split_gloss_keeps_multi_clause_definitions_together() {
+        let (definition, examples) = split_gloss("one sense; another sense");
+        assert_eq!(definition, "one sense; another sense");
+        assert!(examples.is_empty());
+    }
+
+    #[test]
+    fn normalize_term_matches_wordnet_lemma_form() {
+        assert_eq!(normalize_term("  Happy  "), "happy");
+        assert_eq!(normalize_term("New York"), "new_york");
+        assert_eq!(normalize_term("well-chosen"), "well-chosen");
+        assert_eq!(normalize_term("N.Y."), "n.y.");
+        // Punctuation that never appears in a lemma is dropped, not kept.
+        assert_eq!(normalize_term("\"quoted!\""), "quoted");
+        assert_eq!(normalize_term("   "), "");
+    }
+
+    #[test]
+    fn detachment_rules_cover_the_common_inflections() {
+        let wn = WordNet {
+            dir: PathBuf::from("/nonexistent"),
+            indexes: Mutex::new(HashMap::new()),
+            exceptions: Mutex::new(HashMap::new()),
+        };
+        // The exception tables are unreadable here, so this exercises the
+        // suffix rules alone — the surface form always comes first.
+        let nouns = wn.base_forms(Pos::Noun, "boxes");
+        assert_eq!(nouns.first().map(String::as_str), Some("boxes"));
+        assert!(nouns.iter().any(|c| c == "box"));
+
+        let verbs = wn.base_forms(Pos::Verb, "running");
+        assert!(verbs.iter().any(|c| c == "runn"));
+        assert!(verbs.iter().any(|c| c == "running"));
+
+        let adjectives = wn.base_forms(Pos::Adj, "happiest");
+        assert!(adjectives.iter().any(|c| c == "happi"));
+    }
+
+    #[test]
+    fn lowercase_set_dedupes_and_drops_the_search_term() {
+        let mut seen = LowercaseSet::new("happy");
+        let mut out = Vec::new();
+        seen.push(&mut out, "Glad".to_string(), 10);
+        seen.push(&mut out, "glad".to_string(), 10);
+        seen.push(&mut out, "HAPPY".to_string(), 10);
+        seen.push(&mut out, "content".to_string(), 10);
+        assert_eq!(out, vec!["Glad", "content"]);
+    }
+
+    #[test]
+    fn lowercase_set_honours_the_limit() {
+        let mut seen = LowercaseSet::new("term");
+        let mut out = Vec::new();
+        for word in ["a", "b", "c"] {
+            seen.push(&mut out, word.to_string(), 2);
+        }
+        assert_eq!(out.len(), 2);
+    }
+
+    #[test]
+    fn format_definition_groups_by_lemma_and_part_of_speech() {
+        let entry = Entry {
+            senses: vec![
+                Sense {
+                    lemma: "goose".into(),
+                    pos: Pos::Noun,
+                    gloss: "a web-footed bird".into(),
+                    examples: vec!["the goose honked".into()],
+                },
+                Sense {
+                    lemma: "goose".into(),
+                    pos: Pos::Noun,
+                    gloss: "a silly person".into(),
+                    examples: vec![],
+                },
+                Sense {
+                    lemma: "goose".into(),
+                    pos: Pos::Verb,
+                    gloss: "to prod".into(),
+                    examples: vec![],
+                },
+            ],
+            synonyms: vec![],
+            antonyms: vec![],
+        };
+
+        let formatted = format_definition(&entry).unwrap_or_default();
+        assert!(formatted.starts_with("goose noun\n1. a web-footed bird"));
+        assert!(formatted.contains("\n   \"the goose honked\""));
+        // Numbering restarts under the verb heading.
+        assert!(formatted.contains("goose verb\n1. to prod"));
+        assert!(formatted.contains("2. a silly person"));
+    }
+
+    #[test]
+    fn format_definition_is_none_without_senses() {
+        assert!(format_definition(&Entry::default()).is_none());
+    }
+
+    #[test]
+    fn open_rejects_a_directory_without_the_database() {
+        assert!(WordNet::open("/nonexistent/wordnet").is_err());
+    }
+}

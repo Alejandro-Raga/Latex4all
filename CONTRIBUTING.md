@@ -42,6 +42,15 @@ cd claude-prism
 pnpm install
 ```
 
+The dictionary/thesaurus is backed by the Princeton WordNet 3.1 database, which
+is ~27 MB and therefore not committed. `pnpm dev:desktop` and `pnpm build:desktop`
+fetch it automatically (and skip when it's already present); CI does the same. To
+fetch it by hand:
+
+```bash
+node scripts/fetch-wordnet.mjs
+```
+
 ### Run
 
 ```bash
@@ -68,6 +77,10 @@ claude-prism/
 │           │   ├── latex.rs         # Tectonic compilation & SyncTeX
 │           │   ├── claude.rs        # Claude CLI integration & sessions
 │           │   ├── slash_commands.rs # Slash command discovery & CRUD
+│           │   ├── dictionary.rs    # Word lookup (macOS Dictionary Services / WordNet)
+│           │   ├── wordnet.rs       # Bundled WordNet 3.1 reader (all platforms)
+│           │   ├── spellcheck.rs    # NSSpellChecker (macOS) / ISpellChecker (Windows)
+│           │   ├── languagetool.rs  # Local grammar server install & supervision
 │           │   └── zotero.rs        # Zotero OAuth & citations
 │           └── Cargo.toml
 ├── .github/workflows/        # CI/CD (build + release)
@@ -93,8 +106,8 @@ cd apps/desktop/src-tauri && cargo test
 ```
 
 Current test counts:
-- **Frontend:** 89 tests (stores, components)
-- **Rust:** 114 tests (65 unit + 49 integration)
+- **Frontend:** 212 tests (stores, components)
+- **Rust:** 254 tests (unit + integration)
 
 ### What to test
 

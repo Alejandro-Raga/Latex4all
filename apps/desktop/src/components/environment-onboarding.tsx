@@ -34,8 +34,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ClaudeSetup } from "@/components/claude-setup";
+import { ZoteroApiKeyDialog } from "@/components/workspace/zotero-api-key-dialog";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 import { useLanguageToolStore } from "@/stores/language-tool-store";
+import { useSettingsStore } from "@/stores/settings-store";
 import { useUvSetupStore } from "@/stores/uv-setup-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { cn } from "@/lib/utils";
@@ -58,6 +60,7 @@ export function EnvironmentOnboarding() {
   const [skillsChecking, setSkillsChecking] = useState(true);
   const [skillsError, setSkillsError] = useState<string | null>(null);
   const [skillsDialogOpen, setSkillsDialogOpen] = useState(false);
+  const [zoteroApiKeyDialogOpen, setZoteroApiKeyDialogOpen] = useState(false);
   const [SkillsOnboardingComponent, setSkillsOnboardingComponent] =
     useState<ComponentType<{ onClose: () => void }> | null>(null);
 
@@ -95,12 +98,26 @@ export function EnvironmentOnboarding() {
   const checkGrammarStatus = useLanguageToolStore((s) => s.checkStatus);
   const installGrammar = useLanguageToolStore((s) => s.install);
   const startGrammar = useLanguageToolStore((s) => s.start);
+  const grammarCheckEnabled = useSettingsStore((s) => s.grammarCheckEnabled);
 
   const zoteroConnected = useZoteroStore((s) => s.isAuthenticated);
   const zoteroUsername = useZoteroStore((s) => s.username);
   const zoteroValidating = useZoteroStore((s) => s.isValidating);
   const zoteroError = useZoteroStore((s) => s.error);
   const connectZotero = useZoteroStore((s) => s.connectWithOAuth);
+
+  /**
+   * OAuth needs consumer credentials baked in at build time, which a build made
+   * without ZOTERO_CONSUMER_KEY/SECRET simply doesn't have. Rather than leaving
+   * the user at a dead end, fall back to a personal API key — which needs no
+   * registered application — whenever the handshake doesn't complete.
+   */
+  const handleConnectZotero = useCallback(async () => {
+    const connected = await connectZotero();
+    if (!connected) {
+      setZoteroApiKeyDialogOpen(true);
+    }
+  }, [connectZotero]);
 
   const checkSkillsStatus = useCallback(async () => {
     setSkillsChecking(true);
@@ -136,6 +153,17 @@ export function EnvironmentOnboarding() {
       cancelled = true;
     };
   }, [checkClaudeStatus, checkGrammarStatus, checkSkillsStatus, checkUvStatus]);
+
+  // Grammar checking is a persisted preference, but the server behind it dies
+  // with the app. Without this the setting would silently stop working after a
+  // restart, since Setup only reappears when something *required* is missing.
+  const grammarAutoStartRef = useRef(false);
+  useEffect(() => {
+    if (grammarAutoStartRef.current) return;
+    if (!grammarCheckEnabled || grammarStatus !== "stopped") return;
+    grammarAutoStartRef.current = true;
+    startGrammar();
+  }, [grammarCheckEnabled, grammarStatus, startGrammar]);
 
   useEffect(() => {
     const unlisten = listen<boolean>("uv-install-complete", (event) => {
@@ -500,7 +528,7 @@ export function EnvironmentOnboarding() {
                         icon: zoteroValidating ? Loader2Icon : LinkIcon,
                         loading: zoteroValidating,
                         onClick: () => {
-                          connectZotero();
+                          handleConnectZotero();
                         },
                       }
                 }
@@ -538,6 +566,11 @@ export function EnvironmentOnboarding() {
           />
         </DialogContent>
       </Dialog>
+
+      <ZoteroApiKeyDialog
+        open={zoteroApiKeyDialogOpen}
+        onOpenChange={setZoteroApiKeyDialogOpen}
+      />
 
       {skillsDialogOpen && SkillsOnboardingComponent && (
         <SkillsOnboardingComponent

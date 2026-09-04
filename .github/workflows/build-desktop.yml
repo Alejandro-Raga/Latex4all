@@ -85,6 +85,11 @@ jobs:
 
       - run: pnpm install
 
+      # The WordNet database backing the dictionary/thesaurus is ~27 MB and
+      # isn't committed; tauri.conf.json bundles it as a resource.
+      - name: Fetch WordNet database
+        run: node scripts/fetch-wordnet.mjs
+
       - name: Build Tauri app
         shell: bash
         env:
@@ -213,6 +218,11 @@ jobs:
           cache: pnpm
 
       - run: pnpm install
+
+      # The WordNet database backing the dictionary/thesaurus is ~27 MB and
+      # isn't committed; tauri.conf.json bundles it as a resource.
+      - name: Fetch WordNet database
+        run: node scripts/fetch-wordnet.mjs
 
       - name: Build Tauri app
         env:
@@ -371,6 +381,11 @@ jobs:
 
       - run: pnpm install
 
+      # The WordNet database backing the dictionary/thesaurus is ~27 MB and
+      # isn't committed; tauri.conf.json bundles it as a resource.
+      - name: Fetch WordNet database
+        run: node scripts/fetch-wordnet.mjs
+
       - name: Build Tauri app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -466,6 +481,11 @@ jobs:
           cache: pnpm
 
       - run: pnpm install
+
+      # The WordNet database backing the dictionary/thesaurus is ~27 MB and
+      # isn't committed; tauri.conf.json bundles it as a resource.
+      - name: Fetch WordNet database
+        run: node scripts/fetch-wordnet.mjs
 
       - name: Build Tauri app
         env:

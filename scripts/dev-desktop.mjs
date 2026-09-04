@@ -1,5 +1,6 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const env = { ...process.env };
 
@@ -17,6 +18,18 @@ if (process.platform === "win32") {
   env.VCPKG_DEFAULT_TRIPLET = env.VCPKGRS_TRIPLET;
   appendEnvFlag("RUSTFLAGS", "-Ctarget-feature=+crt-static");
   env.CXXFLAGS = [env.CXXFLAGS, "/std:c++17"].filter(Boolean).join(" ");
+}
+
+// The bundled WordNet database (see wordnet.rs) is ~27 MB and isn't committed,
+// so make sure it's on disk before Tauri tries to bundle it as a resource.
+// The fetch script is a no-op once the files are present.
+const wordnet = spawnSync(
+  process.execPath,
+  [join(fileURLToPath(new URL(".", import.meta.url)), "fetch-wordnet.mjs")],
+  { stdio: "inherit" },
+);
+if (wordnet.status !== 0) {
+  process.exit(wordnet.status ?? 1);
 }
 
 const child =
