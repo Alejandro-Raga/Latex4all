@@ -28,9 +28,10 @@ import {
   XIcon,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { useProjectStore } from "@/stores/project-store";
 import { useDocumentStore } from "@/stores/document-store";
-import { useZoteroStore } from "@/stores/zotero-store";
+import { DEFAULT_BIB_FILE_NAME, useZoteroStore } from "@/stores/zotero-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import {
   buildCollectionTree,
@@ -52,6 +53,12 @@ import {
 } from "@/lib/zotero-api";
 import { PdfViewer, type PdfAnnotationRect } from "./preview/pdf-viewer";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
 
@@ -701,25 +708,90 @@ function ZoteroItemRow({
   onSelect: (item: ZoteroItemSummary) => void;
 }) {
   const subtitle = [item.creators, item.year].filter(Boolean).join(" · ");
+  const files = useDocumentStore((s) => s.files);
+  const addItemToBib = useZoteroStore((s) => s.addItemToBib);
+  const [adding, setAdding] = useState(false);
+
+  // Every .bib in the project is a candidate target; listing them flat beats a
+  // submenu, since projects rarely have more than one or two.
+  const bibFiles = useMemo(
+    () =>
+      files
+        .filter((f) => f.name.toLowerCase().endsWith(".bib"))
+        .sort((a, b) => a.relativePath.localeCompare(b.relativePath)),
+    [files],
+  );
+
+  const handleAdd = useCallback(
+    async (targetFileId: string | null, fileLabel: string) => {
+      setAdding(true);
+      try {
+        const result = await addItemToBib(item.key, targetFileId);
+        if (result.status === "added") {
+          toast.success(`Added to ${result.fileName}`, {
+            description: `\\cite{${result.citekey}}`,
+          });
+        } else if (result.status === "duplicate") {
+          toast.info(`Already in ${result.fileName}`, {
+            description: `\\cite{${result.citekey}}`,
+          });
+        } else {
+          toast.error(`Could not add to ${fileLabel}`, {
+            description: result.message,
+          });
+        }
+      } finally {
+        setAdding(false);
+      }
+    },
+    [addItemToBib, item.key],
+  );
+
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(item)}
-      className={cn(
-        "flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left text-xs transition-colors hover:bg-muted",
-        isSelected && "bg-muted font-medium",
-      )}
-    >
-      <FileTextIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate">{item.title}</span>
-        {subtitle && (
-          <span className="block truncate font-normal text-muted-foreground">
-            {subtitle}
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <button
+          type="button"
+          onClick={() => onSelect(item)}
+          className={cn(
+            "flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left text-xs transition-colors hover:bg-muted",
+            isSelected && "bg-muted font-medium",
+          )}
+        >
+          <FileTextIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{item.title}</span>
+            {subtitle && (
+              <span className="block truncate font-normal text-muted-foreground">
+                {subtitle}
+              </span>
+            )}
           </span>
+        </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-56">
+        {bibFiles.length === 0 ? (
+          <ContextMenuItem
+            disabled={adding}
+            onClick={() => handleAdd(null, DEFAULT_BIB_FILE_NAME)}
+          >
+            <PlusIcon className="size-3.5" />
+            Add to new {DEFAULT_BIB_FILE_NAME}
+          </ContextMenuItem>
+        ) : (
+          bibFiles.map((file) => (
+            <ContextMenuItem
+              key={file.id}
+              disabled={adding}
+              onClick={() => handleAdd(file.id, file.name)}
+            >
+              <PlusIcon className="size-3.5" />
+              <span className="truncate">Add to {file.relativePath}</span>
+            </ContextMenuItem>
+          ))
         )}
-      </span>
-    </button>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

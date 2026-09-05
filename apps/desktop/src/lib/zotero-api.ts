@@ -77,7 +77,8 @@ async function zoteroFetch(
   return response;
 }
 
-function extractCitekey(bibtex: string): string {
+/** The citation key of a BibTeX entry — the `foo` in `@article{foo, ...}`. */
+export function extractCitekey(bibtex: string): string {
   const match = bibtex.match(/@\w+\{([^,\s]+)/);
   return match ? match[1] : "";
 }
@@ -402,6 +403,25 @@ export async function fetchLibraryItems(
   }
 
   return result;
+}
+
+/**
+ * BibTeX for one item, rendered by Zotero's own translator — the same source
+ * as a whole-collection import, so an entry added this way is byte-identical
+ * to one that would arrive via sync.
+ */
+export async function fetchItemBibtex(
+  apiKey: string,
+  userID: string,
+  itemKey: string,
+): Promise<string> {
+  const params = new URLSearchParams({ format: "json", include: "bibtex" });
+  const response = await zoteroFetch(
+    apiKey,
+    `/users/${userID}/items/${itemKey}?${params}`,
+  );
+  const item = (await response.json()) as { bibtex?: string };
+  return (item.bibtex ?? "").trim();
 }
 
 /** The first PDF attachment directly under an item, if any. */

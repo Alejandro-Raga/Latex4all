@@ -8,14 +8,29 @@ import {
   startOAuth,
   completeOAuth,
   cancelOAuth,
+  extractCitekey,
+  fetchItemBibtex,
   type ZoteroCollection,
 } from "@/lib/zotero-api";
 import { collectSubtreeKeys } from "@/lib/zotero-collection-tree";
 import { useDocumentStore } from "@/stores/document-store";
-import { createFileOnDisk } from "@/lib/tauri/fs";
+import { createFileOnDisk, readTexFileContent } from "@/lib/tauri/fs";
 import { createLogger } from "@/lib/debug/logger";
 
 const log = createLogger("zotero");
+
+/** Default target when a project has no .bib file yet. */
+export const DEFAULT_BIB_FILE_NAME = "references.bib";
+
+/**
+ * Outcome of adding one Zotero item to a .bib file. `duplicate` is a normal,
+ * expected result — citing the same work twice is how bibliographies get used —
+ * so it's reported rather than thrown.
+ */
+export type AddReferenceResult =
+  | { status: "added"; citekey: string; fileName: string }
+  | { status: "duplicate"; citekey: string; fileName: string }
+  | { status: "error"; message: string };
 
 /** Per-collection sync metadata (persisted) */
 export interface CollectionSyncInfo {
@@ -61,6 +76,15 @@ interface ZoteroState {
   ) => Promise<void>;
   syncCollectionBib: (collectionKey: string | null) => Promise<void>;
   removeCollection: (collectionKey: string | null) => void;
+  /**
+   * Appends one item's BibTeX to a .bib file in the current project.
+   * `targetFileId` names an existing file; `null` creates (or reuses)
+   * `references.bib` at the project root.
+   */
+  addItemToBib: (
+    itemKey: string,
+    targetFileId: string | null,
+  ) => Promise<AddReferenceResult>;
 }
 
 const MYLIB_KEY = "__my_library__";
@@ -399,6 +423,115 @@ export const useZoteroStore = create<ZoteroState>()(
             syncProgress: null,
           });
         }
+      },
+
+      addItemToBib: async (itemKey, targetFileId) => {
+        const { apiKey, userID } = get();
+        if (!apiKey || !userID) {
+          return { status: "error", message: "Not connected to Zotero." };
+        }
+
+        const docStore = useDocumentStore.getState();
+        const projectRoot = docStore.projectRoot;
+        if (!projectRoot) {
+          return { status: "error", message: "No project is open." };
+        }
+
+        let bibtex: string;
+        try {
+          bibtex = await fetchItemBibtex(apiKey, userID, itemKey);
+        } catch (err) {
+          return {
+            status: "error",
+            message:
+              err instanceof Error ? err.message : "Zotero request failed",
+          };
+        }
+        if (!bibtex) {
+          // Notes and standalone attachments have no bibliographic form.
+          return {
+            status: "error",
+            message: "Zotero has no BibTeX entry for this item.",
+          };
+        }
+
+        const citekey = extractCitekey(bibtex);
+        if (!citekey) {
+          return {
+            status: "error",
+            message: "Could not read a citation key from Zotero's BibTeX.",
+          };
+        }
+
+        // An explicit target must exist; only the implicit one is created.
+        if (targetFileId) {
+          const named = docStore.files.find((f) => f.id === targetFileId);
+          if (!named) {
+            return {
+              status: "error",
+              message: "That .bib file is no longer in the project.",
+            };
+          }
+        }
+        const target = targetFileId
+          ? docStore.files.find((f) => f.id === targetFileId)
+          : docStore.files.find((f) => f.name === DEFAULT_BIB_FILE_NAME);
+
+        // No .bib file yet — start one rather than making the user create it.
+        if (!target) {
+          const fileName = DEFAULT_BIB_FILE_NAME;
+          const content = `${bibtex}\n`;
+          try {
+            const absolutePath = await createFileOnDisk(
+              projectRoot,
+              fileName,
+              content,
+            );
+            docStore.addFile({
+              name: fileName,
+              relativePath: fileName,
+              absolutePath,
+              type: "bib",
+              content,
+            });
+          } catch (err) {
+            log.error("Failed to create .bib file", { error: String(err) });
+            return {
+              status: "error",
+              message:
+                err instanceof Error
+                  ? err.message
+                  : "Could not create the .bib file",
+            };
+          }
+          log.info(`Added ${citekey} to new ${fileName}`);
+          return { status: "added", citekey, fileName };
+        }
+
+        // Prefer the editor's copy so unsaved edits aren't clobbered, and fall
+        // back to disk for files whose content was never loaded.
+        let current = target.content;
+        if (current == null) {
+          try {
+            current = await readTexFileContent(target.absolutePath);
+          } catch {
+            current = "";
+          }
+        }
+
+        if (parseBibEntries(current).has(citekey)) {
+          return { status: "duplicate", citekey, fileName: target.name };
+        }
+
+        const separator = current.trim() ? "\n\n" : "";
+        const updated = `${current.trimEnd()}${separator}${bibtex}\n`;
+        docStore.updateFileContent(target.id, updated);
+        // Autosave is on a 2s timer; a .bib the user just asked for should be
+        // on disk before they trigger a compile.
+        await docStore.saveFile(target.id);
+
+        log.info(`Added ${citekey} to ${target.name}`);
+        return { status: "added", citekey, fileName: target.name };
       },
 
       removeCollection: (collectionKey) => {
