@@ -272,7 +272,7 @@ export const useZoteroStore = create<ZoteroState>()(
               name: bibFileName,
               relativePath: bibFileName,
               absolutePath: fullPath,
-              type: "tex",
+              type: "bib",
               content: result.bibtex,
             });
           }
