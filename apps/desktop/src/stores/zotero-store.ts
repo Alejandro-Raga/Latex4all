@@ -419,7 +419,7 @@ export const useZoteroStore = create<ZoteroState>()(
       },
     }),
     {
-      name: "claude-prism-zotero",
+      name: "latex4all-zotero",
       partialize: (state) => ({
         apiKey: state.apiKey,
         userID: state.userID,

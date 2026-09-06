@@ -84,7 +84,7 @@ export const useSettingsStore = create<SettingsState>()(
       setPdfDarkModeInline: (enabled) => set({ pdfDarkModeInline: enabled }),
     }),
     {
-      name: "claude-prism-settings",
+      name: "latex4all-settings",
     },
   ),
 );

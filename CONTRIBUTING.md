@@ -1,4 +1,4 @@
-# Contributing to ClaudePrism
+# Contributing to Latex4All
 
 Contributions are welcome! This guide covers the development environment, workflow, and testing.
 
@@ -37,8 +37,8 @@ vcpkg install harfbuzz[graphite2]:x64-windows freetype:x64-windows icu:x64-windo
 ### Setup
 
 ```bash
-git clone https://github.com/delibae/claude-prism.git
-cd claude-prism
+git clone https://github.com/Alejandro-Raga/Latex4all.git
+cd Latex4all
 pnpm install
 ```
 
@@ -83,7 +83,7 @@ Two secrets are optional:
 ## Project Structure
 
 ```
-claude-prism/
+Latex4all/
 ├── apps/
 │   └── desktop/              # Tauri desktop app
 │       ├── src/              # React frontend (TypeScript)

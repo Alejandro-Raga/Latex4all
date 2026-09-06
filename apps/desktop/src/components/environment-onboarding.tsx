@@ -265,12 +265,12 @@ export function EnvironmentOnboarding() {
           <div className="flex flex-col items-center px-6 pt-6 pb-4 text-center">
             <img
               src="/icon-192.png"
-              alt="ClaudePrism"
+              alt="Latex4All"
               className="size-14 object-contain"
             />
             <DialogHeader className="mt-3 items-center gap-1.5 text-center">
               <DialogTitle className="font-semibold text-xl">
-                ClaudePrism
+                Latex4All
               </DialogTitle>
               <DialogDescription className="max-w-sm text-sm leading-relaxed">
                 Set up the local tools and model provider required before
@@ -463,7 +463,7 @@ export function EnvironmentOnboarding() {
                           ? (grammarError ?? "Setup needs attention")
                           : grammarStatus === "ready"
                             ? grammarExternallyManaged
-                              ? "Running (started outside ClaudePrism)"
+                              ? "Running (started outside Latex4All)"
                               : "Running"
                             : grammarStatus === "stopped"
                               ? "Installed - server not running"

@@ -22,7 +22,7 @@ impl ProxyTransformerChain {
             chain.push(DEEPSEEK);
         }
 
-        // ClaudePrism already buffers and repairs tool-call arguments before
+        // Latex4All already buffers and repairs tool-call arguments before
         // returning them to Claude Code. Naming it here keeps the behavior
         // traceable to Claude Code Router's enhancetool transformer.
         chain.push(ENHANCETOOL);
@@ -79,7 +79,7 @@ impl ProxyTransformerChain {
 }
 
 fn configured_transformer_names() -> Vec<String> {
-    std::env::var("CLAUDE_PRISM_PROXY_TRANSFORMERS")
+    std::env::var("LATEX4ALL_PROXY_TRANSFORMERS")
         .ok()
         .into_iter()
         .flat_map(|value| {

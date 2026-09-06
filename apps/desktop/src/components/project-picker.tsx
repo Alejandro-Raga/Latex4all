@@ -241,9 +241,9 @@ export function ProjectPicker() {
         >
           {!isSidebarCollapsed && (
             <div className="flex min-w-0 items-center gap-2">
-              <img src="/icon-192.png" alt="ClaudePrism" className="size-6" />
+              <img src="/icon-192.png" alt="Latex4All" className="size-6" />
               <span className="truncate font-semibold text-sm">
-                ClaudePrism
+                Latex4All
               </span>
             </div>
           )}
@@ -299,14 +299,14 @@ export function ProjectPicker() {
           )}
         >
           {isSidebarCollapsed ? (
-            <img src="/icon-192.png" alt="ClaudePrism" className="size-4" />
+            <img src="/icon-192.png" alt="Latex4All" className="size-4" />
           ) : (
             <>
-              <span className="truncate">ClaudePrism v{appVersion}</span>
+              <span className="truncate">Latex4All v{appVersion}</span>
               <div className="flex shrink-0 items-center gap-1">
                 <Button variant="ghost" size="icon" className="size-6" asChild>
                   <a
-                    href="https://github.com/delibae/claude-prism"
+                    href="https://github.com/Alejandro-Raga/Latex4all"
                     target="_blank"
                     rel="noopener noreferrer"
                     title="GitHub"
@@ -1108,7 +1108,7 @@ function EnvironmentStatus({ appVersion }: { appVersion: string }) {
 
         <StatusRow
           ok={true}
-          label="ClaudePrism"
+          label="Latex4All"
           detail={appVersion ? `v${appVersion}` : "Checking..."}
         />
       </div>

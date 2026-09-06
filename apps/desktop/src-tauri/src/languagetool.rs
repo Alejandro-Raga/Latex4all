@@ -85,11 +85,11 @@ fn emit(
 
 // ── Paths ──
 
-/// Per-user application data root, e.g. `%LOCALAPPDATA%\ClaudePrism` on Windows
-/// and `~/Library/Application Support/ClaudePrism` on macOS.
+/// Per-user application data root, e.g. `%LOCALAPPDATA%\Latex4All` on Windows
+/// and `~/Library/Application Support/Latex4All` on macOS.
 fn app_data_dir() -> Result<PathBuf, String> {
     dirs::data_local_dir()
-        .map(|dir| dir.join("ClaudePrism"))
+        .map(|dir| dir.join("Latex4All"))
         .ok_or_else(|| "Could not determine the local application data directory".to_string())
 }
 

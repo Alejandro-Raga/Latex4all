@@ -84,8 +84,8 @@ function WorkspaceWithClaude() {
   // Update window title
   useEffect(() => {
     if (projectRoot) {
-      const name = projectRoot.split(/[/\\]/).pop() || "ClaudePrism";
-      getCurrentWindow().setTitle(`${name} - ClaudePrism`);
+      const name = projectRoot.split(/[/\\]/).pop() || "Latex4All";
+      getCurrentWindow().setTitle(`${name} - Latex4All`);
     }
   }, [projectRoot]);
 
@@ -208,7 +208,7 @@ export function App({ onReady }: { onReady?: () => void }) {
 
   useEffect(() => {
     if (!projectRoot) {
-      getCurrentWindow().setTitle("ClaudePrism");
+      getCurrentWindow().setTitle("Latex4All");
     }
   }, [projectRoot]);
 

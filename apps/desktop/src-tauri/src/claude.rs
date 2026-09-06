@@ -20,7 +20,7 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 
 #[derive(Default, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
-struct ClaudePrismAuthConfig {
+struct Latex4AllAuthConfig {
     provider: Option<String>,
     anthropic_api_key: Option<String>,
     anthropic_base_url: Option<String>,
@@ -414,17 +414,17 @@ pub(crate) fn apply_proxy_env_to_command(cmd: &mut Command, window: Option<&Webv
     }
 }
 
-fn get_claude_prism_auth_path() -> Result<PathBuf, String> {
+fn get_latex4all_auth_path() -> Result<PathBuf, String> {
     let config_dir = dirs::config_dir()
         .or_else(dirs::home_dir)
         .ok_or("Could not find config directory")?;
-    Ok(config_dir.join("ClaudePrism").join("anthropic-auth.json"))
+    Ok(config_dir.join("Latex4All").join("anthropic-auth.json"))
 }
 
-fn read_claude_prism_auth_config() -> Result<ClaudePrismAuthConfig, String> {
-    let path = get_claude_prism_auth_path()?;
+fn read_latex4all_auth_config() -> Result<Latex4AllAuthConfig, String> {
+    let path = get_latex4all_auth_path()?;
     if !path.exists() {
-        return Ok(ClaudePrismAuthConfig::default());
+        return Ok(Latex4AllAuthConfig::default());
     }
 
     let content = std::fs::read_to_string(&path)
@@ -467,14 +467,14 @@ fn backup_corrupt_auth_config(path: &Path, reason: &str) -> Result<PathBuf, Stri
     Ok(backup)
 }
 
-fn read_claude_prism_auth_config_for_update() -> Result<ClaudePrismAuthConfig, String> {
-    match read_claude_prism_auth_config() {
+fn read_latex4all_auth_config_for_update() -> Result<Latex4AllAuthConfig, String> {
+    match read_latex4all_auth_config() {
         Ok(config) => Ok(config),
         Err(err) => {
-            let path = get_claude_prism_auth_path()?;
+            let path = get_latex4all_auth_path()?;
             if path.exists() {
                 backup_corrupt_auth_config(&path, &err)?;
-                Ok(ClaudePrismAuthConfig::default())
+                Ok(Latex4AllAuthConfig::default())
             } else {
                 Err(err)
             }
@@ -482,8 +482,8 @@ fn read_claude_prism_auth_config_for_update() -> Result<ClaudePrismAuthConfig, S
     }
 }
 
-fn write_claude_prism_auth_config(config: &ClaudePrismAuthConfig) -> Result<(), String> {
-    let path = get_claude_prism_auth_path()?;
+fn write_latex4all_auth_config(config: &Latex4AllAuthConfig) -> Result<(), String> {
+    let path = get_latex4all_auth_path()?;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create auth settings dir: {}", e))?;
@@ -669,12 +669,12 @@ fn known_proxy_mismatch_error(provider: &str, base_url: Option<&str>) -> Option<
 }
 
 fn stored_claude_credential() -> Option<StoredClaudeCredential> {
-    let config = read_claude_prism_auth_config().ok()?;
+    let config = read_latex4all_auth_config().ok()?;
     stored_claude_credential_from_config(&config)
 }
 
 fn stored_claude_credential_from_config(
-    config: &ClaudePrismAuthConfig,
+    config: &Latex4AllAuthConfig,
 ) -> Option<StoredClaudeCredential> {
     let api_key = config
         .anthropic_api_key
@@ -692,12 +692,12 @@ fn stored_claude_credential_from_config(
 fn stored_openai_compatible_credential_by_id(
     credential_id: Option<&str>,
 ) -> Result<Option<StoredOpenAiCompatibleCredential>, String> {
-    let config = read_claude_prism_auth_config()?;
+    let config = read_latex4all_auth_config()?;
     openai_compatible_credential_by_id_from_config(&config, credential_id)
 }
 
 fn normalized_openai_compatible_credentials(
-    config: &ClaudePrismAuthConfig,
+    config: &Latex4AllAuthConfig,
 ) -> Vec<StoredOpenAiCompatibleCredential> {
     let mut credentials = Vec::new();
     for credential in &config.openai_credentials {
@@ -765,7 +765,7 @@ fn normalized_openai_compatible_credentials(
 }
 
 fn stored_openai_compatible_credential_from_config(
-    config: &ClaudePrismAuthConfig,
+    config: &Latex4AllAuthConfig,
     credential_id: Option<&str>,
 ) -> Option<StoredOpenAiCompatibleCredential> {
     let credentials = normalized_openai_compatible_credentials(config);
@@ -798,7 +798,7 @@ fn stored_openai_compatible_credential_from_config(
 }
 
 fn openai_compatible_credential_by_id_from_config(
-    config: &ClaudePrismAuthConfig,
+    config: &Latex4AllAuthConfig,
     credential_id: Option<&str>,
 ) -> Result<Option<StoredOpenAiCompatibleCredential>, String> {
     let credential_id = credential_id
@@ -882,7 +882,7 @@ pub async fn save_anthropic_api_key(
 
     // Saving a new key should repair an empty/corrupt legacy auth file after
     // backing it up, never silently discard parseable credentials.
-    let mut config = read_claude_prism_auth_config_for_update()?;
+    let mut config = read_latex4all_auth_config_for_update()?;
     config.provider = Some(provider.clone());
 
     if provider == PROVIDER_OPENAI_COMPATIBLE {
@@ -948,7 +948,7 @@ pub async fn save_anthropic_api_key(
         config.openai_api_key = Some(api_key);
         config.openai_base_url = Some(base_url);
         config.openai_model = Some(model);
-        return write_claude_prism_auth_config(&config);
+        return write_latex4all_auth_config(&config);
     }
 
     if base_url.is_none() && !api_key.starts_with("sk-ant-") {
@@ -960,7 +960,7 @@ pub async fn save_anthropic_api_key(
 
     config.anthropic_api_key = Some(api_key);
     config.anthropic_base_url = base_url;
-    write_claude_prism_auth_config(&config)
+    write_latex4all_auth_config(&config)
 }
 
 #[tauri::command]
@@ -1015,7 +1015,7 @@ pub async fn list_openai_compatible_models(
 pub async fn list_openai_compatible_credential_models(
     credential_id: String,
 ) -> Result<Vec<OpenAiCompatibleModelInfo>, String> {
-    let config = read_claude_prism_auth_config()?;
+    let config = read_latex4all_auth_config()?;
     let credential = normalized_openai_compatible_credentials(&config)
         .into_iter()
         .find(|credential| credential.id == credential_id)
@@ -1082,7 +1082,7 @@ async fn fetch_openai_compatible_models(
 pub async fn clear_anthropic_api_key() -> Result<(), String> {
     // Clearing should also recover from an empty/corrupt legacy auth file after
     // preserving the bad file for manual recovery.
-    let mut config = read_claude_prism_auth_config_for_update()?;
+    let mut config = read_latex4all_auth_config_for_update()?;
     config.provider = Some(PROVIDER_CLAUDE_CODE.to_string());
     config.anthropic_api_key = None;
     config.anthropic_base_url = None;
@@ -1091,13 +1091,13 @@ pub async fn clear_anthropic_api_key() -> Result<(), String> {
     config.openai_model = None;
     config.active_openai_credential_id = None;
     config.openai_credentials.clear();
-    write_claude_prism_auth_config(&config)
+    write_latex4all_auth_config(&config)
 }
 
 #[tauri::command]
 pub async fn list_openai_compatible_credentials(
 ) -> Result<Vec<OpenAiCompatibleCredentialInfo>, String> {
-    let config = read_claude_prism_auth_config()?;
+    let config = read_latex4all_auth_config()?;
     Ok(normalized_openai_compatible_credentials(&config)
         .into_iter()
         .map(|credential| OpenAiCompatibleCredentialInfo {
@@ -1116,7 +1116,7 @@ pub async fn delete_openai_compatible_credential(credential_id: String) -> Resul
         return Err("Provider credential id is empty".to_string());
     }
 
-    let mut config = read_claude_prism_auth_config_for_update()?;
+    let mut config = read_latex4all_auth_config_for_update()?;
     if credential_id == "legacy-openai-compatible" && config.openai_credentials.is_empty() {
         if config.openai_api_key.is_none()
             && config.openai_base_url.is_none()
@@ -1129,7 +1129,7 @@ pub async fn delete_openai_compatible_credential(credential_id: String) -> Resul
         config.openai_model = None;
         config.active_openai_credential_id = None;
         config.provider = Some(PROVIDER_CLAUDE_CODE.to_string());
-        return write_claude_prism_auth_config(&config);
+        return write_latex4all_auth_config(&config);
     }
 
     let before_len = config.openai_credentials.len();
@@ -1171,12 +1171,12 @@ pub async fn delete_openai_compatible_credential(credential_id: String) -> Resul
         }
     }
 
-    write_claude_prism_auth_config(&config)
+    write_latex4all_auth_config(&config)
 }
 
 #[tauri::command]
 pub async fn set_active_openai_compatible_credential(credential_id: String) -> Result<(), String> {
-    let mut config = read_claude_prism_auth_config_for_update()?;
+    let mut config = read_latex4all_auth_config_for_update()?;
     let credential = normalized_openai_compatible_credentials(&config)
         .into_iter()
         .find(|credential| credential.id == credential_id)
@@ -1187,7 +1187,7 @@ pub async fn set_active_openai_compatible_credential(credential_id: String) -> R
     config.openai_api_key = Some(credential.api_key);
     config.openai_base_url = Some(credential.base_url);
     config.openai_model = Some(credential.model);
-    write_claude_prism_auth_config(&config)
+    write_latex4all_auth_config(&config)
 }
 
 /// Windows CREATE_NO_WINDOW flag to prevent console windows from flashing
@@ -2063,7 +2063,7 @@ fn find_git_bash() -> Option<String> {
 
 #[tauri::command]
 pub async fn check_claude_status() -> Result<ClaudeStatus, String> {
-    let auth_config = read_claude_prism_auth_config()?;
+    let auth_config = read_latex4all_auth_config()?;
     let claude_provider_configured = stored_claude_credential_from_config(&auth_config).is_some()
         || std::env::var("ANTHROPIC_API_KEY")
             .map(|value| !value.trim().is_empty())
@@ -2966,7 +2966,7 @@ async fn execute_openai_compatible_via_claude_proxy(
 
     let mut cmd = create_command(&claude_path, args, &project_path, effort_level.as_deref());
     clear_anthropic_provider_env(&mut cmd);
-    cmd.env("ANTHROPIC_API_KEY", "claude-prism-local-proxy");
+    cmd.env("ANTHROPIC_API_KEY", "latex4all-local-proxy");
     cmd.env("ANTHROPIC_BASE_URL", proxy_url);
     cmd.env_remove("CLAUDE_MODEL");
 
@@ -3808,7 +3808,7 @@ fn session_excerpt_for_model_title(path: &Path) -> Option<String> {
 }
 
 fn session_title_credential_from_config(
-    config: &ClaudePrismAuthConfig,
+    config: &Latex4AllAuthConfig,
 ) -> Option<StoredOpenAiCompatibleCredential> {
     let credentials = normalized_openai_compatible_credentials(config);
     if let Some(active_id) = config.active_openai_credential_id.as_deref() {
@@ -3981,7 +3981,7 @@ pub async fn generate_claude_session_title(
     let Some(excerpt) = session_excerpt_for_model_title(&session_path) else {
         return Ok(None);
     };
-    let Some(credential) = read_claude_prism_auth_config()
+    let Some(credential) = read_latex4all_auth_config()
         .ok()
         .and_then(|config| session_title_credential_from_config(&config))
     else {
@@ -4213,8 +4213,8 @@ pub async fn set_claude_fast_mode(enabled: bool) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    fn test_openai_compatible_auth_config() -> ClaudePrismAuthConfig {
-        ClaudePrismAuthConfig {
+    fn test_openai_compatible_auth_config() -> Latex4AllAuthConfig {
+        Latex4AllAuthConfig {
             provider: Some(PROVIDER_OPENAI_COMPATIBLE.to_string()),
             active_openai_credential_id: Some("qwen".to_string()),
             openai_credentials: vec![

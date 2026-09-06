@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="./apps/desktop/src-tauri/icons/icon.png" width="120" height="120" alt="ClaudePrism" />
+  <img src="./apps/desktop/src-tauri/icons/icon.png" width="120" height="120" alt="Latex4All" />
 </p>
 
-<h1 align="center">ClaudePrism</h1>
+<h1 align="center">Latex4All</h1>
 
 <p align="center">
   Claude を活用した、オフラインファーストの論文執筆ワークスペース。<br/>
@@ -17,41 +17,38 @@
 </p>
 
 <p align="center">
-  <img src="./assets/demo/main.webp" alt="ClaudePrism デモ" width="800" />
+  <img src="./assets/demo/main.webp" alt="Latex4All デモ" width="800" />
 </p>
 
 <p align="center">
-  <a href="https://claudeprism.delibae.dev?utm_source=github&utm_medium=readme&utm_campaign=launch_v054">
-    <img src="https://img.shields.io/badge/Website-claudeprism.dev-blue?style=flat-square&logo=googlechrome&logoColor=white" alt="Website" />
-  </a>&nbsp;
-  <a href="https://github.com/delibae/claude-prism/releases/latest/download/ClaudePrism-macOS.dmg">
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/Latex4All-macOS.dmg">
     <img src="https://img.shields.io/badge/Download-macOS_(Apple_Silicon)-black?style=for-the-badge&logo=apple&logoColor=white" alt="macOS (Apple Silicon) をダウンロード" />
   </a>&nbsp;
-  <a href="https://github.com/delibae/claude-prism/releases/latest/download/ClaudePrism-macOS-Intel.dmg">
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/Latex4All-macOS-Intel.dmg">
     <img src="https://img.shields.io/badge/Download-macOS_(Intel)-555555?style=for-the-badge&logo=apple&logoColor=white" alt="macOS (Intel) をダウンロード" />
   </a>&nbsp;
-  <a href="https://github.com/delibae/claude-prism/releases/latest/download/ClaudePrism-Windows-setup.exe">
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/Latex4All-Windows-setup.exe">
     <img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Windows 版をダウンロード" />
   </a>&nbsp;
-  <a href="https://github.com/delibae/claude-prism/releases/latest/download/ClaudePrism-Linux.AppImage">
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/Latex4All-Linux.AppImage">
     <img src="https://img.shields.io/badge/Download-Linux_(AppImage)-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux 版をダウンロード" />
   </a>
 </p>
 <p align="center">
-  <a href="https://github.com/delibae/claude-prism/releases">
-    <img src="https://img.shields.io/github/v/release/delibae/claude-prism?style=flat-square&label=Latest%20Release&color=green" alt="Latest Release" />
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases">
+    <img src="https://img.shields.io/github/v/release/Alejandro-Raga/Latex4all?style=flat-square&label=Latest%20Release&color=green" alt="Latest Release" />
   </a>
 </p>
 
 ---
 
-## なぜ ClaudePrism なのか
+## なぜ Latex4All なのか
 
 [OpenAI Prism](https://openai.com/prism/) はクラウドベースの LaTeX ワークスペースです — 利用するにはすべてのファイルとデータを OpenAI のサーバーにアップロードする必要があります。
 
-ClaudePrism は**ローカルファースト**の代替ツールです — ファイルはローカルディスクに保存し、オフラインでコンパイルします。AI 機能は Anthropic API にコンテンツを送信して推論を行います（[データ使用ポリシー](https://code.claude.com/docs/en/data-usage)を参照）。
+Latex4All は**ローカルファースト**の代替ツールです — ファイルはローカルディスクに保存し、オフラインでコンパイルします。AI 機能は Anthropic API にコンテンツを送信して推論を行います（[データ使用ポリシー](https://code.claude.com/docs/en/data-usage)を参照）。
 
-| | OpenAI Prism | ClaudePrism |
+| | OpenAI Prism | Latex4All |
 |---|:---:|:---:|
 | AI モデル | GPT-5.2 | **Claude Opus / Sonnet / Haiku** |
 | 実行環境 | ブラウザ（クラウド） | **ネイティブデスクトップ（Tauri 2 + Rust）** |
@@ -72,7 +69,7 @@ ClaudePrism は**ローカルファースト**の代替ツールです — フ�
 
 ### Python 環境（uv）
 
-ClaudePrism には、高速な Python パッケージマネージャである [uv](https://docs.astral.sh/uv/) が直接組み込まれています。ワンクリックで uv をインストールし、ワンクリックでプロジェクトごとの仮想環境を作成できます。Claude Code は Python コードの実行時に `.venv` を自動で使用するため、エディタを離れることなく、グラフの生成、解析スクリプトの実行、データ処理を行えます。
+Latex4All には、高速な Python パッケージマネージャである [uv](https://docs.astral.sh/uv/) が直接組み込まれています。ワンクリックで uv をインストールし、ワンクリックでプロジェクトごとの仮想環境を作成できます。Claude Code は Python コードの実行時に `.venv` を自動で使用するため、エディタを離れることなく、グラフの生成、解析スクリプトの実行、データ処理を行えます。
 
 <p align="center">
   <img src="./assets/demo/python.webp" alt="Python 環境" width="600" />
@@ -101,7 +98,7 @@ ClaudePrism には、高速な Python パッケージマネージャである [u
 
 ### テンプレート & プロジェクトウィザードですぐに開始
 
-テンプレート（論文、学位論文、プレゼンテーション、ポスター、レターなど）を選び、名前を付け、必要に応じて内容を説明すると、ClaudePrism がプロジェクトをセットアップし、AI が初期コンテンツを生成します。参考ファイル（PDF、BIB、画像）をドラッグ & ドロップすれば、そのまま執筆を始められます。
+テンプレート（論文、学位論文、プレゼンテーション、ポスター、レターなど）を選び、名前を付け、必要に応じて内容を説明すると、Latex4All がプロジェクトをセットアップし、AI が初期コンテンツを生成します。参考ファイル（PDF、BIB、画像）をドラッグ & ドロップすれば、そのまま執筆を始められます。
 
 <p align="center">
   <img src="./assets/demo/starter.webp" alt="テンプレートギャラリー & プロジェクトウィザード" width="700" />
@@ -117,7 +114,7 @@ ClaudePrism には、高速な Python パッケージマネージャである [u
 
 ### 履歴 & 変更提案のレビュー
 
-保存するたびに、ローカル Git リポジトリ（`.claudeprism/history.git/`）にスナップショットが作成されます。重要なチェックポイントにラベルを付けたり、任意の 2 つのスナップショット間の diff を確認したり、以前のバージョンに復元したりできます。Claude が編集を提案すると、専用パネルに視覚的な差分とともに表示され、チャンクごとに承認・却下、または一括で適用・取り消し（`⌘Y` / `⌘N`）できます。
+保存するたびに、ローカル Git リポジトリ（`.latex4all/history.git/`）にスナップショットが作成されます。重要なチェックポイントにラベルを付けたり、任意の 2 つのスナップショット間の diff を確認したり、以前のバージョンに復元したりできます。Claude が編集を提案すると、専用パネルに視覚的な差分とともに表示され、チャンクごとに承認・却下、または一括で適用・取り消し（`⌘Y` / `⌘N`）できます。
 
 <p align="center">
   <img src="./assets/demo/history.webp" alt="履歴 & 変更提案" width="700" />
@@ -159,7 +156,7 @@ CodeMirror 6 ベースのエディタで、LaTeX / BibTeX のシンタックス�
 
 ## インストール
 
-[GitHub Releases](https://github.com/delibae/claude-prism/releases) から最新ビルドをダウンロードしてください。
+[GitHub Releases](https://github.com/Alejandro-Raga/Latex4all/releases) から最新ビルドをダウンロードしてください。
 
 ## コントリビュート
 

@@ -82,7 +82,7 @@ export const useProjectStore = create<ProjectState>()(
       },
     }),
     {
-      name: "claude-prism-projects",
+      name: "latex4all-projects",
       partialize: (state) => ({
         recentProjects: state.recentProjects,
         lastProjectFolder: state.lastProjectFolder,
