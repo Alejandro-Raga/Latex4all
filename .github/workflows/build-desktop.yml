@@ -317,6 +317,18 @@ jobs:
           # flag"), which drops macOS from the update manifest entirely.
           if [ -n "${APPLE_SIGNING_IDENTITY_SECRET:-}" ]; then
             export APPLE_SIGNING_IDENTITY="$APPLE_SIGNING_IDENTITY_SECRET"
+          else
+            # Ad-hoc sign rather than leaving the bundle unsigned. Unsigned, the
+            # .app carries only the linker's ad-hoc signature on the Mach-O and
+            # has no _CodeSignature directory, so macOS fails validation with
+            # "code has no resources but signature indicates they must be
+            # present" and tells the user the app is damaged — which xattr
+            # cannot fix, because the signature itself is invalid.
+            # "-" is codesign's ad-hoc identity; tauri-macos-sign passes it
+            # straight through as `codesign --force -s -`, sealing the bundle.
+            # The app is still unnotarised, so first launch needs
+            # right-click - Open, but it is no longer reported as damaged.
+            export APPLE_SIGNING_IDENTITY="-"
           fi
           pnpm --filter @latex4all/desktop tauri build $EXTRA --target aarch64-apple-darwin
 
@@ -532,6 +544,18 @@ jobs:
           # flag"), which drops macOS from the update manifest entirely.
           if [ -n "${APPLE_SIGNING_IDENTITY_SECRET:-}" ]; then
             export APPLE_SIGNING_IDENTITY="$APPLE_SIGNING_IDENTITY_SECRET"
+          else
+            # Ad-hoc sign rather than leaving the bundle unsigned. Unsigned, the
+            # .app carries only the linker's ad-hoc signature on the Mach-O and
+            # has no _CodeSignature directory, so macOS fails validation with
+            # "code has no resources but signature indicates they must be
+            # present" and tells the user the app is damaged — which xattr
+            # cannot fix, because the signature itself is invalid.
+            # "-" is codesign's ad-hoc identity; tauri-macos-sign passes it
+            # straight through as `codesign --force -s -`, sealing the bundle.
+            # The app is still unnotarised, so first launch needs
+            # right-click - Open, but it is no longer reported as damaged.
+            export APPLE_SIGNING_IDENTITY="-"
           fi
           pnpm --filter @latex4all/desktop tauri build $EXTRA --target x86_64-apple-darwin
 
