@@ -32,6 +32,12 @@
   </a>
 </p>
 <p align="center"><sub>Linux builds are <b>deprecated</b> and no longer published. Build from source if you need Linux.</sub></p>
+<p align="center"><sub>
+  Test builds (latest changes, unsigned, may be rough):
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/download/testing-latest/Latex4All-Windows-setup.exe">Windows</a> ·
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/download/testing-latest/Latex4All-macOS.dmg">macOS (Apple Silicon)</a> ·
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/tag/testing-latest">all test assets</a>
+</sub></p>
 <p align="center">
   <a href="https://github.com/Alejandro-Raga/Latex4all/releases">
     <img src="https://img.shields.io/github/v/release/Alejandro-Raga/Latex4all?style=flat-square&label=Latest%20Release&color=green" alt="Latest Release" />

@@ -298,12 +298,24 @@ jobs:
           ZOTERO_CONSUMER_KEY: ${{ secrets.ZOTERO_CONSUMER_KEY }}
           ZOTERO_CONSUMER_SECRET: ${{ secrets.ZOTERO_CONSUMER_SECRET }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_CREDS_AVAILABLE: ${{ steps.apple_creds.outputs.available }}
         run: |
           # Updater artifacts are signed; without a key, build the installer
           # alone rather than failing the whole job.
           EXTRA=""
           if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
             EXTRA="--config src-tauri/tauri.local-build.conf.json"
+          fi
+          # An unset APPLE_SIGNING_IDENTITY secret still reaches Tauri as an
+          # empty string, and the bundler treats Some("") as a real identity:
+          # it builds a keychain for "" and codesign dies with "The specified
+          # item could not be found in the keychain" after a full compile.
+          # Only None skips signing, and the env var cannot be conditionally
+          # omitted here, so ask for it explicitly. --no-sign covers Apple code
+          # signing only; the updater .sig is minisign over
+          # TAURI_SIGNING_PRIVATE_KEY and is produced regardless.
+          if [ "${APPLE_CREDS_AVAILABLE}" != "true" ]; then
+            EXTRA="$EXTRA --no-sign"
           fi
           pnpm --filter @latex4all/desktop tauri build $EXTRA --target aarch64-apple-darwin
 
@@ -500,12 +512,24 @@ jobs:
           ZOTERO_CONSUMER_KEY: ${{ secrets.ZOTERO_CONSUMER_KEY }}
           ZOTERO_CONSUMER_SECRET: ${{ secrets.ZOTERO_CONSUMER_SECRET }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_CREDS_AVAILABLE: ${{ steps.apple_creds.outputs.available }}
         run: |
           # Updater artifacts are signed; without a key, build the installer
           # alone rather than failing the whole job.
           EXTRA=""
           if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
             EXTRA="--config src-tauri/tauri.local-build.conf.json"
+          fi
+          # An unset APPLE_SIGNING_IDENTITY secret still reaches Tauri as an
+          # empty string, and the bundler treats Some("") as a real identity:
+          # it builds a keychain for "" and codesign dies with "The specified
+          # item could not be found in the keychain" after a full compile.
+          # Only None skips signing, and the env var cannot be conditionally
+          # omitted here, so ask for it explicitly. --no-sign covers Apple code
+          # signing only; the updater .sig is minisign over
+          # TAURI_SIGNING_PRIVATE_KEY and is produced regardless.
+          if [ "${APPLE_CREDS_AVAILABLE}" != "true" ]; then
+            EXTRA="$EXTRA --no-sign"
           fi
           pnpm --filter @latex4all/desktop tauri build $EXTRA --target x86_64-apple-darwin
 
