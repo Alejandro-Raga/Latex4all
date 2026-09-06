@@ -16,6 +16,20 @@
   <a href="./README.zh-CN.md">简体中文</a>
 </p>
 
+> ### A fork of [Claude Prism](https://github.com/delibae/claude-prism)
+>
+> Latex4All is a personal fork of [delibae/claude-prism](https://github.com/delibae/claude-prism).
+> The upstream project is the foundation; everything added on top of it — Zotero
+> integration and one-click BibTeX capture, dictionary/thesaurus (WordNet) and
+> grammar checking, LaTeX autocompletion, the Windows port, and the self-updating
+> release/test channels — was written by Claude Code.
+>
+> **My involvement is direction, not authorship.** I decided what to build, made
+> the design and architecture calls, tested it on real documents and hardware, and
+> reviewed what came back — but I did not hand-write the implementation. Please
+> judge the code on that basis, and prefer upstream if you want a project with
+> conventional human authorship.
+
 <p align="center">
   <img src="./assets/demo/main.webp" alt="Latex4All Demo" width="800" />
 </p>

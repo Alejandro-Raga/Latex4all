@@ -2,6 +2,24 @@
 
 Contributions are welcome! This guide covers the development environment, workflow, and testing.
 
+## About this fork
+
+Latex4All is a personal fork of [delibae/claude-prism](https://github.com/delibae/claude-prism).
+Everything added on top of the upstream project — Zotero integration and one-click
+BibTeX capture, dictionary/thesaurus (WordNet) and grammar checking, LaTeX
+autocompletion, the Windows port, and the self-updating release/test channels —
+was written by Claude Code.
+
+The maintainer's involvement is direction rather than authorship: deciding what to
+build, making the design and architecture calls, testing, and reviewing the
+results — not hand-writing the implementation. Bear that in mind when reading the
+code or filing an issue: conventions may be less consistent than in a
+hand-authored codebase, and a review comment may be acted on by re-prompting
+rather than by hand-editing.
+
+If you want the upstream project with conventional human authorship, use
+[Claude Prism](https://github.com/delibae/claude-prism) directly.
+
 ## Development Environment
 
 ### Prerequisites
