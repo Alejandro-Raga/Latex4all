@@ -24,7 +24,6 @@
   <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/Latex4All-macOS.dmg">macOS (Apple Silicon)</a> ·
   <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/Latex4All-macOS-Intel.dmg">macOS (Intel)</a> ·
   <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/Latex4All-Windows-setup.exe">Windows</a> ·
-  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/Latex4All-Linux.AppImage">Linux</a> ·
   <a href="https://github.com/Alejandro-Raga/Latex4all/releases">所有版本</a>
 </p>
 

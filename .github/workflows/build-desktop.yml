@@ -8,7 +8,7 @@ on:
         required: false
         default: ""
       platforms:
-        description: "Which platforms to build"
+        description: "Which platforms to build ('all' excludes Linux — deprecated)"
         required: false
         default: "all"
         type: choice
@@ -493,12 +493,16 @@ jobs:
   # ──────────────────────────────────────────────
   # Linux
   # ──────────────────────────────────────────────
+  # DEPRECATED (2026-09-06): Linux is no longer a released target. The job no
+  # longer runs on release tags or on a "all" dispatch, so `publish` sees no
+  # Linux signature and drops linux-x86_64 from latest.json and the release
+  # assets. Kept buildable behind an explicit `platforms: linux` dispatch so the
+  # target can be revived without reconstructing this job.
   build-linux:
     runs-on: ubuntu-22.04
     if: >-
-      github.event_name != 'workflow_dispatch'
-      || inputs.platforms == 'all'
-      || inputs.platforms == 'linux'
+      github.event_name == 'workflow_dispatch'
+      && inputs.platforms == 'linux'
     steps:
       - uses: actions/checkout@v4
         with:

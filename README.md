@@ -29,11 +29,9 @@
   </a>&nbsp;
   <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/Latex4All-Windows-setup.exe">
     <img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" />
-  </a>&nbsp;
-  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/Latex4All-Linux.AppImage">
-    <img src="https://img.shields.io/badge/Download-Linux_(AppImage)-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Download for Linux" />
   </a>
 </p>
+<p align="center"><sub>Linux builds are <b>deprecated</b> and no longer published. Build from source if you need Linux.</sub></p>
 <p align="center">
   <a href="https://github.com/Alejandro-Raga/Latex4all/releases">
     <img src="https://img.shields.io/github/v/release/Alejandro-Raga/Latex4all?style=flat-square&label=Latest%20Release&color=green" alt="Latest Release" />
