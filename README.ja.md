@@ -24,14 +24,11 @@
   <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/Latex4All-macOS.dmg">
     <img src="https://img.shields.io/badge/Download-macOS_(Apple_Silicon)-black?style=for-the-badge&logo=apple&logoColor=white" alt="macOS (Apple Silicon) をダウンロード" />
   </a>&nbsp;
-  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/Latex4All-macOS-Intel.dmg">
-    <img src="https://img.shields.io/badge/Download-macOS_(Intel)-555555?style=for-the-badge&logo=apple&logoColor=white" alt="macOS (Intel) をダウンロード" />
-  </a>&nbsp;
   <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/Latex4All-Windows-setup.exe">
     <img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Windows 版をダウンロード" />
   </a>
 </p>
-<p align="center"><sub>Linux ビルドは<b>非推奨</b>となり、配布を終了しました。Linux が必要な場合はソースからビルドしてください。</sub></p>
+<p align="center"><sub>Linux および Intel macOS ビルドは<b>非推奨</b>となり、配布を終了しました。必要な場合はソースからビルドしてください。</sub></p>
 <p align="center">
   <a href="https://github.com/Alejandro-Raga/Latex4all/releases">
     <img src="https://img.shields.io/github/v/release/Alejandro-Raga/Latex4all?style=flat-square&label=Latest%20Release&color=green" alt="Latest Release" />

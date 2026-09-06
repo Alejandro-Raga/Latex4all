@@ -208,8 +208,13 @@ The release channel reads `releases/latest/...`, which GitHub resolves to the
 newest **non-prerelease** tag — so marking test builds as prereleases is what
 keeps them invisible to release-channel users.
 
-Test builds cover Windows and macOS (Apple Silicon) only; macOS Intel and Linux
-are skipped there.
+Supported targets are Windows and macOS (Apple Silicon). Intel macOS and Linux
+are **deprecated**: their jobs no longer run on release tags, on the testing
+branch, or on an `all` dispatch, so `publish` finds no signature for them and
+drops `darwin-x86_64` and `linux-x86_64` from the manifest and the release
+assets. Both jobs are kept intact behind an explicit `platforms: macos-intel`
+or `platforms: linux` dispatch, so either target can be revived without
+reconstructing it.
 
 ### Required repository secrets
 
