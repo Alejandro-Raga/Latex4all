@@ -1,80 +1,49 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { check, type Update } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
+import { useCallback, useEffect } from "react";
+import { useSettingsStore } from "@/stores/settings-store";
+import { useUpdaterStore, type UpdateStatus } from "@/stores/updater-store";
 
-export type UpdateStatus =
-  | { state: "idle" }
-  | { state: "checking" }
-  | { state: "up-to-date" }
-  | { state: "available"; version: string; notes?: string }
-  | { state: "downloading"; percent: number }
-  | { state: "installing" }
-  | { state: "ready" }
-  | { state: "error"; message: string };
+export type { UpdateStatus };
 
+/**
+ * Thin binding between the settings-held channel choice and the shared
+ * updater store. Safe to call from more than one component — the store keeps
+ * a single status, and the launch check is guarded so it runs once per
+ * session no matter how many consumers mount.
+ *
+ * The JS plugin's own `check()` is deliberately unused: its `CheckOptions`
+ * cannot override the endpoint, so it could only ever read the single feed
+ * baked into tauri.conf.json and could not honour the channel choice. The
+ * channel-aware commands live in `src-tauri/src/updater.rs`.
+ */
 export function useUpdater() {
-  const [status, setStatus] = useState<UpdateStatus>({ state: "idle" });
-  const updateRef = useRef<Update | null>(null);
+  const channel = useSettingsStore((s) => s.updateChannel);
+  const autoCheck = useSettingsStore((s) => s.autoCheckForUpdates);
 
-  const checkForUpdate = useCallback(async () => {
-    setStatus({ state: "checking" });
-    try {
-      const update = await check();
-      if (!update) {
-        setStatus({ state: "up-to-date" });
-        return;
-      }
-      updateRef.current = update;
-      setStatus({
-        state: "available",
-        version: update.version,
-        notes: update.body ?? undefined,
-      });
-    } catch (err) {
-      setStatus({ state: "error", message: String(err) });
-    }
-  }, []);
+  const status = useUpdaterStore((s) => s.status);
+  const setStatus = useUpdaterStore((s) => s.setStatus);
+  const launchCheckDone = useUpdaterStore((s) => s.launchCheckDone);
+  const markLaunchChecked = useUpdaterStore((s) => s.markLaunchChecked);
+  const storeCheck = useUpdaterStore((s) => s.check);
+  const storeInstall = useUpdaterStore((s) => s.install);
+  const restart = useUpdaterStore((s) => s.restart);
 
-  const installUpdate = useCallback(async () => {
-    const update = updateRef.current;
-    if (!update) return;
+  const checkForUpdate = useCallback(() => {
+    // No channel chosen yet — the first-run picker hasn't been answered, so
+    // there is no feed to ask.
+    if (!channel) return Promise.resolve();
+    return storeCheck(channel);
+  }, [channel, storeCheck]);
 
-    try {
-      let downloaded = 0;
-      let contentLength = 0;
+  const installUpdate = useCallback(() => {
+    if (!channel) return Promise.resolve();
+    return storeInstall(channel);
+  }, [channel, storeInstall]);
 
-      await update.downloadAndInstall((event) => {
-        switch (event.event) {
-          case "Started":
-            contentLength = event.data.contentLength ?? 0;
-            setStatus({ state: "downloading", percent: 0 });
-            break;
-          case "Progress":
-            downloaded += event.data.chunkLength;
-            if (contentLength > 0) {
-              setStatus({
-                state: "downloading",
-                percent: Math.round((downloaded / contentLength) * 100),
-              });
-            }
-            break;
-          case "Finished":
-            setStatus({ state: "installing" });
-            break;
-        }
-      });
-
-      setStatus({ state: "ready" });
-      setTimeout(() => relaunch(), 1500);
-    } catch (err) {
-      setStatus({ state: "error", message: String(err) });
-    }
-  }, []);
-
-  // Auto-check on mount
   useEffect(() => {
-    checkForUpdate();
-  }, [checkForUpdate]);
+    if (!channel || !autoCheck || launchCheckDone) return;
+    markLaunchChecked();
+    void storeCheck(channel);
+  }, [channel, autoCheck, launchCheckDone, markLaunchChecked, storeCheck]);
 
-  return { status, checkForUpdate, installUpdate };
+  return { status, checkForUpdate, installUpdate, restart, setStatus };
 }

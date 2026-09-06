@@ -67,7 +67,7 @@
       "open": "((mailto:\\w+)|(tel:\\w+)|(https?://\\w+)|(dict://)).+"
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENBNjAzOTI2NzdDQjdBNkMKUldSc2VzdDNKamxneXMzUnZIK0h3TzZ4WVo4QVFVQlRaSFA1TEhCcGtUYW53ZkhNaDluaWgwZWQK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgzREIzMTM4NEIwQUE4MjMKUldRanFBcExPREhiZzNHQStPN0lVdGJJYlV1WURpaXhwTDIrbkpTSU40b2h2ZnQ2RjVoeGs1MGkK",
       "endpoints": [
         "https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/latest.json"
       ]

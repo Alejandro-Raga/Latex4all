@@ -20,6 +20,10 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      # Test channel: every push here is published to the rolling `testing`
+      # prerelease that latest-test.json points at.
+      - testing
 
 permissions:
   contents: write
@@ -103,6 +107,13 @@ jobs:
       # isn't committed; tauri.conf.json bundles it as a resource.
       - name: Fetch WordNet database
         run: node scripts/fetch-wordnet.mjs
+
+      # Test-channel builds must climb in version or the updater has nothing
+      # newer to offer. See scripts/stamp-test-version.mjs.
+      - name: Stamp test-channel version
+        if: github.ref == 'refs/heads/testing'
+        shell: bash
+        run: node scripts/stamp-test-version.mjs
 
       - name: Build Tauri app
         shell: bash
@@ -249,6 +260,13 @@ jobs:
       - name: Fetch WordNet database
         run: node scripts/fetch-wordnet.mjs
 
+      # Test-channel builds must climb in version or the updater has nothing
+      # newer to offer. See scripts/stamp-test-version.mjs.
+      - name: Stamp test-channel version
+        if: github.ref == 'refs/heads/testing'
+        shell: bash
+        run: node scripts/stamp-test-version.mjs
+
       - name: Build Tauri app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -327,10 +345,15 @@ jobs:
   # ──────────────────────────────────────────────
   build-macos-intel:
     runs-on: macos-15-intel
+    # Excluded from test-channel builds: the Intel runner is the slowest in the
+    # matrix and there is no Intel tester to serve.
     if: >-
-      github.event_name != 'workflow_dispatch'
-      || inputs.platforms == 'all'
-      || inputs.platforms == 'macos'
+      github.ref != 'refs/heads/testing'
+      && (
+        github.event_name != 'workflow_dispatch'
+        || inputs.platforms == 'all'
+        || inputs.platforms == 'macos'
+      )
     steps:
       - uses: actions/checkout@v4
         with:
@@ -593,18 +616,34 @@ jobs:
     runs-on: ubuntu-latest
     if: >-
       always()
-      && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '')
+      && (
+        startsWith(github.ref, 'refs/tags/v')
+        || inputs.release_tag != ''
+        || github.ref == 'refs/heads/testing'
+      )
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Determine tag
+      - name: Determine tag and channel
         id: tag
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+          if [[ "$GITHUB_REF" == "refs/heads/testing" ]]; then
+            # Rolling tag: every testing build overwrites the same prerelease,
+            # so latest-test.json lives at a URL that never changes. Named
+            # distinctly from the `testing` *branch* — a tag and branch sharing
+            # a name makes every bare `testing` ref ambiguous to git.
+            echo "tag=testing-latest" >> $GITHUB_OUTPUT
+            echo "channel=test" >> $GITHUB_OUTPUT
+            echo "manifest=latest-test.json" >> $GITHUB_OUTPUT
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            echo "channel=release" >> $GITHUB_OUTPUT
+            echo "manifest=latest.json" >> $GITHUB_OUTPUT
           else
             echo "tag=${{ inputs.release_tag }}" >> $GITHUB_OUTPUT
+            echo "channel=release" >> $GITHUB_OUTPUT
+            echo "manifest=latest.json" >> $GITHUB_OUTPUT
           fi
 
       - name: Download all artifacts
@@ -612,9 +651,10 @@ jobs:
         with:
           path: artifacts
 
-      - name: Generate latest.json
+      - name: Generate update manifest
         env:
           TAG: ${{ steps.tag.outputs.tag }}
+          MANIFEST: ${{ steps.tag.outputs.manifest }}
           WIN_SIG: ${{ needs.build-windows.outputs.sig }}
           WIN_URL: ${{ needs.build-windows.outputs.url }}
           MAC_SIG: ${{ needs.build-macos.outputs.sig }}
@@ -624,7 +664,19 @@ jobs:
           LIN_SIG: ${{ needs.build-linux.outputs.sig }}
           LIN_URL: ${{ needs.build-linux.outputs.url }}
         run: |
-          VERSION="${TAG#v}"
+          # The release channel takes its version from the tag. The test
+          # channel has no meaningful tag (it is always "testing"), so it
+          # re-runs the very script the build jobs used; sharing the one
+          # implementation is what keeps the manifest and the binaries from
+          # claiming different versions.
+          if [ "${{ steps.tag.outputs.channel }}" = "test" ]; then
+            node scripts/stamp-test-version.mjs
+            # Read back the file the script just wrote rather than $TEST_VERSION:
+            # values written to $GITHUB_ENV only land in *later* steps.
+            VERSION="$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")"
+          else
+            VERSION="${TAG#v}"
+          fi
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           export BASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
 
@@ -646,17 +698,33 @@ jobs:
               pub_date: '$PUB_DATE',
               platforms
             };
-            require('fs').writeFileSync('latest.json', JSON.stringify(data, null, 2));
+            require('fs').writeFileSync(process.env.MANIFEST, JSON.stringify(data, null, 2));
             console.log(JSON.stringify(data, null, 2));
           "
 
-      - name: Create draft release
+      - name: Create or refresh release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
-          gh release view "$TAG" > /dev/null 2>&1 || \
-            gh release create "$TAG" --title "Latex4All $TAG" --generate-notes --draft
+          if [ "${{ steps.tag.outputs.channel }}" = "test" ]; then
+            # Must be a *published* prerelease, not a draft: assets on a draft
+            # release are not reachable by the stable download URL the updater
+            # polls. Prerelease keeps it out of `releases/latest`, which is what
+            # the release channel follows, so test builds stay invisible there.
+            if gh release view "$TAG" > /dev/null 2>&1; then
+              gh release edit "$TAG" --prerelease --latest=false \
+                --title "Latex4All (test channel)" \
+                --notes "Rolling build from the testing branch — run ${GITHUB_RUN_NUMBER}, commit ${GITHUB_SHA}."
+            else
+              gh release create "$TAG" --prerelease --latest=false \
+                --title "Latex4All (test channel)" \
+                --notes "Rolling build from the testing branch — run ${GITHUB_RUN_NUMBER}, commit ${GITHUB_SHA}."
+            fi
+          else
+            gh release view "$TAG" > /dev/null 2>&1 || \
+              gh release create "$TAG" --title "Latex4All $TAG" --generate-notes --draft
+          fi
 
       - name: Rename and upload assets
         env:
@@ -680,7 +748,7 @@ jobs:
           find artifacts/desktop-linux -name "*.rpm" 2>/dev/null | head -1 | xargs -I{} cp {} upload/Latex4All-Linux.rpm
           find artifacts/desktop-linux -name "*.AppImage" 2>/dev/null | head -1 | xargs -I{} cp {} upload/Latex4All-Linux.AppImage
 
-          cp latest.json upload/
+          cp "${{ steps.tag.outputs.manifest }}" upload/
 
           echo "==> Uploading:"
           ls -la upload/

@@ -3,6 +3,13 @@ import { persist } from "zustand/middleware";
 
 type CompilerBackend = "tectonic" | "texlive";
 
+/** Which release feed the updater follows.
+ *  - "release": tagged, non-prerelease builds only (GitHub's `releases/latest`)
+ *  - "test":    every build published from the `testing` branch
+ *  `null` means the user has not been asked yet — the first-run picker keys
+ *  off this, so it must stay distinct from a real choice. */
+export type UpdateChannel = "release" | "test";
+
 /** Codes match LanguageTool's format; converted to NSSpellChecker's
  * underscored form on the Rust side. Kept to a curated, verified set rather
  * than exposing every language either engine technically supports. */
@@ -43,6 +50,13 @@ interface SettingsState {
   setPdfDarkModeReference: (enabled: boolean) => void;
   pdfDarkModeInline: boolean;
   setPdfDarkModeInline: (enabled: boolean) => void;
+  /** null until the first-run picker has been answered. */
+  updateChannel: UpdateChannel | null;
+  setUpdateChannel: (channel: UpdateChannel) => void;
+  /** Whether to check on launch at all. Both channels still prompt before
+   *  downloading — this only governs the automatic check. */
+  autoCheckForUpdates: boolean;
+  setAutoCheckForUpdates: (enabled: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -82,6 +96,11 @@ export const useSettingsStore = create<SettingsState>()(
         set({ pdfDarkModeReference: enabled }),
       pdfDarkModeInline: false,
       setPdfDarkModeInline: (enabled) => set({ pdfDarkModeInline: enabled }),
+      updateChannel: null,
+      setUpdateChannel: (channel) => set({ updateChannel: channel }),
+      autoCheckForUpdates: true,
+      setAutoCheckForUpdates: (enabled) =>
+        set({ autoCheckForUpdates: enabled }),
     }),
     {
       name: "latex4all-settings",

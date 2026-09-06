@@ -176,6 +176,52 @@ The hook is set up automatically when you run `pnpm install`.
 
 A GitHub Actions workflow runs `biome ci` on every pull request and push to `main`. PRs that fail lint checks cannot be merged.
 
+## Releases and update channels
+
+The app updates itself through the Tauri updater. There are two channels; the
+user picks one on first launch and can switch under Settings → Updates.
+
+| Channel   | Feed                  | Published by                        | Release on GitHub               |
+|-----------|-----------------------|-------------------------------------|---------------------------------|
+| `release` | `latest.json`         | pushing a `v*` tag                  | draft, published by hand        |
+| `test`    | `latest-test.json`    | pushing to the `testing` branch     | `testing-latest`, prerelease    |
+
+The release channel reads `releases/latest/...`, which GitHub resolves to the
+newest **non-prerelease** tag — so marking test builds as prereleases is what
+keeps them invisible to release-channel users.
+
+Test builds cover Windows and macOS (Apple Silicon) only; macOS Intel and Linux
+are skipped there.
+
+### Required repository secrets
+
+Without `TAURI_SIGNING_PRIVATE_KEY` the build falls back to
+`tauri.local-build.conf.json`, which sets `createUpdaterArtifacts: false`. That
+produces installers with no `.sig` files, the publish job's `if (WIN_SIG)`
+guards skip every platform, and the manifest ships as `{"platforms": {}}` —
+an updater that silently offers nothing. Both secrets must be set:
+
+- `TAURI_SIGNING_PRIVATE_KEY` — contents of the minisign private key
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — its password (empty if generated without one)
+
+The matching public key lives in `tauri.conf.json` under `plugins.updater.pubkey`.
+Changing the keypair invalidates every already-installed copy of the app: the old
+pubkey is compiled in, so those installs reject the new signatures and must be
+reinstalled by hand once.
+
+### Test-channel versioning
+
+`scripts/stamp-test-version.mjs` rewrites the version to
+`<major>.<minor>.<CI run number>` before a testing-branch build. Without it every
+test build would report the same version as the last release and the updater
+would never see anything newer. Run numbers only increase, so test builds climb
+monotonically.
+
+Because test versions outrun real releases (a test build might be `1.3.57` while
+the newest release is `1.3.0`), moving a machine from `test` back to `release`
+needs a manual reinstall — the release channel will not offer what looks to it
+like a downgrade.
+
 ## Pull Request Process
 
 1. Fork the repository

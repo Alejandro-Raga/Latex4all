@@ -39,6 +39,7 @@ import { useDocumentStore } from "@/stores/document-store";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 import { useUvSetupStore } from "@/stores/uv-setup-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import { UpdateSettings } from "@/components/updater/update-settings";
 import { compileLatex } from "@/lib/latex-compiler";
 import { getMupdfClient } from "@/lib/mupdf/mupdf-client";
 import { exists, join } from "@/lib/tauri/fs";
@@ -66,7 +67,7 @@ interface DefaultProject {
 }
 
 type ProjectPickerSection = "projects" | "settings";
-type SettingsDetailSection = "provider" | "environment";
+type SettingsDetailSection = "provider" | "environment" | "updates";
 
 type RecentProject = {
   path: string;
@@ -100,6 +101,7 @@ export function ProjectPicker() {
     useState<ProjectPickerSection>("projects");
   const [settingsDetailSection, setSettingsDetailSection] =
     useState<SettingsDetailSection>("provider");
+  const updateChannel = useSettingsStore((s) => s.updateChannel);
   const [searchQuery, setSearchQuery] = useState("");
   const [removeProjectTarget, setRemoveProjectTarget] =
     useState<RecentProject | null>(null);
@@ -242,9 +244,7 @@ export function ProjectPicker() {
           {!isSidebarCollapsed && (
             <div className="flex min-w-0 items-center gap-2">
               <img src="/icon-192.png" alt="Latex4All" className="size-6" />
-              <span className="truncate font-semibold text-sm">
-                Latex4All
-              </span>
+              <span className="truncate font-semibold text-sm">Latex4All</span>
             </div>
           )}
           <Button
@@ -406,6 +406,13 @@ export function ProjectPicker() {
                   meta="Python / Skills"
                   onClick={() => setSettingsDetailSection("environment")}
                 />
+                <SettingsDetailButton
+                  active={settingsDetailSection === "updates"}
+                  icon={DownloadIcon}
+                  label="Updates"
+                  meta={updateChannel === "test" ? "Test" : "Release"}
+                  onClick={() => setSettingsDetailSection("updates")}
+                />
               </aside>
 
               <div className="min-w-0">
@@ -416,6 +423,14 @@ export function ProjectPicker() {
                     contentClassName="p-0"
                   >
                     <ClaudeSetup variant="embedded" />
+                  </SettingsPanel>
+                ) : settingsDetailSection === "updates" ? (
+                  <SettingsPanel
+                    title="Updates"
+                    icon={DownloadIcon}
+                    contentClassName="p-0"
+                  >
+                    <UpdateSettings appVersion={appVersion} />
                   </SettingsPanel>
                 ) : (
                   <SettingsPanel

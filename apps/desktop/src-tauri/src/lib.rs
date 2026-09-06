@@ -11,6 +11,7 @@ mod latex;
 mod skills;
 mod slash_commands;
 mod spellcheck;
+mod updater;
 mod uv;
 mod wordnet;
 mod zotero;
@@ -617,6 +618,8 @@ pub fn run() {
             languagetool::install_language_tool,
             languagetool::start_language_tool,
             languagetool::stop_language_tool,
+            updater::updater_check,
+            updater::updater_install,
             latex::compile_latex,
             latex::synctex_edit,
             latex::detect_texlive,
