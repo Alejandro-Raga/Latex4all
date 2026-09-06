@@ -141,6 +141,10 @@ jobs:
           if [ -n "$NSIS_SIG" ] && [ -n "$NSIS_EXE" ]; then
             echo "sig=$(cat "$NSIS_SIG")" >> $GITHUB_OUTPUT
             echo "url=$(basename "$NSIS_EXE")" >> $GITHUB_OUTPUT
+          else
+            # Without this the manifest silently ships {"platforms": {}} and the
+            # updater offers nothing, with no failed step to point at.
+            echo "::warning::No updater signature for Windows — this platform will be missing from the update manifest."
           fi
 
       - name: Upload build artifacts
@@ -216,7 +220,28 @@ jobs:
           echo "CXXFLAGS=-std=c++17" >> $GITHUB_ENV
           echo "CFLAGS=" >> $GITHUB_ENV
 
+      # This fork has no Apple Developer account. Upstream's macOS jobs imported
+      # a certificate unconditionally, which fails on an empty secret with
+      # "SecKeychainItemImport: One or more parameters passed to a function were
+      # not valid" — the whole job dies before it ever compiles anything.
+      # Detect the credentials once and skip signing/notarisation without them.
+      # The DMG is then unsigned (Gatekeeper will quarantine it), but it builds,
+      # and the *updater* signature is unaffected: that comes from
+      # TAURI_SIGNING_PRIVATE_KEY, which has nothing to do with Apple signing.
+      - name: Detect Apple signing credentials
+        id: apple_creds
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No APPLE_CERTIFICATE secret set — building an unsigned macOS bundle."
+          fi
+
       - name: Import Apple certificate
+        if: steps.apple_creds.outputs.available == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -283,6 +308,7 @@ jobs:
           pnpm --filter @latex4all/desktop tauri build $EXTRA --target aarch64-apple-darwin
 
       - name: Notarize DMG
+        if: steps.apple_creds.outputs.available == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -319,6 +345,8 @@ jobs:
           if [ -n "$TAR_SIG" ] && [ -n "$TAR_GZ" ]; then
             echo "sig=$(cat "$TAR_SIG")" >> $GITHUB_OUTPUT
             echo "url=$(basename "$TAR_GZ")" >> $GITHUB_OUTPUT
+          else
+            echo "::warning::No updater signature for macOS — this platform will be missing from the update manifest."
           fi
 
       - name: Upload build artifacts
@@ -401,7 +429,28 @@ jobs:
           echo "CXXFLAGS=-std=c++17" >> $GITHUB_ENV
           echo "CFLAGS=" >> $GITHUB_ENV
 
+      # This fork has no Apple Developer account. Upstream's macOS jobs imported
+      # a certificate unconditionally, which fails on an empty secret with
+      # "SecKeychainItemImport: One or more parameters passed to a function were
+      # not valid" — the whole job dies before it ever compiles anything.
+      # Detect the credentials once and skip signing/notarisation without them.
+      # The DMG is then unsigned (Gatekeeper will quarantine it), but it builds,
+      # and the *updater* signature is unaffected: that comes from
+      # TAURI_SIGNING_PRIVATE_KEY, which has nothing to do with Apple signing.
+      - name: Detect Apple signing credentials
+        id: apple_creds
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No APPLE_CERTIFICATE secret set — building an unsigned macOS bundle."
+          fi
+
       - name: Import Apple certificate
+        if: steps.apple_creds.outputs.available == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -461,6 +510,7 @@ jobs:
           pnpm --filter @latex4all/desktop tauri build $EXTRA --target x86_64-apple-darwin
 
       - name: Notarize DMG
+        if: steps.apple_creds.outputs.available == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -497,6 +547,8 @@ jobs:
           if [ -n "$TAR_SIG" ] && [ -n "$TAR_GZ" ]; then
             echo "sig=$(cat "$TAR_SIG")" >> $GITHUB_OUTPUT
             echo "url=$(basename "$TAR_GZ")" >> $GITHUB_OUTPUT
+          else
+            echo "::warning::No updater signature for macOS — this platform will be missing from the update manifest."
           fi
 
       - name: Upload build artifacts
