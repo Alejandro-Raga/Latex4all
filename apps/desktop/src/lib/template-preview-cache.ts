@@ -13,6 +13,37 @@ const thumbnailCache = new Map<string, string>();
 const failedIds = new Set<string>();
 const pendingRequests = new Map<string, Promise<string | null>>();
 
+// The gallery mounts every card at once, so without a cap all ~13 templates
+// race into a single-threaded worker while it is still compiling the ~10 MB
+// MuPDF wasm. A crash during that startup rejects every in-flight request
+// together (see mupdf-client's onerror), which used to blacklist the whole
+// gallery permanently — failedIds was never cleared, so the thumbnails stayed
+// blank for the rest of the session. Cap the fan-out and allow retries.
+const MAX_CONCURRENT = 2;
+const MAX_ATTEMPTS = 3;
+
+let activeCount = 0;
+const queue: Array<() => void> = [];
+
+function acquireSlot(): Promise<void> {
+  if (activeCount < MAX_CONCURRENT) {
+    activeCount++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => queue.push(resolve));
+}
+
+function releaseSlot(): void {
+  const next = queue.shift();
+  if (next) {
+    next();
+    return;
+  }
+  activeCount--;
+}
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function notify() {
   for (const fn of listeners) fn();
 }
@@ -35,8 +66,31 @@ export function getTemplatePdfUrl(templateId: string): string {
   return `/examples/${templateId}/main.pdf`;
 }
 
+/** One attempt: fetch the static PDF and render page 1 to a PNG object URL. */
+async function renderOnce(templateId: string): Promise<string> {
+  const url = getTemplatePdfUrl(templateId);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const buffer = await response.arrayBuffer();
+
+  const client = getMupdfClient();
+  const docId = await client.openDocument(buffer);
+  try {
+    const pngBuffer = await client.renderThumbnail(docId, 0, 300);
+    const blob = new Blob([pngBuffer], { type: "image/png" });
+    return URL.createObjectURL(blob);
+  } finally {
+    // Closing in `finally` keeps a render failure from leaking the document,
+    // which previously stayed open in the worker for the life of the session.
+    await client.closeDocument(docId).catch(() => {});
+  }
+}
+
 /**
- * Load the static PDF and render page 1 as a thumbnail data URL.
+ * Load the static PDF and render page 1 as a thumbnail object URL.
+ *
+ * Retries on a fresh worker: a failure here is usually the shared worker
+ * dying rather than a bad PDF, and that is recoverable.
  */
 export async function generateThumbnail(
   templateId: string,
@@ -50,33 +104,40 @@ export async function generateThumbnail(
   if (pending) return pending;
 
   const promise = (async (): Promise<string | null> => {
+    await acquireSlot();
     try {
-      const url = getTemplatePdfUrl(templateId);
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const buffer = await response.arrayBuffer();
-
-      const client = getMupdfClient();
-      const docId = await client.openDocument(buffer);
-
-      const targetWidth = 300;
-      const pngBuffer = await client.renderThumbnail(docId, 0, targetWidth);
-      await client.closeDocument(docId);
-
-      const blob = new Blob([pngBuffer], { type: "image/png" });
-      const dataUrl = URL.createObjectURL(blob);
-
-      thumbnailCache.set(templateId, dataUrl);
-      notify();
-      return dataUrl;
-    } catch (err) {
-      log.warn(`Failed to load preview for ${templateId}`, {
-        error: String(err),
-      });
-      failedIds.add(templateId);
-      notify();
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          const dataUrl = await renderOnce(templateId);
+          thumbnailCache.set(templateId, dataUrl);
+          notify();
+          return dataUrl;
+        } catch (err) {
+          if (attempt === MAX_ATTEMPTS) {
+            log.warn(
+              `Failed to load preview for ${templateId} after ${MAX_ATTEMPTS} attempts`,
+              { error: String(err) },
+            );
+            failedIds.add(templateId);
+            notify();
+            return null;
+          }
+          log.warn(
+            `Preview attempt ${attempt} failed for ${templateId}, retrying`,
+            { error: String(err) },
+          );
+          // Deliberately not resetting the client here. When the worker is the
+          // thing that died, its onerror handler has already cleared the
+          // singleton, so the next getMupdfClient() call builds a fresh one.
+          // Forcing a reset would instead terminate a *healthy* worker on
+          // unrelated errors, invalidating the docIds pdf-doc-cache holds and
+          // breaking an already-open document preview.
+          await delay(250 * 2 ** (attempt - 1));
+        }
+      }
       return null;
     } finally {
+      releaseSlot();
       pendingRequests.delete(templateId);
     }
   })();
