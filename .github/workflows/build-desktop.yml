@@ -754,6 +754,16 @@ jobs:
             VERSION="$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")"
           else
             VERSION="${TAG#v}"
+            # Unlike the test channel, a release build does not stamp the
+            # binary — its version comes from tauri.conf.json. If the tag
+            # disagrees, the manifest advertises a version the installed app can
+            # never report, so every launch re-offers the same update forever.
+            # Fail loudly rather than ship that.
+            CONF_VERSION="$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")"
+            if [ "$VERSION" != "$CONF_VERSION" ]; then
+              echo "::error::Tag $TAG implies version $VERSION, but tauri.conf.json says $CONF_VERSION. Bump the version in the repo and retag."
+              exit 1
+            fi
           fi
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           export BASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
