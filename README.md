@@ -24,22 +24,22 @@
   <a href="https://claudeprism.delibae.dev?utm_source=github&utm_medium=readme&utm_campaign=launch_v054">
     <img src="https://img.shields.io/badge/Website-claudeprism.dev-blue?style=flat-square&logo=googlechrome&logoColor=white" alt="Website" />
   </a>&nbsp;
-  <a href="https://github.com/delibae/claude-prism/releases/latest/download/ClaudePrism-macOS.dmg">
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/ClaudePrism-macOS.dmg">
     <img src="https://img.shields.io/badge/Download-macOS_(Apple_Silicon)-black?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS (Apple Silicon)" />
   </a>&nbsp;
-  <a href="https://github.com/delibae/claude-prism/releases/latest/download/ClaudePrism-macOS-Intel.dmg">
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/ClaudePrism-macOS-Intel.dmg">
     <img src="https://img.shields.io/badge/Download-macOS_(Intel)-555555?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS (Intel)" />
   </a>&nbsp;
-  <a href="https://github.com/delibae/claude-prism/releases/latest/download/ClaudePrism-Windows-setup.exe">
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/ClaudePrism-Windows-setup.exe">
     <img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" />
   </a>&nbsp;
-  <a href="https://github.com/delibae/claude-prism/releases/latest/download/ClaudePrism-Linux.AppImage">
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/ClaudePrism-Linux.AppImage">
     <img src="https://img.shields.io/badge/Download-Linux_(AppImage)-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Download for Linux" />
   </a>
 </p>
 <p align="center">
-  <a href="https://github.com/delibae/claude-prism/releases">
-    <img src="https://img.shields.io/github/v/release/delibae/claude-prism?style=flat-square&label=Latest%20Release&color=green" alt="Latest Release" />
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases">
+    <img src="https://img.shields.io/github/v/release/Alejandro-Raga/Latex4all?style=flat-square&label=Latest%20Release&color=green" alt="Latest Release" />
   </a>
 </p>
 
@@ -149,7 +149,7 @@ CodeMirror 6 with LaTeX/BibTeX syntax highlighting, real-time error linting, fin
 
 ## Installation
 
-Download the latest build from [GitHub Releases](https://github.com/delibae/claude-prism/releases).
+Download the latest build from [GitHub Releases](https://github.com/Alejandro-Raga/Latex4all/releases).
 
 ## Contributing
 

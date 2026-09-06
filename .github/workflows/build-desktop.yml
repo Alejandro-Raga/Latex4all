@@ -622,7 +622,7 @@ jobs:
         run: |
           VERSION="${TAG#v}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          export BASE_URL="https://github.com/delibae/claude-prism/releases/download/$TAG"
+          export BASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
 
           node -e "
             const BASE = process.env.BASE_URL;
