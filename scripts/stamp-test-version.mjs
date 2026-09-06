@@ -4,7 +4,7 @@
  *
  * The updater compares the manifest's version against the version compiled
  * into the running app. Every testing-branch build otherwise reports the same
- * `1.3.0` as the last release, so the updater would see nothing newer and the
+ * `1.0.0` as the last release, so the updater would see nothing newer and the
  * test channel would never deliver anything.
  *
  * The stamp is `<major>.<minor>.<CI run number>` — plain numeric, because the
@@ -12,7 +12,7 @@
  * version. Run numbers only ever increase, so test builds climb monotonically.
  *
  * Consequence worth knowing: test versions quickly outrun real releases (a
- * test build is 1.3.57 while the newest release is still 1.3.0), so switching
+ * test build is 1.0.57 while the newest release is still 1.0.0), so switching
  * a machine from the test channel back to release needs a manual reinstall —
  * the release channel will not offer what looks to it like a downgrade.
  */

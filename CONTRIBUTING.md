@@ -235,8 +235,8 @@ test build would report the same version as the last release and the updater
 would never see anything newer. Run numbers only increase, so test builds climb
 monotonically.
 
-Because test versions outrun real releases (a test build might be `1.3.57` while
-the newest release is `1.3.0`), moving a machine from `test` back to `release`
+Because test versions outrun real releases (a test build might be `1.0.57` while
+the newest release is `1.0.0`), moving a machine from `test` back to `release`
 needs a manual reinstall — the release channel will not offer what looks to it
 like a downgrade.
 
