@@ -1,4 +1,11 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from "react";
+import {
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  useEffect,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import {
   FileTextIcon,
@@ -71,10 +78,10 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -274,18 +281,57 @@ function useAppVersion() {
 function LayoutPaneSwitcher({
   controls,
   collapsed = false,
-  onQuickToggleSidebar,
   side = "bottom",
   align = "end",
   buttonClassName,
 }: {
   controls?: LayoutControls;
   collapsed?: boolean;
-  onQuickToggleSidebar?: () => void;
   side?: "top" | "right" | "bottom" | "left";
   align?: "start" | "center" | "end";
   buttonClassName?: string;
 }) {
+  // Click opens the menu; hover is only a shortcut on top of that. It used to
+  // be hover-only, with the click bound to collapsing the sidebar instead —
+  // which left anyone who clicks the button (rather than resting on it) with
+  // no way to reach these toggles at all, and no way in from the keyboard.
+  const [open, setOpen] = useState(false);
+  const openedByHover = useRef(false);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelHoverTimer = () => {
+    if (hoverTimer.current) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+  };
+
+  useEffect(() => cancelHoverTimer, []);
+
+  const handleOpenChange = (next: boolean) => {
+    cancelHoverTimer();
+    // A deliberate click (or Enter/Space) pins the menu open until it is
+    // dismissed, rather than vanishing the moment the pointer drifts off.
+    if (next) openedByHover.current = false;
+    setOpen(next);
+  };
+
+  const scheduleHoverOpen = (event: ReactPointerEvent) => {
+    if (event.pointerType !== "mouse" || open) return;
+    cancelHoverTimer();
+    hoverTimer.current = setTimeout(() => {
+      openedByHover.current = true;
+      setOpen(true);
+    }, 120);
+  };
+
+  const scheduleHoverClose = (event: ReactPointerEvent) => {
+    if (event.pointerType !== "mouse") return;
+    cancelHoverTimer();
+    if (!openedByHover.current) return;
+    hoverTimer.current = setTimeout(() => setOpen(false), 180);
+  };
+
   const trigger = (
     <Button
       variant="ghost"
@@ -294,7 +340,6 @@ function LayoutPaneSwitcher({
         "transition-transform duration-300 ease-in-out hover:scale-105",
         buttonClassName,
       )}
-      onClick={onQuickToggleSidebar}
       title="Layout"
       aria-label="Layout"
     >
@@ -310,13 +355,26 @@ function LayoutPaneSwitcher({
   if (!controls) return trigger;
 
   return (
-    <HoverCard openDelay={80} closeDelay={140}>
-      <HoverCardTrigger asChild>{trigger}</HoverCardTrigger>
-      <HoverCardContent
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger
+        asChild
+        onPointerEnter={scheduleHoverOpen}
+        onPointerLeave={scheduleHoverClose}
+      >
+        {trigger}
+      </PopoverTrigger>
+      <PopoverContent
         side={side}
         align={align}
         sideOffset={8}
-        className="w-44 rounded-2xl border-border/70 bg-popover/95 p-1.5 shadow-2xl backdrop-blur"
+        onPointerEnter={cancelHoverTimer}
+        onPointerLeave={scheduleHoverClose}
+        // Opening on hover must not steal focus from the editor; a click-opened
+        // menu still gets focus, so keyboard users can tab through the rows.
+        onOpenAutoFocus={(event) => {
+          if (openedByHover.current) event.preventDefault();
+        }}
+        className="w-44 rounded-2xl border-border/70 bg-popover p-1.5 shadow-2xl"
       >
         <div className="space-y-1">
           <LayoutToggleRow
@@ -344,8 +402,8 @@ function LayoutPaneSwitcher({
             onCheckedChange={controls.setReferenceVisible}
           />
         </div>
-      </HoverCardContent>
-    </HoverCard>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -1150,7 +1208,6 @@ export function Sidebar({
         <LayoutPaneSwitcher
           controls={layoutControls}
           collapsed={collapsed}
-          onQuickToggleSidebar={onToggleCollapsed}
           side="right"
           align="start"
           buttonClassName="size-7"
@@ -1275,7 +1332,6 @@ export function Sidebar({
               <LayoutPaneSwitcher
                 controls={layoutControls}
                 collapsed={collapsed}
-                onQuickToggleSidebar={onToggleCollapsed}
                 side="bottom"
                 align="end"
                 buttonClassName="size-6"
