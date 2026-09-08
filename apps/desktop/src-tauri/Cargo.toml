@@ -41,6 +41,10 @@ tectonic = { version = "0.15", default-features = true, features = ["external-ha
 #   Windows: vcpkg install harfbuzz[graphite2] freetype icu fontconfig (with TECTONIC_DEP_BACKEND=vcpkg)
 flate2 = "1"
 tar = "0.4"
+# Pure-Rust Hunspell-compatible spell checker, used for languages the OS has
+# no dictionary for (see language_packs.rs). Deliberately not the C hunspell
+# bindings: this build already fights enough native dependencies.
+spellbook = "0.4"
 # LanguageTool and the Adoptium JRE are both distributed as zips (see languagetool.rs).
 zip = { version = "2", default-features = false, features = ["deflate"] }
 

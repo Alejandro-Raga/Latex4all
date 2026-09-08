@@ -75,6 +75,7 @@ import {
   formatCompileError,
 } from "@/lib/latex-compiler";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useLanguagePacksStore } from "@/stores/language-packs-store";
 import { EditorToolbar } from "./editor-toolbar";
 import { SelectionToolbar, type ToolbarAction } from "./selection-toolbar";
 import { WordLookupPopover } from "./word-lookup-popover";
@@ -82,6 +83,7 @@ import { matchCase } from "./match-case";
 import {
   spellcheckExtension,
   refreshSpellingDecorations,
+  clearSpellingCache,
   forceSpellcheckRecheck,
   clearMisspellingEffect,
 } from "./spellcheck-extension";
@@ -264,16 +266,21 @@ export function LatexEditor() {
       useSettingsStore.getState().ignoredWords.includes(word.toLowerCase()),
     [],
   );
+  const languagePackRevision = useLanguagePacksStore((s) => s.revision);
   useEffect(() => {
     // Apply immediately rather than waiting for the next edit or file
     // switch (which would otherwise be the next time these plugins happen
-    // to re-run and notice the language changed).
+    // to re-run and notice the language changed). Installing or removing a
+    // language pack changes the same answer, so it re-checks too — and the
+    // cached verdicts have to go, since they were reached with a different
+    // dictionary behind them (or none at all).
+    clearSpellingCache();
     const view = viewRef.current;
     if (view) {
       forceSpellcheckRecheck(view);
       forceGrammarRecheck(view);
     }
-  }, [checkLanguage]);
+  }, [checkLanguage, languagePackRevision]);
   useEffect(() => {
     // Same reasoning: flipping the toolbar toggle shouldn't wait for the
     // next edit — turning it on should start checking immediately, and

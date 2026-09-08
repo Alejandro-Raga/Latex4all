@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useDictionaryStore } from "@/stores/dictionary-store";
+import { useLanguagePacksStore } from "@/stores/language-packs-store";
 import { parseAntonyms } from "./parse-antonyms";
 import { parseSynonyms } from "./parse-synonyms";
 import { useViewportAnchoredPosition } from "./use-viewport-anchored-position";
@@ -40,6 +41,10 @@ interface DictionaryLookupResult {
   /** False when no offline database could be opened, so "nothing found" is a
    * setup problem rather than a word without an entry. */
   databaseAvailable: boolean;
+  /** Language code whose pack is missing — set instead of `databaseAvailable`
+   * for a non-English document, where the fix is a language pack rather than
+   * the English dictionary. */
+  missingLanguagePack: string | null;
 }
 
 /** `dict://` is a macOS URL scheme; there is no Dictionary.app elsewhere. */
@@ -66,12 +71,22 @@ export function WordLookupPopover({
   const dictionaryInstalling = useDictionaryStore((s) => s.isInstalling);
   const dictionaryProgress = useDictionaryStore((s) => s.progress);
   const checkDictionaryStatus = useDictionaryStore((s) => s.checkStatus);
+  const installLanguagePack = useLanguagePacksStore((s) => s.install);
+  const languagePackInstalling = useLanguagePacksStore((s) => s.installing);
+  const languagePackProgress = useLanguagePacksStore((s) => s.progress);
+  const refreshLanguagePacks = useLanguagePacksStore((s) => s.refresh);
+  const languagePack = useLanguagePacksStore((s) =>
+    s.packs.find((pack) => pack.code === language),
+  );
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setResult(null);
-    invoke<DictionaryLookupResult>("lookup_dictionary_definition", { term })
+    invoke<DictionaryLookupResult>("lookup_dictionary_definition", {
+      term,
+      language,
+    })
       .then((res) => {
         if (!cancelled) setResult(res);
       })
@@ -84,7 +99,7 @@ export function WordLookupPopover({
     return () => {
       cancelled = true;
     };
-  }, [term]);
+  }, [term, language]);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,6 +133,33 @@ export function WordLookupPopover({
     if (!result?.synonyms) return [];
     return parseAntonyms(result.synonyms, term);
   }, [result, term]);
+
+  const missingPackCode = result?.missingLanguagePack ?? null;
+
+  useEffect(() => {
+    if (missingPackCode) void refreshLanguagePacks();
+  }, [missingPackCode, refreshLanguagePacks]);
+
+  const rerunLookup = useCallback(
+    () =>
+      invoke<DictionaryLookupResult>("lookup_dictionary_definition", {
+        term,
+        language,
+      }).then(setResult),
+    [term, language],
+  );
+
+  const handleInstallLanguagePack = useCallback(() => {
+    if (!missingPackCode) return;
+    installLanguagePack(missingPackCode)
+      .then(() => {
+        toast.success(`${languagePack?.label ?? missingPackCode} is ready.`);
+        return rerunLookup();
+      })
+      .catch((err) => {
+        toast.error(`Could not install the language: ${err}`);
+      });
+  }, [installLanguagePack, missingPackCode, languagePack, rerunLookup]);
 
   const handleInstallDictionary = useCallback(() => {
     installDictionary()
@@ -279,6 +321,15 @@ export function WordLookupPopover({
           </div>
         )}
 
+        {!loading &&
+          !result?.definition &&
+          !missingPackCode &&
+          synonyms.length > 0 && (
+            <p className="text-muted-foreground text-xs">
+              Definitions are available in English only.
+            </p>
+          )}
+
         {!loading && result?.definition && (
           <div>
             {(synonyms.length > 0 || antonyms.length > 0) && (
@@ -292,10 +343,36 @@ export function WordLookupPopover({
           </div>
         )}
 
-        {nothingFound && !databaseMissing && (
+        {nothingFound && !databaseMissing && !missingPackCode && (
           <p className="text-muted-foreground">
             No definition found for "{term}".
           </p>
+        )}
+
+        {missingPackCode && (
+          <div className="space-y-2">
+            <p className="text-muted-foreground">
+              {languagePack?.label ?? missingPackCode} isn't downloaded yet, so
+              there's nothing to look "{term}" up in.
+            </p>
+            <button
+              onClick={handleInstallLanguagePack}
+              disabled={languagePackInstalling !== null}
+              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs transition-colors hover:bg-muted disabled:opacity-70"
+            >
+              {languagePackInstalling === missingPackCode ? (
+                <>
+                  <Loader2Icon className="size-3.5 animate-spin" />
+                  {languagePackProgress?.message ?? "Installing…"}
+                </>
+              ) : (
+                <>
+                  <DownloadIcon className="size-3.5" />
+                  Download {languagePack?.label ?? missingPackCode}
+                </>
+              )}
+            </button>
+          </div>
         )}
 
         {databaseMissing && (

@@ -3,8 +3,10 @@ import type { EditorView } from "@codemirror/view";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import {
+  AlertTriangleIcon,
   BoldIcon,
   ItalicIcon,
+  Loader2Icon,
   ListIcon,
   Heading1Icon,
   Heading2Icon,
@@ -44,6 +46,7 @@ import { refreshSpellingDecorations } from "./spellcheck-extension";
 import { forceGrammarRecheck } from "./grammar-check-extension";
 import { useDocumentStore } from "@/stores/document-store";
 import { useLanguageToolStore } from "@/stores/language-tool-store";
+import { useLanguagePacksStore } from "@/stores/language-packs-store";
 import { CHECK_LANGUAGES, useSettingsStore } from "@/stores/settings-store";
 
 interface EditorInfo {
@@ -109,6 +112,10 @@ export function EditorToolbar({
   );
   const checkLanguage = useSettingsStore((s) => s.checkLanguage);
   const setCheckLanguage = useSettingsStore((s) => s.setCheckLanguage);
+  const languagePacks = useLanguagePacksStore((s) => s.packs);
+  const refreshLanguagePacks = useLanguagePacksStore((s) => s.refresh);
+  const installLanguagePack = useLanguagePacksStore((s) => s.install);
+  const languagePackInstalling = useLanguagePacksStore((s) => s.installing);
   const grammarStatus = useLanguageToolStore((s) => s.status);
   const checkGrammarStatus = useLanguageToolStore((s) => s.checkStatus);
   const startGrammarServer = useLanguageToolStore((s) => s.start);
@@ -164,6 +171,27 @@ export function EditorToolbar({
     setGrammarCheckEnabled,
     startGrammarServer,
   ]);
+  useEffect(() => {
+    refreshLanguagePacks();
+  }, [refreshLanguagePacks]);
+
+  // Nothing can check this language: the OS has no dictionary for it and none
+  // has been downloaded. Left unsaid, the document just looks free of typos.
+  const activePack = languagePacks.find((pack) => pack.code === checkLanguage);
+  const languageUnchecked =
+    activePack !== undefined &&
+    !activePack.systemSupported &&
+    !activePack.installed;
+
+  const downloadActiveLanguage = useCallback(() => {
+    if (!activePack) return;
+    toast.promise(installLanguagePack(activePack.code), {
+      loading: `Downloading ${activePack.label}…`,
+      success: `${activePack.label} is ready.`,
+      error: (err) => `Could not install ${activePack.label}: ${err}`,
+    });
+  }, [activePack, installLanguagePack]);
+
   const ignoredWords = useSettingsStore((s) => s.ignoredWords);
   const removeIgnoredWord = useSettingsStore((s) => s.removeIgnoredWord);
   const handleRemoveIgnoredWord = useCallback(
@@ -449,6 +477,23 @@ export function EditorToolbar({
             ))}
           </SelectContent>
         </Select>
+        {languageUnchecked && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-2 text-amber-600 text-xs hover:text-amber-600 dark:text-amber-500"
+            onClick={downloadActiveLanguage}
+            disabled={languagePackInstalling !== null}
+            title={`Nothing on this machine can spell check ${activePack?.label ?? checkLanguage}. Download a dictionary for it.`}
+          >
+            {languagePackInstalling === activePack?.code ? (
+              <Loader2Icon className="size-3 animate-spin" />
+            ) : (
+              <AlertTriangleIcon className="size-3" />
+            )}
+            Not checked
+          </Button>
+        )}
         <Popover>
           <PopoverTrigger asChild>
             <Button

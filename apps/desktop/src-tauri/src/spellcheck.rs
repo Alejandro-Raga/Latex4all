@@ -6,11 +6,17 @@
 //! * Windows — the `ISpellChecker` COM API (Windows 8+), the engine behind Edge
 //!   and the Windows text stack.
 //!
-//! Linux has no system-wide equivalent, so spell checking is inert there and
-//! the grammar server's own typo detection carries that load instead.
+//! Neither covers every language the app offers: Windows only exposes
+//! languages the user has added as a Windows language pack, and Linux has none
+//! at all. `language_packs.rs` fills those gaps with a downloadable Hunspell
+//! dictionary, used only where the OS comes up short.
+
+/// How many corrections the popover shows, whichever checker produced them.
+const MAX_SUGGESTIONS: usize = 8;
 
 #[cfg(target_os = "macos")]
 mod macos {
+    use super::MAX_SUGGESTIONS;
     use objc2_app_kit::NSSpellChecker;
     use objc2_foundation::{NSInteger, NSRange, NSString};
     use std::sync::OnceLock;
@@ -57,6 +63,19 @@ mod macos {
             .collect()
     }
 
+    /// macOS ships dictionaries for every language the app offers, so this is
+    /// only false for a language AppKit has never heard of.
+    pub fn supports_language(language: &str) -> bool {
+        let Some(lang) = ns_language(language) else {
+            return true; // "auto" always resolves to something
+        };
+        let checker = NSSpellChecker::sharedSpellChecker();
+        checker
+            .availableLanguages()
+            .iter()
+            .any(|available| available.to_string() == lang.to_string())
+    }
+
     pub fn suggestions(word: &str, language: &str) -> Vec<String> {
         let checker = NSSpellChecker::sharedSpellChecker();
         let lang = ns_language(language);
@@ -84,7 +103,7 @@ mod macos {
         );
 
         guesses
-            .map(|arr| arr.iter().map(|s| s.to_string()).take(8).collect())
+            .map(|arr| arr.iter().map(|s| s.to_string()).take(MAX_SUGGESTIONS).collect())
             .unwrap_or_default()
     }
 }
@@ -102,8 +121,7 @@ mod windows_impl {
         COINIT_MULTITHREADED,
     };
 
-    /// Matches the macOS ceiling on how many corrections the popover shows.
-    const MAX_SUGGESTIONS: usize = 8;
+    use super::MAX_SUGGESTIONS;
     /// `GetUserDefaultLocaleName` writes at most LOCALE_NAME_MAX_LENGTH wide chars.
     const LOCALE_NAME_MAX_LENGTH: usize = 85;
 
@@ -251,6 +269,13 @@ mod windows_impl {
         unsafe { errors.Next(&mut error) }.is_ok() && error.is_some()
     }
 
+    /// Windows only exposes languages the user has added as a Windows language
+    /// pack, so this is routinely false for, say, Spanish on an English
+    /// install — the case language packs exist to cover.
+    pub fn supports_language(language: &str) -> bool {
+        with_checker(language, |_| ()).is_some()
+    }
+
     pub fn misspelled_words(words: &[String], language: &str) -> Vec<String> {
         with_checker(language, |checker| {
             words
@@ -280,10 +305,10 @@ mod windows_impl {
 /// The platform spell checker, or a no-op on systems without one.
 mod backend {
     #[cfg(target_os = "macos")]
-    pub use super::macos::{misspelled_words, suggestions};
+    pub use super::macos::{misspelled_words, suggestions, supports_language};
 
     #[cfg(target_os = "windows")]
-    pub use super::windows_impl::{misspelled_words, suggestions};
+    pub use super::windows_impl::{misspelled_words, suggestions, supports_language};
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     pub fn misspelled_words(_words: &[String], _language: &str) -> Vec<String> {
@@ -294,18 +319,42 @@ mod backend {
     pub fn suggestions(_word: &str, _language: &str) -> Vec<String> {
         Vec::new()
     }
+
+    /// Linux has no system spell checker, so every language needs a pack.
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    pub fn supports_language(_language: &str) -> bool {
+        false
+    }
+}
+
+/// Whether the OS itself can check `language`. When it cannot, a downloaded
+/// language pack takes over; the language picker uses this to say which
+/// languages actually need a download.
+pub fn system_supports_language(language: &str) -> bool {
+    backend::supports_language(language)
 }
 
 /// Check a batch of (typically unique) words against `language` (e.g.
 /// "en-US", "en-GB"; "auto" for the system default), returning just the
-/// misspelled subset. Runs the OS calls on a blocking thread since both
-/// platforms' dictionary lookups are synchronous native calls. Returns nothing
-/// on platforms without a system spell checker.
+/// misspelled subset.
+///
+/// The OS checker is preferred wherever it has the language, so the app keeps
+/// honouring the user's own settings and learned words. A downloaded language
+/// pack covers what the OS cannot — on Windows that is any language without a
+/// Windows language pack, and on Linux it is everything. With neither, nothing
+/// is reported: the caller cannot tell correct spelling from an unchecked
+/// document, so the language picker flags that case from `list_language_packs`
+/// instead.
 #[tauri::command]
 pub async fn check_spelling(words: Vec<String>, language: String) -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || backend::misspelled_words(&words, &language))
-        .await
-        .map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        if backend::supports_language(&language) {
+            return backend::misspelled_words(&words, &language);
+        }
+        crate::language_packs::misspelled_words(&words, &language).unwrap_or_default()
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Suggested corrections for a single word in `language` — empty if it's
@@ -315,7 +364,12 @@ pub async fn get_spelling_suggestions(
     word: String,
     language: String,
 ) -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || backend::suggestions(&word, &language))
-        .await
-        .map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        if backend::supports_language(&language) {
+            return backend::suggestions(&word, &language);
+        }
+        crate::language_packs::suggestions(&word, &language, MAX_SUGGESTIONS).unwrap_or_default()
+    })
+    .await
+    .map_err(|e| e.to_string())
 }

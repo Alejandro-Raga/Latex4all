@@ -38,10 +38,13 @@ pub struct DictionaryLookupResult {
     synonym_list: Option<Vec<String>>,
     /// Antonyms as a structured list, from WordNet.
     antonym_list: Option<Vec<String>>,
-    /// False when no WordNet database could be opened at all, so the popover
-    /// can offer to install one instead of claiming the word has no entry.
-    /// Always true on macOS, where the system dictionary answers regardless.
+    /// False when nothing could answer this language at all, so the popover
+    /// can offer to install something instead of claiming the word has no
+    /// entry. True on macOS, where the system dictionary answers regardless.
     database_available: bool,
+    /// Set when the language is not English and has no installed thesaurus, so
+    /// the popover can point at the language pack rather than at WordNet.
+    missing_language_pack: Option<String>,
 }
 
 #[cfg(target_os = "macos")]
@@ -142,6 +145,9 @@ mod macos {
 const ARCHIVE_URL: &str = "https://wordnetcode.princeton.edu/wn3.1.dict.tar.gz";
 const ARCHIVE_SHA256: &str = "3f7d8be8ef6ecc7167d39b10d66954ec734280b5bdcd57f7d9eafe429d11c22a";
 const WORDNET_VERSION: &str = "3.1";
+
+/// Matches WordNet's own ceiling, so the popover reads the same either way.
+const MAX_THESAURUS_SYNONYMS: usize = 60;
 
 const POS: [&str; 4] = ["noun", "verb", "adj", "adv"];
 
@@ -396,21 +402,40 @@ fn extract_database(archive: &[u8], dest: &Path) -> Result<(), String> {
 
 // ── Lookup ──
 
-/// Look up `term`, filling in whatever the platform can provide.
+/// Look up `term` for a document in `language`, filling in whatever is
+/// available.
+///
+/// English is served by the bundled WordNet (and, on macOS, by Dictionary
+/// Services). Other languages have no glossed database to draw definitions
+/// from, so they get synonyms out of the language pack's thesaurus — which is
+/// the half a writer reaches for anyway — and an honest "no definition".
 #[tauri::command]
-pub fn lookup_dictionary_definition(app: tauri::AppHandle, term: String) -> DictionaryLookupResult {
-    let dir = wordnet_dir(&app);
-    // On macOS the system dictionary answers on its own, so a missing WordNet
-    // database is not the reason a word came back empty.
-    let database_available = dir.is_some() || cfg!(target_os = "macos");
+pub fn lookup_dictionary_definition(
+    app: tauri::AppHandle,
+    term: String,
+    language: Option<String>,
+) -> DictionaryLookupResult {
+    let language = language.unwrap_or_default();
+    let is_english = language.is_empty()
+        || language.eq_ignore_ascii_case("auto")
+        || language.to_lowercase().starts_with("en");
 
     let trimmed = term.trim();
     if trimmed.is_empty() {
         return DictionaryLookupResult {
-            database_available,
+            database_available: true,
             ..Default::default()
         };
     }
+
+    if !is_english {
+        return lookup_non_english(trimmed, &language);
+    }
+
+    let dir = wordnet_dir(&app);
+    // On macOS the system dictionary answers on its own, so a missing WordNet
+    // database is not the reason a word came back empty.
+    let database_available = dir.is_some() || cfg!(target_os = "macos");
 
     #[cfg(target_os = "macos")]
     let (definition, thesaurus_entry) = macos::lookup(trimmed);
@@ -448,6 +473,43 @@ pub fn lookup_dictionary_definition(app: tauri::AppHandle, term: String) -> Dict
         synonym_list,
         antonym_list,
         database_available,
+        missing_language_pack: None,
+    }
+}
+
+/// Synonyms from the language pack's MyThes thesaurus. MyThes records senses
+/// and their synonyms but no glosses, so there is no definition to give —
+/// saying so is better than implying the word is unknown.
+fn lookup_non_english(term: &str, language: &str) -> DictionaryLookupResult {
+    let Some(thesaurus) = crate::language_packs::thesaurus(language) else {
+        return DictionaryLookupResult {
+            database_available: false,
+            missing_language_pack: Some(language.to_string()),
+            ..Default::default()
+        };
+    };
+
+    let senses = thesaurus.lookup(term);
+    let mut synonyms: Vec<String> = Vec::new();
+    for sense in senses {
+        for synonym in sense.synonyms {
+            // MyThes repeats a word across senses; the popover wants one list.
+            if !synonym.eq_ignore_ascii_case(term)
+                && !synonyms.iter().any(|s| s.eq_ignore_ascii_case(&synonym))
+            {
+                synonyms.push(synonym);
+            }
+        }
+    }
+    synonyms.truncate(MAX_THESAURUS_SYNONYMS);
+
+    DictionaryLookupResult {
+        definition: None,
+        synonyms: None,
+        synonym_list: Some(synonyms).filter(|s| !s.is_empty()),
+        antonym_list: None,
+        database_available: true,
+        missing_language_pack: None,
     }
 }
 

@@ -6,6 +6,7 @@ mod claude_process;
 mod dictionary;
 mod grammar;
 mod history;
+mod language_packs;
 mod languagetool;
 mod latex;
 mod skills;
@@ -614,6 +615,9 @@ pub fn run() {
             dictionary::install_dictionary,
             spellcheck::check_spelling,
             spellcheck::get_spelling_suggestions,
+            language_packs::list_language_packs,
+            language_packs::install_language_pack,
+            language_packs::remove_language_pack,
             grammar::check_grammar,
             grammar::check_grammar_server_available,
             languagetool::language_tool_status,

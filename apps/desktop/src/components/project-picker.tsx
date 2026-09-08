@@ -27,6 +27,7 @@ import {
   PanelLeftIcon,
   PlusIcon,
   SettingsIcon,
+  LanguagesIcon,
   RefreshCwIcon,
   PlayIcon,
   GithubIcon,
@@ -41,6 +42,8 @@ import { useDocumentStore } from "@/stores/document-store";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 import { useUvSetupStore } from "@/stores/uv-setup-store";
 import { useDictionaryStore } from "@/stores/dictionary-store";
+import { useLanguagePacksStore } from "@/stores/language-packs-store";
+import { LanguagePacksSettings } from "@/components/settings/language-packs";
 import { useLanguageToolStore } from "@/stores/language-tool-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { UpdateSettings } from "@/components/updater/update-settings";
@@ -71,7 +74,11 @@ interface DefaultProject {
 }
 
 type ProjectPickerSection = "projects" | "settings";
-type SettingsDetailSection = "provider" | "environment" | "updates";
+type SettingsDetailSection =
+  | "provider"
+  | "environment"
+  | "languages"
+  | "updates";
 
 type RecentProject = {
   path: string;
@@ -106,6 +113,19 @@ export function ProjectPicker() {
   const [settingsDetailSection, setSettingsDetailSection] =
     useState<SettingsDetailSection>("provider");
   const updateChannel = useSettingsStore((s) => s.updateChannel);
+  const languagePacks = useLanguagePacksStore((s) => s.packs);
+  const refreshLanguagePacks = useLanguagePacksStore((s) => s.refresh);
+  // Counts what the machine can actually check, downloads and system
+  // dictionaries alike — the number a user would want to see at a glance.
+  const languagesMeta = languagePacks.length
+    ? `${languagePacks.filter((p) => p.installed || p.systemSupported).length} of ${languagePacks.length}`
+    : "Spelling";
+
+  // Populate the counter beside the sidebar label as soon as Settings opens,
+  // rather than only once the Languages panel itself is visited.
+  useEffect(() => {
+    if (activeSection === "settings") refreshLanguagePacks();
+  }, [activeSection, refreshLanguagePacks]);
   const [searchQuery, setSearchQuery] = useState("");
   const [removeProjectTarget, setRemoveProjectTarget] =
     useState<RecentProject | null>(null);
@@ -411,6 +431,13 @@ export function ProjectPicker() {
                   onClick={() => setSettingsDetailSection("environment")}
                 />
                 <SettingsDetailButton
+                  active={settingsDetailSection === "languages"}
+                  icon={LanguagesIcon}
+                  label="Languages"
+                  meta={languagesMeta}
+                  onClick={() => setSettingsDetailSection("languages")}
+                />
+                <SettingsDetailButton
                   active={settingsDetailSection === "updates"}
                   icon={DownloadIcon}
                   label="Updates"
@@ -427,6 +454,14 @@ export function ProjectPicker() {
                     contentClassName="p-0"
                   >
                     <ClaudeSetup variant="embedded" />
+                  </SettingsPanel>
+                ) : settingsDetailSection === "languages" ? (
+                  <SettingsPanel
+                    title="Languages"
+                    icon={LanguagesIcon}
+                    contentClassName="p-0"
+                  >
+                    <LanguagePacksSettings />
                   </SettingsPanel>
                 ) : settingsDetailSection === "updates" ? (
                   <SettingsPanel
