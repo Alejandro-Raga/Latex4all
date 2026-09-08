@@ -343,8 +343,29 @@ async function syncFullLibrary(
 export interface ZoteroItemSummary {
   key: string;
   title: string;
+  /** Creator surnames, comma-separated, in Zotero's own order. */
   creators: string;
+  /** Publication year, or "" when the item's date has none to read. */
   year: string;
+  /** Zotero's raw `date` field, kept verbatim for sorting — it is free text
+   * ("2020-05-12", "May 2020", "in press"), so it is not safe to display. */
+  date: string;
+}
+
+/**
+ * The publication year in a Zotero `date`, or null.
+ *
+ * Zotero stores dates as whatever the user or the translator typed, so the
+ * year is not reliably the first four characters: "May 2020", "12/05/2020"
+ * and "2020-05-12" are all ordinary. Take the first plausible 4-digit year
+ * instead, and only accept one that could actually be a publication year.
+ */
+export function parsePublicationYear(date: string): number | null {
+  for (const match of date.matchAll(/\d{4}/g)) {
+    const year = Number(match[0]);
+    if (year >= 1000 && year <= 2999) return year;
+  }
+  return null;
 }
 
 /** Top-level items (not attachments/notes) in a collection, or the whole library when collectionKey is null. */
@@ -390,11 +411,14 @@ export async function fetchLibraryItems(
         .map((c) => c.lastName ?? c.name ?? "")
         .filter(Boolean)
         .join(", ");
+      const date = item.data.date ?? "";
+      const year = parsePublicationYear(date);
       result.push({
         key: item.key,
         title: item.data.title || "Untitled",
         creators,
-        year: item.data.date ? item.data.date.slice(0, 4) : "",
+        year: year === null ? "" : String(year),
+        date,
       });
     }
 

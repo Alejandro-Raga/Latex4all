@@ -25,6 +25,7 @@ import {
   MinusIcon,
   PlusIcon,
   BookOpenIcon,
+  SearchIcon,
   XIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -51,8 +52,22 @@ import {
   fetchAnnotations,
   type ZoteroItemSummary,
 } from "@/lib/zotero-api";
+import {
+  REFERENCE_SORTS,
+  searchReferences,
+  sortReferences,
+  type ReferenceSort,
+} from "@/lib/zotero-search";
 import { PdfViewer, type PdfAnnotationRect } from "./preview/pdf-viewer";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -214,6 +229,8 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   const [zoteroErrorKeys, setZoteroErrorKeys] = useState<Map<string, string>>(
     new Map(),
   );
+  const [zoteroQuery, setZoteroQuery] = useState("");
+  const [zoteroSort, setZoteroSort] = useState<ReferenceSort>("relevance");
 
   const treeCache = useRef(new Map<string, TreeNode>());
   const previewCache = useRef(new Map<string, Preview>());
@@ -499,6 +516,21 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
     () => buildCollectionTree(zoteroCollections),
     [zoteroCollections],
   );
+
+  const searching = zoteroQuery.trim().length > 0;
+  // A search spans the library, not whichever collections happen to be open,
+  // so it needs the same full item list "My Library" loads — fetched once and
+  // then reused by both.
+  useEffect(() => {
+    if (searching) loadZoteroItemsForKey(MY_LIBRARY_KEY, null);
+  }, [searching, loadZoteroItemsForKey]);
+
+  const searchResults = useMemo(() => {
+    if (!searching) return [];
+    const items = zoteroItemsByCollection.get(MY_LIBRARY_KEY);
+    if (!items) return [];
+    return searchReferences(items, zoteroQuery, zoteroSort);
+  }, [searching, zoteroItemsByCollection, zoteroQuery, zoteroSort]);
   const selectedZoteroItemKey =
     selectedFile?.source === "zotero" ? selectedFile.itemKey : null;
 
@@ -580,36 +612,100 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
                   </p>
                 ) : (
                   <div className="flex flex-col gap-0.5">
-                    <ZoteroTreeRow
-                      icon={BookOpenIcon}
-                      label="My Library"
-                      expanded={expandedZoteroCollections.has(MY_LIBRARY_KEY)}
-                      onToggle={() => toggleZoteroNode(MY_LIBRARY_KEY, null)}
-                    />
-                    {expandedZoteroCollections.has(MY_LIBRARY_KEY) && (
-                      <ZoteroNestedGroup>
-                        <ZoteroItemsSlot
-                          items={zoteroItemsByCollection.get(MY_LIBRARY_KEY)}
-                          loading={zoteroLoadingKeys.has(MY_LIBRARY_KEY)}
-                          error={zoteroErrorKeys.get(MY_LIBRARY_KEY)}
-                          selectedItemKey={selectedZoteroItemKey}
-                          onSelectItem={selectZoteroItem}
+                    <div className="mb-1 flex items-center gap-1.5 px-2">
+                      <div className="relative min-w-0 flex-1">
+                        <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={zoteroQuery}
+                          onChange={(e) => setZoteroQuery(e.target.value)}
+                          placeholder="Search title or author…"
+                          aria-label="Search references by title or author"
+                          className="h-7 pr-7 pl-7 text-xs"
                         />
-                      </ZoteroNestedGroup>
-                    )}
-                    {zoteroCollectionTree.map((node) => (
-                      <ZoteroCollectionTree
-                        key={node.key}
-                        node={node}
-                        expandedKeys={expandedZoteroCollections}
-                        onToggleExpand={toggleZoteroNode}
-                        itemsByCollection={zoteroItemsByCollection}
-                        loadingKeys={zoteroLoadingKeys}
-                        errorKeys={zoteroErrorKeys}
+                        {zoteroQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setZoteroQuery("")}
+                            aria-label="Clear search"
+                            className="absolute top-1/2 right-1.5 flex size-4 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          >
+                            <XIcon className="size-3" />
+                          </button>
+                        )}
+                      </div>
+                      <Select
+                        value={zoteroSort}
+                        onValueChange={(value) =>
+                          setZoteroSort(value as ReferenceSort)
+                        }
+                      >
+                        <SelectTrigger
+                          size="sm"
+                          className="h-7! w-auto shrink-0 text-xs"
+                          aria-label="Order references"
+                          title="Order references"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {REFERENCE_SORTS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {searching ? (
+                      <ZoteroSearchResults
+                        results={searchResults}
+                        loading={zoteroLoadingKeys.has(MY_LIBRARY_KEY)}
+                        error={zoteroErrorKeys.get(MY_LIBRARY_KEY)}
                         selectedItemKey={selectedZoteroItemKey}
                         onSelectItem={selectZoteroItem}
                       />
-                    ))}
+                    ) : (
+                      <>
+                        <ZoteroTreeRow
+                          icon={BookOpenIcon}
+                          label="My Library"
+                          expanded={expandedZoteroCollections.has(
+                            MY_LIBRARY_KEY,
+                          )}
+                          onToggle={() =>
+                            toggleZoteroNode(MY_LIBRARY_KEY, null)
+                          }
+                        />
+                        {expandedZoteroCollections.has(MY_LIBRARY_KEY) && (
+                          <ZoteroNestedGroup>
+                            <ZoteroItemsSlot
+                              items={zoteroItemsByCollection.get(
+                                MY_LIBRARY_KEY,
+                              )}
+                              loading={zoteroLoadingKeys.has(MY_LIBRARY_KEY)}
+                              error={zoteroErrorKeys.get(MY_LIBRARY_KEY)}
+                              selectedItemKey={selectedZoteroItemKey}
+                              onSelectItem={selectZoteroItem}
+                              sort={zoteroSort}
+                            />
+                          </ZoteroNestedGroup>
+                        )}
+                        {zoteroCollectionTree.map((node) => (
+                          <ZoteroCollectionTree
+                            key={node.key}
+                            node={node}
+                            expandedKeys={expandedZoteroCollections}
+                            onToggleExpand={toggleZoteroNode}
+                            itemsByCollection={zoteroItemsByCollection}
+                            loadingKeys={zoteroLoadingKeys}
+                            errorKeys={zoteroErrorKeys}
+                            selectedItemKey={selectedZoteroItemKey}
+                            onSelectItem={selectZoteroItem}
+                            sort={zoteroSort}
+                          />
+                        ))}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -802,13 +898,20 @@ function ZoteroItemsSlot({
   error,
   selectedItemKey,
   onSelectItem,
+  sort,
 }: {
   items: ZoteroItemSummary[] | undefined;
   loading: boolean;
   error: string | undefined;
   selectedItemKey: string | null;
   onSelectItem: (item: ZoteroItemSummary) => void;
+  sort: ReferenceSort;
 }) {
+  const ordered = useMemo(
+    () => (items ? sortReferences(items, sort) : undefined),
+    [items, sort],
+  );
+
   return (
     <>
       {loading && (
@@ -818,10 +921,62 @@ function ZoteroItemsSlot({
         </div>
       )}
       {error && <p className="py-1 text-destructive text-xs">{error}</p>}
-      {items?.length === 0 && !loading && !error && (
+      {ordered?.length === 0 && !loading && !error && (
         <p className="py-1 text-muted-foreground text-xs">No items here.</p>
       )}
-      {items?.map((item) => (
+      {ordered?.map((item) => (
+        <ZoteroItemRow
+          key={item.key}
+          item={item}
+          isSelected={selectedItemKey === item.key}
+          onSelect={onSelectItem}
+        />
+      ))}
+    </>
+  );
+}
+
+/** A flat, already-ordered result list. A search spans the whole library, so
+ * the collection tree it replaces would have nothing useful to say about
+ * where each hit lives. */
+function ZoteroSearchResults({
+  results,
+  loading,
+  error,
+  selectedItemKey,
+  onSelectItem,
+}: {
+  results: ZoteroItemSummary[];
+  loading: boolean;
+  error: string | undefined;
+  selectedItemKey: string | null;
+  onSelectItem: (item: ZoteroItemSummary) => void;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 px-2 py-1 text-muted-foreground text-xs">
+        <Loader2Icon className="size-3 animate-spin" />
+        Searching your library…
+      </div>
+    );
+  }
+  if (error) {
+    return <p className="px-2 py-1 text-destructive text-xs">{error}</p>;
+  }
+  if (results.length === 0) {
+    return (
+      <p className="px-2 py-1 text-muted-foreground text-xs">
+        No references match. Try fewer words, or scope one with{" "}
+        <code>author:</code> or <code>title:</code>.
+      </p>
+    );
+  }
+  return (
+    <>
+      <p className="px-2 py-1 text-muted-foreground text-xs">
+        {results.length} {results.length === 1 ? "match" : "matches"}
+      </p>
+      {results.map((item) => (
         <ZoteroItemRow
           key={item.key}
           item={item}
@@ -849,6 +1004,7 @@ function ZoteroCollectionTree({
   errorKeys,
   selectedItemKey,
   onSelectItem,
+  sort,
 }: {
   node: ZoteroCollectionNode;
   expandedKeys: Set<string>;
@@ -858,6 +1014,7 @@ function ZoteroCollectionTree({
   errorKeys: Map<string, string>;
   selectedItemKey: string | null;
   onSelectItem: (item: ZoteroItemSummary) => void;
+  sort: ReferenceSort;
 }) {
   const isExpanded = expandedKeys.has(node.key);
 
@@ -877,6 +1034,7 @@ function ZoteroCollectionTree({
             error={errorKeys.get(node.key)}
             selectedItemKey={selectedItemKey}
             onSelectItem={onSelectItem}
+            sort={sort}
           />
           {node.children.map((child) => (
             <ZoteroCollectionTree
@@ -889,6 +1047,7 @@ function ZoteroCollectionTree({
               errorKeys={errorKeys}
               selectedItemKey={selectedItemKey}
               onSelectItem={onSelectItem}
+              sort={sort}
             />
           ))}
         </ZoteroNestedGroup>
