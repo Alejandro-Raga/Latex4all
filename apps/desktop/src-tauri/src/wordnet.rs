@@ -144,15 +144,28 @@ impl WordNet {
         })
     }
 
-    /// Process-wide instance for the bundled database at `dir`. Returns the
-    /// same `Err` on every call if the resource is missing, rather than
-    /// retrying the filesystem on each keystroke.
+    /// Process-wide instance for the database at `dir`. Returns the same `Err`
+    /// on every call if that directory has no database, rather than retrying
+    /// the filesystem on each keystroke.
+    ///
+    /// Keyed by directory: a user-installed copy lives somewhere the bundled
+    /// resource doesn't, so installing one mid-session is picked up on the
+    /// next lookup instead of being masked by a cached "missing" result.
     pub fn shared(dir: &Path) -> Result<&'static WordNet, String> {
-        static INSTANCE: OnceLock<Result<WordNet, String>> = OnceLock::new();
-        INSTANCE
-            .get_or_init(|| WordNet::open(dir))
-            .as_ref()
-            .map_err(|e| e.clone())
+        static INSTANCES: OnceLock<Mutex<HashMap<PathBuf, Result<&'static WordNet, String>>>> =
+            OnceLock::new();
+        let mut cache = INSTANCES
+            .get_or_init(|| Mutex::new(HashMap::new()))
+            .lock()
+            .map_err(|_| "WordNet instance cache poisoned".to_string())?;
+        cache
+            .entry(dir.to_path_buf())
+            .or_insert_with(|| {
+                // Leaked for the same reason the index files are: at most one
+                // per database directory, alive for the rest of the process.
+                WordNet::open(dir).map(|wn| &*Box::leak(Box::new(wn)))
+            })
+            .clone()
     }
 
     // ── File access ──

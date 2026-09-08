@@ -2,7 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
-import { BookOpenIcon, ExternalLinkIcon, XIcon } from "lucide-react";
+import {
+  BookOpenIcon,
+  DownloadIcon,
+  ExternalLinkIcon,
+  Loader2Icon,
+  XIcon,
+} from "lucide-react";
+import { toast } from "sonner";
+import { useDictionaryStore } from "@/stores/dictionary-store";
 import { parseAntonyms } from "./parse-antonyms";
 import { parseSynonyms } from "./parse-synonyms";
 import { useViewportAnchoredPosition } from "./use-viewport-anchored-position";
@@ -29,6 +37,9 @@ interface DictionaryLookupResult {
   synonyms: string | null;
   synonymList: string[] | null;
   antonymList: string[] | null;
+  /** False when no offline database could be opened, so "nothing found" is a
+   * setup problem rather than a word without an entry. */
+  databaseAvailable: boolean;
 }
 
 /** `dict://` is a macOS URL scheme; there is no Dictionary.app elsewhere. */
@@ -51,6 +62,10 @@ export function WordLookupPopover({
   const [loading, setLoading] = useState(true);
   const [spellingSuggestions, setSpellingSuggestions] = useState<string[]>([]);
   const { ref: popoverRef, coords } = useViewportAnchoredPosition(anchor);
+  const installDictionary = useDictionaryStore((s) => s.install);
+  const dictionaryInstalling = useDictionaryStore((s) => s.isInstalling);
+  const dictionaryProgress = useDictionaryStore((s) => s.progress);
+  const checkDictionaryStatus = useDictionaryStore((s) => s.checkStatus);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +119,21 @@ export function WordLookupPopover({
     return parseAntonyms(result.synonyms, term);
   }, [result, term]);
 
+  const handleInstallDictionary = useCallback(() => {
+    installDictionary()
+      .then(() => {
+        toast.success("Dictionary installed.");
+        // Re-run the lookup that came back empty, now that there is a
+        // database behind it.
+        return invoke<DictionaryLookupResult>("lookup_dictionary_definition", {
+          term,
+        }).then(setResult);
+      })
+      .catch((err) => {
+        toast.error(`Could not install the dictionary: ${err}`);
+      });
+  }, [installDictionary, term]);
+
   const handleOpenInDictionary = useCallback(() => {
     shellOpen(`dict://${encodeURIComponent(term)}`).catch((err) => {
       console.error("Failed to open Dictionary.app", err);
@@ -140,6 +170,15 @@ export function WordLookupPopover({
     synonyms.length === 0 &&
     antonyms.length === 0 &&
     spellingSuggestions.length === 0;
+
+  // A build whose bundled database didn't make it into the installer would
+  // otherwise report every word as having no entry, with nothing to act on.
+  const databaseMissing =
+    !loading && result !== null && !result.databaseAvailable;
+
+  useEffect(() => {
+    if (databaseMissing) void checkDictionaryStatus();
+  }, [databaseMissing, checkDictionaryStatus]);
 
   return createPortal(
     <div
@@ -253,10 +292,36 @@ export function WordLookupPopover({
           </div>
         )}
 
-        {nothingFound && (
+        {nothingFound && !databaseMissing && (
           <p className="text-muted-foreground">
             No definition found for "{term}".
           </p>
+        )}
+
+        {databaseMissing && (
+          <div className="space-y-2">
+            <p className="text-muted-foreground">
+              The offline dictionary isn't installed, so there's nothing to look
+              "{term}" up in.
+            </p>
+            <button
+              onClick={handleInstallDictionary}
+              disabled={dictionaryInstalling}
+              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs transition-colors hover:bg-muted disabled:opacity-70"
+            >
+              {dictionaryInstalling ? (
+                <>
+                  <Loader2Icon className="size-3.5 animate-spin" />
+                  {dictionaryProgress?.message ?? "Installing…"}
+                </>
+              ) : (
+                <>
+                  <DownloadIcon className="size-3.5" />
+                  Install dictionary (about 16 MB)
+                </>
+              )}
+            </button>
+          </div>
         )}
       </div>
 

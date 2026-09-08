@@ -610,6 +610,8 @@ pub fn run() {
             js_log,
             read_clipboard_file_paths,
             dictionary::lookup_dictionary_definition,
+            dictionary::dictionary_status,
+            dictionary::install_dictionary,
             spellcheck::check_spelling,
             spellcheck::get_spelling_suggestions,
             grammar::check_grammar,

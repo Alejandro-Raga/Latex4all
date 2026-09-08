@@ -26,6 +26,8 @@ dirs = "5"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "system-proxy", "socks"] }
 hmac = "0.12"
 sha1 = "0.10"
+# Verifies the WordNet archive the dictionary installer downloads (dictionary.rs).
+sha2 = "0.10"
 base64 = "0.22"
 dotenvy = "0.15"
 git2 = { version = "0.20", default-features = false, features = ["vendored-libgit2"] }

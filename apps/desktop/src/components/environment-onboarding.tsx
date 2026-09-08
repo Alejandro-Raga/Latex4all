@@ -12,6 +12,7 @@ import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import {
   AlertCircleIcon,
   BookMarkedIcon,
+  BookOpenIcon,
   CheckCircle2Icon,
   CircleIcon,
   DownloadIcon,
@@ -36,6 +37,7 @@ import {
 import { ClaudeSetup } from "@/components/claude-setup";
 import { ZoteroApiKeyDialog } from "@/components/workspace/zotero-api-key-dialog";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
+import { useDictionaryStore } from "@/stores/dictionary-store";
 import { useLanguageToolStore } from "@/stores/language-tool-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useUvSetupStore } from "@/stores/uv-setup-store";
@@ -96,6 +98,15 @@ export function EnvironmentOnboarding() {
     (s) => s.externallyManaged,
   );
   const checkGrammarStatus = useLanguageToolStore((s) => s.checkStatus);
+  const dictionaryStatus = useDictionaryStore((s) => s.status);
+  const dictionarySource = useDictionaryStore((s) => s.source);
+  const dictionaryVersion = useDictionaryStore((s) => s.version);
+  const dictionaryError = useDictionaryStore((s) => s.error);
+  const dictionaryProgress = useDictionaryStore((s) => s.progress);
+  const isDictionaryInstalling = useDictionaryStore((s) => s.isInstalling);
+  const hasSystemDictionary = useDictionaryStore((s) => s.hasSystemDictionary);
+  const checkDictionaryStatus = useDictionaryStore((s) => s.checkStatus);
+  const installDictionary = useDictionaryStore((s) => s.install);
   const installGrammar = useLanguageToolStore((s) => s.install);
   const startGrammar = useLanguageToolStore((s) => s.start);
   const grammarCheckEnabled = useSettingsStore((s) => s.grammarCheckEnabled);
@@ -143,6 +154,7 @@ export function EnvironmentOnboarding() {
       checkUvStatus(),
       checkSkillsStatus(),
       checkGrammarStatus(),
+      checkDictionaryStatus(),
     ]).finally(() => {
       if (!cancelled) {
         setInitialCheckComplete(true);
@@ -152,7 +164,13 @@ export function EnvironmentOnboarding() {
     return () => {
       cancelled = true;
     };
-  }, [checkClaudeStatus, checkGrammarStatus, checkSkillsStatus, checkUvStatus]);
+  }, [
+    checkClaudeStatus,
+    checkDictionaryStatus,
+    checkGrammarStatus,
+    checkSkillsStatus,
+    checkUvStatus,
+  ]);
 
   // Grammar checking is a persisted preference, but the server behind it dies
   // with the app. Without this the setting would silently stop working after a
@@ -491,6 +509,58 @@ export function EnvironmentOnboarding() {
                           loading: isGrammarInstalling,
                           onClick: installGrammar,
                         }
+                }
+              />
+
+              <SetupItem
+                optional
+                state={
+                  isDictionaryInstalling || dictionaryStatus === "checking"
+                    ? "loading"
+                    : dictionaryStatus === "error"
+                      ? "error"
+                      : dictionaryStatus === "ready"
+                        ? "ready"
+                        : "blocked"
+                }
+                icon={BookOpenIcon}
+                title="Dictionary"
+                detail={
+                  isDictionaryInstalling
+                    ? (dictionaryProgress?.message ?? "Downloading...")
+                    : dictionaryStatus === "checking"
+                      ? "Checking..."
+                      : dictionaryStatus === "error"
+                        ? (dictionaryError ?? "Setup needs attention")
+                        : dictionaryStatus === "ready"
+                          ? dictionarySource === "user"
+                            ? `WordNet ${dictionaryVersion ?? ""} (downloaded)`.trim()
+                            : hasSystemDictionary
+                              ? "System dictionary, plus bundled thesaurus"
+                              : "Bundled with the app"
+                          : "Right-click definitions and synonyms (~16 MB)"
+                }
+                action={
+                  dictionaryStatus === "ready"
+                    ? {
+                        label: "Check",
+                        icon: RefreshCwIcon,
+                        onClick: checkDictionaryStatus,
+                      }
+                    : {
+                        label: isDictionaryInstalling
+                          ? "Installing"
+                          : "Install",
+                        icon: isDictionaryInstalling
+                          ? Loader2Icon
+                          : DownloadIcon,
+                        loading: isDictionaryInstalling,
+                        onClick: () => {
+                          installDictionary().catch(() => {
+                            // Surfaced in `detail` via the store's error state.
+                          });
+                        },
+                      }
                 }
               />
 
