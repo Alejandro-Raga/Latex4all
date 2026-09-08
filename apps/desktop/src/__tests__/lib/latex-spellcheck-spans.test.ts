@@ -20,7 +20,10 @@ describe("extractCheckableSpans", () => {
     ]);
   });
 
-  it("handles the other offered languages' diacritics too", () => {
+  // The pattern is script-agnostic on purpose: a document can contain these
+  // whatever language the checker is set to, and they must not be shredded
+  // into fragments the way an ASCII-only pattern shredded them.
+  it("handles other Latin-script diacritics too", () => {
     expect(words("Über größere Änderungen")).toEqual([
       "Über",
       "größere",

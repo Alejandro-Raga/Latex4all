@@ -11,18 +11,32 @@ type CompilerBackend = "tectonic" | "texlive";
 export type UpdateChannel = "release" | "test";
 
 /** Codes match LanguageTool's format; converted to NSSpellChecker's
- * underscored form on the Rust side. Kept to a curated, verified set rather
- * than exposing every language either engine technically supports. */
+ * underscored form on the Rust side.
+ *
+ * English and Spanish only, deliberately. Offering a language means the
+ * spelling, grammar and lookup paths all have to hold up in it, and French,
+ * German and Portuguese were listed without that being true — the popover had
+ * no definitions for them and, until language packs, Windows silently checked
+ * no spelling either. They come back when they can be supported properly.
+ * Keep in step with `catalogue()` in src-tauri/src/language_packs.rs. */
 export const CHECK_LANGUAGES = [
   { code: "en-US", label: "English (US)" },
   { code: "en-GB", label: "English (UK)" },
   { code: "en-CA", label: "English (Canada)" },
   { code: "en-AU", label: "English (Australia)" },
   { code: "es", label: "Spanish" },
-  { code: "fr", label: "French" },
-  { code: "de", label: "German" },
-  { code: "pt-PT", label: "Portuguese" },
 ] as const;
+
+const DEFAULT_CHECK_LANGUAGE = "en-US";
+
+/** A language that has since been withdrawn would otherwise stay selected,
+ * leaving the picker blank and the checkers pointed at something the app no
+ * longer supports. */
+function supportedCheckLanguage(code: unknown): string {
+  return CHECK_LANGUAGES.some((language) => language.code === code)
+    ? (code as string)
+    : DEFAULT_CHECK_LANGUAGE;
+}
 
 interface SettingsState {
   compilerBackend: CompilerBackend;
@@ -74,8 +88,9 @@ export const useSettingsStore = create<SettingsState>()(
         set({ grammarCheckEnabled: enabled }),
       grammarCheckServerUrl: "http://localhost:8081",
       setGrammarCheckServerUrl: (url) => set({ grammarCheckServerUrl: url }),
-      checkLanguage: "en-US",
-      setCheckLanguage: (language) => set({ checkLanguage: language }),
+      checkLanguage: DEFAULT_CHECK_LANGUAGE,
+      setCheckLanguage: (language) =>
+        set({ checkLanguage: supportedCheckLanguage(language) }),
       ignoredWords: [],
       addIgnoredWord: (word) =>
         set((state) => {
@@ -104,6 +119,13 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: "latex4all-settings",
+      merge: (persisted, current) => {
+        const merged = { ...current, ...(persisted as object) };
+        return {
+          ...merged,
+          checkLanguage: supportedCheckLanguage(merged.checkLanguage),
+        };
+      },
     },
   ),
 );

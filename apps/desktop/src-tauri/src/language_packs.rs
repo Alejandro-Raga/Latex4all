@@ -109,6 +109,9 @@ fn catalogue() -> &'static [LanguagePack] {
                 thesaurus: None,
                 approx_bytes: 560_000,
             },
+            // English and Spanish only. Adding a language here means committing
+            // to its spelling, grammar and lookup paths all working; see
+            // CHECK_LANGUAGES in src/stores/settings-store.ts.
             LanguagePack {
                 code: "es",
                 label: "Spanish",
@@ -116,33 +119,6 @@ fn catalogue() -> &'static [LanguagePack] {
                 // The only one of these still shipped as Latin-1.
                 thesaurus: Some(thes("es/th_es_v2.dat", Latin1)),
                 approx_bytes: 3_760_000,
-            },
-            LanguagePack {
-                code: "fr",
-                label: "French",
-                spelling: [
-                    aff("fr_FR/dictionaries/fr.aff", Utf8),
-                    dic("fr_FR/dictionaries/fr.dic", Utf8),
-                ],
-                thesaurus: Some(thes("fr_FR/dictionaries/thes_fr.dat", Utf8)),
-                approx_bytes: 6_240_000,
-            },
-            LanguagePack {
-                code: "de",
-                label: "German",
-                spelling: [
-                    aff("de/de_DE_frami.aff", Latin1),
-                    dic("de/de_DE_frami.dic", Latin1),
-                ],
-                thesaurus: Some(thes("de/th_de_DE_v2.dat", Utf8)),
-                approx_bytes: 36_070_000,
-            },
-            LanguagePack {
-                code: "pt-PT",
-                label: "Portuguese",
-                spelling: [aff("pt_PT/pt_PT.aff", Utf8), dic("pt_PT/pt_PT.dic", Utf8)],
-                thesaurus: Some(thes("pt_PT/th_pt_PT.dat", Utf8)),
-                approx_bytes: 4_420_000,
             },
         ]
     })
@@ -591,10 +567,7 @@ mod tests {
     #[test]
     fn the_catalogue_covers_every_offered_language() {
         let codes: Vec<&str> = catalogue().iter().map(|p| p.code).collect();
-        assert_eq!(
-            codes,
-            vec!["en-US", "en-GB", "en-CA", "en-AU", "es", "fr", "de", "pt-PT"]
-        );
+        assert_eq!(codes, vec!["en-US", "en-GB", "en-CA", "en-AU", "es"]);
     }
 
     #[test]
@@ -622,8 +595,12 @@ mod tests {
     #[test]
     fn lookup_is_case_insensitive_on_the_language_code() {
         assert!(pack_for("ES").is_some());
-        assert!(pack_for("pt-PT").is_some());
+        assert!(pack_for("en-us").is_some());
         assert!(pack_for("klingon").is_none());
+        // Withdrawn languages must not resolve, or a stale setting would keep
+        // pointing at data the app no longer offers.
+        assert!(pack_for("de").is_none());
+        assert!(pack_for("pt-PT").is_none());
     }
 
     // ── Encoding ──
