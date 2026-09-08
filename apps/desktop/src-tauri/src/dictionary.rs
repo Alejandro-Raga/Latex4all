@@ -146,8 +146,9 @@ const ARCHIVE_URL: &str = "https://wordnetcode.princeton.edu/wn3.1.dict.tar.gz";
 const ARCHIVE_SHA256: &str = "3f7d8be8ef6ecc7167d39b10d66954ec734280b5bdcd57f7d9eafe429d11c22a";
 const WORDNET_VERSION: &str = "3.1";
 
-/// Matches WordNet's own ceiling, so the popover reads the same either way.
+/// Match WordNet's own ceilings, so the popover reads the same either way.
 const MAX_THESAURUS_SYNONYMS: usize = 60;
+const MAX_THESAURUS_ANTONYMS: usize = 30;
 
 const POS: [&str; 4] = ["noun", "verb", "adj", "adv"];
 
@@ -477,40 +478,99 @@ pub fn lookup_dictionary_definition(
     }
 }
 
-/// Synonyms from the language pack's MyThes thesaurus. MyThes records senses
-/// and their synonyms but no glosses, so there is no definition to give —
-/// saying so is better than implying the word is unknown.
+/// Definitions, synonyms and antonyms from the installed language pack.
+///
+/// Definitions come from the prepared Wiktionary database; synonyms are the
+/// union of Wiktionary's and the MyThes thesaurus's, since the two disagree
+/// about coverage and neither is a superset. Antonyms exist only in the
+/// Wiktionary half — MyThes records none at all.
 fn lookup_non_english(term: &str, language: &str) -> DictionaryLookupResult {
-    let Some(thesaurus) = crate::language_packs::thesaurus(language) else {
+    let definitions = crate::language_packs::definitions(language);
+    let thesaurus = crate::language_packs::thesaurus(language);
+    if definitions.is_none() && thesaurus.is_none() {
         return DictionaryLookupResult {
             database_available: false,
             missing_language_pack: Some(language.to_string()),
             ..Default::default()
         };
+    }
+
+    let senses = definitions
+        .map(|source| source.lookup(term))
+        .unwrap_or_default();
+
+    let mut synonyms: Vec<String> = Vec::new();
+    let mut antonyms: Vec<String> = Vec::new();
+    let push = |list: &mut Vec<String>, word: &str, limit: usize| {
+        if list.len() < limit
+            && !word.eq_ignore_ascii_case(term)
+            && !list.iter().any(|existing| existing.eq_ignore_ascii_case(word))
+        {
+            list.push(word.to_string());
+        }
     };
 
-    let senses = thesaurus.lookup(term);
-    let mut synonyms: Vec<String> = Vec::new();
-    for sense in senses {
-        for synonym in sense.synonyms {
-            // MyThes repeats a word across senses; the popover wants one list.
-            if !synonym.eq_ignore_ascii_case(term)
-                && !synonyms.iter().any(|s| s.eq_ignore_ascii_case(&synonym))
-            {
-                synonyms.push(synonym);
+    for sense in &senses {
+        for word in &sense.synonyms {
+            push(&mut synonyms, word, MAX_THESAURUS_SYNONYMS);
+        }
+        for word in &sense.antonyms {
+            push(&mut antonyms, word, MAX_THESAURUS_ANTONYMS);
+        }
+    }
+    if let Some(thesaurus) = thesaurus {
+        for sense in thesaurus.lookup(term) {
+            for word in sense.synonyms {
+                push(&mut synonyms, &word, MAX_THESAURUS_SYNONYMS);
             }
         }
     }
-    synonyms.truncate(MAX_THESAURUS_SYNONYMS);
 
     DictionaryLookupResult {
-        definition: None,
+        definition: format_pack_definition(term, &senses),
         synonyms: None,
         synonym_list: Some(synonyms).filter(|s| !s.is_empty()),
-        antonym_list: None,
+        antonym_list: Some(antonyms).filter(|a| !a.is_empty()),
         database_available: true,
         missing_language_pack: None,
     }
+}
+
+/// Renders senses the way `wordnet::format_definition` renders English ones,
+/// so the popover reads the same in either language: the headword and its part
+/// of speech, then numbered senses.
+fn format_pack_definition(
+    term: &str,
+    senses: &[crate::language_packs::DefinitionSense],
+) -> Option<String> {
+    if senses.is_empty() {
+        return None;
+    }
+
+    let mut out = String::new();
+    let mut current_pos: Option<&str> = None;
+    let mut index = 0usize;
+
+    for sense in senses {
+        let pos = sense.part_of_speech.as_deref();
+        if current_pos != pos {
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            out.push_str(term);
+            if let Some(pos) = pos {
+                out.push(' ');
+                out.push_str(pos);
+            }
+            out.push('\n');
+            current_pos = pos;
+            index = 0;
+        }
+        index += 1;
+        out.push_str(&format!("{index}. {}\n", sense.text));
+    }
+
+    Some(out.trim_end().to_string())
 }
 
 #[cfg(test)]

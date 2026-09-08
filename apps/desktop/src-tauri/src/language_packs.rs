@@ -20,7 +20,8 @@
 
 use serde::Serialize;
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use sha2::Digest;
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use tauri::{Emitter, WebviewWindow};
@@ -60,6 +61,8 @@ pub struct LanguagePack {
     /// English is served by the bundled WordNet, which has real definitions;
     /// pulling a 17 MB MyThes file to duplicate its synonyms would be waste.
     thesaurus: Option<PackSource>,
+    /// Definitions, where a usable source exists. English has WordNet already.
+    definitions: Option<DefinitionSource>,
     /// Rounded total download, for the picker. Measured from the pinned commit.
     approx_bytes: u64,
 }
@@ -76,6 +79,20 @@ fn thes(path: &'static str, encoding: SourceEncoding) -> PackSource {
     PackSource { path, encoding, stored_as: "thesaurus.dat" }
 }
 
+/// A gzipped record file built by `scripts/build-spanish-definitions.mjs` and
+/// published as a release asset, rather than fetched from an upstream project
+/// like everything else here — no one distributes Wiktionary in a form small
+/// enough to download on demand, so the extract has to be prepared ahead of
+/// time.
+struct DefinitionSource {
+    url: &'static str,
+    sha256: &'static str,
+    /// Shown in the language picker so the download size is not a surprise.
+    approx_bytes: u64,
+    /// CC BY-SA obliges us to say where it came from.
+    attribution: &'static str,
+}
+
 fn catalogue() -> &'static [LanguagePack] {
     use SourceEncoding::{Latin1, Utf8};
     static CATALOGUE: OnceLock<Vec<LanguagePack>> = OnceLock::new();
@@ -86,6 +103,7 @@ fn catalogue() -> &'static [LanguagePack] {
                 label: "English (US)",
                 spelling: [aff("en/en_US.aff", Utf8), dic("en/en_US.dic", Utf8)],
                 thesaurus: None,
+                definitions: None,
                 approx_bytes: 660_000,
             },
             LanguagePack {
@@ -93,6 +111,7 @@ fn catalogue() -> &'static [LanguagePack] {
                 label: "English (UK)",
                 spelling: [aff("en/en_GB.aff", Utf8), dic("en/en_GB.dic", Utf8)],
                 thesaurus: None,
+                definitions: None,
                 approx_bytes: 1_270_000,
             },
             LanguagePack {
@@ -100,6 +119,7 @@ fn catalogue() -> &'static [LanguagePack] {
                 label: "English (Canada)",
                 spelling: [aff("en/en_CA.aff", Utf8), dic("en/en_CA.dic", Utf8)],
                 thesaurus: None,
+                definitions: None,
                 approx_bytes: 560_000,
             },
             LanguagePack {
@@ -107,6 +127,7 @@ fn catalogue() -> &'static [LanguagePack] {
                 label: "English (Australia)",
                 spelling: [aff("en/en_AU.aff", Utf8), dic("en/en_AU.dic", Utf8)],
                 thesaurus: None,
+                definitions: None,
                 approx_bytes: 560_000,
             },
             // English and Spanish only. Adding a language here means committing
@@ -118,7 +139,13 @@ fn catalogue() -> &'static [LanguagePack] {
                 spelling: [aff("es/es_ES.aff", Utf8), dic("es/es_ES.dic", Utf8)],
                 // The only one of these still shipped as Latin-1.
                 thesaurus: Some(thes("es/th_es_v2.dat", Latin1)),
-                approx_bytes: 3_760_000,
+                definitions: Some(DefinitionSource {
+                    url: "https://github.com/Alejandro-Raga/Latex4all/releases/download/dictionary-data-v1/es-definitions.dat.gz",
+                    sha256: "72f6d577633c7f693c9eec0bcc4f9938b733cf1997bb28b1a23efd6c6636b72b",
+                    approx_bytes: 4_500_000,
+                    attribution: "Definitions from Wiktionary (CC BY-SA 4.0)",
+                }),
+                approx_bytes: 8_260_000,
             },
         ]
     })
@@ -154,6 +181,12 @@ fn has_thesaurus(code: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn has_definitions(code: &str) -> bool {
+    pack_dir(code)
+        .map(|dir| dir.join("definitions.dat").is_file())
+        .unwrap_or(false)
+}
+
 // ── Status ──
 
 #[derive(Serialize)]
@@ -167,6 +200,12 @@ pub struct LanguagePackInfo {
     has_thesaurus: bool,
     /// This pack would also bring a thesaurus if installed.
     offers_thesaurus: bool,
+    /// The downloaded pack includes definitions.
+    has_definitions: bool,
+    /// This pack would also bring definitions if installed.
+    offers_definitions: bool,
+    /// Attribution the licence obliges us to show, when there is one.
+    attribution: Option<String>,
     /// The OS already spell checks this language, so a pack is optional.
     system_supported: bool,
     approx_bytes: u64,
@@ -186,6 +225,12 @@ pub async fn list_language_packs() -> Result<Vec<LanguagePackInfo>, String> {
                 installed: is_installed(pack.code),
                 has_thesaurus: has_thesaurus(pack.code),
                 offers_thesaurus: pack.thesaurus.is_some(),
+                has_definitions: has_definitions(pack.code),
+                offers_definitions: pack.definitions.is_some(),
+                attribution: pack
+                    .definitions
+                    .as_ref()
+                    .map(|source| source.attribution.to_string()),
                 system_supported: crate::spellcheck::system_supports_language(pack.code),
                 approx_bytes: pack.approx_bytes,
             })
@@ -252,6 +297,43 @@ async fn fetch(client: &reqwest::Client, source: &PackSource) -> Result<String, 
     Ok(decode(bytes.to_vec(), source.encoding))
 }
 
+/// Downloads, verifies and decompresses the definition database.
+async fn fetch_definitions(
+    client: &reqwest::Client,
+    source: &DefinitionSource,
+) -> Result<String, String> {
+    let response = client
+        .get(source.url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to download the definition database: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Failed to download the definition database: server returned HTTP {}",
+            response.status()
+        ));
+    }
+    let compressed = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Download of the definition database was interrupted: {e}"))?;
+
+    let digest = format!("{:x}", sha2::Sha256::digest(&compressed));
+    if digest != source.sha256 {
+        return Err(format!(
+            "The downloaded definition database does not match its expected checksum \
+             (expected {}, got {digest}). Nothing was installed.",
+            source.sha256
+        ));
+    }
+
+    let mut text = String::new();
+    flate2::read::GzDecoder::new(&compressed[..])
+        .read_to_string(&mut text)
+        .map_err(|e| format!("The definition database could not be decompressed: {e}"))?;
+    Ok(text)
+}
+
 /// Downloads the spelling dictionary — and the thesaurus, where one exists —
 /// for `code`, storing everything as UTF-8 so nothing downstream deals with
 /// encodings. Progress is reported through `language-pack-progress`.
@@ -282,6 +364,19 @@ pub async fn install_language_pack(window: WebviewWindow, code: String) -> Resul
             Some(((index * 100) / total) as u8),
         );
         downloaded.push((source.stored_as, fetch(&client, source).await?));
+    }
+
+    // The definition database is a prepared artifact rather than an upstream
+    // file, so it is checksummed: nothing else would notice if it were served
+    // truncated or replaced.
+    if let Some(source) = &pack.definitions {
+        emit(
+            &window,
+            pack.code,
+            format!("Downloading {} definitions…", pack.label),
+            Some(75),
+        );
+        downloaded.push(("definitions.dat", fetch_definitions(&client, source).await?));
     }
 
     emit(&window, pack.code, format!("Installing {}…", pack.label), Some(95));
@@ -340,6 +435,7 @@ type Dict = spellbook::Dictionary;
 struct Caches {
     dictionaries: HashMap<String, Option<&'static Dict>>,
     thesauri: HashMap<String, Option<&'static Thesaurus>>,
+    definitions: HashMap<String, Option<&'static Definitions>>,
 }
 
 fn caches() -> &'static Mutex<Caches> {
@@ -348,6 +444,7 @@ fn caches() -> &'static Mutex<Caches> {
         Mutex::new(Caches {
             dictionaries: HashMap::new(),
             thesauri: HashMap::new(),
+            definitions: HashMap::new(),
         })
     })
 }
@@ -358,6 +455,7 @@ fn forget_cached(code: &str) {
     if let Ok(mut caches) = caches().lock() {
         caches.dictionaries.remove(code);
         caches.thesauri.remove(code);
+        caches.definitions.remove(code);
     }
 }
 
@@ -417,35 +515,30 @@ pub fn suggestions(word: &str, code: &str, limit: usize) -> Option<Vec<String>> 
     Some(out)
 }
 
-// ── Thesaurus (MyThes) ──
+// ── Record files (MyThes shape) ──
 
-/// A MyThes `.dat` file, indexed by byte offset rather than read into memory:
-/// the German thesaurus is 30 MB, which is a lot to hold resident for a
-/// right-click that may never come.
-pub struct Thesaurus {
+/// A file of `lemma|<line count>` headers, each followed by that many
+/// `|`-separated field lines, after a first line naming the encoding. MyThes
+/// uses this shape for thesauri; the generated Spanish definition database
+/// reuses it so both can share one indexer.
+///
+/// Indexed by byte offset rather than read into memory: these files run to
+/// tens of megabytes, which is a lot to hold resident for a right-click that
+/// may never come.
+struct RecordFile {
     path: PathBuf,
     /// Lowercased lemma -> byte offset of its header line.
     offsets: HashMap<String, u64>,
 }
 
-/// One sense of a word: the part of speech MyThes records, and its synonyms.
-pub struct ThesaurusSense {
-    pub part_of_speech: Option<String>,
-    pub synonyms: Vec<String>,
-}
-
-impl Thesaurus {
-    /// Scans the file once to record where each entry starts. The format is
-    /// `lemma|<sense count>` followed by that many `pos|syn|syn|...` lines,
-    /// after a first line naming the encoding (always UTF-8 here — packs are
-    /// normalised on install).
+impl RecordFile {
     fn open(path: &Path) -> Result<Self, String> {
         let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
         let mut reader = BufReader::new(file);
         let mut offsets = HashMap::new();
         let mut offset = 0u64;
         let mut line = String::new();
-        let mut skip_senses = 0usize;
+        let mut skip_lines = 0usize;
         let mut first = true;
 
         loop {
@@ -461,8 +554,8 @@ impl Thesaurus {
                 first = false; // encoding header
                 continue;
             }
-            if skip_senses > 0 {
-                skip_senses -= 1;
+            if skip_lines > 0 {
+                skip_lines -= 1;
                 continue;
             }
             let trimmed = line.trim_end_matches(['\r', '\n']);
@@ -472,7 +565,7 @@ impl Thesaurus {
             let Ok(count) = count.trim().parse::<usize>() else {
                 continue;
             };
-            skip_senses = count;
+            skip_lines = count;
             offsets.insert(lemma.to_lowercase(), start);
         }
 
@@ -482,7 +575,8 @@ impl Thesaurus {
         })
     }
 
-    pub fn lookup(&self, term: &str) -> Vec<ThesaurusSense> {
+    /// The fields of each line belonging to `term`, or empty when unknown.
+    fn lookup(&self, term: &str) -> Vec<Vec<String>> {
         let Some(&offset) = self.offsets.get(&term.trim().to_lowercase()) else {
             return Vec::new();
         };
@@ -504,35 +598,125 @@ impl Thesaurus {
             .and_then(|(_, count)| count.trim().parse::<usize>().ok())
             .unwrap_or(0);
 
-        let mut senses = Vec::with_capacity(count);
+        let mut rows = Vec::with_capacity(count);
         for _ in 0..count {
             let mut line = String::new();
             if reader.read_line(&mut line).unwrap_or(0) == 0 {
                 break;
             }
-            let mut fields = line.trim_end_matches(['\r', '\n']).split('|');
-            // The first field is a part-of-speech tag like "(noun)", or "-"
-            // in the dictionaries that don't record one.
-            let pos = fields.next().unwrap_or("").trim();
-            let synonyms: Vec<String> = fields
+            rows.push(
+                line.trim_end_matches(['\r', '\n'])
+                    .split('|')
+                    .map(str::trim)
+                    .map(str::to_string)
+                    .collect(),
+            );
+        }
+        rows
+    }
+}
+
+// ── Thesaurus ──
+
+pub struct Thesaurus(RecordFile);
+
+/// One sense of a word: the part of speech MyThes records, and its synonyms.
+pub struct ThesaurusSense {
+    pub part_of_speech: Option<String>,
+    pub synonyms: Vec<String>,
+}
+
+/// MyThes writes "-" where it records no part of speech, and wraps real ones
+/// in parentheses.
+fn part_of_speech(field: &str) -> Option<String> {
+    match field.trim() {
+        "" | "-" => None,
+        other => Some(other.trim_matches(['(', ')']).to_string()),
+    }
+}
+
+impl Thesaurus {
+    fn open(path: &Path) -> Result<Self, String> {
+        RecordFile::open(path).map(Self)
+    }
+
+    pub fn lookup(&self, term: &str) -> Vec<ThesaurusSense> {
+        self.0
+            .lookup(term)
+            .into_iter()
+            .filter_map(|fields| {
+                let synonyms: Vec<String> = fields
+                    .iter()
+                    .skip(1)
+                    .filter(|s| !s.is_empty())
+                    .cloned()
+                    .collect();
+                if synonyms.is_empty() {
+                    return None;
+                }
+                Some(ThesaurusSense {
+                    part_of_speech: part_of_speech(fields.first().map_or("", String::as_str)),
+                    synonyms,
+                })
+            })
+            .collect()
+    }
+}
+
+// ── Definitions ──
+
+pub struct Definitions(RecordFile);
+
+/// One sense of a word: its part of speech, what it means, and the words
+/// Wiktionary relates it to. MyThes carries no antonyms at all, so these are
+/// the only ones Spanish has.
+pub struct DefinitionSense {
+    pub part_of_speech: Option<String>,
+    pub text: String,
+    pub synonyms: Vec<String>,
+    pub antonyms: Vec<String>,
+}
+
+/// `a;b;c` -> ["a", "b", "c"], tolerating an empty field.
+fn related(field: Option<&String>) -> Vec<String> {
+    field
+        .map(|value| {
+            value
+                .split(';')
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .map(str::to_string)
-                .collect();
-            if synonyms.is_empty() {
-                continue;
-            }
-            senses.push(ThesaurusSense {
-                part_of_speech: match pos {
-                    "" | "-" => None,
-                    other => Some(other.trim_matches(['(', ')']).to_string()),
-                },
-                synonyms,
-            });
-        }
-        senses
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+impl Definitions {
+    fn open(path: &Path) -> Result<Self, String> {
+        RecordFile::open(path).map(Self)
+    }
+
+    pub fn lookup(&self, term: &str) -> Vec<DefinitionSense> {
+        self.0
+            .lookup(term)
+            .into_iter()
+            .filter_map(|fields| {
+                let text = fields.get(1).cloned().unwrap_or_default();
+                if text.is_empty() {
+                    return None;
+                }
+                Some(DefinitionSense {
+                    part_of_speech: part_of_speech(fields.first().map_or("", String::as_str)),
+                    text,
+                    synonyms: related(fields.get(2)),
+                    antonyms: related(fields.get(3)),
+                })
+            })
+            .collect()
     }
 }
+
+// ── Cached readers ──
 
 /// The thesaurus for `code`, or `None` when no pack with one is installed.
 pub fn thesaurus(code: &str) -> Option<&'static Thesaurus> {
@@ -540,21 +724,42 @@ pub fn thesaurus(code: &str) -> Option<&'static Thesaurus> {
     if let Some(cached) = caches.thesauri.get(code) {
         return *cached;
     }
-    let loaded = pack_dir(code).ok().and_then(|dir| {
-        let path = dir.join("thesaurus.dat");
-        if !path.is_file() {
-            return None;
-        }
-        match Thesaurus::open(&path) {
-            Ok(thesaurus) => Some(&*Box::leak(Box::new(thesaurus))),
-            Err(error) => {
-                eprintln!("[language-packs] {code} thesaurus failed to load: {error}");
-                None
-            }
-        }
-    });
+    let loaded = load_cached(code, "thesaurus.dat", Thesaurus::open, "thesaurus");
     caches.thesauri.insert(code.to_string(), loaded);
     loaded
+}
+
+/// The definition database for `code`, or `None` when the pack has none.
+pub fn definitions(code: &str) -> Option<&'static Definitions> {
+    let mut caches = caches().lock().ok()?;
+    if let Some(cached) = caches.definitions.get(code) {
+        return *cached;
+    }
+    let loaded = load_cached(code, "definitions.dat", Definitions::open, "definitions");
+    caches.definitions.insert(code.to_string(), loaded);
+    loaded
+}
+
+/// Opens `file_name` from `code`'s pack and leaks it, so it is read at most
+/// once and stays valid for the rest of the process.
+fn load_cached<T: 'static>(
+    code: &str,
+    file_name: &str,
+    open: fn(&Path) -> Result<T, String>,
+    label: &str,
+) -> Option<&'static T> {
+    let dir = pack_dir(code).ok()?;
+    let path = dir.join(file_name);
+    if !path.is_file() {
+        return None;
+    }
+    match open(&path) {
+        Ok(value) => Some(&*Box::leak(Box::new(value))),
+        Err(error) => {
+            eprintln!("[language-packs] {code} {label} failed to load: {error}");
+            None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -674,6 +879,60 @@ mod tests {
         assert_eq!(thesaurus.lookup("  casa  ").len(), 1);
     }
 
+    const DEFINITIONS_SAMPLE: &str = "UTF-8\n\
+        bueno|2\n\
+        adj|Que tiene bondad en su corazón.|bondadoso;generoso|malo;malvado\n\
+        noun|Persona de buen carácter.||\n\
+        análisis|1\n\
+        noun|La acción y el efecto de separar un todo en sus elementos.||\n";
+
+    #[test]
+    fn definitions_carry_their_related_words() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("definitions.dat");
+        std::fs::write(&path, DEFINITIONS_SAMPLE).unwrap();
+        let definitions = Definitions::open(&path).unwrap();
+
+        let senses = definitions.lookup("bueno");
+        assert_eq!(senses.len(), 2);
+        assert_eq!(senses[0].part_of_speech.as_deref(), Some("adj"));
+        assert_eq!(senses[0].text, "Que tiene bondad en su corazón.");
+        assert_eq!(senses[0].synonyms, vec!["bondadoso", "generoso"]);
+        // MyThes has no antonyms at all, so these are the only ones Spanish gets.
+        assert_eq!(senses[0].antonyms, vec!["malo", "malvado"]);
+    }
+
+    #[test]
+    fn a_sense_with_no_related_words_still_reads() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("definitions.dat");
+        std::fs::write(&path, DEFINITIONS_SAMPLE).unwrap();
+        let definitions = Definitions::open(&path).unwrap();
+
+        let senses = definitions.lookup("análisis");
+        assert_eq!(senses.len(), 1);
+        assert!(senses[0].synonyms.is_empty());
+        assert!(senses[0].antonyms.is_empty());
+        assert!(senses[0].text.starts_with("La acción"));
+    }
+
+    #[test]
+    fn a_definition_ending_in_a_number_is_not_read_as_a_header() {
+        // "Número atómico 12" ends in `|<digits>`, exactly the shape of an
+        // entry header; only tracking the declared line count keeps the index
+        // from tearing the file apart from that point on.
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("definitions.dat");
+        std::fs::write(
+            &path,
+            "UTF-8\nmagnesio|1\nnoun|Elemento químico de número atómico|12\nzinc|1\nnoun|Otro elemento.||\n",
+        )
+        .unwrap();
+        let definitions = Definitions::open(&path).unwrap();
+        assert_eq!(definitions.lookup("zinc").len(), 1);
+        assert_eq!(definitions.0.offsets.len(), 2);
+    }
+
     #[test]
     fn an_unknown_word_yields_no_senses() {
         let tmp = tempfile::tempdir().unwrap();
@@ -688,6 +947,6 @@ mod tests {
         let path = write_thesaurus(tmp.path(), SAMPLE);
         let thesaurus = Thesaurus::open(&path).unwrap();
         assert!(thesaurus.lookup("UTF-8").is_empty());
-        assert_eq!(thesaurus.offsets.len(), 2);
+        assert_eq!(thesaurus.0.offsets.len(), 2);
     }
 }

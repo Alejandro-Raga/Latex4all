@@ -14,6 +14,12 @@ export interface LanguagePack {
   installed: boolean;
   hasThesaurus: boolean;
   offersThesaurus: boolean;
+  /** The downloaded pack includes definitions. */
+  hasDefinitions: boolean;
+  /** This pack would also bring definitions if installed. */
+  offersDefinitions: boolean;
+  /** Attribution the data's licence obliges the app to show. */
+  attribution: string | null;
   /** The OS already spell checks this language, so a pack is optional. */
   systemSupported: boolean;
   approxBytes: number;

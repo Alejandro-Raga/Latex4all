@@ -23,19 +23,38 @@ function formatSize(bytes: number): string {
     : `${Math.round(bytes / 1024)} KB`;
 }
 
+/** Lists what a pack brings, so "download" is not a leap of faith. */
+function contents(pack: LanguagePack, installed: boolean): string {
+  const parts = ["spelling"];
+  if (installed ? pack.hasThesaurus : pack.offersThesaurus)
+    parts.push("synonyms");
+  if (installed ? pack.hasDefinitions : pack.offersDefinitions)
+    parts.push("definitions");
+  // "spelling, synonyms and definitions"
+  return parts.length > 1
+    ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`
+    : parts[0];
+}
+
 /** What a language can do right now, in the order that matters to the user. */
 function describe(pack: LanguagePack): string {
   if (pack.installed) {
-    return pack.hasThesaurus
-      ? "Spelling and synonyms, downloaded"
-      : "Spelling, downloaded";
+    const listed = contents(pack, true);
+    return `${listed.charAt(0).toUpperCase()}${listed.slice(1)}, downloaded`;
   }
-  if (pack.systemSupported) {
+  if (
+    pack.systemSupported &&
+    !pack.offersDefinitions &&
+    !pack.offersThesaurus
+  ) {
     return "Spelling handled by your system";
   }
-  return pack.offersThesaurus
-    ? `Not checked — adds spelling and synonyms (${formatSize(pack.approxBytes)})`
-    : `Not checked — adds spelling (${formatSize(pack.approxBytes)})`;
+  const extras = pack.systemSupported
+    ? `Your system handles spelling — adds ${contents(pack, false)
+        .replace(/^spelling(, )?/, "")
+        .replace(/^and /, "")}`
+    : `Not checked — adds ${contents(pack, false)}`;
+  return `${extras} (${formatSize(pack.approxBytes)})`;
 }
 
 /**
@@ -54,6 +73,14 @@ export function LanguagePacksSettings() {
   const install = useLanguagePacksStore((s) => s.install);
   const remove = useLanguagePacksStore((s) => s.remove);
   const checkLanguage = useSettingsStore((s) => s.checkLanguage);
+  // CC BY-SA obliges the app to credit the sources it ships data from.
+  const attributions = [
+    ...new Set(
+      packs
+        .map((pack) => pack.attribution)
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
 
   useEffect(() => {
     refresh();
@@ -197,6 +224,13 @@ export function LanguagePacksSettings() {
             );
           })}
         </div>
+      )}
+
+      {attributions.length > 0 && (
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          {attributions.join(" · ")}. Spelling and thesaurus data from the
+          LibreOffice dictionaries.
+        </p>
       )}
 
       {error && <p className="text-destructive text-xs">{error}</p>}

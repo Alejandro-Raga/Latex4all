@@ -50,6 +50,12 @@ interface DictionaryLookupResult {
 /** `dict://` is a macOS URL scheme; there is no Dictionary.app elsewhere. */
 const HAS_SYSTEM_DICTIONARY_APP = navigator.userAgent.includes("Macintosh");
 
+/** The Real Academia Española's dictionary is the authority for Spanish, but
+ * it is copyrighted and has no licence that would let the app carry it. Link
+ * out to it instead: the definitions shown here come from Wiktionary, and this
+ * is one click to the official entry. */
+const RAE_LOOKUP_URL = "https://dle.rae.es/";
+
 /** Definitions from Dictionary Services can run long; keep the popover readable. */
 const MAX_HEIGHT = 360;
 const POPOVER_WIDTH = 320;
@@ -135,6 +141,7 @@ export function WordLookupPopover({
   }, [result, term]);
 
   const missingPackCode = result?.missingLanguagePack ?? null;
+  const isSpanish = language.toLowerCase().startsWith("es");
 
   useEffect(() => {
     if (missingPackCode) void refreshLanguagePacks();
@@ -175,6 +182,12 @@ export function WordLookupPopover({
         toast.error(`Could not install the dictionary: ${err}`);
       });
   }, [installDictionary, term]);
+
+  const handleOpenInRae = useCallback(() => {
+    shellOpen(`${RAE_LOOKUP_URL}${encodeURIComponent(term)}`).catch((err) => {
+      console.error("Failed to open dle.rae.es", err);
+    });
+  }, [term]);
 
   const handleOpenInDictionary = useCallback(() => {
     shellOpen(`dict://${encodeURIComponent(term)}`).catch((err) => {
@@ -324,9 +337,10 @@ export function WordLookupPopover({
         {!loading &&
           !result?.definition &&
           !missingPackCode &&
-          synonyms.length > 0 && (
+          synonyms.length > 0 &&
+          languagePack?.offersDefinitions === false && (
             <p className="text-muted-foreground text-xs">
-              Definitions are available in English only.
+              This language has synonyms but no definitions yet.
             </p>
           )}
 
@@ -402,15 +416,27 @@ export function WordLookupPopover({
         )}
       </div>
 
-      {HAS_SYSTEM_DICTIONARY_APP && (
-        <div className="border-border border-t px-3 py-1.5">
-          <button
-            onClick={handleOpenInDictionary}
-            className="flex items-center gap-1.5 text-muted-foreground text-xs transition-colors hover:text-foreground"
-          >
-            <ExternalLinkIcon className="size-3" />
-            Open in Dictionary
-          </button>
+      {(HAS_SYSTEM_DICTIONARY_APP || isSpanish) && (
+        <div className="flex items-center gap-3 border-border border-t px-3 py-1.5">
+          {HAS_SYSTEM_DICTIONARY_APP && (
+            <button
+              onClick={handleOpenInDictionary}
+              className="flex items-center gap-1.5 text-muted-foreground text-xs transition-colors hover:text-foreground"
+            >
+              <ExternalLinkIcon className="size-3" />
+              Open in Dictionary
+            </button>
+          )}
+          {isSpanish && (
+            <button
+              onClick={handleOpenInRae}
+              className="flex items-center gap-1.5 text-muted-foreground text-xs transition-colors hover:text-foreground"
+              title="Look this word up in the Real Academia Española's dictionary"
+            >
+              <ExternalLinkIcon className="size-3" />
+              Open in RAE
+            </button>
+          )}
         </div>
       )}
     </div>,
