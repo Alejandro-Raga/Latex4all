@@ -24,7 +24,12 @@
  *   node scripts/build-spanish-definitions.mjs [--source <file|url>] [--out <dir>]
  */
 
-import { createReadStream, createWriteStream, mkdirSync, statSync } from "node:fs";
+import {
+  createReadStream,
+  createWriteStream,
+  mkdirSync,
+  statSync,
+} from "node:fs";
 import { createInterface } from "node:readline";
 import { createGzip } from "node:zlib";
 import { Readable } from "node:stream";
@@ -77,8 +82,12 @@ function relatedWords(...lists) {
   const seen = [];
   for (const list of lists) {
     for (const item of list ?? []) {
-      const word = (item?.word ?? "").replace(/[|;]/g, " ").replace(/\s+/g, " ").trim();
-      if (word && !seen.includes(word) && seen.length < MAX_RELATED) seen.push(word);
+      const word = (item?.word ?? "")
+        .replace(/[|;]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (word && !seen.includes(word) && seen.length < MAX_RELATED)
+        seen.push(word);
     }
   }
   return seen.join(";");
@@ -98,13 +107,17 @@ function parseArgs() {
 
 async function openSource(source) {
   if (!/^https?:\/\//.test(source)) {
-    console.log(`==> Reading ${source} (${(statSync(source).size / 1048576).toFixed(0)} MB)`);
+    console.log(
+      `==> Reading ${source} (${(statSync(source).size / 1048576).toFixed(0)} MB)`,
+    );
     return createReadStream(source);
   }
   console.log(`==> Streaming ${source}`);
   const response = await fetch(source);
   if (!response.ok) {
-    throw new Error(`Download failed: HTTP ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Download failed: HTTP ${response.status} ${response.statusText}`,
+    );
   }
   const total = Number(response.headers.get("content-length") ?? 0);
   if (total) console.log(`    ${(total / 1073741824).toFixed(2)} GB to read`);
@@ -127,7 +140,10 @@ stream.on("data", (chunk) => {
   bytesIn += chunk.length;
 });
 
-for await (const line of createInterface({ input: stream, crlfDelay: Infinity })) {
+for await (const line of createInterface({
+  input: stream,
+  crlfDelay: Infinity,
+})) {
   if (!line.trim()) continue;
   lines += 1;
 
@@ -161,11 +177,17 @@ for await (const line of createInterface({ input: stream, crlfDelay: Infinity })
   // Wiktionary often hangs synonyms and antonyms off the entry rather than a
   // particular sense; attach those to the first one so they are not lost.
   senses[0].synonyms = relatedWords(
-    senses[0].synonyms.split(";").filter(Boolean).map((word) => ({ word })),
+    senses[0].synonyms
+      .split(";")
+      .filter(Boolean)
+      .map((word) => ({ word })),
     entry.synonyms,
   );
   senses[0].antonyms = relatedWords(
-    senses[0].antonyms.split(";").filter(Boolean).map((word) => ({ word })),
+    senses[0].antonyms
+      .split(";")
+      .filter(Boolean)
+      .map((word) => ({ word })),
     entry.antonyms,
   );
 
@@ -193,7 +215,9 @@ console.log(`    ${inflections} inflected-form senses discarded`);
 console.log(`    ${withAntonyms} senses carry antonyms`);
 
 if (entries.size === 0) {
-  console.error("No definitions were extracted — refusing to write an empty database.");
+  console.error(
+    "No definitions were extracted — refusing to write an empty database.",
+  );
   process.exit(1);
 }
 
@@ -214,8 +238,14 @@ async function* records() {
   }
 }
 
-await pipeline(Readable.from(records()), createGzip({ level: 9 }), createWriteStream(target));
+await pipeline(
+  Readable.from(records()),
+  createGzip({ level: 9 }),
+  createWriteStream(target),
+);
 
 const size = statSync(target).size;
 console.log(`==> Wrote ${target} (${(size / 1048576).toFixed(2)} MB gzipped)`);
-console.log("    Source: Spanish Wiktionary via kaikki.org (wiktextract), CC BY-SA");
+console.log(
+  "    Source: Spanish Wiktionary via kaikki.org (wiktextract), CC BY-SA",
+);

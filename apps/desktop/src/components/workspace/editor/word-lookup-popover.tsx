@@ -168,6 +168,25 @@ export function WordLookupPopover({
       });
   }, [installLanguagePack, missingPackCode, languagePack, rerunLookup]);
 
+  // A pack downloaded before definitions existed still spell checks, so the
+  // only symptom is a word with synonyms and no definition. Offer the fix
+  // where that is actually noticed.
+  const packNeedsUpdate =
+    !loading &&
+    !result?.definition &&
+    !missingPackCode &&
+    languagePack?.needsUpdate === true;
+
+  const handleUpdateLanguagePack = useCallback(() => {
+    if (!languagePack) return;
+    installLanguagePack(languagePack.code)
+      .then(() => {
+        toast.success(`${languagePack.label} updated.`);
+        return rerunLookup();
+      })
+      .catch((err) => toast.error(`Could not update: ${err}`));
+  }, [installLanguagePack, languagePack, rerunLookup]);
+
   const handleInstallDictionary = useCallback(() => {
     installDictionary()
       .then(() => {
@@ -357,10 +376,38 @@ export function WordLookupPopover({
           </div>
         )}
 
-        {nothingFound && !databaseMissing && !missingPackCode && (
-          <p className="text-muted-foreground">
-            No definition found for "{term}".
-          </p>
+        {nothingFound &&
+          !databaseMissing &&
+          !missingPackCode &&
+          !packNeedsUpdate && (
+            <p className="text-muted-foreground">
+              No definition found for "{term}".
+            </p>
+          )}
+
+        {packNeedsUpdate && (
+          <div className="space-y-2">
+            <p className="text-muted-foreground">
+              Your {languagePack?.label} download predates definitions.
+            </p>
+            <button
+              onClick={handleUpdateLanguagePack}
+              disabled={languagePackInstalling !== null}
+              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-xs transition-colors hover:bg-muted disabled:opacity-70"
+            >
+              {languagePackInstalling === languagePack?.code ? (
+                <>
+                  <Loader2Icon className="size-3.5 animate-spin" />
+                  {languagePackProgress?.message ?? "Updating…"}
+                </>
+              ) : (
+                <>
+                  <DownloadIcon className="size-3.5" />
+                  Update {languagePack?.label} to add definitions
+                </>
+              )}
+            </button>
+          </div>
         )}
 
         {missingPackCode && (

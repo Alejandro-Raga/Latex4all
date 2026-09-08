@@ -206,6 +206,10 @@ pub struct LanguagePackInfo {
     offers_definitions: bool,
     /// Attribution the licence obliges us to show, when there is one.
     attribution: Option<String>,
+    /// Installed, but from before the pack gained a file it now offers.
+    /// Nothing else would say so: the pack still spell checks, it just
+    /// quietly has no definitions.
+    needs_update: bool,
     /// The OS already spell checks this language, so a pack is optional.
     system_supported: bool,
     approx_bytes: u64,
@@ -231,6 +235,9 @@ pub async fn list_language_packs() -> Result<Vec<LanguagePackInfo>, String> {
                     .definitions
                     .as_ref()
                     .map(|source| source.attribution.to_string()),
+                needs_update: is_installed(pack.code)
+                    && ((pack.thesaurus.is_some() && !has_thesaurus(pack.code))
+                        || (pack.definitions.is_some() && !has_definitions(pack.code))),
                 system_supported: crate::spellcheck::system_supports_language(pack.code),
                 approx_bytes: pack.approx_bytes,
             })

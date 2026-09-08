@@ -20,6 +20,9 @@ export interface LanguagePack {
   offersDefinitions: boolean;
   /** Attribution the data's licence obliges the app to show. */
   attribution: string | null;
+  /** Installed, but missing something the pack now offers — a pack downloaded
+   * before definitions existed still spell checks, so nothing else says so. */
+  needsUpdate: boolean;
   /** The OS already spell checks this language, so a pack is optional. */
   systemSupported: boolean;
   approxBytes: number;

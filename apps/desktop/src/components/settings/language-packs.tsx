@@ -38,6 +38,13 @@ function contents(pack: LanguagePack, installed: boolean): string {
 
 /** What a language can do right now, in the order that matters to the user. */
 function describe(pack: LanguagePack): string {
+  if (pack.needsUpdate) {
+    const missing = [];
+    if (pack.offersThesaurus && !pack.hasThesaurus) missing.push("synonyms");
+    if (pack.offersDefinitions && !pack.hasDefinitions)
+      missing.push("definitions");
+    return `Update available — adds ${missing.join(" and ")}`;
+  }
   if (pack.installed) {
     const listed = contents(pack, true);
     return `${listed.charAt(0).toUpperCase()}${listed.slice(1)}, downloaded`;
@@ -135,12 +142,16 @@ export function LanguagePacksSettings() {
                 <div
                   className={cn(
                     "flex size-7 shrink-0 items-center justify-center rounded-md border",
-                    ready
-                      ? "border-green-500/20 bg-green-500/10 text-green-600"
-                      : "border-border/70 bg-muted/30 text-muted-foreground",
+                    pack.needsUpdate
+                      ? "border-amber-500/30 bg-amber-500/10 text-amber-600"
+                      : ready
+                        ? "border-green-500/20 bg-green-500/10 text-green-600"
+                        : "border-border/70 bg-muted/30 text-muted-foreground",
                   )}
                 >
-                  {pack.installed ? (
+                  {pack.needsUpdate ? (
+                    <RefreshCwIcon className="size-3.5" />
+                  ) : pack.installed ? (
                     <CheckCircle2Icon className="size-3.5" />
                   ) : pack.systemSupported ? (
                     <MonitorIcon className="size-3.5" />
@@ -183,7 +194,7 @@ export function LanguagePacksSettings() {
                   ) : pack.installed ? (
                     <>
                       <Button
-                        variant="ghost"
+                        variant={pack.needsUpdate ? "default" : "ghost"}
                         size="sm"
                         className="h-7 rounded-md px-2.5 text-xs"
                         onClick={() => handleInstall(pack)}

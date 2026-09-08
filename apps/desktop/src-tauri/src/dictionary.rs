@@ -88,9 +88,36 @@ mod macos {
         }
     }
 
-    /// Find the best installed Thesaurus dictionary, preferring an English one
-    /// when more than one is installed (e.g. alongside a foreign-language pack).
-    fn find_thesaurus() -> Option<*const c_void> {
+    /// A dictionary that translates between two languages names both of them,
+    /// and its entries are glosses in the other language — no use for "what
+    /// does this word mean" in the language being written.
+    fn is_bilingual(name: &str) -> bool {
+        name.contains('\u{2022}') || name.contains('/') || name.contains(" - ")
+    }
+
+    /// Whether a dictionary's name says it covers `language`. Matching on the
+    /// name is crude, but Dictionary Services exposes no language metadata,
+    /// and the alternative — letting macOS choose — is what put Spanish
+    /// definitions in English documents: `DCSCopyTextDefinition(NULL, ...)`
+    /// answers from whichever of the user's dictionaries matches first, and
+    /// someone writing Spanish has Spanish dictionaries enabled.
+    fn covers_language(name: &str, language: &str) -> bool {
+        let lower = name.to_lowercase();
+        let markers: &[&str] = if language.to_lowercase().starts_with("es") {
+            &["español", "española", "espanol", "castellano"]
+        } else {
+            &["english"]
+        };
+        markers.iter().any(|marker| lower.contains(marker))
+    }
+
+    /// The best installed dictionary for `language` — a thesaurus when
+    /// `thesaurus` is set, a defining dictionary otherwise.
+    ///
+    /// Returns `None` rather than settling for something unattributable: the
+    /// caller has our own data to fall back on, and a definition in the wrong
+    /// language is worse than none.
+    fn find_dictionary(language: &str, thesaurus: bool) -> Option<*const c_void> {
         unsafe {
             let dicts = DCSCopyAvailableDictionaries();
             if dicts.is_null() {
@@ -101,7 +128,6 @@ mod macos {
             CFSetGetValues(dicts, values.as_mut_ptr());
 
             let mut best: Option<*const c_void> = None;
-            let mut best_is_english = false;
             for &d in &values {
                 if d.is_null() {
                     continue;
@@ -112,13 +138,17 @@ mod macos {
                 }
                 let name = CFString::wrap_under_get_rule(name_ref).to_string();
                 let lower = name.to_lowercase();
-                if lower.contains("thesaurus") {
-                    let is_english = lower.contains("english");
-                    if best.is_none() || (is_english && !best_is_english) {
-                        best = Some(d);
-                        best_is_english = is_english;
-                    }
+                if lower.contains("thesaurus") != thesaurus
+                    || is_bilingual(&name)
+                    // Wikipedia answers nearly anything with an article stub,
+                    // which is not a definition.
+                    || lower.contains("wikipedia")
+                    || !covers_language(&name, language)
+                {
+                    continue;
                 }
+                best = Some(d);
+                break;
             }
 
             CFRelease(dicts);
@@ -126,13 +156,50 @@ mod macos {
         }
     }
 
-    /// `(definition, raw thesaurus entry)`, either of which may be absent
-    /// depending on which dictionaries the user has enabled.
-    pub fn lookup(term: &str) -> (Option<String>, Option<String>) {
+    /// `(definition, raw thesaurus entry)` for `language`, either of which may
+    /// be absent depending on which dictionaries the user has enabled.
+    pub fn lookup(term: &str, language: &str) -> (Option<String>, Option<String>) {
         let cf_term = CFString::new(term);
-        let definition = define_with(std::ptr::null(), &cf_term);
-        let synonyms = find_thesaurus().and_then(|dict| define_with(dict, &cf_term));
+        let definition =
+            find_dictionary(language, false).and_then(|dict| define_with(dict, &cf_term));
+        let synonyms =
+            find_dictionary(language, true).and_then(|dict| define_with(dict, &cf_term));
         (definition, synonyms)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        // Real names from a Mac with 87 dictionaries installed.
+        #[test]
+        fn bilingual_dictionaries_are_rejected() {
+            assert!(is_bilingual(
+                "Gran Diccionario Oxford - Español-Inglés • Inglés-Español"
+            ));
+            assert!(is_bilingual(
+                "NE Nationalencyklopedin AB Professional English-Swedish / Svensk-Engelska"
+            ));
+            assert!(!is_bilingual("Oxford Dictionary of English"));
+            assert!(!is_bilingual(
+                "Larousse Editorial Diccionario General de la Lengua Española"
+            ));
+        }
+
+        #[test]
+        fn a_dictionary_is_matched_to_the_language_it_names() {
+            assert!(covers_language("Oxford Dictionary of English", "en-US"));
+            assert!(!covers_language("Oxford Dictionary of English", "es"));
+            assert!(covers_language(
+                "Larousse Editorial Diccionario General de la Lengua Española",
+                "es"
+            ));
+            assert!(!covers_language(
+                "Larousse Editorial Diccionario General de la Lengua Española",
+                "en-US"
+            ));
+            assert!(!covers_language("Оксфорд Қазақ Cөздігі", "en-US"));
+        }
     }
 }
 
@@ -429,19 +496,21 @@ pub fn lookup_dictionary_definition(
         };
     }
 
+    // Whatever the system has for *this* language, and nothing else. Asking
+    // macOS to choose is what put Spanish definitions in English documents.
+    #[cfg(target_os = "macos")]
+    let (definition, thesaurus_entry) = macos::lookup(trimmed, &language);
+    #[cfg(not(target_os = "macos"))]
+    let (definition, thesaurus_entry): (Option<String>, Option<String>) = (None, None);
+
     if !is_english {
-        return lookup_non_english(trimmed, &language);
+        return lookup_non_english(trimmed, &language, definition);
     }
 
     let dir = wordnet_dir(&app);
-    // On macOS the system dictionary answers on its own, so a missing WordNet
-    // database is not the reason a word came back empty.
-    let database_available = dir.is_some() || cfg!(target_os = "macos");
-
-    #[cfg(target_os = "macos")]
-    let (definition, thesaurus_entry) = macos::lookup(trimmed);
-    #[cfg(not(target_os = "macos"))]
-    let (definition, thesaurus_entry): (Option<String>, Option<String>) = (None, None);
+    // On macOS a language-matched system dictionary answers on its own, so a
+    // missing WordNet database is not necessarily why a word came back empty.
+    let database_available = dir.is_some() || definition.is_some();
 
     // WordNet covers whatever the system dictionary didn't. On Windows and
     // Linux that's everything; on macOS it's typically just the thesaurus half.
@@ -484,11 +553,18 @@ pub fn lookup_dictionary_definition(
 /// union of Wiktionary's and the MyThes thesaurus's, since the two disagree
 /// about coverage and neither is a superset. Antonyms exist only in the
 /// Wiktionary half — MyThes records none at all.
-fn lookup_non_english(term: &str, language: &str) -> DictionaryLookupResult {
+fn lookup_non_english(
+    term: &str,
+    language: &str,
+    system_definition: Option<String>,
+) -> DictionaryLookupResult {
     let definitions = crate::language_packs::definitions(language);
     let thesaurus = crate::language_packs::thesaurus(language);
     if definitions.is_none() && thesaurus.is_none() {
+        // Still hand back whatever the system dictionary had, so a Mac with a
+        // Spanish dictionary enabled is not left with a blank popover.
         return DictionaryLookupResult {
+            definition: system_definition,
             database_available: false,
             missing_language_pack: Some(language.to_string()),
             ..Default::default()
@@ -527,7 +603,9 @@ fn lookup_non_english(term: &str, language: &str) -> DictionaryLookupResult {
     }
 
     DictionaryLookupResult {
-        definition: format_pack_definition(term, &senses),
+        // A dictionary the user installed themselves beats ours, exactly as it
+        // does for English.
+        definition: system_definition.or_else(|| format_pack_definition(term, &senses)),
         synonyms: None,
         synonym_list: Some(synonyms).filter(|s| !s.is_empty()),
         antonym_list: Some(antonyms).filter(|a| !a.is_empty()),
