@@ -27,6 +27,8 @@ import {
   PanelLeftIcon,
   PlusIcon,
   SettingsIcon,
+  RefreshCwIcon,
+  PlayIcon,
   GithubIcon,
   MonitorIcon,
   MoonIcon,
@@ -38,6 +40,8 @@ import { useProjectStore } from "@/stores/project-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 import { useUvSetupStore } from "@/stores/uv-setup-store";
+import { useDictionaryStore } from "@/stores/dictionary-store";
+import { useLanguageToolStore } from "@/stores/language-tool-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { UpdateSettings } from "@/components/updater/update-settings";
 import { compileLatex } from "@/lib/latex-compiler";
@@ -1033,6 +1037,43 @@ function EnvironmentStatus({ appVersion }: { appVersion: string }) {
   const [skillsInstalling, _setSkillsInstalling] = useState(false);
   const [showSkillsOnboarding, setShowSkillsOnboarding] = useState(false);
 
+  // ── Dictionary (WordNet) ──
+  const dictionaryStatus = useDictionaryStore((s) => s.status);
+  const dictionarySource = useDictionaryStore((s) => s.source);
+  const dictionaryVersion = useDictionaryStore((s) => s.version);
+  const dictionaryProgress = useDictionaryStore((s) => s.progress);
+  const dictionaryInstalling = useDictionaryStore((s) => s.isInstalling);
+  const dictionaryHasSystem = useDictionaryStore((s) => s.hasSystemDictionary);
+  const checkDictionary = useDictionaryStore((s) => s.checkStatus);
+  const installDictionary = useDictionaryStore((s) => s.install);
+
+  // ── Grammar checker (LanguageTool) ──
+  const grammarStatus = useLanguageToolStore((s) => s.status);
+  const grammarVersion = useLanguageToolStore((s) => s.version);
+  const grammarProgress = useLanguageToolStore((s) => s.progress);
+  const grammarInstalling = useLanguageToolStore((s) => s.isInstalling);
+  const grammarStarting = useLanguageToolStore((s) => s.isStarting);
+  const grammarExternal = useLanguageToolStore((s) => s.externallyManaged);
+  const checkGrammar = useLanguageToolStore((s) => s.checkStatus);
+  const installGrammar = useLanguageToolStore((s) => s.install);
+  const startGrammar = useLanguageToolStore((s) => s.start);
+
+  const runDictionaryInstall = useCallback(() => {
+    toast.promise(installDictionary(), {
+      loading: "Downloading the dictionary database...",
+      success: "Dictionary installed.",
+      error: (err) => `Could not install the dictionary: ${err}`,
+    });
+  }, [installDictionary]);
+
+  const runGrammarInstall = useCallback(() => {
+    toast.promise(installGrammar(), {
+      loading: "Downloading LanguageTool...",
+      success: "Grammar checking is ready.",
+      error: (err) => `Setup failed: ${err}`,
+    });
+  }, [installGrammar]);
+
   const checkSkills = useCallback(async () => {
     try {
       const gs = await invoke<SkillsStatus>("check_skills_installed", {
@@ -1047,7 +1088,9 @@ function EnvironmentStatus({ appVersion }: { appVersion: string }) {
   useEffect(() => {
     checkUv();
     checkSkills();
-  }, [checkUv, checkSkills]);
+    checkDictionary();
+    checkGrammar();
+  }, [checkUv, checkSkills, checkDictionary, checkGrammar]);
 
   // Listen for uv install completion
   useEffect(() => {
@@ -1110,6 +1153,15 @@ function EnvironmentStatus({ appVersion }: { appVersion: string }) {
                 ? `${skillsStatus.skill_count} skills`
                 : "Not installed"
           }
+          secondaryAction={
+            skillsStatus?.installed && !skillsInstalling
+              ? {
+                  label: "Reinstall",
+                  icon: "refresh",
+                  onClick: () => setShowSkillsOnboarding(true),
+                }
+              : undefined
+          }
           action={
             skillsInstalling
               ? { label: "Installing...", loading: true }
@@ -1118,6 +1170,82 @@ function EnvironmentStatus({ appVersion }: { appVersion: string }) {
                   onClick: () => setShowSkillsOnboarding(true),
                   icon: skillsStatus?.installed ? "settings" : "download",
                 }
+          }
+        />
+
+        {/* Dictionary (WordNet) */}
+        <StatusRow
+          ok={dictionaryStatus === "ready"}
+          label="Dictionary"
+          detail={
+            dictionaryInstalling
+              ? (dictionaryProgress?.message ?? "Downloading...")
+              : dictionaryStatus === "checking"
+                ? "Checking..."
+                : dictionaryStatus === "ready"
+                  ? dictionarySource === "user"
+                    ? `WordNet ${dictionaryVersion ?? ""} (downloaded)`.trim()
+                    : dictionaryHasSystem
+                      ? "System dictionary + bundled thesaurus"
+                      : "Bundled with the app"
+                  : "Not installed - right-click lookups have no entries"
+          }
+          secondaryAction={
+            dictionaryStatus === "ready" && !dictionaryInstalling
+              ? {
+                  label: "Reinstall",
+                  icon: "refresh",
+                  onClick: runDictionaryInstall,
+                }
+              : undefined
+          }
+          action={
+            dictionaryInstalling
+              ? { label: "Installing...", loading: true }
+              : dictionaryStatus === "ready"
+                ? { label: "Check", icon: "refresh", onClick: checkDictionary }
+                : { label: "Install", onClick: runDictionaryInstall }
+          }
+        />
+
+        {/* Grammar checker (LanguageTool) */}
+        <StatusRow
+          ok={grammarStatus === "ready"}
+          label="Grammar checker"
+          detail={
+            grammarInstalling
+              ? (grammarProgress?.message ?? "Downloading...")
+              : grammarStarting
+                ? "Starting server..."
+                : grammarStatus === "checking"
+                  ? "Checking..."
+                  : grammarStatus === "ready"
+                    ? grammarExternal
+                      ? "Running (started outside Latex4All)"
+                      : `LanguageTool ${grammarVersion ?? ""} running`.trim()
+                    : grammarStatus === "stopped"
+                      ? "Installed - server not running"
+                      : "Not installed (~250 MB)"
+          }
+          secondaryAction={
+            grammarStatus === "stopped" && !grammarInstalling
+              ? {
+                  label: "Reinstall",
+                  icon: "refresh",
+                  onClick: runGrammarInstall,
+                }
+              : undefined
+          }
+          action={
+            grammarInstalling
+              ? { label: "Installing...", loading: true }
+              : grammarStarting
+                ? { label: "Starting...", loading: true }
+                : grammarStatus === "ready"
+                  ? { label: "Check", icon: "refresh", onClick: checkGrammar }
+                  : grammarStatus === "stopped"
+                    ? { label: "Start", icon: "play", onClick: startGrammar }
+                    : { label: "Install", onClick: runGrammarInstall }
           }
         />
 
@@ -1145,16 +1273,15 @@ function StatusRow({
   label,
   detail,
   action,
+  secondaryAction,
 }: {
   ok: boolean;
   label: string;
   detail: string;
-  action?: {
-    label: string;
-    onClick?: () => void;
-    loading?: boolean;
-    icon?: "download" | "key" | "settings";
-  };
+  action?: StatusRowAction;
+  /** Shown to the left of `action` — the maintenance option ("Reinstall",
+   * "Start") that sits alongside the primary one. */
+  secondaryAction?: StatusRowAction;
 }) {
   return (
     <div className="flex min-h-12 min-w-0 items-center gap-3 px-4 py-3">
@@ -1185,26 +1312,43 @@ function StatusRow({
           {detail}
         </span>
       </div>
-      {action && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 shrink-0 rounded-md px-2.5 text-xs"
-          onClick={action.onClick}
-          disabled={action.loading}
-        >
-          {action.loading ? (
-            <Loader2Icon className="mr-1 size-3 animate-spin" />
-          ) : action.icon === "key" ? (
-            <KeyRoundIcon className="mr-1 size-3" />
-          ) : action.icon === "settings" ? (
-            <SettingsIcon className="mr-1 size-3" />
-          ) : (
-            <DownloadIcon className="mr-1 size-3" />
-          )}
-          {action.label}
-        </Button>
-      )}
+      {secondaryAction && <StatusRowButton action={secondaryAction} />}
+      {action && <StatusRowButton action={action} />}
     </div>
+  );
+}
+
+interface StatusRowAction {
+  label: string;
+  onClick?: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+  icon?: "download" | "key" | "settings" | "refresh" | "play";
+}
+
+function StatusRowButton({ action }: { action: StatusRowAction }) {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-7 shrink-0 rounded-md px-2.5 text-xs"
+      onClick={action.onClick}
+      disabled={action.loading || action.disabled}
+    >
+      {action.loading ? (
+        <Loader2Icon className="mr-1 size-3 animate-spin" />
+      ) : action.icon === "key" ? (
+        <KeyRoundIcon className="mr-1 size-3" />
+      ) : action.icon === "settings" ? (
+        <SettingsIcon className="mr-1 size-3" />
+      ) : action.icon === "refresh" ? (
+        <RefreshCwIcon className="mr-1 size-3" />
+      ) : action.icon === "play" ? (
+        <PlayIcon className="mr-1 size-3" />
+      ) : (
+        <DownloadIcon className="mr-1 size-3" />
+      )}
+      {action.label}
+    </Button>
   );
 }
