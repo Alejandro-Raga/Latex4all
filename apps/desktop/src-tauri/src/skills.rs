@@ -9,10 +9,23 @@ const TARBALL_URLS: &[&str] = &[
     "https://github.com/K-Dense-AI/claude-scientific-skills/archive/refs/heads/main.tar.gz",
 ];
 const SKILLS_DOWNLOAD_ATTEMPTS: usize = 3;
-const SKILLS_DOWNLOAD_TIMEOUT_SECS: u64 = 240;
 const SKILLS_CONNECT_TIMEOUT_SECS: u64 = 20;
-const SKILLS_INSTALL_TIMEOUT_SECS: u64 = 420;
+/// The upstream archive is ~230 MB (the repo carries ~215 MB of documentation
+/// screenshots alongside the ~24 MB of skills we actually install), so a
+/// deadline on the *whole* transfer is really a minimum-bandwidth requirement:
+/// the old 240 s cap silently demanded ~8 Mbit/s sustained and aborted anyone
+/// slower. Time out on a stalled connection instead — no bytes at all for this
+/// long — which is the condition actually worth giving up on.
+const SKILLS_DOWNLOAD_STALL_TIMEOUT_SECS: u64 = 90;
+/// Backstop for the whole install, not a bandwidth budget. It has to comfortably
+/// exceed the download itself or it just re-raises the problem one level up:
+/// the previous 420 s was shorter than two attempts at the 240 s transfer cap,
+/// so a single retry guaranteed this fired.
+const SKILLS_INSTALL_TIMEOUT_SECS: u64 = 2700;
 const SKILL_CONTENT_TIMEOUT_SECS: u64 = 45;
+/// Progress is emitted at most this often, so a slow download still visibly
+/// moves without flooding the webview.
+const SKILLS_PROGRESS_INTERVAL_SECS: u64 = 2;
 const RAW_SKILL_URLS: &[&str] = &[
     "https://raw.githubusercontent.com/K-Dense-AI/scientific-agent-skills/main/skills",
     "https://raw.githubusercontent.com/K-Dense-AI/claude-scientific-skills/main/scientific-skills",
@@ -733,6 +746,8 @@ fn configure_proxy_for_client(
     Ok(builder)
 }
 
+/// For small, quick requests, where a deadline on the whole exchange is the
+/// right thing to want.
 fn build_skills_http_client(
     timeout_secs: u64,
     window: Option<&WebviewWindow>,
@@ -740,6 +755,19 @@ fn build_skills_http_client(
     let builder = reqwest::Client::builder()
         .connect_timeout(Duration::from_secs(SKILLS_CONNECT_TIMEOUT_SECS))
         .timeout(Duration::from_secs(timeout_secs));
+
+    configure_proxy_for_client(builder, window)?
+        .build()
+        .map_err(|e| format!("Failed to create download client: {}", e))
+}
+
+/// For the archive download, which is large enough that how long it takes says
+/// more about the connection than about whether it is working. Bounded by how
+/// long it can go without delivering anything rather than by a total deadline.
+fn build_skills_download_client(window: Option<&WebviewWindow>) -> Result<reqwest::Client, String> {
+    let builder = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(SKILLS_CONNECT_TIMEOUT_SECS))
+        .read_timeout(Duration::from_secs(SKILLS_DOWNLOAD_STALL_TIMEOUT_SECS));
 
     configure_proxy_for_client(builder, window)?
         .build()
@@ -756,53 +784,124 @@ fn tarball_source_label(url: &str) -> &'static str {
     }
 }
 
-fn reset_download_workspace(tmp_dir: &Path) {
+/// Clears what a previous extraction left behind. Deliberately leaves the
+/// downloaded archive alone — `unpack_tarball` is reading it.
+fn reset_extraction_workspace(tmp_dir: &Path) {
     let _ = std::fs::remove_dir_all(tmp_dir.join("repo"));
     let _ = std::fs::remove_dir_all(tmp_dir.join("repo-raw"));
 }
 
-fn find_extracted_repo_dir(raw_dir: &Path) -> Option<PathBuf> {
-    let mut candidates = Vec::new();
-    let entries = std::fs::read_dir(raw_dir).ok()?;
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            candidates.push(path);
-        }
-    }
-    candidates.sort();
-
-    for candidate in &candidates {
-        if find_skills_source(candidate).is_some() {
-            return Some(candidate.clone());
-        }
-    }
-
-    candidates.into_iter().next()
+/// Clears everything a previous *attempt* left behind, including a partial
+/// archive the next attempt must not try to decompress.
+fn reset_download_workspace(tmp_dir: &Path) {
+    reset_extraction_workspace(tmp_dir);
+    let _ = std::fs::remove_file(tmp_dir.join("archive.tar.gz"));
 }
 
-fn unpack_tarball(bytes: &[u8], tmp_dir: &Path) -> Result<(), String> {
-    reset_download_workspace(tmp_dir);
+/// Everything below the archive's single top-level directory, or `None` for
+/// that directory itself. GitHub archives always wrap the tree in one
+/// `<repo>-<ref>/` component; stripping it keeps paths short (Windows still
+/// caps most APIs at 260 characters) and puts `skills/` where
+/// `find_skills_source` looks for it.
+fn strip_archive_root(path: &Path) -> Option<PathBuf> {
+    let mut components = path.components();
+    components.next()?;
+    let rest = components.as_path();
+    if rest.as_os_str().is_empty() {
+        None
+    } else {
+        Some(rest.to_path_buf())
+    }
+}
 
-    let raw_dir = tmp_dir.join("repo-raw");
-    std::fs::create_dir_all(&raw_dir)
+/// True for a path the installer will actually keep. The upstream repository
+/// is ~90% documentation screenshots by weight, none of which `copy_skills`
+/// ever looks at — writing them out only costs disk churn and, on Windows, a
+/// virus scan of every one of them.
+fn is_wanted_archive_path(relative: &Path) -> bool {
+    relative
+        .components()
+        .next()
+        .and_then(|first| first.as_os_str().to_str())
+        .map(|first| SKILLS_SUBFOLDERS.contains(&first))
+        .unwrap_or(false)
+}
+
+/// Rejects anything that would write outside `dest` — `..`, an absolute path,
+/// or a Windows drive prefix.
+fn is_safe_relative_path(relative: &Path) -> bool {
+    relative
+        .components()
+        .all(|c| matches!(c, std::path::Component::Normal(_)))
+}
+
+/// Unpacks `archive` into `dest`, keeping only the entries `keep` accepts.
+/// Returns how many files were written.
+fn unpack_filtered(
+    archive: &Path,
+    dest: &Path,
+    keep: impl Fn(&Path) -> bool,
+) -> Result<usize, String> {
+    let file = std::fs::File::open(archive)
+        .map_err(|e| format!("Failed to open downloaded archive: {}", e))?;
+    let decoder = flate2::read::GzDecoder::new(std::io::BufReader::new(file));
+    let mut tar = tar::Archive::new(decoder);
+
+    let mut written = 0usize;
+    for entry in tar
+        .entries()
+        .map_err(|e| format!("Failed to read tarball: {}", e))?
+    {
+        let mut entry = entry.map_err(|e| format!("Corrupt tarball entry: {}", e))?;
+        if !entry.header().entry_type().is_file() {
+            continue;
+        }
+        let path = entry
+            .path()
+            .map_err(|e| format!("Corrupt tarball entry: {}", e))?
+            .into_owned();
+        let Some(relative) = strip_archive_root(&path) else {
+            continue;
+        };
+        if !is_safe_relative_path(&relative) || !keep(&relative) {
+            continue;
+        }
+
+        let target = dest.join(&relative);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create {}: {}", parent.display(), e))?;
+        }
+        let mut out = std::fs::File::create(&target)
+            .map_err(|e| format!("Failed to create {}: {}", target.display(), e))?;
+        std::io::copy(&mut entry, &mut out)
+            .map_err(|e| format!("Failed to extract {}: {}", target.display(), e))?;
+        written += 1;
+    }
+
+    Ok(written)
+}
+
+fn unpack_tarball(archive: &Path, tmp_dir: &Path) -> Result<(), String> {
+    reset_extraction_workspace(tmp_dir);
+
+    let repo_dir = tmp_dir.join("repo");
+    std::fs::create_dir_all(&repo_dir)
         .map_err(|e| format!("Failed to create extraction dir: {}", e))?;
 
-    let decoder = flate2::read::GzDecoder::new(bytes);
-    let mut archive = tar::Archive::new(decoder);
+    let written = unpack_filtered(archive, &repo_dir, is_wanted_archive_path)?;
 
-    archive
-        .unpack(&raw_dir)
-        .map_err(|e| format!("Failed to extract tarball: {}", e))?;
+    // Should upstream ever move the skills out from under those folder names,
+    // fall back to unpacking the whole archive rather than reporting an empty
+    // install — `find_skills_source` can still go looking.
+    if written == 0 {
+        unpack_filtered(archive, &repo_dir, |_| true)?;
+    }
 
-    let repo_source = find_extracted_repo_dir(&raw_dir)
-        .ok_or_else(|| "Downloaded tarball did not contain a repository directory".to_string())?;
+    if find_skills_source(&repo_dir).is_none() {
+        return Err("Downloaded archive did not contain a skills directory".to_string());
+    }
 
-    std::fs::rename(&repo_source, tmp_dir.join("repo"))
-        .map_err(|e| format!("Failed to prepare extracted repo: {}", e))?;
-
-    let _ = std::fs::remove_dir_all(&raw_dir);
     Ok(())
 }
 
@@ -831,40 +930,113 @@ async fn download_tarball_once(
         ));
     }
 
+    // Streamed to disk rather than accumulated in a Vec: the archive is ~230 MB,
+    // which is a lot of resident memory to hold only to hand straight to the
+    // gzip reader.
+    let archive_path = tmp_dir.join("archive.tar.gz");
+    let mut file = tokio::fs::File::create(&archive_path)
+        .await
+        .map_err(|e| format!("Failed to create {}: {}", archive_path.display(), e))?;
+
     let total_size = response.content_length();
-    let mut bytes =
-        Vec::with_capacity(total_size.unwrap_or_default().min(64 * 1024 * 1024) as usize);
     let mut downloaded = 0_u64;
-    let mut last_emitted_percent = 0_u64;
+    let started = std::time::Instant::now();
+    let mut last_emitted = std::time::Instant::now();
 
     while let Some(chunk) = response
         .chunk()
         .await
         .map_err(|e| format!("Failed to read download bytes: {}", e))?
     {
+        use tokio::io::AsyncWriteExt;
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| format!("Failed to write downloaded archive: {}", e))?;
         downloaded += chunk.len() as u64;
-        bytes.extend_from_slice(&chunk);
 
-        if let Some(total) = total_size {
-            if total > 0 {
-                let percent = ((downloaded.saturating_mul(100)) / total).min(100);
-                if percent >= last_emitted_percent + 5 || percent == 100 {
-                    emit_log(window, &format!("Download progress {}%", percent));
-                    last_emitted_percent = percent;
-                }
-            }
-        } else if downloaded / (1024 * 1024) > last_emitted_percent {
-            last_emitted_percent = downloaded / (1024 * 1024);
-            emit_log(window, &format!("Downloaded {} MiB", last_emitted_percent));
+        // Time-based rather than percentage-based: on a slow link the old
+        // 5%-step logging could go minutes without a word, which is exactly
+        // when the user most needs to see that it is still moving.
+        if last_emitted.elapsed() >= Duration::from_secs(SKILLS_PROGRESS_INTERVAL_SECS) {
+            last_emitted = std::time::Instant::now();
+            emit_log(window, &download_progress_message(downloaded, total_size, started.elapsed()));
         }
     }
 
-    unpack_tarball(&bytes, tmp_dir)
+    use tokio::io::AsyncWriteExt as _;
+    file.flush()
+        .await
+        .map_err(|e| format!("Failed to finish writing the archive: {}", e))?;
+    drop(file);
+
+    emit_log(
+        window,
+        &format!(
+            "Downloaded {} in {}",
+            format_megabytes(downloaded),
+            format_duration(started.elapsed())
+        ),
+    );
+
+    emit_log(window, "Extracting skills...");
+    let archive_for_task = archive_path.clone();
+    let tmp_for_task = tmp_dir.to_path_buf();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        unpack_tarball(&archive_for_task, &tmp_for_task)
+    })
+    .await
+    .map_err(|e| format!("Extraction task failed: {}", e))?;
+
+    // The archive is the largest thing in the temp directory by far; drop it as
+    // soon as it has been unpacked rather than at the end of the install.
+    let _ = std::fs::remove_file(&archive_path);
+    result
+}
+
+fn format_megabytes(bytes: u64) -> String {
+    format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+}
+
+fn format_duration(elapsed: Duration) -> String {
+    let secs = elapsed.as_secs();
+    if secs < 60 {
+        format!("{}s", secs)
+    } else {
+        format!("{}m {:02}s", secs / 60, secs % 60)
+    }
+}
+
+/// "45.2 MB of 230.1 MB (19%) — 1.4 MB/s". Falls back gracefully when the
+/// server declines to send a Content-Length.
+fn download_progress_message(
+    downloaded: u64,
+    total: Option<u64>,
+    elapsed: Duration,
+) -> String {
+    let rate = {
+        let seconds = elapsed.as_secs_f64();
+        if seconds > 0.0 {
+            format!(" — {:.1} MB/s", downloaded as f64 / 1_048_576.0 / seconds)
+        } else {
+            String::new()
+        }
+    };
+
+    match total.filter(|t| *t > 0) {
+        Some(total) => format!(
+            "Downloaded {} of {} ({}%){}",
+            format_megabytes(downloaded),
+            format_megabytes(total),
+            (downloaded.saturating_mul(100) / total).min(100),
+            rate
+        ),
+        None => format!("Downloaded {}{}", format_megabytes(downloaded), rate),
+    }
 }
 
 /// Download and extract tarball.
 async fn download_tarball(window: &WebviewWindow, tmp_dir: &Path) -> Result<(), String> {
-    let client = build_skills_http_client(SKILLS_DOWNLOAD_TIMEOUT_SECS, Some(window))?;
+    let client = build_skills_download_client(Some(window))?;
 
     let mut last_error = None;
     for attempt in 1..=SKILLS_DOWNLOAD_ATTEMPTS {
@@ -1315,8 +1487,11 @@ async fn install_skills_with_timeout(
         Ok(result) => result,
         Err(_) => {
             let message = format!(
-                "Skills installation timed out after {} seconds. Check your network or try again later.",
-                SKILLS_INSTALL_TIMEOUT_SECS
+                "Skills installation timed out after {} minutes. The download is about 230 MB, \
+                 so this usually means a very slow or repeatedly interrupted connection — \
+                 the install log above shows how far it got. A proxy that buffers large \
+                 downloads can also cause it.",
+                SKILLS_INSTALL_TIMEOUT_SECS / 60
             );
             emit_log(window, &message);
             Err(message)
@@ -1698,5 +1873,174 @@ mod tests {
         assert!(info.description.contains("RNA-seq"));
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // ── Archive extraction ──
+
+    /// A gzipped tarball shaped like a GitHub source archive: one top-level
+    /// `<repo>-<ref>/` directory wrapping everything.
+    fn fake_repo_archive(dir: &Path, entries: &[(&str, &str)]) -> PathBuf {
+        use std::io::Write;
+
+        let mut tar_bytes = Vec::new();
+        {
+            let mut builder = tar::Builder::new(&mut tar_bytes);
+            for (name, contents) in entries {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(contents.len() as u64);
+                header.set_mode(0o644);
+                header.set_cksum();
+                builder
+                    .append_data(
+                        &mut header,
+                        format!("scientific-agent-skills-main/{}", name),
+                        contents.as_bytes(),
+                    )
+                    .unwrap();
+            }
+            builder.finish().unwrap();
+        }
+
+        let path = dir.join("archive.tar.gz");
+        let mut encoder = flate2::write::GzEncoder::new(
+            std::fs::File::create(&path).unwrap(),
+            flate2::Compression::fast(),
+        );
+        encoder.write_all(&tar_bytes).unwrap();
+        encoder.finish().unwrap().flush().unwrap();
+        path
+    }
+
+    fn skill_entries() -> Vec<(&'static str, &'static str)> {
+        vec![
+            ("skills/astropy/SKILL.md", "---\nname: astropy\n---\n"),
+            ("skills/astropy/references/wcs.md", "notes"),
+            ("skills/rdkit/SKILL.md", "---\nname: rdkit\n---\n"),
+        ]
+    }
+
+    #[test]
+    fn strip_archive_root_drops_the_wrapper_directory() {
+        assert_eq!(
+            strip_archive_root(Path::new("repo-main/skills/astropy/SKILL.md")),
+            Some(PathBuf::from("skills/astropy/SKILL.md"))
+        );
+        // The wrapper directory itself has nothing below it.
+        assert_eq!(strip_archive_root(Path::new("repo-main")), None);
+    }
+
+    #[test]
+    fn only_the_skills_subtree_is_wanted() {
+        assert!(is_wanted_archive_path(Path::new("skills/astropy/SKILL.md")));
+        assert!(is_wanted_archive_path(Path::new(
+            "scientific-skills/astropy/SKILL.md"
+        )));
+        assert!(!is_wanted_archive_path(Path::new("docs/images/astropy.png")));
+        assert!(!is_wanted_archive_path(Path::new("README.md")));
+        assert!(!is_wanted_archive_path(Path::new("tests/astropy/case.md")));
+    }
+
+    #[test]
+    fn traversal_paths_are_rejected() {
+        assert!(is_safe_relative_path(Path::new("skills/astropy/SKILL.md")));
+        assert!(!is_safe_relative_path(Path::new("../escaped.md")));
+        assert!(!is_safe_relative_path(Path::new("skills/../../escaped.md")));
+        assert!(!is_safe_relative_path(Path::new("/etc/passwd")));
+    }
+
+    #[test]
+    fn unpack_keeps_the_skills_and_leaves_the_documentation_behind() {
+        // The upstream repo is ~90% screenshots by weight; extracting them
+        // costs disk churn and, on Windows, a virus scan per file, and
+        // `copy_skills` never looks at them.
+        let tmp = tempfile::tempdir().unwrap();
+        let mut entries = skill_entries();
+        entries.push(("docs/images/astropy.png", "pretend this is 1.5 MB"));
+        entries.push(("docs/k-dense-web.gif", "pretend this is 22 MB"));
+        entries.push(("README.md", "readme"));
+        let archive = fake_repo_archive(tmp.path(), &entries);
+
+        unpack_tarball(&archive, tmp.path()).unwrap();
+
+        let repo = tmp.path().join("repo");
+        assert!(repo.join("skills/astropy/SKILL.md").is_file());
+        assert!(repo.join("skills/astropy/references/wcs.md").is_file());
+        assert!(repo.join("skills/rdkit/SKILL.md").is_file());
+        assert!(!repo.join("docs").exists());
+        assert!(!repo.join("README.md").exists());
+    }
+
+    #[test]
+    fn unpack_falls_back_to_everything_when_the_layout_changes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = fake_repo_archive(
+            tmp.path(),
+            &[
+                ("packs/astropy/SKILL.md", "---\nname: astropy\n---\n"),
+                ("README.md", "readme"),
+            ],
+        );
+
+        unpack_tarball(&archive, tmp.path()).unwrap();
+
+        let repo = tmp.path().join("repo");
+        assert!(repo.join("packs/astropy/SKILL.md").is_file());
+        assert!(find_skills_source(&repo).is_some());
+    }
+
+    #[test]
+    fn unpack_reports_an_archive_with_no_skills_in_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let archive = fake_repo_archive(tmp.path(), &[("README.md", "readme")]);
+
+        let error = unpack_tarball(&archive, tmp.path()).unwrap_err();
+        assert!(error.contains("skills directory"), "unexpected: {error}");
+    }
+
+    #[test]
+    fn unpack_replaces_a_previous_attempt() {
+        let tmp = tempfile::tempdir().unwrap();
+        let stale = tmp.path().join("repo/skills/gone");
+        std::fs::create_dir_all(&stale).unwrap();
+        std::fs::write(stale.join("SKILL.md"), "---\nname: gone\n---\n").unwrap();
+
+        let archive = fake_repo_archive(tmp.path(), &skill_entries());
+        unpack_tarball(&archive, tmp.path()).unwrap();
+
+        assert!(!tmp.path().join("repo/skills/gone").exists());
+        assert!(tmp.path().join("repo/skills/astropy/SKILL.md").is_file());
+    }
+
+    // ── Progress reporting ──
+
+    #[test]
+    fn progress_message_reports_size_share_and_rate() {
+        let message = download_progress_message(
+            50 * 1_048_576,
+            Some(200 * 1_048_576),
+            Duration::from_secs(25),
+        );
+        assert!(message.contains("50.0 MB of 200.0 MB"), "{message}");
+        assert!(message.contains("(25%)"), "{message}");
+        assert!(message.contains("2.0 MB/s"), "{message}");
+    }
+
+    #[test]
+    fn progress_message_copes_without_a_content_length() {
+        let message =
+            download_progress_message(10 * 1_048_576, None, Duration::from_secs(5));
+        assert!(message.contains("10.0 MB"), "{message}");
+        assert!(!message.contains("of"), "{message}");
+    }
+
+    #[test]
+    fn the_install_budget_allows_for_every_download_attempt() {
+        // The old 420 s install cap was shorter than two download attempts,
+        // so one retry guaranteed a spurious "installation timed out".
+        assert!(
+            SKILLS_INSTALL_TIMEOUT_SECS
+                > SKILLS_DOWNLOAD_STALL_TIMEOUT_SECS * SKILLS_DOWNLOAD_ATTEMPTS as u64,
+            "the install budget must outlast the download attempts it wraps"
+        );
     }
 }

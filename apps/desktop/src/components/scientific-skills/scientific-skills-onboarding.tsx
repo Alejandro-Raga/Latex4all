@@ -343,11 +343,19 @@ export function ScientificSkillsOnboarding({
                   ? "Installation Failed"
                   : "Installing Skills"}
             </DialogTitle>
-            {isComplete && (
+            {isComplete ? (
               <DialogDescription>
                 {installResult?.skills_installed ?? 0} scientific skills are now
                 available.
               </DialogDescription>
+            ) : (
+              !error && (
+                <DialogDescription>
+                  This downloads about 230 MB, so it can take several minutes on
+                  a slow connection. You can leave this open — progress is shown
+                  below.
+                </DialogDescription>
+              )
             )}
           </DialogHeader>
 

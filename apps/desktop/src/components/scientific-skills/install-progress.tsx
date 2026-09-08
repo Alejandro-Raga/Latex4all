@@ -10,28 +10,64 @@ const PHASE_MAP: Record<string, number> = {
   "Downloading skills": 20,
   "downloading tarball": 20,
   "Download complete": 60,
+  "Extracting skills": 62,
   "Copying skills": 70,
   Copied: 90,
   "Cleanup complete": 95,
 };
 
-function pctFromLog(log: string): number | null {
-  const downloadMatch = log.match(/^Download progress\s+(\d+)%/i);
-  if (downloadMatch?.[1]) {
-    const downloadPct = Math.max(0, Math.min(100, Number(downloadMatch[1])));
-    return Math.round(20 + downloadPct * 0.4);
+/** The archive is ~230 MB, so the download owns most of the wall clock; give
+ * it the widest band of the bar. */
+const DOWNLOAD_START_PCT = 20;
+const DOWNLOAD_END_PCT = 60;
+
+/** Matches "Downloaded 45.2 MB of 230.1 MB (19%) — 1.4 MB/s" — the shape
+ * `download_progress_message` in skills.rs emits while bytes are arriving. */
+const DOWNLOAD_SHARE_RE =
+  /^Downloaded\s+[\d.]+\s*MB\s+of\s+[\d.]+\s*MB\s+\((\d+)%\)/i;
+/** Matches "Downloaded 45.2 MB — 1.4 MB/s", used when the server sends no
+ * Content-Length and there is no share to report. */
+const DOWNLOAD_BYTES_RE = /^Downloaded\s+([\d.]+)\s*MB/i;
+/** The pre-existing "Downloaded 45 MiB" wording, still emitted by older
+ * builds a user may be upgrading from. */
+const DOWNLOAD_LEGACY_RE = /^Downloaded\s+(\d+)\s+MiB/i;
+
+export function pctFromLog(log: string): number | null {
+  const legacyPercent = log.match(/^Download progress\s+(\d+)%/i);
+  if (legacyPercent?.[1]) {
+    return scaleDownload(Number(legacyPercent[1]));
   }
 
-  const downloadedMatch = log.match(/^Downloaded\s+(\d+)\s+MiB/i);
-  if (downloadedMatch?.[1]) {
-    const mib = Math.max(0, Number(downloadedMatch[1]));
-    return Math.min(55, 20 + mib);
+  const share = log.match(DOWNLOAD_SHARE_RE);
+  if (share?.[1]) {
+    return scaleDownload(Number(share[1]));
+  }
+
+  // No total to divide by: creep toward the middle of the download band on
+  // megabytes seen, so the bar still moves without ever claiming to be done.
+  const bytes = log.match(DOWNLOAD_BYTES_RE) ?? log.match(DOWNLOAD_LEGACY_RE);
+  if (bytes?.[1]) {
+    const megabytes = Math.max(0, Number(bytes[1]));
+    if (Number.isFinite(megabytes)) {
+      return Math.min(
+        DOWNLOAD_END_PCT - 5,
+        DOWNLOAD_START_PCT + Math.round(megabytes / 8),
+      );
+    }
   }
 
   for (const [key, pct] of Object.entries(PHASE_MAP)) {
     if (log.toLowerCase().includes(key.toLowerCase())) return pct;
   }
   return null;
+}
+
+function scaleDownload(percent: number): number {
+  const clamped = Math.max(0, Math.min(100, percent));
+  return Math.round(
+    DOWNLOAD_START_PCT +
+      (clamped * (DOWNLOAD_END_PCT - DOWNLOAD_START_PCT)) / 100,
+  );
 }
 
 interface InstallProgressProps {
