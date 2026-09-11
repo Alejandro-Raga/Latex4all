@@ -20,6 +20,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-11
+
+### Fixed
+
+- The release channel could stop offering updates entirely. It polled GitHub's
+  `releases/latest`, which resolves to whichever non-prerelease was published
+  most recently — so publishing anything else, such as a data-only release,
+  quietly made that the "latest" release and every update check answered 404.
+  Both channels now read a fixed rolling tag that CI rewrites in place, so
+  publishing other releases cannot affect them.
+
 ### Changed
 
 - Plainer wording throughout the menus and dialogs: "From a template" rather

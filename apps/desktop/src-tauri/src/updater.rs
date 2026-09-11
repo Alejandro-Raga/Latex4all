@@ -6,18 +6,28 @@
 //! swap the endpoint per call.
 //!
 //! Both channels are served by the same GitHub repo and verified against the
-//! same pubkey in `tauri.conf.json`; only the manifest they read differs. The
-//! release channel follows `releases/latest`, which GitHub resolves to the
-//! newest *non-prerelease* tag, so publishing test builds as prereleases keeps
-//! them invisible to release-channel users automatically.
+//! same pubkey in `tauri.conf.json`; only the manifest they read differs. Each
+//! reads a rolling tag that CI rewrites in place — `release-latest` and
+//! `testing-latest` — so both endpoints are URLs that never change and neither
+//! depends on GitHub's notion of which release is "latest".
 
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_updater::UpdaterExt;
 
+/// Rolling tag holding nothing but the release manifest, mirroring how
+/// `testing-latest` works for the test channel.
+///
+/// This deliberately does *not* use `releases/latest`. GitHub resolves that to
+/// whichever non-prerelease was published most recently, which is not the same
+/// thing as the newest app release: publishing `dictionary-data-v1` on
+/// 2026-09-08 made a data-only release "latest", and because it carries no
+/// `latest.json` the entire release channel answered 404 until the next app
+/// release displaced it. Nothing surfaced the breakage — update checks simply
+/// failed. A fixed tag cannot be hijacked by publishing something else.
 const RELEASE_ENDPOINT: &str =
-    "https://github.com/Alejandro-Raga/Latex4all/releases/latest/download/latest.json";
+    "https://github.com/Alejandro-Raga/Latex4all/releases/download/release-latest/latest.json";
 
 /// Rolling prerelease tag that testing-branch builds overwrite in place, so the
 /// URL stays constant while the artifacts behind it change. The tag is

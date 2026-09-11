@@ -907,4 +907,35 @@ jobs:
             gh release upload "$TAG" "$file" --clobber
           done
 
-      # Release stays as draft — publish manually from GitHub Releases UI
+      - name: Refresh the release-channel pointer
+        if: steps.tag.outputs.channel == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          # The updater polls this fixed tag rather than `releases/latest`.
+          # GitHub resolves "latest" to whichever non-prerelease was published
+          # most recently, which is not the same as the newest app release:
+          # publishing `dictionary-data-v1` made a data-only release "latest"
+          # and the release channel answered 404 until the next app release
+          # displaced it, with nothing anywhere reporting the breakage.
+          #
+          # Holds only the manifest — the download URLs inside it already point
+          # at the versioned release, so the binaries are not duplicated. Marked
+          # prerelease so this pointer never becomes `releases/latest` itself,
+          # leaving the versioned release as the one people land on. Published
+          # rather than draft: assets on a draft are unreachable by the stable
+          # URL the updater polls.
+          NOTES="Machine-readable pointer used by the in-app updater; currently $TAG. Download Latex4All from the versioned release instead."
+          if gh release view release-latest > /dev/null 2>&1; then
+            gh release edit release-latest --prerelease --latest=false \
+              --title "Latex4All (release channel pointer)" --notes "$NOTES"
+          else
+            gh release create release-latest --prerelease --latest=false \
+              --title "Latex4All (release channel pointer)" --notes "$NOTES"
+          fi
+          gh release upload release-latest "${{ steps.tag.outputs.manifest }}" --clobber
+
+      # The versioned release stays a draft — publish it from the GitHub
+      # Releases UI. Keep marking it "latest" when you do: apps built before
+      # the pointer existed still poll `releases/latest`.
