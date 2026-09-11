@@ -19,10 +19,10 @@
 > ### A fork of [Claude Prism](https://github.com/delibae/claude-prism)
 >
 > Latex4All is a personal fork of [delibae/claude-prism](https://github.com/delibae/claude-prism).
-> The upstream project is the foundation; everything added on top of it — Zotero
+> Everything added on top of it, such as Zotero
 > integration and one-click BibTeX capture, dictionary/thesaurus (WordNet) and
 > grammar checking, LaTeX autocompletion, the Windows port, and the self-updating
-> release/test channels — was written by Claude Code.
+> release/test channels was implemented by me through vibe-coding. As a disclaimer, i am not a programmer nor do i intend to pass as one, i just wanted to add features that i deeemed useful. 
 >
 > **My involvement is direction, not authorship.** I decided what to build, made
 > the design and architecture calls, tested it on real documents and hardware, and
