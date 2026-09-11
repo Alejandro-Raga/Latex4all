@@ -3,7 +3,7 @@
  * Stamp a test-channel build version into tauri.conf.json.
  *
  * The updater compares the manifest's version against the version compiled
- * into the running app. Every testing-branch build otherwise reports the same
+ * into the running app. Every trunk build otherwise reports the same
  * `1.0.0` as the last release, so the updater would see nothing newer and the
  * test channel would never deliver anything.
  *

@@ -22,9 +22,11 @@ on:
     tags:
       - "v*"
     branches:
-      # Test channel: every push here is published to the rolling `testing`
-      # prerelease that latest-test.json points at.
-      - testing
+      # Test channel: every push to the trunk is published to the rolling
+      # `testing-latest` prerelease that latest-test.json points at. There is no
+      # separate testing branch — one trunk, two channels: pushes go to test,
+      # tags go to release.
+      - main
 
 permissions:
   contents: write
@@ -112,7 +114,7 @@ jobs:
       # Test-channel builds must climb in version or the updater has nothing
       # newer to offer. See scripts/stamp-test-version.mjs.
       - name: Stamp test-channel version
-        if: github.ref == 'refs/heads/testing'
+        if: github.ref == 'refs/heads/main'
         shell: bash
         run: node scripts/stamp-test-version.mjs
 
@@ -292,7 +294,7 @@ jobs:
       # Test-channel builds must climb in version or the updater has nothing
       # newer to offer. See scripts/stamp-test-version.mjs.
       - name: Stamp test-channel version
-        if: github.ref == 'refs/heads/testing'
+        if: github.ref == 'refs/heads/main'
         shell: bash
         run: node scripts/stamp-test-version.mjs
 
@@ -404,7 +406,7 @@ jobs:
   # Ref: https://v2.tauri.app/plugin/updater/ (platform key: darwin-x86_64)
   # ──────────────────────────────────────────────
   # DEPRECATED (2026-09-06): Intel macOS is no longer a supported target. The job
-  # no longer runs on release tags, on the testing branch, or on an "all"
+  # no longer runs on release tags, on the trunk, or on an "all"
   # dispatch, so `publish` sees no Intel signature and drops darwin-x86_64 from
   # the manifest and the release assets. Kept buildable behind an explicit
   # `platforms: macos-intel` dispatch so the target can be revived without
@@ -739,7 +741,7 @@ jobs:
       && (
         startsWith(github.ref, 'refs/tags/v')
         || inputs.release_tag != ''
-        || github.ref == 'refs/heads/testing'
+        || github.ref == 'refs/heads/main'
       )
 
     steps:
@@ -752,11 +754,9 @@ jobs:
       - name: Determine tag and channel
         id: tag
         run: |
-          if [[ "$GITHUB_REF" == "refs/heads/testing" ]]; then
-            # Rolling tag: every testing build overwrites the same prerelease,
-            # so latest-test.json lives at a URL that never changes. Named
-            # distinctly from the `testing` *branch* — a tag and branch sharing
-            # a name makes every bare `testing` ref ambiguous to git.
+          if [[ "$GITHUB_REF" == "refs/heads/main" ]]; then
+            # Rolling tag: every trunk build overwrites the same prerelease, so
+            # latest-test.json lives at a URL that never changes.
             echo "tag=testing-latest" >> $GITHUB_OUTPUT
             echo "channel=test" >> $GITHUB_OUTPUT
             echo "manifest=latest-test.json" >> $GITHUB_OUTPUT
@@ -866,7 +866,7 @@ jobs:
           # manifest the updater plugin parses stays exactly the shape it
           # expects. The app compares it against the commit stamped into itself
           # and skips an update that would reinstall the code already running —
-          # which is what a channel switch does, since the tip of `testing` and
+          # which is what a channel switch does, since the tip of the trunk and
           # a release cut from the same commit have different version numbers.
           node -e "
             const fs = require('fs');
