@@ -94,6 +94,48 @@ describe("project-grouping", () => {
     });
   });
 
+  describe("ordering by date created", () => {
+    it("puts the newest folder first", () => {
+      const createdAt = new Map([
+        ["/paper", 900],
+        ["/thesis", 100],
+        ["/talk", 500],
+        ["/notes", 300],
+      ]);
+      const groups = groupProjects({ ...base, sort: "created", createdAt });
+      expect(groups[0].projects.map((p) => p.path)).toEqual([
+        "/paper",
+        "/talk",
+        "/notes",
+        "/thesis",
+      ]);
+    });
+
+    it("falls back for a folder not read from disk yet", () => {
+      // Created dates arrive asynchronously. A project still waiting on its
+      // stat should sit where its other timestamps put it, not jump to an end.
+      const createdAt = new Map([["/notes", 900]]);
+      const addedAt = new Map([["/paper", 800]]);
+      const groups = groupProjects({
+        ...base,
+        sort: "created",
+        createdAt,
+        addedAt,
+      });
+      expect(groups[0].projects.map((p) => p.path)).toEqual([
+        "/notes",
+        "/paper",
+        "/thesis",
+        "/talk",
+      ]);
+    });
+
+    it("works with no created dates at all", () => {
+      const groups = groupProjects({ ...base, sort: "created" });
+      expect(groups[0].projects).toHaveLength(4);
+    });
+  });
+
   describe("grouping by type", () => {
     const types = new Map([
       ["/thesis", "Thesis"],

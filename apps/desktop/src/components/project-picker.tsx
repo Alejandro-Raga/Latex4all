@@ -13,6 +13,7 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile, readTextFile, stat } from "@tauri-apps/plugin-fs";
 import { groupProjects, type ProjectSort } from "@/lib/project-grouping";
+import { syncProjectTypes } from "@/lib/project-type-sync";
 import {
   PROJECT_TYPE_SUGGESTIONS,
   normalizeType,
@@ -218,8 +219,22 @@ export function ProjectPicker() {
         );
         if (cancelled || projects.length === 0) return;
 
+        // Seeded from the folder rather than the clock. Adding them in a loop
+        // stamped every project with the same instant, which left "Recent" and
+        // "Date added" showing one arbitrary order that never changed and
+        // looked broken. These are projects the app found, not ones it watched
+        // being opened, so the folder's own times are the only real answer
+        // available.
         for (const project of [...projects].reverse()) {
-          addRecentProject(project.path);
+          const [modified, created] = await Promise.all([
+            getProjectModifiedAt(project.path),
+            getProjectCreatedAt(project.path),
+          ]);
+          if (cancelled) return;
+          addRecentProject(project.path, {
+            lastOpened: modified ?? undefined,
+            addedAt: created ?? modified ?? undefined,
+          });
         }
       } catch (err) {
         console.warn("Failed to discover default projects:", err);
@@ -268,7 +283,8 @@ export function ProjectPicker() {
   };
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
-  const [projectSort, setProjectSort] = useState<ProjectSort>("recent");
+  const projectSort = useProjectStore((s) => s.projectSort);
+  const setProjectSort = useProjectStore((s) => s.setProjectSort);
   const [typePrompt, setTypePrompt] = useState<string | null>(null);
   const [customType, setCustomType] = useState("");
 
@@ -900,6 +916,20 @@ async function getProjectCreatedAt(
       statDateToMs(info.ctime) ??
       statDateToMs(info.mtime)
     );
+  } catch {
+    return null;
+  }
+}
+
+/** When the folder was last written to. The best available stand-in for "when
+ *  you last worked on this" for a project the app discovered rather than
+ *  watched you open. */
+async function getProjectModifiedAt(
+  projectPath: string,
+): Promise<number | null> {
+  try {
+    const info = (await stat(projectPath)) as { mtime?: unknown };
+    return statDateToMs(info.mtime);
   } catch {
     return null;
   }

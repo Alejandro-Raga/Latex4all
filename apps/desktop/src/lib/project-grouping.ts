@@ -11,7 +11,7 @@
 
 import { UNTYPED_LABEL } from "@/lib/project-meta";
 
-export type ProjectSort = "recent" | "added" | "type";
+export type ProjectSort = "recent" | "added" | "created" | "type";
 
 export interface SortableProject {
   path: string;
@@ -38,6 +38,9 @@ export interface GroupingInput<T extends SortableProject> {
   /** Path to when it was added. Absent falls back to lastOpened, which is what
    *  every project recorded before the field existed. */
   addedAt: ReadonlyMap<string, number>;
+  /** Path to the folder's creation time. Absent until it has been read from
+   *  disk, where date-added stands in so the order is still stable. */
+  createdAt?: ReadonlyMap<string, number>;
 }
 
 export const FAVORITES_LABEL = "Favourites";
@@ -54,6 +57,18 @@ function byAdded<T extends SortableProject>(
     (addedAt.get(a.path) ?? a.lastOpened);
 }
 
+/** Newest first, falling back through date-added to last-opened so a project
+ *  whose folder has not been read yet still lands somewhere sensible rather
+ *  than jumping to one end of the list. */
+function byCreated<T extends SortableProject>(
+  createdAt: ReadonlyMap<string, number>,
+  addedAt: ReadonlyMap<string, number>,
+) {
+  const when = (p: T) =>
+    createdAt.get(p.path) ?? addedAt.get(p.path) ?? p.lastOpened;
+  return (a: T, b: T) => when(b) - when(a);
+}
+
 /**
  * Favourites are pinned above everything and are not repeated in the groups
  * below — a project in two places at once reads as two projects.
@@ -64,8 +79,14 @@ export function groupProjects<T extends SortableProject>({
   favorites,
   types,
   addedAt,
+  createdAt,
 }: GroupingInput<T>): ProjectGroup<T>[] {
-  const compare = sort === "added" ? byAdded<T>(addedAt) : byRecency<T>;
+  const compare =
+    sort === "added"
+      ? byAdded<T>(addedAt)
+      : sort === "created"
+        ? byCreated<T>(createdAt ?? new Map(), addedAt)
+        : byRecency<T>;
 
   const pinned = projects.filter((p) => favorites.has(p.path)).sort(compare);
   const rest = projects.filter((p) => !favorites.has(p.path)).sort(compare);

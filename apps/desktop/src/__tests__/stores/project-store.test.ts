@@ -158,6 +158,37 @@ describe("useProjectStore", () => {
     });
   });
 
+  describe("seeded timestamps", () => {
+    it("uses the folder's times when given them", () => {
+      // Discovered projects: added in a loop, so without this every one lands
+      // on the same instant and ordering by recency shows an arbitrary list.
+      store().addRecentProject("/found", { lastOpened: 111, addedAt: 222 });
+      expect(store().recentProjects[0].lastOpened).toBe(111);
+      expect(store().addedAt["/found"]).toBe(222);
+    });
+
+    it("still stamps now when no times are supplied", () => {
+      const before = Date.now();
+      store().addRecentProject("/opened");
+      expect(store().recentProjects[0].lastOpened).toBeGreaterThanOrEqual(
+        before,
+      );
+    });
+
+    it("does not let a seed overwrite a date already recorded", () => {
+      store().addRecentProject("/a", { addedAt: 500 });
+      store().addRecentProject("/a", { addedAt: 900 });
+      expect(store().addedAt["/a"]).toBe(500);
+    });
+  });
+
+  describe("the sort choice", () => {
+    it("survives, because opening a project unmounts the picker", () => {
+      store().setProjectSort("type");
+      expect(store().projectSort).toBe("type");
+    });
+  });
+
   describe("removing", () => {
     it("forgets the star and the type too", () => {
       // Otherwise re-adding the folder later brings back a star nobody set.

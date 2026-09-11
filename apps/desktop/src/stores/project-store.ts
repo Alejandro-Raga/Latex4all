@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { ProjectSort } from "@/lib/project-grouping";
 
 interface RecentProject {
   path: string;
@@ -19,12 +20,28 @@ interface ProjectState {
    *  source of truth: it exists so the grid can group immediately instead of
    *  reflowing as a read per project comes back. */
   projectTypes: Record<string, string>;
-  addRecentProject: (path: string) => void;
+  /** Path to the folder's own creation time, read from disk. A cache, like
+   *  projectTypes — ordering by it must not wait on a stat per project. */
+  createdAt: Record<string, number>;
+  /** How the grid is ordered. Persisted: opening a project unmounts the picker,
+   *  and coming back to a different order than you left is disorienting. */
+  projectSort: ProjectSort;
+  /**
+   * `times` is for projects the app discovered rather than watched being
+   * opened: without it every one is stamped with the same instant and ordering
+   * by recency or by date added shows the same arbitrary list.
+   */
+  addRecentProject: (
+    path: string,
+    times?: { lastOpened?: number; addedAt?: number },
+  ) => void;
   removeRecentProject: (path: string) => void;
   renameRecentProject: (oldPath: string, newPath: string) => void;
   setLastProjectFolder: (path: string) => void;
   toggleFavorite: (path: string) => void;
   cacheProjectType: (path: string, type: string | null) => void;
+  cacheProjectCreatedAt: (path: string, created: number) => void;
+  setProjectSort: (sort: ProjectSort) => void;
 }
 
 /**
@@ -91,18 +108,27 @@ export const useProjectStore = create<ProjectState>()(
       favorites: [],
       addedAt: {},
       projectTypes: {},
+      createdAt: {},
+      projectSort: "recent",
 
       setLastProjectFolder: (path) => set({ lastProjectFolder: path }),
 
-      addRecentProject: (path) => {
+      setProjectSort: (sort) => set({ projectSort: sort }),
+
+      addRecentProject: (path, times) => {
         const normalizedPath = normalizeRecentPath(path);
         const name = recentProjectName(normalizedPath);
+        const now = Date.now();
         set((state) => {
           const filtered = state.recentProjects.filter(
             (p) => !isSameProjectPath(p.path, normalizedPath),
           );
           const next = [
-            { path: normalizedPath, name, lastOpened: Date.now() },
+            {
+              path: normalizedPath,
+              name,
+              lastOpened: times?.lastOpened ?? now,
+            },
             ...filtered,
           ];
           return {
@@ -110,7 +136,8 @@ export const useProjectStore = create<ProjectState>()(
             addedAt: {
               ...state.addedAt,
               // Only on first sight: reopening a project does not re-add it.
-              [normalizedPath]: state.addedAt[normalizedPath] ?? Date.now(),
+              [normalizedPath]:
+                state.addedAt[normalizedPath] ?? times?.addedAt ?? now,
             },
           };
         });
@@ -136,6 +163,13 @@ export const useProjectStore = create<ProjectState>()(
         });
       },
 
+      cacheProjectCreatedAt: (path, created) => {
+        const normalizedPath = normalizeRecentPath(path);
+        set((state) => ({
+          createdAt: { ...state.createdAt, [normalizedPath]: created },
+        }));
+      },
+
       cacheProjectType: (path, type) => {
         const normalizedPath = normalizeRecentPath(path);
         set((state) => {
@@ -151,8 +185,10 @@ export const useProjectStore = create<ProjectState>()(
         set((state) => {
           const projectTypes = { ...state.projectTypes };
           const addedAt = { ...state.addedAt };
+          const createdAt = { ...state.createdAt };
           delete projectTypes[normalizedPath];
           delete addedAt[normalizedPath];
+          delete createdAt[normalizedPath];
           return {
             recentProjects: state.recentProjects.filter(
               (p) => !isSameProjectPath(p.path, normalizedPath),
@@ -164,6 +200,7 @@ export const useProjectStore = create<ProjectState>()(
             ),
             projectTypes,
             addedAt,
+            createdAt,
           };
         });
       },
@@ -191,6 +228,7 @@ export const useProjectStore = create<ProjectState>()(
             normalizedNewPath,
           ),
           addedAt: movePathKey(state.addedAt, oldPath, normalizedNewPath),
+          createdAt: movePathKey(state.createdAt, oldPath, normalizedNewPath),
         }));
       },
     }),
@@ -202,6 +240,8 @@ export const useProjectStore = create<ProjectState>()(
         favorites: state.favorites,
         addedAt: state.addedAt,
         projectTypes: state.projectTypes,
+        createdAt: state.createdAt,
+        projectSort: state.projectSort,
       }),
     },
   ),

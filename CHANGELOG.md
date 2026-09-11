@@ -32,9 +32,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   creating from a template, which fills it in for you, or by right-clicking a
   project.
 - The project grid can be ordered by how recently you opened something, by when
-  you added it, or grouped by type with a heading per group. Starred projects
-  sit at the top either way, and are never forgotten when older projects drop
-  off the list.
+  you added it, by when the project was created, or grouped by type with a
+  heading per group. Starred projects sit at the top either way, and are never
+  forgotten when older projects drop off the list. The order you choose is
+  remembered.
 
 ### Fixed
 
