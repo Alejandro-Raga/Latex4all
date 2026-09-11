@@ -11,6 +11,11 @@ Test-channel builds are deliberately *not* listed here — their versions are CI
 run numbers, so there is nothing to write in advance. Their notes are generated
 from the commit subjects since the last stable release.
 
+**Entries are for users.** A change earns a line here if someone could notice
+it: a new feature, or a fix to something that was broken for them. Describe the
+symptom, not the plumbing — "updates stopped being offered" rather than which
+URL changed. Branch layout, CI, refactors and tests belong in commit messages.
+
 Write entries under `## [Unreleased]` as you go, then rename that heading to
 `## [x.y.z]` when you tag. The one release predating this file is
 [v1.0.0](https://github.com/Alejandro-Raga/Latex4all/releases); anything older
@@ -33,34 +38,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- A failed update said nothing at all. The dialog had no case for the error
-  state, so it simply closed and left you on the version you started from with
-  no idea why. It now shows what went wrong, including when there is nothing to
-  install because you are already running that build.
+- A failed update said nothing at all — the dialog just closed and left you on
+  the version you started from. It now says what went wrong, including when
+  there is nothing to install because you already have that build.
 
 ### Changed
 
-- Choosing an update channel checks it. Coming back to Release from a test
-  build offers the release straight away, so the separate button for it, and
-  the paragraph explaining when to press it, are gone.
+- Choosing an update channel now checks it, so coming back to Release from a
+  test build offers the release straight away.
 
 ## [1.1.2] - 2026-09-11
 
 ### Changed
 
-- Switching channels no longer downloads a build you already have. The tip of
-  the test channel and a release cut from the same commit carry different
-  version numbers, so the app used to offer an update that reinstalled exactly
-  what was running. Each channel now publishes the commit it is serving, and a
-  build that matches the one installed is not offered.
+- Switching channels no longer downloads a build you already have. When the two
+  channels are carrying the same code under different version numbers, there is
+  nothing to install and nothing is offered.
 
 ### Fixed
 
-- "Check for updates" on the release channel said "up to date" to a machine
-  running a test build. Test versions carry the CI run number, so 1.1.22
-  outranks a 1.1.1 release while containing less — the channel had nothing
-  newer to offer and said so, which was true and useless. It now notices the
-  machine is ahead of the release and offers the rollback instead.
+- "Check for updates" told you that you were up to date while you were running
+  a test build the release channel would never have offered to replace. It now
+  notices and offers the release instead.
 
 - Settings said definitions were English-only. Spanish has had them since the
   Wiktionary data was added; the note simply hadn't caught up.
@@ -69,12 +68,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- The release channel could stop offering updates entirely. It polled GitHub's
-  `releases/latest`, which resolves to whichever non-prerelease was published
-  most recently — so publishing anything else, such as a data-only release,
-  quietly made that the "latest" release and every update check answered 404.
-  Both channels now read a fixed rolling tag that CI rewrites in place, so
-  publishing other releases cannot affect them.
+- The release channel had stopped offering updates altogether — every check
+  failed silently. It works again, and can no longer be knocked out this way.
 
 ### Changed
 
@@ -94,9 +89,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Per-version release notes for both update channels, shown in the update
   dialog rather than the previous placeholder text.
 - You can leave the test channel again. Switching back to Release offers to
-  install the current release over a newer test build, which an ordinary
-  update check cannot do — it only ever looks for something newer. A rollback
-  is always explicit; the launch check will never start one on its own.
+  install the current release over a newer test build. It never happens on its
+  own — only when you ask.
 - Project previews on the home screen now show the real shape of the document:
   a presentation appears as a wide slide, an article as a portrait page. The
   cards themselves stay a uniform size, so the grid still reads as a grid.
