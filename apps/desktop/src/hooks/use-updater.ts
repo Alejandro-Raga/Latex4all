@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from "react";
-import { useSettingsStore } from "@/stores/settings-store";
+import { useSettingsStore, type UpdateChannel } from "@/stores/settings-store";
 import { useUpdaterStore, type UpdateStatus } from "@/stores/updater-store";
 
 export type { UpdateStatus };
@@ -45,15 +45,17 @@ export function useUpdater() {
   }, [channel, status, storeInstall]);
 
   /**
-   * Ask the current channel for its build even if it is older than the one
-   * installed. This is how someone leaves the test channel: their build is
-   * numbered above the newest release, so an ordinary check finds nothing and
-   * would leave them stranded on a test build indefinitely.
+   * Check a channel by name rather than the one in settings.
+   *
+   * Switching channel calls this with the channel just picked: the settings
+   * write has not landed in this render yet, so `channel` still holds the old
+   * one. On release it is also what surfaces a rollback when the machine is
+   * running a test build numbered above it.
    */
-  const rollBack = useCallback(() => {
-    if (!channel) return Promise.resolve();
-    return storeCheck(channel, true);
-  }, [channel, storeCheck]);
+  const checkChannel = useCallback(
+    (next: UpdateChannel) => storeCheckRequested(next),
+    [storeCheckRequested],
+  );
 
   useEffect(() => {
     if (!channel || !autoCheck || launchCheckDone) return;
@@ -65,7 +67,7 @@ export function useUpdater() {
     status,
     checkForUpdate,
     installUpdate,
-    rollBack,
+    checkChannel,
     restart,
     setStatus,
   };

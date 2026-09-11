@@ -229,7 +229,11 @@ pub async fn updater_install(
     allow_downgrade: bool,
 ) -> Result<(), String> {
     let Some(update) = check_with(&app, channel, allow_downgrade).await? else {
-        return Err("No update available to install".to_string());
+        // Reached when the channel turns out to be serving the build already
+        // installed — same version, or same commit under a different version
+        // number. The dialog shows this verbatim, so it has to read as an
+        // explanation rather than a fault.
+        return Err("You are already running this build.".to_string());
     };
 
     let progress_app = app.clone();

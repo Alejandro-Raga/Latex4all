@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  TriangleAlertIcon,
   DownloadIcon,
   FlaskConicalIcon,
   Loader2Icon,
@@ -42,7 +43,8 @@ export function UpdateManager() {
     (status.state === "available" ||
       status.state === "downloading" ||
       status.state === "installing" ||
-      status.state === "ready");
+      status.state === "ready" ||
+      status.state === "error");
 
   if (!showPrompt) return null;
 
@@ -59,7 +61,9 @@ export function UpdateManager() {
       }}
     >
       <DialogContent
-        showCloseButton={status.state === "available"}
+        showCloseButton={
+          status.state === "available" || status.state === "error"
+        }
         className="sm:max-w-md"
       >
         {status.state === "available" && (
@@ -91,6 +95,23 @@ export function UpdateManager() {
               <Button onClick={installUpdate} className="gap-1.5">
                 <DownloadIcon className="size-3.5" />
                 {status.isDowngrade ? "Roll back" : "Download & install"}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+
+        {status.state === "error" && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <TriangleAlertIcon className="size-4" />
+                Update failed
+              </DialogTitle>
+              <DialogDescription>{status.message}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button onClick={() => setStatus({ state: "idle" })}>
+                Close
               </Button>
             </DialogFooter>
           </>

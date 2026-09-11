@@ -20,6 +20,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A failed update said nothing at all. The dialog had no case for the error
+  state, so it simply closed and left you on the version you started from with
+  no idea why. It now shows what went wrong, including when there is nothing to
+  install because you are already running that build.
+
+### Changed
+
+- Choosing an update channel checks it. Coming back to Release from a test
+  build offers the release straight away, so the separate button for it, and
+  the paragraph explaining when to press it, are gone.
+
 ## [1.1.2] - 2026-09-11
 
 ### Changed
