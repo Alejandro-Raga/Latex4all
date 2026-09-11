@@ -103,6 +103,7 @@ interface DefaultProject {
 const SORTS: Array<{ value: ProjectSort; label: string }> = [
   { value: "recent", label: "Recent" },
   { value: "added", label: "Date added" },
+  { value: "created", label: "Date created" },
   { value: "type", label: "Type" },
 ];
 
@@ -293,27 +294,55 @@ export function ProjectPicker() {
   const addedAt = useProjectStore((s) => s.addedAt);
   const toggleFavorite = useProjectStore((s) => s.toggleFavorite);
   const cacheProjectType = useProjectStore((s) => s.cacheProjectType);
+  const createdAt = useProjectStore((s) => s.createdAt);
+  const cacheProjectCreatedAt = useProjectStore((s) => s.cacheProjectCreatedAt);
 
-  // Each project's type is kept in its own folder, so it has to be read back.
-  // The cached copy in the store is what the grid renders, which is why the
-  // grid does not reflow as these land.
+  // Paths with a write in flight. The reconcile below skips them: the cache is
+  // updated optimistically when a type is set and the write lands a moment
+  // later, so a read in between finds no file and would reset it.
+  const pendingTypeWrites = useRef<Set<string>>(new Set());
+
+  // Types live in each project's folder, so the cache has to be reconciled with
+  // disk. Deliberately not keyed on the cache — depending on `projectTypes`
+  // here made setting a type re-run this, which is what reset it.
+  useEffect(() => {
+    let cancelled = false;
+    void syncProjectTypes({
+      paths: recentProjects.map((project) => project.path),
+      readType: readProjectType,
+      getCached: (path) =>
+        useProjectStore.getState().projectTypes[path] ?? null,
+      setCached: (path, type) => {
+        if (!cancelled) cacheProjectType(path, type);
+      },
+      isPending: (path) => pendingTypeWrites.current.has(path),
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [recentProjects, cacheProjectType]);
+
+  // The folder's own creation date, for ordering by when the project was made.
   useEffect(() => {
     let cancelled = false;
     for (const project of recentProjects) {
-      readProjectType(project.path).then((type) => {
-        if (cancelled) return;
-        if (type !== (projectTypes[project.path] ?? null)) {
-          cacheProjectType(project.path, type);
+      if (useProjectStore.getState().createdAt[project.path] !== undefined) {
+        continue;
+      }
+      getProjectCreatedAt(project.path).then((created) => {
+        if (!cancelled && created !== null) {
+          cacheProjectCreatedAt(project.path, created);
         }
       });
     }
     return () => {
       cancelled = true;
     };
-  }, [recentProjects, projectTypes, cacheProjectType]);
+  }, [recentProjects, cacheProjectCreatedAt]);
 
   const setProjectType = useCallback(
     async (path: string, type: string | null) => {
+      pendingTypeWrites.current.add(path);
       cacheProjectType(path, type);
       try {
         await writeProjectType(path, type);
@@ -323,6 +352,8 @@ export function ProjectPicker() {
         log.warn(`Could not set type for ${path}: ${String(err)}`);
         cacheProjectType(path, (await readProjectType(path)) ?? null);
         toast.error("Could not save the project type.");
+      } finally {
+        pendingTypeWrites.current.delete(path);
       }
     },
     [cacheProjectType],
@@ -345,8 +376,9 @@ export function ProjectPicker() {
         favorites: new Set(favorites),
         types: new Map(Object.entries(projectTypes)),
         addedAt: new Map(Object.entries(addedAt)),
+        createdAt: new Map(Object.entries(createdAt)),
       }),
-    [visibleProjects, projectSort, favorites, projectTypes, addedAt],
+    [visibleProjects, projectSort, favorites, projectTypes, addedAt, createdAt],
   );
 
   if (wizardMode) {
