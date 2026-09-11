@@ -727,6 +727,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history and tags: test-channel notes are the commits since the
+          # last stable release, and the default shallow clone has neither.
+          fetch-depth: 0
 
       - name: Determine tag and channel
         id: tag
@@ -754,18 +758,10 @@ jobs:
         with:
           path: artifacts
 
-      - name: Generate update manifest
+      - name: Determine version
+        id: version
         env:
           TAG: ${{ steps.tag.outputs.tag }}
-          MANIFEST: ${{ steps.tag.outputs.manifest }}
-          WIN_SIG: ${{ needs.build-windows.outputs.sig }}
-          WIN_URL: ${{ needs.build-windows.outputs.url }}
-          MAC_SIG: ${{ needs.build-macos.outputs.sig }}
-          MAC_URL: ${{ needs.build-macos.outputs.url }}
-          MAC_INTEL_SIG: ${{ needs.build-macos-intel.outputs.sig }}
-          MAC_INTEL_URL: ${{ needs.build-macos-intel.outputs.url }}
-          LIN_SIG: ${{ needs.build-linux.outputs.sig }}
-          LIN_URL: ${{ needs.build-linux.outputs.url }}
         run: |
           # The release channel takes its version from the tag. The test
           # channel has no meaningful tag (it is always "testing"), so it
@@ -790,7 +786,39 @@ jobs:
               exit 1
             fi
           fi
-          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build release notes
+        env:
+          CHANNEL: ${{ steps.tag.outputs.channel }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Markdown for the GitHub release body; plain text for the updater
+          # manifest, whose dialog has no markdown renderer. On the release
+          # channel this exits non-zero when CHANGELOG.md has no section for
+          # the tag — a release must not ship placeholder notes.
+          node scripts/release-notes.mjs --channel "$CHANNEL" --version "$VERSION" \
+            --format markdown > release-notes.md
+          node scripts/release-notes.mjs --channel "$CHANNEL" --version "$VERSION" \
+            --format plain > release-notes.txt
+          echo "==> Release notes:"
+          cat release-notes.md
+
+      - name: Generate update manifest
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          MANIFEST: ${{ steps.tag.outputs.manifest }}
+          VERSION: ${{ steps.version.outputs.version }}
+          WIN_SIG: ${{ needs.build-windows.outputs.sig }}
+          WIN_URL: ${{ needs.build-windows.outputs.url }}
+          MAC_SIG: ${{ needs.build-macos.outputs.sig }}
+          MAC_URL: ${{ needs.build-macos.outputs.url }}
+          MAC_INTEL_SIG: ${{ needs.build-macos-intel.outputs.sig }}
+          MAC_INTEL_URL: ${{ needs.build-macos-intel.outputs.url }}
+          LIN_SIG: ${{ needs.build-linux.outputs.sig }}
+          LIN_URL: ${{ needs.build-linux.outputs.url }}
+        run: |
+          export PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           export BASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG"
 
           node -e "
@@ -806,9 +834,11 @@ jobs:
               platforms['windows-x86_64'] = { signature: process.env.WIN_SIG, url: BASE + '/Latex4All-Windows-setup.exe' };
 
             const data = {
-              version: '$VERSION',
-              notes: 'Latex4All $TAG',
-              pub_date: '$PUB_DATE',
+              version: process.env.VERSION,
+              // Plain text, not markdown: the update dialog renders notes in a
+              // pre-wrap box, so markup would reach the reader literally.
+              notes: require('fs').readFileSync('release-notes.txt', 'utf8').trim(),
+              pub_date: process.env.PUB_DATE,
               platforms
             };
             require('fs').writeFileSync(process.env.MANIFEST, JSON.stringify(data, null, 2));
@@ -825,18 +855,25 @@ jobs:
             # release are not reachable by the stable download URL the updater
             # polls. Prerelease keeps it out of `releases/latest`, which is what
             # the release channel follows, so test builds stay invisible there.
+            # The rolling prerelease is rewritten every build, so its notes are
+            # always regenerated too.
+            printf '%s\n\n---\nBuild %s from commit %s.\n' \
+              "$(cat release-notes.md)" "${GITHUB_RUN_NUMBER}" "${GITHUB_SHA}" > test-notes.md
             if gh release view "$TAG" > /dev/null 2>&1; then
               gh release edit "$TAG" --prerelease --latest=false \
                 --title "Latex4All (test channel)" \
-                --notes "Rolling build from the testing branch — run ${GITHUB_RUN_NUMBER}, commit ${GITHUB_SHA}."
+                --notes-file test-notes.md
             else
               gh release create "$TAG" --prerelease --latest=false \
                 --title "Latex4All (test channel)" \
-                --notes "Rolling build from the testing branch — run ${GITHUB_RUN_NUMBER}, commit ${GITHUB_SHA}."
+                --notes-file test-notes.md
             fi
           else
+            # Only on create: a release draft is published by hand and may have
+            # been edited there, so a re-run must not clobber that wording.
             gh release view "$TAG" > /dev/null 2>&1 || \
-              gh release create "$TAG" --title "Latex4All $TAG" --generate-notes --draft
+              gh release create "$TAG" --title "Latex4All $TAG" \
+                --notes-file release-notes.md --draft
           fi
 
       - name: Rename and upload assets
