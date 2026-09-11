@@ -12,8 +12,27 @@ import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile, readTextFile, stat } from "@tauri-apps/plugin-fs";
+import { groupProjects, type ProjectSort } from "@/lib/project-grouping";
+import {
+  PROJECT_TYPE_SUGGESTIONS,
+  normalizeType,
+  readProjectType,
+  writeProjectType,
+} from "@/lib/project-meta";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { toast } from "sonner";
 import {
+  CheckIcon,
+  StarIcon,
   FolderOpenIcon,
   XIcon,
   FileTextIcon,
@@ -57,6 +76,7 @@ import { compileLatex } from "@/lib/latex-compiler";
 import { getMupdfClient } from "@/lib/mupdf/mupdf-client";
 import { exists, join } from "@/lib/tauri/fs";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -78,6 +98,12 @@ interface DefaultProject {
   last_modified: number;
   has_main_tex: boolean;
 }
+
+const SORTS: Array<{ value: ProjectSort; label: string }> = [
+  { value: "recent", label: "Recent" },
+  { value: "added", label: "Date added" },
+  { value: "type", label: "Type" },
+];
 
 type ProjectPickerSection = "projects" | "settings";
 type SettingsDetailSection =
@@ -242,6 +268,50 @@ export function ProjectPicker() {
   };
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
+  const [projectSort, setProjectSort] = useState<ProjectSort>("recent");
+  const [typePrompt, setTypePrompt] = useState<string | null>(null);
+  const [customType, setCustomType] = useState("");
+
+  const favorites = useProjectStore((s) => s.favorites);
+  const projectTypes = useProjectStore((s) => s.projectTypes);
+  const addedAt = useProjectStore((s) => s.addedAt);
+  const toggleFavorite = useProjectStore((s) => s.toggleFavorite);
+  const cacheProjectType = useProjectStore((s) => s.cacheProjectType);
+
+  // Each project's type is kept in its own folder, so it has to be read back.
+  // The cached copy in the store is what the grid renders, which is why the
+  // grid does not reflow as these land.
+  useEffect(() => {
+    let cancelled = false;
+    for (const project of recentProjects) {
+      readProjectType(project.path).then((type) => {
+        if (cancelled) return;
+        if (type !== (projectTypes[project.path] ?? null)) {
+          cacheProjectType(project.path, type);
+        }
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [recentProjects, projectTypes, cacheProjectType]);
+
+  const setProjectType = useCallback(
+    async (path: string, type: string | null) => {
+      cacheProjectType(path, type);
+      try {
+        await writeProjectType(path, type);
+      } catch (err) {
+        // The folder may be read-only or gone. Put the cache back rather than
+        // showing a type the project does not actually carry.
+        log.warn(`Could not set type for ${path}: ${String(err)}`);
+        cacheProjectType(path, (await readProjectType(path)) ?? null);
+        toast.error("Could not save the project type.");
+      }
+    },
+    [cacheProjectType],
+  );
+
   const visibleProjects = useMemo(() => {
     if (!normalizedSearch) return recentProjects;
     return recentProjects.filter(
@@ -250,6 +320,18 @@ export function ProjectPicker() {
         project.path.toLowerCase().includes(normalizedSearch),
     );
   }, [normalizedSearch, recentProjects]);
+
+  const projectGroups = useMemo(
+    () =>
+      groupProjects({
+        projects: visibleProjects,
+        sort: projectSort,
+        favorites: new Set(favorites),
+        types: new Map(Object.entries(projectTypes)),
+        addedAt: new Map(Object.entries(addedAt)),
+      }),
+    [visibleProjects, projectSort, favorites, projectTypes, addedAt],
+  );
 
   if (wizardMode) {
     return (
@@ -508,16 +590,62 @@ export function ProjectPicker() {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-6 gap-y-6">
-                  {visibleProjects.map((project) => (
-                    <ProjectPreviewCard
-                      key={project.path}
-                      project={project}
-                      onOpen={() => handleOpenRecent(project.path)}
-                      onRemove={() => setRemoveProjectTarget(project)}
-                    />
+                <>
+                  <div className="flex items-center gap-1">
+                    {SORTS.map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setProjectSort(value)}
+                        className={cn(
+                          "rounded-md px-2.5 py-1 text-xs transition-colors",
+                          projectSort === value
+                            ? "bg-accent font-medium text-accent-foreground"
+                            : "text-muted-foreground hover:bg-muted/60",
+                        )}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {projectGroups.map((group) => (
+                    <div key={group.key} className="flex flex-col gap-3">
+                      {group.label && (
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+                            {group.label}
+                          </span>
+                          <span className="text-muted-foreground/60 text-xs tabular-nums">
+                            {group.projects.length}
+                          </span>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-6 gap-y-6">
+                        {group.projects.map((project) => (
+                          <ProjectPreviewCard
+                            key={project.path}
+                            project={project}
+                            isFavorite={favorites.includes(project.path)}
+                            type={projectTypes[project.path] ?? null}
+                            onOpen={() => handleOpenRecent(project.path)}
+                            onRemove={() => setRemoveProjectTarget(project)}
+                            onToggleFavorite={() =>
+                              toggleFavorite(project.path)
+                            }
+                            onSetType={(type) =>
+                              void setProjectType(project.path, type)
+                            }
+                            onCustomType={() => {
+                              setCustomType(projectTypes[project.path] ?? "");
+                              setTypePrompt(project.path);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   ))}
-                </div>
+                </>
               )}
             </div>
           )}
@@ -565,6 +693,45 @@ export function ProjectPicker() {
               </div>
             </button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={typePrompt !== null}
+        onOpenChange={(open) => {
+          if (!open) setTypePrompt(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Project type</DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (typePrompt === null) return;
+              const value = normalizeType(customType);
+              void setProjectType(typePrompt, value.length > 0 ? value : null);
+              setTypePrompt(null);
+            }}
+          >
+            <Input
+              autoFocus
+              value={customType}
+              onChange={(e) => setCustomType(e.target.value)}
+              placeholder="Referee report"
+            />
+            <DialogFooter className="mt-4">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setTypePrompt(null)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit">Save</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
@@ -859,12 +1026,22 @@ async function computeProjectPreview(
 
 function ProjectPreviewCard({
   project,
+  isFavorite,
+  type,
   onOpen,
   onRemove,
+  onToggleFavorite,
+  onSetType,
+  onCustomType,
 }: {
   project: RecentProject;
+  isFavorite: boolean;
+  type: string | null;
   onOpen: () => void;
   onRemove: () => void;
+  onToggleFavorite: () => void;
+  onSetType: (type: string | null) => void;
+  onCustomType: () => void;
 }) {
   const [preview, setPreview] = useState<ProjectPreviewState>(() => {
     const cached = projectPreviewCache.get(projectPreviewCacheKey(project));
@@ -909,42 +1086,109 @@ function ProjectPreviewCard({
           width and a 16:9 deck only 0.56x, so a mixed row was 2.5x apart in
           height however it was aligned. A 3:4 card is near enough to A4 that
           an ordinary document still fills it edge to edge. */}
-      <div className="relative aspect-[3/4] w-full">
-        <button
-          className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-muted/20 text-left transition-all duration-200 hover:border-foreground/20 hover:shadow-md"
-          onClick={onOpen}
-        >
-          <div
-            className={cn(
-              "overflow-hidden",
-              pageFit(aspectRatio) === "height" ? "h-full" : "w-full",
-            )}
-            style={{ aspectRatio }}
-          >
-            <ProjectPreviewSurface
-              preview={preview}
-              projectName={project.name}
-            />
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div className="relative aspect-[3/4] w-full">
+            <button
+              className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-muted/20 text-left transition-all duration-200 hover:border-foreground/20 hover:shadow-md"
+              onClick={onOpen}
+            >
+              <div
+                className={cn(
+                  "overflow-hidden",
+                  pageFit(aspectRatio) === "height" ? "h-full" : "w-full",
+                )}
+                style={{ aspectRatio }}
+              >
+                <ProjectPreviewSurface
+                  preview={preview}
+                  projectName={project.name}
+                />
+              </div>
+            </button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-2 right-2 size-7 bg-background/80 opacity-0 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+              onClick={onRemove}
+              aria-label={`Remove ${project.name}`}
+            >
+              <XIcon className="size-3.5" />
+            </Button>
+            {/* A star stays visible once set — it is the state, not a hover
+            affordance. Unstarred, it appears on hover like the remove button. */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "absolute top-2 left-2 size-7 bg-background/80 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 group-hover:opacity-100",
+                isFavorite ? "opacity-100" : "opacity-0",
+              )}
+              onClick={onToggleFavorite}
+              aria-label={
+                isFavorite
+                  ? `Remove ${project.name} from favourites`
+                  : `Add ${project.name} to favourites`
+              }
+            >
+              <StarIcon
+                className={cn(
+                  "size-3.5",
+                  isFavorite && "fill-current text-amber-500",
+                )}
+              />
+            </Button>
           </div>
-        </button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute top-2 right-2 size-7 bg-background/80 opacity-0 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
-          onClick={onRemove}
-          aria-label={`Remove ${project.name}`}
-        >
-          <XIcon className="size-3.5" />
-        </Button>
-      </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={onToggleFavorite}>
+            {isFavorite ? "Remove from favourites" : "Add to favourites"}
+          </ContextMenuItem>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>Type</ContextMenuSubTrigger>
+            <ContextMenuSubContent>
+              {PROJECT_TYPE_SUGGESTIONS.map((suggestion) => (
+                <ContextMenuItem
+                  key={suggestion}
+                  onSelect={() => onSetType(suggestion)}
+                >
+                  {suggestion}
+                  {type === suggestion && (
+                    <CheckIcon className="ml-auto size-3.5" />
+                  )}
+                </ContextMenuItem>
+              ))}
+              <ContextMenuSeparator />
+              <ContextMenuItem onSelect={onCustomType}>
+                Something else…
+              </ContextMenuItem>
+              {type && (
+                <ContextMenuItem onSelect={() => onSetType(null)}>
+                  Clear
+                </ContextMenuItem>
+              )}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={onRemove}>
+            Remove from list
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
       <button
         className="mt-2 block w-full truncate text-left font-medium text-sm leading-tight hover:underline"
         onClick={onOpen}
       >
         {project.name}
       </button>
-      <div className="mt-1 h-4 truncate text-left text-muted-foreground text-xs">
-        {createdDateLabel}
+      <div className="mt-1 flex h-4 items-center gap-1.5 text-left text-muted-foreground text-xs">
+        <span className="truncate">{createdDateLabel}</span>
+        {type && (
+          <>
+            <span className="text-muted-foreground/40">·</span>
+            <span className="truncate">{type}</span>
+          </>
+        )}
       </div>
     </div>
   );

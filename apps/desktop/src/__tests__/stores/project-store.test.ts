@@ -1,12 +1,17 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useProjectStore } from "@/stores/project-store";
 
+const store = () => useProjectStore.getState();
+
 describe("useProjectStore", () => {
   beforeEach(() => {
     // Reset the store between tests
     useProjectStore.setState({
       recentProjects: [],
       lastProjectFolder: null,
+      favorites: [],
+      addedAt: {},
+      projectTypes: {},
     });
   });
 
@@ -111,6 +116,90 @@ describe("useProjectStore", () => {
         path: "/work/new",
         name: "new",
       });
+    });
+  });
+
+  describe("the recent cap", () => {
+    it("never drops a favourite, however long since it was opened", () => {
+      // The whole point of a star: it is the project you always want to see.
+      store().addRecentProject("/keep");
+      store().toggleFavorite("/keep");
+      for (let i = 0; i < 20; i++) store().addRecentProject(`/p${i}`);
+
+      const paths = store().recentProjects.map((p) => p.path);
+      expect(paths).toContain("/keep");
+      // Favourites sit outside the cap rather than eating into it.
+      expect(paths.filter((p) => p !== "/keep")).toHaveLength(10);
+    });
+
+    it("lets an un-starred project fall past the cap again", () => {
+      store().addRecentProject("/old");
+      store().toggleFavorite("/old");
+      for (let i = 0; i < 15; i++) store().addRecentProject(`/p${i}`);
+      expect(store().recentProjects.map((p) => p.path)).toContain("/old");
+
+      store().toggleFavorite("/old");
+      expect(store().recentProjects.map((p) => p.path)).not.toContain("/old");
+    });
+  });
+
+  describe("addedAt", () => {
+    it("records when a project was first seen", () => {
+      store().addRecentProject("/a");
+      expect(store().addedAt["/a"]).toBeGreaterThan(0);
+    });
+
+    it("does not move when the project is reopened", () => {
+      // Reopening is not re-adding; sorting by date added must stay stable.
+      store().addRecentProject("/a");
+      const first = store().addedAt["/a"];
+      store().addRecentProject("/a");
+      expect(store().addedAt["/a"]).toBe(first);
+    });
+  });
+
+  describe("removing", () => {
+    it("forgets the star and the type too", () => {
+      // Otherwise re-adding the folder later brings back a star nobody set.
+      store().addRecentProject("/a");
+      store().toggleFavorite("/a");
+      store().cacheProjectType("/a", "Thesis");
+
+      store().removeRecentProject("/a");
+
+      expect(store().favorites).not.toContain("/a");
+      expect(store().projectTypes["/a"]).toBeUndefined();
+      expect(store().addedAt["/a"]).toBeUndefined();
+    });
+  });
+
+  describe("renaming", () => {
+    it("carries the star, type and added date to the new path", () => {
+      store().addRecentProject("/old");
+      store().toggleFavorite("/old");
+      store().cacheProjectType("/old", "Article");
+      const added = store().addedAt["/old"];
+
+      store().renameRecentProject("/old", "/new");
+
+      expect(store().favorites).toEqual(["/new"]);
+      expect(store().projectTypes["/new"]).toBe("Article");
+      expect(store().projectTypes["/old"]).toBeUndefined();
+      expect(store().addedAt["/new"]).toBe(added);
+    });
+  });
+
+  describe("type cache", () => {
+    it("clears the entry when the type is removed", () => {
+      store().cacheProjectType("/a", "Poster");
+      store().cacheProjectType("/a", null);
+      expect(store().projectTypes["/a"]).toBeUndefined();
+    });
+
+    it("ignores a trailing slash, as the rest of the store does", () => {
+      store().addRecentProject("/a/");
+      store().toggleFavorite("/a");
+      expect(store().favorites).toEqual(["/a"]);
     });
   });
 });

@@ -1,6 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { mkdir, writeTextFile } from "@tauri-apps/plugin-fs";
+import {
+  typeForTemplateSubcategory,
+  writeProjectType,
+} from "@/lib/project-meta";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { homeDir } from "@tauri-apps/api/path";
 import { toast } from "sonner";
@@ -374,6 +378,16 @@ export function TemplatePreview() {
         return;
       }
       await mkdir(projectPath, { recursive: true });
+
+      // The template already says what kind of work this is, so the project
+      // arrives typed rather than asking for something it can infer.
+      const inferredType = typeForTemplateSubcategory(template.subcategory);
+      if (inferredType) {
+        await writeProjectType(projectPath, inferredType).catch(() => {
+          // A type is a convenience; failing to record it must not abort
+          // creating the project.
+        });
+      }
 
       const mainTexPath = await join(projectPath, template.mainFileName);
       const mainExists = await exists(mainTexPath);
