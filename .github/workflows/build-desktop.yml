@@ -124,9 +124,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ZOTERO_CONSUMER_KEY: ${{ secrets.ZOTERO_CONSUMER_KEY }}
           ZOTERO_CONSUMER_SECRET: ${{ secrets.ZOTERO_CONSUMER_SECRET }}
-          # Stamped into the binary so the updater can recognise a manifest
-          # that is serving the code already installed.
-          LATEX4ALL_COMMIT: ${{ github.sha }}
         run: |
           # Updater artifacts are signed; without a key, build the installer
           # alone rather than failing the whole job.
@@ -303,9 +300,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ZOTERO_CONSUMER_KEY: ${{ secrets.ZOTERO_CONSUMER_KEY }}
           ZOTERO_CONSUMER_SECRET: ${{ secrets.ZOTERO_CONSUMER_SECRET }}
-          # Stamped into the binary so the updater can recognise a manifest
-          # that is serving the code already installed.
-          LATEX4ALL_COMMIT: ${{ github.sha }}
           # Deliberately NOT named APPLE_SIGNING_IDENTITY: an unset secret still
           # arrives as an empty string, and the bundler reads Some("") as a real
           # identity — it builds a keychain for "" and codesign dies with "The
@@ -533,9 +527,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ZOTERO_CONSUMER_KEY: ${{ secrets.ZOTERO_CONSUMER_KEY }}
           ZOTERO_CONSUMER_SECRET: ${{ secrets.ZOTERO_CONSUMER_SECRET }}
-          # Stamped into the binary so the updater can recognise a manifest
-          # that is serving the code already installed.
-          LATEX4ALL_COMMIT: ${{ github.sha }}
           # Deliberately NOT named APPLE_SIGNING_IDENTITY: an unset secret still
           # arrives as an empty string, and the bundler reads Some("") as a real
           # identity — it builds a keychain for "" and codesign dies with "The
@@ -680,9 +671,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ZOTERO_CONSUMER_KEY: ${{ secrets.ZOTERO_CONSUMER_KEY }}
           ZOTERO_CONSUMER_SECRET: ${{ secrets.ZOTERO_CONSUMER_SECRET }}
-          # Stamped into the binary so the updater can recognise a manifest
-          # that is serving the code already installed.
-          LATEX4ALL_COMMIT: ${{ github.sha }}
           # Use pkg-config (same as tectonic's own CI) with semi-static linking.
           # AppImage bundles .so files automatically for portable distribution.
           TECTONIC_DEP_BACKEND: pkg-config
@@ -862,20 +850,6 @@ jobs:
             console.log(JSON.stringify(data, null, 2));
           "
 
-          # Which commit this manifest is serving. Kept in its own file so the
-          # manifest the updater plugin parses stays exactly the shape it
-          # expects. The app compares it against the commit stamped into itself
-          # and skips an update that would reinstall the code already running —
-          # which is what a channel switch does, since the tip of the trunk and
-          # a release cut from the same commit have different version numbers.
-          node -e "
-            const fs = require('fs');
-            fs.writeFileSync(
-              process.env.MANIFEST.replace(/\.json$/, '.commit.json'),
-              JSON.stringify({ commit: process.env.GITHUB_SHA, version: process.env.VERSION }, null, 2)
-            );
-          "
-
       - name: Create or refresh release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -929,8 +903,7 @@ jobs:
           find artifacts/desktop-linux -name "*.rpm" 2>/dev/null | head -1 | xargs -I{} cp {} upload/Latex4All-Linux.rpm
           find artifacts/desktop-linux -name "*.AppImage" 2>/dev/null | head -1 | xargs -I{} cp {} upload/Latex4All-Linux.AppImage
 
-          MANIFEST="${{ steps.tag.outputs.manifest }}"
-          cp "$MANIFEST" "${MANIFEST%.json}.commit.json" upload/
+          cp "${{ steps.tag.outputs.manifest }}" upload/
 
           echo "==> Uploading:"
           ls -la upload/
@@ -966,8 +939,7 @@ jobs:
             gh release create release-latest --prerelease --latest=false \
               --title "Latex4All (release channel pointer)" --notes "$NOTES"
           fi
-          MANIFEST="${{ steps.tag.outputs.manifest }}"
-          gh release upload release-latest "$MANIFEST" "${MANIFEST%.json}.commit.json" --clobber
+          gh release upload release-latest "${{ steps.tag.outputs.manifest }}" --clobber
 
       # The versioned release stays a draft — publish it from the GitHub
       # Releases UI. Keep marking it "latest" when you do: apps built before

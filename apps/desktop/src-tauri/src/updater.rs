@@ -36,19 +36,6 @@ const RELEASE_ENDPOINT: &str =
 const TEST_ENDPOINT: &str =
     "https://github.com/Alejandro-Raga/Latex4all/releases/download/testing-latest/latest-test.json";
 
-/// Which commit each channel is currently serving, published beside the
-/// manifest. Kept out of the manifest itself so the file the updater plugin
-/// parses stays exactly the shape it expects.
-const RELEASE_COMMIT_ENDPOINT: &str =
-    "https://github.com/Alejandro-Raga/Latex4all/releases/download/release-latest/latest.commit.json";
-const TEST_COMMIT_ENDPOINT: &str =
-    "https://github.com/Alejandro-Raga/Latex4all/releases/download/testing-latest/latest-test.commit.json";
-
-/// The commit this binary was built from, stamped by CI in build.rs. `None` in
-/// a local dev build, where the check below is skipped and behaviour is exactly
-/// as it was before it existed.
-const BUILD_COMMIT: Option<&str> = option_env!("LATEX4ALL_COMMIT");
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Channel {
@@ -64,60 +51,6 @@ impl Channel {
         }
     }
 
-    fn commit_endpoint(self) -> &'static str {
-        match self {
-            Channel::Release => RELEASE_COMMIT_ENDPOINT,
-            Channel::Test => TEST_COMMIT_ENDPOINT,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct ServedBuild {
-    commit: String,
-}
-
-/// Whether the channel is serving the very code this binary was built from.
-///
-/// Version numbers cannot answer this. Test builds are stamped with the CI run
-/// number, so the tip of `testing` and a release cut from the same commit carry
-/// different versions, and switching channels would otherwise download tens of
-/// megabytes to install exactly what is already running.
-///
-/// Every failure path answers `false`, which simply means the ordinary version
-/// comparison decides — the same thing that happened before this existed. That
-/// covers a dev build with no stamp, a channel whose sidecar has not been
-/// published yet, and any network trouble.
-async fn serving_this_build(channel: Channel) -> bool {
-    let Some(current) = BUILD_COMMIT else {
-        return false;
-    };
-
-    let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-    {
-        Ok(client) => client,
-        Err(_) => return false,
-    };
-
-    let Ok(response) = client.get(channel.commit_endpoint()).send().await else {
-        return false;
-    };
-    if !response.status().is_success() {
-        return false;
-    }
-    // text + serde_json rather than reqwest's `.json()`: that helper is behind
-    // reqwest's "json" feature, which this crate does not enable, and turning a
-    // dependency feature on for one call is a worse trade than two lines here.
-    let Ok(body) = response.text().await else {
-        return false;
-    };
-    let Ok(served) = serde_json::from_str::<ServedBuild>(&body) else {
-        return false;
-    };
-
-    served.commit == current
 }
 
 #[derive(Debug, Serialize)]
@@ -155,13 +88,6 @@ async fn check_with(
     channel: Channel,
     allow_downgrade: bool,
 ) -> Result<Option<tauri_plugin_updater::Update>, String> {
-    // Nothing to do if the channel is already serving this exact build. Checked
-    // before the manifest fetch because it is the cheaper of the two and makes
-    // the common channel-switch case a no-op.
-    if serving_this_build(channel).await {
-        return Ok(None);
-    }
-
     let endpoint = channel
         .endpoint()
         .parse()
@@ -226,14 +152,18 @@ pub async fn updater_check(
 pub async fn updater_install(
     app: AppHandle,
     channel: Channel,
-    allow_downgrade: bool,
 ) -> Result<(), String> {
-    let Some(update) = check_with(&app, channel, allow_downgrade).await? else {
-        // Reached when the channel turns out to be serving the build already
-        // installed — same version, or same commit under a different version
-        // number. The dialog shows this verbatim, so it has to read as an
-        // explanation rather than a fault.
-        return Err("You are already running this build.".to_string());
+    // Always permissive, unlike the check. The check decides what to *offer*,
+    // and is strict on the release channel so a downgrade is never proposed by
+    // itself. By the time this runs the user has read what will be installed
+    // and asked for it, so the only question left is what the channel is
+    // serving — not whether it outranks what is installed. Deciding that twice,
+    // from two different places, is what made an accepted rollback fail at the
+    // last step with "no update available".
+    let Some(update) = check_with(&app, channel, true).await? else {
+        // Only reachable if the channel stopped serving anything between the
+        // offer and the click. The dialog shows this verbatim.
+        return Err("This channel has nothing to install right now.".to_string());
     };
 
     let progress_app = app.clone();

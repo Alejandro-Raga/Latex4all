@@ -25,6 +25,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Moving from the test channel to Release could refuse to install, saying you
+  already had that build. The test channel and a release are not
+  interchangeable even when they look close — the test build has features the
+  release does not — so the release is always offered and always installable.
+
 ### Added
 
 - Projects can be starred and given a type — article, thesis, presentation,

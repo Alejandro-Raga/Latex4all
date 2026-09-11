@@ -37,12 +37,8 @@ export function useUpdater() {
 
   const installUpdate = useCallback(() => {
     if (!channel) return Promise.resolve();
-    // Install re-checks, so it has to ask with the same permission that
-    // produced the offer — otherwise a rollback the user accepted would come
-    // back "no update available" and fail at the last step.
-    const allowDowngrade = status.state === "available" && status.isDowngrade;
-    return storeInstall(channel, allowDowngrade);
-  }, [channel, status, storeInstall]);
+    return storeInstall(channel);
+  }, [channel, storeInstall]);
 
   /**
    * Check a channel by name rather than the one in settings.

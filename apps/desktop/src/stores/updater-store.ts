@@ -60,7 +60,7 @@ interface UpdaterState {
    * rather than a false "up to date".
    */
   checkRequested: (channel: UpdateChannel) => Promise<void>;
-  install: (channel: UpdateChannel, allowDowngrade?: boolean) => Promise<void>;
+  install: (channel: UpdateChannel) => Promise<void>;
   restart: () => Promise<void>;
 }
 
@@ -123,7 +123,7 @@ export const useUpdaterStore = create<UpdaterState>()((set, get) => ({
     await get().check(channel, true);
   },
 
-  install: async (channel, allowDowngrade = false) => {
+  install: async (channel) => {
     let unlistenProgress: (() => void) | undefined;
     let unlistenFinished: (() => void) | undefined;
 
@@ -149,7 +149,7 @@ export const useUpdaterStore = create<UpdaterState>()((set, get) => ({
         set({ status: { state: "installing" } });
       });
 
-      await invoke("updater_install", { channel, allowDowngrade });
+      await invoke("updater_install", { channel });
       set({ status: { state: "ready" } });
     } catch (err) {
       log.error("Update install failed", { error: String(err) });

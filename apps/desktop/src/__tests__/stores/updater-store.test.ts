@@ -233,21 +233,19 @@ describe("updater store", () => {
 
       expect(mockInvoke).toHaveBeenCalledWith("updater_install", {
         channel: "release",
-        allowDowngrade: false,
       });
     });
 
-    it("carries the downgrade permission into the install", async () => {
-      // install() re-checks; without the same flag the rollback the user just
-      // accepted would come back "no update available" and fail at the last
-      // step.
+    it("does not decide for itself what may be installed", async () => {
+      // The check decides what to offer; install takes whatever the channel is
+      // serving, because the user has already been shown it and asked for it.
+      // Deciding twice is what made an accepted rollback fail at the last step.
       mockInvoke.mockResolvedValue(undefined);
 
-      await useUpdaterStore.getState().install("release", true);
+      await useUpdaterStore.getState().install("release");
 
       expect(mockInvoke).toHaveBeenCalledWith("updater_install", {
         channel: "release",
-        allowDowngrade: true,
       });
       expect(useUpdaterStore.getState().status).toEqual({ state: "ready" });
     });
