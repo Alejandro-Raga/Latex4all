@@ -20,6 +20,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Switching channels no longer downloads a build you already have. The tip of
+  the test channel and a release cut from the same commit carry different
+  version numbers, so the app used to offer an update that reinstalled exactly
+  what was running. Each channel now publishes the commit it is serving, and a
+  build that matches the one installed is not offered.
+
 ## [1.1.2] - 2026-09-11
 
 ### Fixed
