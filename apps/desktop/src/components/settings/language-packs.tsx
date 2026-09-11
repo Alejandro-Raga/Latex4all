@@ -116,9 +116,8 @@ export function LanguagePacksSettings() {
       <div>
         <p className="text-muted-foreground text-xs leading-relaxed">
           Spell checking uses your system's dictionaries where it has them.
-          Download a language to check the ones it doesn't — and, outside
-          English, to get synonyms when you right-click a word. Definitions stay
-          English-only; no free database offers them for the rest.
+          Download a language to check the ones it doesn't, and to get
+          definitions and synonyms when you right-click a word.
         </p>
       </div>
 

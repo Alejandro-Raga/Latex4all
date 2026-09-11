@@ -20,6 +20,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Settings said definitions were English-only. Spanish has had them since the
+  Wiktionary data was added; the note simply hadn't caught up.
+
 ## [1.1.1] - 2026-09-11
 
 ### Fixed

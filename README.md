@@ -5,8 +5,8 @@
 <h1 align="center">Latex4All</h1>
 
 <p align="center">
-  An offline-first scientific writing workspace powered by Claude.<br/>
-  LaTeX + Python + 100+ scientific skills — runs on your desktop.
+  A desktop LaTeX editor with Claude in it.<br/>
+  Your documents stay on your disk and compile locally.
 </p>
 
 <p align="center">
@@ -19,10 +19,8 @@
 > ### A fork of [Claude Prism](https://github.com/delibae/claude-prism)
 >
 > Latex4All is a personal fork of [delibae/claude-prism](https://github.com/delibae/claude-prism).
-> The upstream project is the foundation; everything added on top of it — Zotero
-> integration and one-click BibTeX capture, dictionary/thesaurus (WordNet) and
-> grammar checking, LaTeX autocompletion, the Windows port, and the self-updating
-> release/test channels — was written by Claude Code.
+> The upstream project is the foundation; everything listed under *What this
+> fork adds* was written by Claude Code.
 >
 > **My involvement is direction, not authorship.** I decided what to build, made
 > the design and architecture calls, tested it on real documents and hardware, and
@@ -31,7 +29,7 @@
 > conventional human authorship.
 
 <p align="center">
-  <img src="./assets/demo/main.webp" alt="Latex4All Demo" width="800" />
+  <img src="./assets/demo/main.webp" alt="Latex4All" width="800" />
 </p>
 
 <p align="center">
@@ -42,143 +40,82 @@
     <img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows" />
   </a>
 </p>
-<p align="center"><sub>Linux and Intel macOS builds are <b>deprecated</b> and no longer published. Build from source if you need either.</sub></p>
 
 <p align="center">
-  <b>Test channel</b> — every change as it lands. Unsigned, and rougher than a release.
-</p>
-<p align="center">
-  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/download/testing-latest/Latex4All-Windows-setup.exe">
-    <img src="https://img.shields.io/badge/Test_build-Windows-2ea44f?style=for-the-badge&logo=windows&logoColor=white" alt="Test build for Windows" />
-  </a>&nbsp;
   <a href="https://github.com/Alejandro-Raga/Latex4all/releases/download/testing-latest/Latex4All-macOS.dmg">
-    <img src="https://img.shields.io/badge/Test_build-macOS_(Apple_Silicon)-2ea44f?style=for-the-badge&logo=apple&logoColor=white" alt="Test build for macOS (Apple Silicon)" />
+    <img src="https://img.shields.io/badge/Test_build-macOS-2ea44f?style=flat-square&logo=apple&logoColor=white" alt="Test build for macOS" />
   </a>&nbsp;
-  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/tag/testing-latest">
-    <img src="https://img.shields.io/badge/all_test_assets-2ea44f?style=for-the-badge" alt="All test assets" />
-  </a>
-</p>
-<p align="center">
-  <a href="https://github.com/Alejandro-Raga/Latex4all/releases">
-    <img src="https://img.shields.io/github/v/release/Alejandro-Raga/Latex4all?style=flat-square&label=Latest%20Release&color=green" alt="Latest Release" />
+  <a href="https://github.com/Alejandro-Raga/Latex4all/releases/download/testing-latest/Latex4All-Windows-setup.exe">
+    <img src="https://img.shields.io/badge/Test_build-Windows-2ea44f?style=flat-square&logo=windows&logoColor=white" alt="Test build for Windows" />
   </a>
 </p>
 
----
-
-## Why Latex4All?
-
-[OpenAI Prism](https://openai.com/prism/) is a cloud-based LaTeX workspace — all your files and data must be uploaded to OpenAI's servers to use it.
-
-Latex4All is a **local-first** alternative — your files are stored on your disk, compiled offline, and edited locally. AI features require sending content to Anthropic's API for inference (see [data usage](https://code.claude.com/docs/en/data-usage)).
-
-| | OpenAI Prism | Latex4All |
-|---|:---:|:---:|
-| AI Model | GPT-5.2 | **Claude Opus / Sonnet / Haiku** |
-| Runtime | Browser (cloud) | **Native desktop (Tauri 2 + Rust)** |
-| LaTeX | Cloud compilation | **Tectonic (embedded, offline)** |
-| Python Environment | — | **Built-in uv + venv — one-click scientific Python setup** |
-| Scientific Skills | — | **100+ domain skills (bioinformatics, cheminformatics, ML, ...)** |
-| Getting Started | Account setup required | **Install and go — template gallery + project wizard** |
-| Version Control | — | **Git-based history with labels & diff** |
-| Source Code | Proprietary | **Open source (MIT)** |
-
-### Data & Privacy
-
-Latex4All stores and compiles your documents locally — nothing is uploaded to a remote server for storage. However, when you use AI features, **prompts and file contents that Claude reads are sent to Anthropic's API for inference**, just like any cloud-based LLM tool. See [Claude Code data usage](https://code.claude.com/docs/en/data-usage) for retention policies and opt-out options.
+<p align="center"><sub>
+  Test builds carry every change as it lands, and are rougher than a release.<br/>
+  Linux and Intel macOS are no longer published — build from source if you need either.
+</sub></p>
 
 ---
 
-## Features
+## What it is
 
-### Python Environment (uv)
-Latex4All integrates [uv](https://docs.astral.sh/uv/) — the fast Python package manager — directly into the app. One click to install uv, one click to create a project-level virtual environment. Claude Code automatically uses the `.venv` when running Python code, so you can generate plots, run analysis scripts, and process data without leaving the editor.
+A native application for writing LaTeX, with Claude available in the editor and
+a PDF preview beside the source. LaTeX compiles inside the app, so there is no
+TeX installation to maintain, and every save is kept in a local history you can
+browse and roll back.
 
-<p align="center">
-  <img src="./assets/demo/python.webp" alt="Python Environment" width="600" />
-</p>
+It also carries a Python environment and a large library of scientific skills
+for Claude, both from upstream. [Claude Prism](https://github.com/delibae/claude-prism)
+documents that side of it in full.
 
-### 100+ Scientific Skills
-Browse and install domain-specific skills from [K-Dense Scientific Skills](https://github.com/K-Dense-AI/claude-scientific-skills) — curated prompts and tool configurations that give Claude deep knowledge in specialized fields:
+## What this fork adds
 
-| Domain | Skills |
-|--------|--------|
-| **Bioinformatics & Genomics** | Scanpy, BioPython, PyDESeq2, PySAM, gget, AnnData, ... |
-| **Cheminformatics & Drug Discovery** | RDKit, DeepChem, DiffDock, PubChem, ChEMBL, ... |
-| **Data Analysis & Visualization** | Matplotlib, Seaborn, Plotly, Polars, scikit-learn, ... |
-| **Machine Learning & AI** | PyTorch Lightning, Transformers, SHAP, UMAP, PyMC, ... |
-| **Clinical Research** | ClinicalTrials.gov, ClinVar, DrugBank, FDA, ... |
-| **Scientific Communication** | Literature Review, Grant Writing, Citation Management, ... |
-| **Multi-omics & Systems Biology** | scvi-tools, COBRApy, Reactome, Bioservices, ... |
-| **And more** | Materials Science, Lab Automation, Proteomics, Physics, ... |
+**Zotero.** Browse your library without leaving the editor, search it by title
+or author, insert citations, and add a single reference to a `.bib` file from
+its context menu.
 
-Skills are installed globally (`~/.claude/skills/`) or per-project, and Claude automatically loads them when relevant.
+**Dictionary, thesaurus and spell checking.** Right-click a word for its
+definition, synonyms and antonyms. Grammar checking runs locally rather than
+through a service. English and Spanish.
 
-<p align="center">
-  <img src="./assets/demo/scientific.webp" alt="Scientific Skills" width="700" />
-</p>
+**LaTeX autocompletion,** and a reference panel for the commands nobody
+remembers.
 
-### Quick Start with Templates & Project Wizard
-Pick a template (paper, thesis, presentation, poster, letter, etc.), give it a name, optionally describe what you're writing — Latex4All sets up the project and generates initial content with AI. Drag & drop reference files (PDF, BIB, images) and start writing immediately.
+**Windows.** The spelling, thesaurus and grammar services were ported, and CI
+builds Windows installers alongside macOS.
 
-<p align="center">
-  <img src="./assets/demo/starter.webp" alt="Template Gallery & Project Wizard" width="700" />
-</p>
+**Updates in the app.** Two channels — releases, and a test channel that
+publishes every change as it lands. You can move between them in either
+direction, including back down from a test build to the current release, and
+each update shows what changed.
 
-### Claude AI Assistant
-Chat with Claude directly in the editor. Select between Sonnet, Opus, Haiku models with adjustable reasoning effort levels. Persistent sessions, tool use (file edit, bash, search), and extensible slash commands.
+## Data and privacy
 
-<p align="center">
-  <img src="./assets/demo/claudecommand.webp" alt="Claude AI Assistant & Slash Commands" width="600" />
-</p>
+Your documents are stored and compiled on your own machine. Nothing is uploaded
+for storage.
 
-### History & Proposed Changes
-Every save creates a snapshot in a local Git repository (`.latex4all/history.git/`). Label important checkpoints, browse diffs between any two snapshots, and restore previous versions. When Claude suggests edits, changes appear in a dedicated panel with visual diffs — accept or reject per chunk, or apply/undo all at once (`⌘Y` / `⌘N`).
+The AI features are not local. When Claude reads or edits a file, that content
+is sent to Anthropic's API, as with any hosted model. See
+[Claude Code data usage](https://code.claude.com/docs/en/data-usage) for
+retention and opt-out.
 
-<p align="center">
-  <img src="./assets/demo/history.webp" alt="History & Proposed Changes" width="700" />
-</p>
+## Installing
 
-### Offline LaTeX Compilation
-Tectonic is embedded directly in the app. Packages are downloaded once on first use and cached locally. After that, compilation works fully offline with no TeX Live installation required.
+Download a build from [Releases](https://github.com/Alejandro-Raga/Latex4all/releases),
+or build from source — see [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-### Capture & Ask
-Press `⌘X` to enter capture mode, drag to select any region in the PDF — the captured image is pinned to the chat composer so you can immediately ask Claude about it. Great for asking about equations, figures, tables, or reviewer comments.
-
-<p align="center">
-  <img src="./assets/demo/capture_ask.webp" alt="Capture & Ask" width="700" />
-</p>
-
-### Live PDF Preview
-Native MuPDF rendering with SyncTeX support — click a position in the PDF to jump to the corresponding source line. Supports zoom, text selection, and capture.
-
-### Editor
-CodeMirror 6 with LaTeX/BibTeX syntax highlighting, real-time error linting, find & replace (regex), and multi-file project support with auto-save.
-
-### More
-- **Zotero Integration** — OAuth-based bibliography management and citation insertion.
-
-<p align="center">
-  <img src="./assets/demo/zotero.webp" alt="Zotero Integration" width="300" />
-</p>
-
-- **Slash Commands** — Built-in (`/review`, `/init`) + custom commands from `.claude/commands/`.
-- **External Editors** — Open projects in Cursor, VS Code, Zed, or Sublime Text.
-- **Dark / Light Theme** — Automatic switching.
-
----
-
-## Installation
-
-Download the latest build from [GitHub Releases](https://github.com/Alejandro-Raga/Latex4all/releases).
+macOS builds are ad-hoc signed rather than notarised, because the project has no
+Apple Developer account.
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup, testing, and guidelines.
+[CONTRIBUTING.md](./CONTRIBUTING.md) covers development setup and testing.
 
 ## Acknowledgments
 
-This project started from [Open Prism](https://github.com/assistant-ui/open-prism) by [assistant-ui](https://github.com/assistant-ui).
+Built on [Claude Prism](https://github.com/delibae/claude-prism), which in turn
+started from [Open Prism](https://github.com/assistant-ui/open-prism) by
+[assistant-ui](https://github.com/assistant-ui).
 
 ## License
 
