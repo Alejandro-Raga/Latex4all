@@ -137,8 +137,8 @@ export function UvSetupDialog({ open, onClose }: UvSetupDialogProps) {
               <div className="min-w-0 flex-1 overflow-hidden">
                 <div className="font-medium text-sm">
                   {venvReady
-                    ? "Virtual Environment Active"
-                    : "No Virtual Environment"}
+                    ? "Virtual environment active"
+                    : "No virtual environment"}
                 </div>
                 {venvPath && (
                   <div

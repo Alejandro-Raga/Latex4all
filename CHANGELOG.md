@@ -20,6 +20,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Plainer wording throughout the menus and dialogs: "From a template" rather
+  than "Guided Setup", "Create and draft" rather than "Create & Generate with
+  AI". Labels are sentence case now, so menus read like sentences instead of
+  headlines.
+- Replaced the decorative sparkle, rocket, lightning-bolt and brain icons with
+  ones that describe what they sit next to. The flask stays where it actually
+  means the test channel.
+- The model picker lists Sonnet, Opus and Haiku without marketing descriptions.
+
 ## [1.1.0] - 2026-09-11
 
 ### Added

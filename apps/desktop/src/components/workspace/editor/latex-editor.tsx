@@ -1517,7 +1517,7 @@ export function LatexEditor() {
                 size="sm"
                 onClick={() => loadFileContent(activeFile.id)}
               >
-                Open Anyway
+                Open anyway
               </Button>
             </div>
           </div>
@@ -1742,7 +1742,7 @@ export function LatexEditor() {
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Add Label</DialogTitle>
+            <DialogTitle>Add label</DialogTitle>
           </DialogHeader>
           <div className="py-4">
             <Input

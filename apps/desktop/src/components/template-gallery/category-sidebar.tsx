@@ -3,7 +3,8 @@ import {
   GraduationCapIcon,
   BriefcaseIcon,
   PaletteIcon,
-  SparklesIcon,
+  CircleDashedIcon,
+  LayoutGridIcon,
   MonitorIcon,
   LayoutIcon,
   UserIcon,
@@ -27,7 +28,7 @@ const CATEGORY_ICONS: Record<TemplateCategory, React.ReactNode> = {
   academic: <GraduationCapIcon className="size-4" />,
   professional: <BriefcaseIcon className="size-4" />,
   creative: <PaletteIcon className="size-4" />,
-  starter: <SparklesIcon className="size-4" />,
+  starter: <CircleDashedIcon className="size-4" />,
 };
 
 const _SUBCATEGORY_ICONS: Record<TemplateSubcategory, React.ReactNode> = {
@@ -59,8 +60,8 @@ export function CategorySidebar() {
             : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
         }`}
       >
-        <SparklesIcon className="size-4" />
-        <span className="flex-1">All Templates</span>
+        <LayoutGridIcon className="size-4" />
+        <span className="flex-1">All templates</span>
         <span className="text-muted-foreground text-xs tabular-nums">
           {allCount}
         </span>

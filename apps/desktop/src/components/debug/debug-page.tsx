@@ -115,7 +115,7 @@ export function DebugPage() {
           ) : (
             <CopyIcon className="size-3.5" />
           )}
-          {copied ? "Copied!" : "Copy Bug Report"}
+          {copied ? "Copied!" : "Copy bug report"}
         </button>
       </div>
 
@@ -230,7 +230,7 @@ export function DebugPage() {
                 <Row label="OS" value={systemInfo.os} />
                 <Row label="OS Version" value={systemInfo.os_version} />
                 <Row label="Architecture" value={systemInfo.arch} />
-                <Row label="App Version" value={systemInfo.app_version} />
+                <Row label="App version" value={systemInfo.app_version} />
               </div>
             ) : (
               <p className="text-muted-foreground text-sm">Loading...</p>
@@ -240,9 +240,9 @@ export function DebugPage() {
               Browser / WebView
             </h3>
             <div className="space-y-1 text-sm">
-              <Row label="User Agent" value={navigator.userAgent} />
+              <Row label="User agent" value={navigator.userAgent} />
               <Row
-                label="Device Pixel Ratio"
+                label="Device pixel ratio"
                 value={String(window.devicePixelRatio)}
               />
               <Row label="GPU Renderer" value={getGpuRenderer()} />
@@ -257,7 +257,7 @@ export function DebugPage() {
             </h3>
             <div className="space-y-1 text-sm">
               <Row
-                label="Current State"
+                label="Current state"
                 value={document.visibilityState}
                 valueClass={
                   document.visibilityState === "visible"
@@ -266,10 +266,10 @@ export function DebugPage() {
                 }
               />
               <Row
-                label="Window Focused"
+                label="Window focused"
                 value={document.hasFocus() ? "Yes" : "No"}
               />
-              <Row label="Restore Events" value={String(visibilityCount)} />
+              <Row label="Restore events" value={String(visibilityCount)} />
             </div>
 
             <h3 className="pt-4 font-semibold text-muted-foreground text-xs uppercase">

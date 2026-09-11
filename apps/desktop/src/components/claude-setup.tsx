@@ -693,7 +693,7 @@ export function ClaudeSetup({
           <div className="min-w-0 space-y-2">
             <Label className="text-xs">
               {selectedProvider === "openai-compatible"
-                ? "Model Provider"
+                ? "Model provider"
                 : "Provider"}
             </Label>
             <div className="grid min-w-0 grid-cols-2 gap-2">
@@ -957,7 +957,7 @@ export function ClaudeSetup({
                 : "Saving..."
               : selectedProvider === "openai-compatible"
                 ? apiKeyOptional
-                  ? "Verify & Use Local Provider"
+                  ? "Verify and use local provider"
                   : "Verify & Use API Key"
                 : "Use API Key"}
           </Button>
@@ -979,7 +979,7 @@ export function ClaudeSetup({
               disabled={isSavingApiKey}
             >
               <LogInIcon className="size-3.5" />
-              Sign in with Browser
+              Sign in with browser
             </Button>
           </>
         )}
@@ -1329,7 +1329,7 @@ export function ClaudeSetup({
         <div className="flex items-center gap-2">
           <AlertCircleIcon className="size-5 shrink-0 text-destructive" />
           <p className="font-medium text-sm">
-            {hasInstallSteps ? "Installation Failed" : "Setup Error"}
+            {hasInstallSteps ? "Installation failed" : "Setup error"}
           </p>
         </div>
 
@@ -1357,7 +1357,7 @@ export function ClaudeSetup({
             onClick={hasInstallSteps ? install : checkStatus}
           >
             <RefreshCwIcon className="size-3.5" />
-            {hasInstallSteps ? "Retry Installation" : "Retry"}
+            {hasInstallSteps ? "Retry installation" : "Retry"}
           </Button>
           {!hasInstallSteps && (
             <Button
@@ -1369,7 +1369,7 @@ export function ClaudeSetup({
               }}
             >
               <ExternalLinkIcon className="size-3.5" />
-              Setup Guide
+              Setup guide
             </Button>
           )}
         </div>

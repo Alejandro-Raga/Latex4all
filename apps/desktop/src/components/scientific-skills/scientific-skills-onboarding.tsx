@@ -156,7 +156,7 @@ export function ScientificSkillsOnboarding({
           ...categories,
           {
             id: "imported",
-            name: "Imported Skills",
+            name: "Imported skills",
             icon: "settings",
             skill_count: importedSkills.length,
             skills: importedSkills.map((skill) => ({
@@ -255,7 +255,7 @@ export function ScientificSkillsOnboarding({
       const selectedFolder = await open({
         directory: true,
         multiple: false,
-        title: "Import Claude Skill Folder",
+        title: "Import Claude skill folder",
       });
 
       if (typeof selectedFolder !== "string") return;
@@ -338,10 +338,10 @@ export function ScientificSkillsOnboarding({
                 <FlaskConicalIcon className="size-5 text-muted-foreground" />
               )}
               {isComplete
-                ? "Installation Complete"
+                ? "Installation complete"
                 : error
-                  ? "Installation Failed"
-                  : "Installing Skills"}
+                  ? "Installation failed"
+                  : "Installing skills"}
             </DialogTitle>
             {isComplete ? (
               <DialogDescription>
@@ -465,7 +465,7 @@ export function ScientificSkillsOnboarding({
                 ) : (
                   <Button size="sm" onClick={handleInstall} className="gap-1.5">
                     <DownloadIcon className="size-3.5" />
-                    Install All
+                    Install all
                   </Button>
                 )}
                 <Button
@@ -565,7 +565,7 @@ export function ScientificSkillsOnboarding({
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete Skill</DialogTitle>
+            <DialogTitle>Delete skill</DialogTitle>
             <DialogDescription>
               Delete {deleteTarget?.name ?? "this skill"} from ~/.claude/skills.
               This cannot be undone.
@@ -609,7 +609,7 @@ export function ScientificSkillsOnboarding({
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Uninstall All Skills</DialogTitle>
+            <DialogTitle>Uninstall all skills</DialogTitle>
             <DialogDescription>
               This will delete every skill under ~/.claude/skills, including
               imported local skills. This cannot be undone.

@@ -9,7 +9,7 @@ import {
   FolderOpenIcon,
   PaperclipIcon,
   XIcon,
-  SparklesIcon,
+  PenLineIcon,
   UploadIcon,
   ChevronDownIcon,
   FileTextIcon,
@@ -62,7 +62,7 @@ export function ProjectWizard({ mode, onBack }: ProjectWizardProps) {
           >
             <ArrowLeftIcon className="size-4" />
           </Button>
-          <span className="font-semibold text-sm">Choose a Template</span>
+          <span className="font-semibold text-sm">Choose a template</span>
         </div>
         <div className="flex-1 overflow-hidden">
           <TemplateGallery />
@@ -124,7 +124,7 @@ function ScratchForm({ onBack }: { onBack: () => void }) {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: "Choose Location for New Project",
+      title: "Choose a location for the new project",
     });
     if (selected) {
       setProjectFolder(selected);
@@ -135,7 +135,7 @@ function ScratchForm({ onBack }: { onBack: () => void }) {
   const handleAddAttachments = useCallback(async () => {
     const selected = await open({
       multiple: true,
-      title: "Add Reference Files",
+      title: "Add reference files",
     });
     if (selected) {
       const paths = Array.isArray(selected) ? selected : [selected];
@@ -283,7 +283,7 @@ function ScratchForm({ onBack }: { onBack: () => void }) {
         >
           <ArrowLeftIcon className="size-4" />
         </Button>
-        <span className="font-semibold text-sm">New Document</span>
+        <span className="font-semibold text-sm">New document</span>
       </div>
 
       {/* Form */}
@@ -480,11 +480,11 @@ function ScratchForm({ onBack }: { onBack: () => void }) {
                 </>
               ) : purpose.trim() ? (
                 <>
-                  <SparklesIcon className="size-4" />
-                  Create & Generate with AI
+                  <PenLineIcon className="size-4" />
+                  Create and draft
                 </>
               ) : (
-                "Create Project"
+                "Create project"
               )}
             </Button>
           </div>

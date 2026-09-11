@@ -1,5 +1,5 @@
 import {
-  RocketIcon,
+  DownloadIcon,
   FlaskConicalIcon,
   Loader2Icon,
   RotateCcwIcon,
@@ -12,13 +12,13 @@ const CHANNELS: Array<{
   value: UpdateChannel;
   label: string;
   blurb: string;
-  icon: typeof RocketIcon;
+  icon: typeof DownloadIcon;
 }> = [
   {
     value: "release",
     label: "Release",
     blurb: "Official tagged releases only.",
-    icon: RocketIcon,
+    icon: DownloadIcon,
   },
   {
     value: "test",

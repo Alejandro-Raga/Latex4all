@@ -471,7 +471,7 @@ export function WordLookupPopover({
               className="flex items-center gap-1.5 text-muted-foreground text-xs transition-colors hover:text-foreground"
             >
               <ExternalLinkIcon className="size-3" />
-              Open in Dictionary
+              Open in dictionary
             </button>
           )}
           {isSpanish && (

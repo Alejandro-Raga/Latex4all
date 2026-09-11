@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   DownloadIcon,
-  RocketIcon,
   FlaskConicalIcon,
   Loader2Icon,
   RefreshCwIcon,
@@ -157,7 +156,7 @@ function ChannelPicker({ onPick }: { onPick: (c: UpdateChannel) => void }) {
 
         <div className="space-y-2.5">
           <ChannelOption
-            icon={RocketIcon}
+            icon={DownloadIcon}
             title="Release"
             blurb="Official tagged releases only. Fewer updates, each one deliberately published."
             onClick={() => onPick("release")}
@@ -184,7 +183,7 @@ function ChannelOption({
   blurb,
   onClick,
 }: {
-  icon: typeof RocketIcon;
+  icon: typeof DownloadIcon;
   title: string;
   blurb: string;
   onClick: () => void;

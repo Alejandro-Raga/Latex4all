@@ -429,7 +429,7 @@ export function EnvironmentOnboarding() {
                         : "blocked"
                 }
                 icon={FlaskConicalIcon}
-                title="Scientific Skills"
+                title="Scientific skills"
                 detail={
                   skillsChecking
                     ? "Checking..."
@@ -469,7 +469,7 @@ export function EnvironmentOnboarding() {
                         : "blocked"
                 }
                 icon={SpellCheckIcon}
-                title="Grammar Checker"
+                title="Grammar checker"
                 detail={
                   isGrammarInstalling
                     ? (grammarProgress?.message ?? "Downloading...")

@@ -240,7 +240,7 @@ export function HistoryPanel({ maxHeight }: { maxHeight?: string }) {
       <Dialog open={labelDialogOpen} onOpenChange={setLabelDialogOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Add Label</DialogTitle>
+            <DialogTitle>Add label</DialogTitle>
           </DialogHeader>
           <div className="py-4">
             <Input

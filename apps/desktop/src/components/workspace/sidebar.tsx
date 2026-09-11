@@ -1220,7 +1220,7 @@ export function Sidebar({
           className="size-7 transition-transform duration-300 ease-in-out hover:scale-105"
           onClick={onToggleCollapsed}
           title="Files"
-          aria-label="Expand Files"
+          aria-label="Expand files"
         >
           <FolderIcon className="size-3.5" />
         </Button>
@@ -1230,7 +1230,7 @@ export function Sidebar({
           className="size-7 transition-transform duration-300 ease-in-out hover:scale-105"
           onClick={onToggleCollapsed}
           title="Outline"
-          aria-label="Expand Outline"
+          aria-label="Expand outline"
         >
           <ListIcon className="size-3.5" />
         </Button>
@@ -1250,7 +1250,7 @@ export function Sidebar({
           className="size-7 transition-transform duration-300 ease-in-out hover:scale-105"
           onClick={onToggleCollapsed}
           title="Environment"
-          aria-label="Expand Environment"
+          aria-label="Expand environment"
         >
           <AppWindowIcon className="size-3.5" />
         </Button>
@@ -1261,8 +1261,8 @@ export function Sidebar({
           size="icon"
           className="size-7 transition-transform duration-300 ease-in-out hover:scale-105"
           onClick={closeProject}
-          title="Close Project"
-          aria-label="Close Project"
+          title="Close project"
+          aria-label="Close project"
         >
           <HomeIcon className="size-3.5" />
         </Button>
@@ -1302,8 +1302,8 @@ export function Sidebar({
                 size="icon"
                 className="size-6 transition-all duration-150 ease-out hover:scale-105"
                 onClick={closeProject}
-                title="Close Project"
-                aria-label="Close Project"
+                title="Close project"
+                aria-label="Close project"
               >
                 <HomeIcon className="size-3.5" />
               </Button>
@@ -1387,12 +1387,12 @@ export function Sidebar({
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openNewFolderDialog()}>
                           <FolderPlusIcon className="mr-2 size-4" />
-                          New Folder
+                          New folder
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleImport()}>
                           <UploadIcon className="mr-2 size-4" />
-                          Import File
+                          Import file
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -1441,16 +1441,16 @@ export function Sidebar({
                     <ContextMenuContent>
                       <ContextMenuItem onClick={() => openNewFileDialog()}>
                         <FileTextIcon className="mr-2 size-4" />
-                        New File
+                        New file
                       </ContextMenuItem>
                       <ContextMenuItem onClick={() => openNewFolderDialog()}>
                         <FolderPlusIcon className="mr-2 size-4" />
-                        New Folder
+                        New folder
                       </ContextMenuItem>
                       <ContextMenuSeparator />
                       <ContextMenuItem onClick={() => handleImport()}>
                         <UploadIcon className="mr-2 size-4" />
-                        Import File
+                        Import file
                       </ContextMenuItem>
                     </ContextMenuContent>
                   </ContextMenu>
@@ -1658,7 +1658,7 @@ export function Sidebar({
           >
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>Rename Project</DialogTitle>
+                <DialogTitle>Rename project</DialogTitle>
               </DialogHeader>
               <div className="space-y-2 py-4">
                 <Input
@@ -1942,15 +1942,15 @@ function FileTreeNode({
             <ContextMenuContent>
               <ContextMenuItem onClick={() => onNewFile(node.relativePath)}>
                 <FileTextIcon className="mr-2 size-4" />
-                New File Here
+                New file here
               </ContextMenuItem>
               <ContextMenuItem onClick={() => onNewFolder(node.relativePath)}>
                 <FolderPlusIcon className="mr-2 size-4" />
-                New Folder
+                New folder
               </ContextMenuItem>
               <ContextMenuItem onClick={() => onImport(node.relativePath)}>
                 <UploadIcon className="mr-2 size-4" />
-                Import File Here
+                Import file here
               </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem

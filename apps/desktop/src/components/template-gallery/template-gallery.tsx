@@ -48,7 +48,7 @@ export function TemplateGallery() {
     ? CATEGORY_LABELS[selectedCategory]
     : searchQuery
       ? `Results for "${searchQuery}"`
-      : "All Templates";
+      : "All templates";
 
   return (
     <div className="flex h-full flex-col">

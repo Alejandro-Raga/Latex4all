@@ -642,7 +642,7 @@ export function PdfPreview() {
           <div className="w-full max-w-lg">
             <div className="mb-4 flex items-center gap-2 text-destructive">
               <AlertCircleIcon className="size-5" />
-              <h2 className="font-semibold text-base">Compilation Failed</h2>
+              <h2 className="font-semibold text-base">Compilation failed</h2>
               <span className="ml-auto rounded-full bg-destructive/15 px-2 py-0.5 font-medium text-xs">
                 {errors.length} {errors.length === 1 ? "error" : "errors"}
               </span>
@@ -663,7 +663,7 @@ export function PdfPreview() {
                 className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 font-medium text-primary-foreground text-xs shadow-sm transition-colors hover:bg-primary/90"
               >
                 <MousePointerClickIcon className="size-3.5" />
-                Fix with Chat
+                Fix with chat
               </button>
               <button
                 onClick={() => handleCompile(true)}
@@ -871,7 +871,7 @@ export function PdfPreview() {
                 className="size-7 shrink-0"
                 onClick={() => goToPage(currentPage - 1)}
                 disabled={currentPage <= 1}
-                title="Page Up"
+                title="Page up"
               >
                 <ChevronUpIcon className="size-3.5" />
               </Button>
@@ -915,7 +915,7 @@ export function PdfPreview() {
                 className="size-7 shrink-0"
                 onClick={() => goToPage(currentPage + 1)}
                 disabled={currentPage >= numPages}
-                title="Page Down"
+                title="Page down"
               >
                 <ChevronDownIcon className="size-3.5" />
               </Button>
@@ -986,7 +986,9 @@ export function PdfPreview() {
                 title={`Capture & Ask (${navigator.userAgent.includes("Mac") ? "Cmd+X" : "Ctrl+X"})`}
               >
                 <CrosshairIcon className="size-3.5 shrink-0" />
-                <span className="@[56rem]/pv:inline hidden">Capture & Ask</span>
+                <span className="@[56rem]/pv:inline hidden">
+                  Capture and ask
+                </span>
                 <kbd className="pointer-events-none ml-0.5 @[64rem]/pv:inline hidden rounded border border-background/30 bg-background/20 px-1 py-0.5 font-medium text-[10px] text-background leading-none">
                   {navigator.userAgent.includes("Mac") ? "Cmd+X" : "Ctrl+X"}
                 </kbd>

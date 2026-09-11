@@ -88,7 +88,7 @@ export function ProblemsPanel({
             title="Fix all problems with AI"
           >
             <MousePointerClickIcon className="size-3" />
-            <span>Fix with Chat</span>
+            <span>Fix with chat</span>
           </button>
         )}
       </div>

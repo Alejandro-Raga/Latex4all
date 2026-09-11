@@ -21,11 +21,9 @@ import {
   ImageIcon,
   FileSpreadsheetIcon,
   PaperclipIcon,
-  ZapIcon,
   CheckIcon,
   ChevronDownIcon,
-  SparklesIcon,
-  RabbitIcon,
+  BoxIcon,
   LayersIcon,
   PlusIcon,
   Trash2Icon,
@@ -1250,20 +1248,14 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
     {
       id: "sonnet" as const,
       name: "Sonnet",
-      desc: "Fast, efficient for most tasks",
-      icon: <ZapIcon className="size-3.5" />,
     },
     {
       id: "opus" as const,
       name: "Opus",
-      desc: "Most capable, complex reasoning",
-      icon: <SparklesIcon className="size-3.5" />,
     },
     {
       id: "haiku" as const,
       name: "Haiku",
-      desc: "Fastest, simple tasks",
-      icon: <RabbitIcon className="size-3.5" />,
     },
     {
       id: "opusplan" as const,
@@ -1384,7 +1376,7 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                         className="size-4 shrink-0 object-contain"
                       />
                     ) : (
-                      <SparklesIcon className="size-3.5 shrink-0" />
+                      <BoxIcon className="size-3.5 shrink-0" />
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-medium text-xs">
@@ -1449,7 +1441,7 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                           className="size-4 shrink-0 object-contain"
                         />
                       ) : (
-                        <SparklesIcon className="size-3.5 shrink-0" />
+                        <BoxIcon className="size-3.5 shrink-0" />
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-medium text-xs">
@@ -1521,12 +1513,8 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                         )}
                         onClick={() => setSelectedModel(m.id)}
                       >
-                        {m.icon}
                         <div className="min-w-0 flex-1">
                           <div className="font-medium text-xs">{m.name}</div>
-                          <div className="truncate text-muted-foreground text-xs">
-                            {m.desc}
-                          </div>
                         </div>
                         {selectedModel === m.id && (
                           <CheckIcon className="size-3 shrink-0" />
@@ -1896,7 +1884,7 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                       className="size-3.5 shrink-0 object-contain"
                     />
                   ) : (
-                    <SparklesIcon className="size-3" />
+                    <BoxIcon className="size-3" />
                   )}
                   <span className="max-w-36 truncate">
                     {selectedProviderDisplayName}
@@ -1918,7 +1906,7 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                       className="size-3.5 shrink-0 object-contain"
                     />
                   ) : (
-                    <SparklesIcon className="size-3" />
+                    <BoxIcon className="size-3" />
                   )}
                   <span>Claude Code</span>
                   <span className="max-w-32 truncate">
@@ -1931,7 +1919,7 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                 </>
               ) : (
                 <>
-                  <SparklesIcon className="size-3" />
+                  <BoxIcon className="size-3" />
                   <span>Provider</span>
                   <span className="text-muted-foreground/60">
                     {setupStatus === "checking" ? "Loading" : "Select"}

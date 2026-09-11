@@ -17,7 +17,7 @@ import {
   FolderOpenIcon,
   XIcon,
   FileTextIcon,
-  SparklesIcon,
+  LayoutTemplateIcon,
   CheckCircle2Icon,
   CircleIcon,
   DownloadIcon,
@@ -212,7 +212,7 @@ export function ProjectPicker() {
       const selected = await open({
         directory: true,
         multiple: false,
-        title: "Open Project Folder",
+        title: "Open project folder",
       });
       if (typeof selected === "string" && selected) {
         await openProject(selected);
@@ -310,7 +310,7 @@ export function ProjectPicker() {
             icon={FolderOpenIcon}
             onClick={() => setActiveSection("projects")}
           >
-            All Projects
+            All projects
           </ProjectNavButton>
           <ProjectNavButton
             active={activeSection === "settings"}
@@ -379,7 +379,7 @@ export function ProjectPicker() {
         <header className="flex h-[calc(48px+var(--titlebar-height))] shrink-0 flex-nowrap items-center gap-3 border-border/70 border-b bg-background px-5">
           <div className="mr-auto flex min-w-0 items-center">
             <h1 className="truncate font-semibold text-lg leading-none">
-              {activeSection === "settings" ? "Settings" : "All Projects"}
+              {activeSection === "settings" ? "Settings" : "All projects"}
             </h1>
           </div>
 
@@ -528,7 +528,7 @@ export function ProjectPicker() {
       <Dialog open={showModeDialog} onOpenChange={setShowModeDialog}>
         <DialogContent showCloseButton={false} className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create New Project</DialogTitle>
+            <DialogTitle>Create new project</DialogTitle>
             <DialogDescription>How would you like to start?</DialogDescription>
           </DialogHeader>
           <div className="flex gap-3 pt-2">
@@ -537,12 +537,12 @@ export function ProjectPicker() {
               className="group flex flex-1 flex-col items-center gap-3 rounded-lg border border-border/70 p-4 text-center transition-colors hover:border-border hover:bg-muted/50"
             >
               <div className="flex size-10 items-center justify-center rounded-md bg-muted/50 transition-colors group-hover:bg-muted">
-                <SparklesIcon className="size-5 text-muted-foreground transition-colors group-hover:text-foreground" />
+                <LayoutTemplateIcon className="size-5 text-muted-foreground transition-colors group-hover:text-foreground" />
               </div>
               <div>
-                <div className="font-semibold text-sm">Guided Setup</div>
+                <div className="font-semibold text-sm">From a template</div>
                 <p className="mt-1 text-muted-foreground text-xs leading-relaxed">
-                  Pick a template and let AI help you get started
+                  Papers, slides, CVs and letters
                 </p>
               </div>
               <span className="rounded-md bg-muted px-2 py-0.5 font-medium text-[10px] text-muted-foreground">
@@ -558,9 +558,9 @@ export function ProjectPicker() {
                 <FileTextIcon className="size-5 text-muted-foreground transition-colors group-hover:text-foreground" />
               </div>
               <div>
-                <div className="font-semibold text-sm">Blank Document</div>
+                <div className="font-semibold text-sm">Blank document</div>
                 <p className="mt-1 text-muted-foreground text-xs leading-relaxed">
-                  Start with an empty LaTeX file
+                  An empty .tex file
                 </p>
               </div>
             </button>
@@ -576,7 +576,7 @@ export function ProjectPicker() {
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Remove Project</DialogTitle>
+            <DialogTitle>Remove project</DialogTitle>
             <DialogDescription>
               Remove "{removeProjectTarget?.name ?? "this project"}" from All
               Projects? The project files will stay on disk.
@@ -1224,7 +1224,7 @@ function EnvironmentStatus({ appVersion }: { appVersion: string }) {
         {/* Scientific Skills */}
         <StatusRow
           ok={!!skillsStatus?.installed}
-          label="Scientific Skills"
+          label="Scientific skills"
           detail={
             skillsInstalling
               ? "Installing..."

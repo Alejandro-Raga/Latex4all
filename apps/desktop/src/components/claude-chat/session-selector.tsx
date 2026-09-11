@@ -178,7 +178,7 @@ export function SessionSelector() {
 
           <DropdownMenuItem onSelect={handleNewChat}>
             <PlusIcon className="size-4" />
-            <span>New Chat</span>
+            <span>New chat</span>
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
-  SparklesIcon,
+  PenLineIcon,
   LoaderIcon,
   ArrowLeftIcon,
   FolderOpenIcon,
@@ -330,7 +330,7 @@ export function TemplatePreview() {
   const handleAddAttachments = useCallback(async () => {
     const selected = await open({
       multiple: true,
-      title: "Add Reference Files",
+      title: "Add reference files",
     });
     if (selected) {
       const paths = Array.isArray(selected) ? selected : [selected];
@@ -349,7 +349,7 @@ export function TemplatePreview() {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: "Choose Location for New Project",
+      title: "Choose a location for the new project",
     });
     if (selected) {
       setProjectFolder(selected);
@@ -473,8 +473,7 @@ export function TemplatePreview() {
                     onClick={() => setModalStep("details")}
                     className="gap-1.5"
                   >
-                    <SparklesIcon className="size-3.5" />
-                    Use Template
+                    Use template
                   </Button>
                 </div>
               </div>
@@ -755,11 +754,11 @@ export function TemplatePreview() {
                   </>
                 ) : purpose.trim() ? (
                   <>
-                    <SparklesIcon className="size-4" />
-                    Create & Generate with AI
+                    <PenLineIcon className="size-4" />
+                    Create and draft
                   </>
                 ) : (
-                  "Create Project"
+                  "Create project"
                 )}
               </Button>
             </div>

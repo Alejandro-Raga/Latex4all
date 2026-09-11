@@ -346,7 +346,7 @@ export function EditorToolbar({
                   variant="ghost"
                   size="icon"
                   className="size-6 p-1"
-                  title="Open in Editor"
+                  title="Open in editor"
                 >
                   <ExternalLinkIcon className="size-4" />
                 </Button>
@@ -557,7 +557,7 @@ export function EditorToolbar({
               variant="ghost"
               size="icon"
               className="size-6 p-1"
-              title="Open in Editor"
+              title="Open in editor"
             >
               <ExternalLinkIcon className="size-4" />
             </Button>

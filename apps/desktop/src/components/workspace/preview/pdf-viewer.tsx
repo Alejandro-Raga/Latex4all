@@ -1029,7 +1029,7 @@ export function PdfViewer({
         href.startsWith("mailto:")
       ) {
         ask(`Open in browser?\n${href}`, {
-          title: "External Link",
+          title: "External link",
           kind: "info",
           okLabel: "Open",
           cancelLabel: "Cancel",

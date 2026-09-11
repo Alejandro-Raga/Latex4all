@@ -552,7 +552,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
           <LibraryIcon className="size-3.5 text-muted-foreground" />
         )}
         <span className="min-w-0 flex-1 truncate font-medium text-sm">
-          {refProjectName ?? "Quick Reference"}
+          {refProjectName ?? "Quick reference"}
         </span>
         <Button
           variant="ghost"
@@ -560,7 +560,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
           className="size-6"
           onClick={onClose}
           title="Close"
-          aria-label="Close Quick Reference"
+          aria-label="Close quick reference"
         >
           <XIcon className="size-3.5" />
         </Button>

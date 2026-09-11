@@ -1,6 +1,6 @@
 import { type FC, useState } from "react";
 import {
-  BrainIcon,
+  EllipsisIcon,
   CheckIcon,
   ChevronDownIcon,
   ChevronRightIcon,
@@ -12,7 +12,7 @@ import {
   ListTodoIcon,
   LoaderIcon,
   MessageCircleQuestionIcon,
-  SparklesIcon,
+  ListChecksIcon,
   TerminalIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -394,7 +394,7 @@ const ExitPlanModeWidget: FC<{ input: any; result?: ContentBlock }> = ({
       }`}
     >
       <div className="flex items-center gap-2 px-3 py-2">
-        <SparklesIcon className="size-3.5 text-amber-500" />
+        <ListChecksIcon className="size-3.5 text-amber-500" />
         <span className="font-medium text-amber-700 dark:text-amber-300">
           {needsApproval
             ? "Plan needs approval"
@@ -564,7 +564,7 @@ export const ThinkingWidget: FC<{ thinking: string; signature?: string }> = ({
       >
         <div className="flex items-center gap-2">
           <div className="flex size-5 items-center justify-center rounded-full bg-muted-foreground/10">
-            <BrainIcon className="size-3.5 text-muted-foreground" />
+            <EllipsisIcon className="size-3.5 text-muted-foreground" />
           </div>
           <span className="font-medium text-muted-foreground text-sm italic">
             Thinking...

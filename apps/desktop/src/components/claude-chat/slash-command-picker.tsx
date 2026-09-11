@@ -15,7 +15,7 @@ import {
   GlobeIcon,
   TerminalIcon,
   FileCodeIcon,
-  ZapIcon,
+  FolderIcon,
   XIcon,
   SearchIcon,
   FlaskConicalIcon,
@@ -79,7 +79,7 @@ function getCommandIcon(command: SlashCommand) {
     return <GlobeIcon className="size-3.5 shrink-0 text-muted-foreground" />;
   if (command.scope === "default")
     return <CommandIcon className="size-3.5 shrink-0 text-muted-foreground" />;
-  return <ZapIcon className="size-3.5 shrink-0 text-muted-foreground" />;
+  return <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />;
 }
 
 // ─── Fuzzy matching (fzf/fzy-inspired) ───
