@@ -471,9 +471,15 @@ export function PdfPreview() {
     const defaultName = mainFile
       ? mainFile.name.replace(/\.tex$/, ".pdf")
       : "document.pdf";
+    // Open in the project's own folder. A bare filename leaves the dialog
+    // wherever the OS was last pointed, which for most people is not where the
+    // document lives.
+    const defaultPath = projectRoot
+      ? await join(projectRoot, defaultName)
+      : defaultName;
     const filePath = await save({
       title: "Export PDF",
-      defaultPath: defaultName,
+      defaultPath,
       filters: [{ name: "PDF", extensions: ["pdf"] }],
     });
     if (!filePath) return;

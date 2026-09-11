@@ -18,6 +18,11 @@ URL changed. Branch layout, CI, refactors and tests belong in commit messages.
 
 Write entries under `## [Unreleased]
 
+### Changed
+
+- Exporting a PDF now opens in the project's own folder rather than wherever
+  the save dialog was last pointed.
+
 ## [1.1.3] - 2026-09-11
 
 ### Added
