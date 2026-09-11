@@ -154,6 +154,77 @@ describe("updater store", () => {
     });
   });
 
+  describe("checkRequested", () => {
+    it("reports the release as a rollback when the machine is ahead of it", async () => {
+      // The situation this exists for: running test build 1.1.22, switched to
+      // the release channel, where 1.1.1 is the newest. The first check finds
+      // nothing because 1.1.1 is the lower number.
+      mockInvoke.mockResolvedValueOnce(null).mockResolvedValueOnce({
+        version: "1.1.1",
+        currentVersion: "1.1.22",
+        notes: "Stable release",
+        date: null,
+        isDowngrade: true,
+      });
+
+      await useUpdaterStore.getState().checkRequested("release");
+
+      expect(useUpdaterStore.getState().status).toEqual({
+        state: "available",
+        version: "1.1.1",
+        notes: "Stable release",
+        isDowngrade: true,
+      });
+      expect(mockInvoke).toHaveBeenNthCalledWith(1, "updater_check", {
+        channel: "release",
+        allowDowngrade: false,
+      });
+      expect(mockInvoke).toHaveBeenNthCalledWith(2, "updater_check", {
+        channel: "release",
+        allowDowngrade: true,
+      });
+    });
+
+    it("stays up-to-date when the machine really is current", async () => {
+      mockInvoke.mockResolvedValue(null);
+
+      await useUpdaterStore.getState().checkRequested("release");
+
+      expect(useUpdaterStore.getState().status).toEqual({
+        state: "up-to-date",
+      });
+    });
+
+    it("does not second-guess a normal update into a rollback offer", async () => {
+      mockInvoke.mockResolvedValue({
+        version: "1.2.0",
+        currentVersion: "1.1.1",
+        notes: null,
+        date: null,
+        isDowngrade: false,
+      });
+
+      await useUpdaterStore.getState().checkRequested("release");
+
+      // One call only: the follow-up is for an empty result, not any result.
+      expect(mockInvoke).toHaveBeenCalledTimes(1);
+      expect(useUpdaterStore.getState().status).toMatchObject({
+        state: "available",
+        version: "1.2.0",
+      });
+    });
+
+    it("leaves the test channel alone", async () => {
+      // A test build below the tip is an ordinary update there, and nothing
+      // about that channel can strand a machine above it.
+      mockInvoke.mockResolvedValue(null);
+
+      await useUpdaterStore.getState().checkRequested("test");
+
+      expect(mockInvoke).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("install", () => {
     it("ends in the ready state so the UI can offer a restart", async () => {
       mockInvoke.mockResolvedValue(undefined);

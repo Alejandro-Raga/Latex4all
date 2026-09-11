@@ -24,6 +24,7 @@ export function useUpdater() {
   const launchCheckDone = useUpdaterStore((s) => s.launchCheckDone);
   const markLaunchChecked = useUpdaterStore((s) => s.markLaunchChecked);
   const storeCheck = useUpdaterStore((s) => s.check);
+  const storeCheckRequested = useUpdaterStore((s) => s.checkRequested);
   const storeInstall = useUpdaterStore((s) => s.install);
   const restart = useUpdaterStore((s) => s.restart);
 
@@ -31,8 +32,8 @@ export function useUpdater() {
     // No channel chosen yet — the first-run picker hasn't been answered, so
     // there is no feed to ask.
     if (!channel) return Promise.resolve();
-    return storeCheck(channel);
-  }, [channel, storeCheck]);
+    return storeCheckRequested(channel);
+  }, [channel, storeCheckRequested]);
 
   const installUpdate = useCallback(() => {
     if (!channel) return Promise.resolve();

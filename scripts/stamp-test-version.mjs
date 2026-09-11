@@ -12,9 +12,11 @@
  * version. Run numbers only ever increase, so test builds climb monotonically.
  *
  * Consequence worth knowing: test versions quickly outrun real releases (a
- * test build is 1.0.57 while the newest release is still 1.0.0), so switching
- * a machine from the test channel back to release needs a manual reinstall —
- * the release channel will not offer what looks to it like a downgrade.
+ * test build is 1.1.27 while the newest release is 1.1.1), so a test build can
+ * contain *less* than a release with a lower number. The release channel will
+ * not offer what looks to it like a downgrade, so leaving the test channel
+ * goes through the explicit rollback in Settings -> Updates; Check now offers
+ * it when it finds the machine ahead of the release.
  */
 
 import fs from "node:fs";

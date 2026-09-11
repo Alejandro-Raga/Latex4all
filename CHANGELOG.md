@@ -20,7 +20,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-09-11
+
 ### Fixed
+
+- "Check for updates" on the release channel said "up to date" to a machine
+  running a test build. Test versions carry the CI run number, so 1.1.22
+  outranks a 1.1.1 release while containing less — the channel had nothing
+  newer to offer and said so, which was true and useless. It now notices the
+  machine is ahead of the release and offers the rollback instead.
 
 - Settings said definitions were English-only. Spanish has had them since the
   Wiktionary data was added; the note simply hadn't caught up.

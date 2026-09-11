@@ -49,6 +49,17 @@ interface UpdaterState {
    * somebody asked for one.
    */
   check: (channel: UpdateChannel, allowDowngrade?: boolean) => Promise<void>;
+  /**
+   * A check the user asked for, as opposed to the one that runs at launch.
+   *
+   * On the release channel "nothing newer" is ambiguous: it is also the answer
+   * when the machine runs a test build numbered above the newest release. Test
+   * versions carry the CI run number, so 1.1.22 outranks a 1.1.1 release while
+   * containing less of the history. This asks a second time allowing an older
+   * build, so the answer is "you are on a test build, here is the release"
+   * rather than a false "up to date".
+   */
+  checkRequested: (channel: UpdateChannel) => Promise<void>;
   install: (channel: UpdateChannel, allowDowngrade?: boolean) => Promise<void>;
   restart: () => Promise<void>;
 }
@@ -98,6 +109,18 @@ export const useUpdaterStore = create<UpdaterState>()((set, get) => ({
       log.warn("Update check failed", { error: String(err) });
       set({ status: { state: "error", message: String(err) } });
     }
+  },
+
+  checkRequested: async (channel) => {
+    await get().check(channel);
+
+    // Only the release channel can be stranded this way, and only when the
+    // ordinary check came back empty — anything else is already the right
+    // answer and must not be second-guessed into a rollback offer.
+    if (channel !== "release") return;
+    if (get().status.state !== "up-to-date") return;
+
+    await get().check(channel, true);
   },
 
   install: async (channel, allowDowngrade = false) => {
