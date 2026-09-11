@@ -16,21 +16,9 @@ it: a new feature, or a fix to something that was broken for them. Describe the
 symptom, not the plumbing — "updates stopped being offered" rather than which
 URL changed. Branch layout, CI, refactors and tests belong in commit messages.
 
-Write entries under `## [Unreleased]` as you go, then rename that heading to
-`## [x.y.z]` when you tag. The one release predating this file is
-[v1.0.0](https://github.com/Alejandro-Raga/Latex4all/releases); anything older
-belongs to the upstream project this was forked from.
+Write entries under `## [Unreleased]
 
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-
-## [Unreleased]
-
-### Fixed
-
-- Moving from the test channel to Release could refuse to install, saying you
-  already had that build. The test channel and a release are not
-  interchangeable even when they look close — the test build has features the
-  release does not — so the release is always offered and always installable.
+## [1.1.3] - 2026-09-11
 
 ### Added
 
@@ -44,16 +32,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   forgotten when older projects drop off the list. The order you choose is
   remembered.
 
-### Fixed
-
-- A failed update said nothing at all — the dialog just closed and left you on
-  the version you started from. It now says what went wrong, including when
-  there is nothing to install because you already have that build.
-
 ### Changed
 
 - Choosing an update channel now checks it, so coming back to Release from a
   test build offers the release straight away.
+
+### Fixed
+
+- Setting a project's type did nothing the first time and only worked on the
+  second attempt.
+- Ordering by recency or by date added showed the same unchanging list, because
+  every project the app had found for itself was recorded at the same moment.
+  They now take their dates from the project folder.
+- Moving from the test channel to Release could refuse to install, saying you
+  already had that build. The release is now always offered and always
+  installable.
+- A failed update said nothing at all — the dialog just closed and left you on
+  the version you started from. It now says what went wrong.
 
 ## [1.1.2] - 2026-09-11
 
