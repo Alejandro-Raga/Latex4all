@@ -46,6 +46,11 @@ import { useLanguagePacksStore } from "@/stores/language-packs-store";
 import { LanguagePacksSettings } from "@/components/settings/language-packs";
 import { useLanguageToolStore } from "@/stores/language-tool-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import {
+  PORTRAIT_ASPECT,
+  pageAspectRatio,
+  texSourceAspectRatio,
+} from "@/lib/preview-aspect-ratio";
 import { UpdateSettings } from "@/components/updater/update-settings";
 import { compileLatex } from "@/lib/latex-compiler";
 import { getMupdfClient } from "@/lib/mupdf/mupdf-client";
@@ -89,8 +94,8 @@ type RecentProject = {
 type ProjectPreviewData = {
   createdAt: number | null;
 } & (
-  | { kind: "pdf"; url: string }
-  | { kind: "tex"; fileName: string; lines: string[] }
+  | { kind: "pdf"; url: string; aspectRatio: number }
+  | { kind: "tex"; fileName: string; lines: string[]; aspectRatio: number }
   | { kind: "empty" }
 );
 
@@ -648,7 +653,11 @@ async function firstExistingPath(
   );
 }
 
-async function renderPdfThumbnailFromBytes(bytes: Uint8Array): Promise<string> {
+type RenderedThumbnail = { url: string; aspectRatio: number };
+
+async function renderPdfThumbnailFromBytes(
+  bytes: Uint8Array,
+): Promise<RenderedThumbnail> {
   const buffer = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(buffer).set(bytes);
   const client = getMupdfClient();
@@ -656,9 +665,16 @@ async function renderPdfThumbnailFromBytes(bytes: Uint8Array): Promise<string> {
 
   try {
     docId = await client.openDocument(buffer);
+    // The first page's own bounds, so a deck reports itself as a deck. Read
+    // before rendering: both need the document open, and this is the cheaper
+    // of the two if the render throws.
+    const { width, height } = await client.getPageSize(docId, 0);
     const pngBuffer = await client.renderThumbnail(docId, 0, 420);
     const blob = new Blob([new Uint8Array(pngBuffer)], { type: "image/png" });
-    return URL.createObjectURL(blob);
+    return {
+      url: URL.createObjectURL(blob),
+      aspectRatio: pageAspectRatio(width, height),
+    };
   } finally {
     if (docId !== null) {
       await client.closeDocument(docId).catch(() => {});
@@ -666,8 +682,14 @@ async function renderPdfThumbnailFromBytes(bytes: Uint8Array): Promise<string> {
   }
 }
 
-async function renderPdfThumbnail(pdfPath: string): Promise<string> {
+async function renderPdfThumbnail(pdfPath: string): Promise<RenderedThumbnail> {
   return renderPdfThumbnailFromBytes(await readFile(pdfPath));
+}
+
+function previewAspectRatio(preview: ProjectPreviewState): number {
+  if (preview.status !== "ready") return PORTRAIT_ASPECT;
+  if (preview.data.kind === "empty") return PORTRAIT_ASPECT;
+  return preview.data.aspectRatio;
 }
 
 function texPreviewLines(content: string) {
@@ -775,7 +797,7 @@ async function computeProjectPreview(
       try {
         const data: ProjectPreviewData = {
           kind: "pdf",
-          url: await renderPdfThumbnail(pdfPath),
+          ...(await renderPdfThumbnail(pdfPath)),
           createdAt,
         };
         projectPreviewCache.set(cacheKey, data);
@@ -803,7 +825,7 @@ async function computeProjectPreview(
         );
         const data: ProjectPreviewData = {
           kind: "pdf",
-          url: await renderPdfThumbnailFromBytes(pdfBytes),
+          ...(await renderPdfThumbnailFromBytes(pdfBytes)),
           createdAt,
         };
         projectPreviewCache.set(cacheKey, data);
@@ -815,10 +837,12 @@ async function computeProjectPreview(
       }
 
       const fileName = texFile.absolutePath.split(/[\\/]/).pop() ?? "main.tex";
+      const source = await readTextFile(texFile.absolutePath);
       const data: ProjectPreviewData = {
         kind: "tex",
         fileName,
-        lines: texPreviewLines(await readTextFile(texFile.absolutePath)),
+        lines: texPreviewLines(source),
+        aspectRatio: texSourceAspectRatio(source),
         createdAt,
       };
       projectPreviewCache.set(cacheKey, data);
@@ -874,24 +898,34 @@ function ProjectPreviewCard({
     };
   }, [project]);
 
+  const aspectRatio = previewAspectRatio(preview);
+
   return (
     <div className="group min-w-0">
-      <div className="relative">
-        <button
-          className="relative aspect-[3/4] w-full overflow-hidden rounded-lg border border-border/70 bg-background text-left transition-all duration-200 hover:border-foreground/20 hover:shadow-md"
-          onClick={onOpen}
-        >
-          <ProjectPreviewSurface preview={preview} projectName={project.name} />
-        </button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute top-2 right-2 size-7 bg-background/80 opacity-0 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
-          onClick={onRemove}
-          aria-label={`Remove ${project.name}`}
-        >
-          <XIcon className="size-3.5" />
-        </Button>
+      {/* The row reserves a portrait-sized slot whatever the page shape, so a
+          deck sitting next to an article doesn't drag its neighbours' titles
+          out of line. Same approach the template gallery uses. */}
+      <div className="flex aspect-[3/4] items-center justify-center">
+        <div className="relative max-h-full w-full" style={{ aspectRatio }}>
+          <button
+            className="relative h-full w-full overflow-hidden rounded-lg border border-border/70 bg-background text-left transition-all duration-200 hover:border-foreground/20 hover:shadow-md"
+            onClick={onOpen}
+          >
+            <ProjectPreviewSurface
+              preview={preview}
+              projectName={project.name}
+            />
+          </button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-2 right-2 size-7 bg-background/80 opacity-0 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+            onClick={onRemove}
+            aria-label={`Remove ${project.name}`}
+          >
+            <XIcon className="size-3.5" />
+          </Button>
+        </div>
       </div>
       <button
         className="mt-2 block w-full truncate text-left font-medium text-sm leading-tight hover:underline"
