@@ -5,7 +5,11 @@
 // document: the rendered page's bounds when there is a PDF, and the
 // \documentclass line when source is all we have.
 
-export const PORTRAIT_ASPECT = 3 / 4;
+// A4, which is what almost every LaTeX document actually is. Used for the
+// loading placeholder and as the fallback when a page can't be measured, so
+// the card lands at very nearly its final height on the first paint instead of
+// starting at some other shape and shoving the title as the preview resolves.
+export const PORTRAIT_ASPECT = 1 / Math.SQRT2;
 
 export function pageAspectRatio(width: number, height: number): number {
   if (!Number.isFinite(width) || !Number.isFinite(height)) {

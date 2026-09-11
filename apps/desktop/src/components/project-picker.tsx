@@ -507,7 +507,7 @@ export function ProjectPicker() {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-6 gap-y-6">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] items-end gap-x-6 gap-y-6">
                   {visibleProjects.map((project) => (
                     <ProjectPreviewCard
                       key={project.path}
@@ -902,30 +902,31 @@ function ProjectPreviewCard({
 
   return (
     <div className="group min-w-0">
-      {/* The row reserves a portrait-sized slot whatever the page shape, so a
-          deck sitting next to an article doesn't drag its neighbours' titles
-          out of line. Same approach the template gallery uses. */}
-      <div className="flex aspect-[3/4] items-center justify-center">
-        <div className="relative max-h-full w-full" style={{ aspectRatio }}>
-          <button
-            className="relative h-full w-full overflow-hidden rounded-lg border border-border/70 bg-background text-left transition-all duration-200 hover:border-foreground/20 hover:shadow-md"
-            onClick={onOpen}
-          >
-            <ProjectPreviewSurface
-              preview={preview}
-              projectName={project.name}
-            />
-          </button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-2 right-2 size-7 bg-background/80 opacity-0 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
-            onClick={onRemove}
-            aria-label={`Remove ${project.name}`}
-          >
-            <XIcon className="size-3.5" />
-          </Button>
-        </div>
+      {/* Height comes from the width and the page's own ratio, with no fixed
+          slot to escape. An earlier version centred the card inside a 3:4 box
+          and leaned on max-h-full to rein in anything taller — but A4 is 0.707,
+          taller than 3:4, and WKWebView will not shrink an aspect-ratio box's
+          width to honour max-height, so every ordinary document spilled over
+          its own title. The row is bottom-aligned instead (items-end on the
+          grid), which keeps titles on a shared baseline and, because the text
+          block below is a fixed height, keeps a wide deck's name as close to
+          its preview as a tall article's. */}
+      <div className="relative w-full" style={{ aspectRatio }}>
+        <button
+          className="relative h-full w-full overflow-hidden rounded-lg border border-border/70 bg-background text-left transition-all duration-200 hover:border-foreground/20 hover:shadow-md"
+          onClick={onOpen}
+        >
+          <ProjectPreviewSurface preview={preview} projectName={project.name} />
+        </button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute top-2 right-2 size-7 bg-background/80 opacity-0 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+          onClick={onRemove}
+          aria-label={`Remove ${project.name}`}
+        >
+          <XIcon className="size-3.5" />
+        </Button>
       </div>
       <button
         className="mt-2 block w-full truncate text-left font-medium text-sm leading-tight hover:underline"
