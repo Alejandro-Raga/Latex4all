@@ -12,9 +12,9 @@ run numbers, so there is nothing to write in advance. Their notes are generated
 from the commit subjects since the last stable release.
 
 Write entries under `## [Unreleased]` as you go, then rename that heading to
-`## [x.y.z]` when you tag. Versions before 1.3.0 predate this file; see the
-[GitHub releases](https://github.com/Alejandro-Raga/Latex4all/releases) for
-their history.
+`## [x.y.z]` when you tag. The one release predating this file is
+[v1.0.0](https://github.com/Alejandro-Raga/Latex4all/releases); anything older
+belongs to the upstream project this was forked from.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
