@@ -24,6 +24,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Per-version release notes for both update channels, shown in the update
   dialog rather than the previous placeholder text.
+- You can leave the test channel again. Switching back to Release offers to
+  install the current release over a newer test build, which an ordinary
+  update check cannot do — it only ever looks for something newer. A rollback
+  is always explicit; the launch check will never start one on its own.
 - Project previews on the home screen now show the real shape of the document:
   a presentation appears as a wide slide, an article as a portrait page. The
   cards themselves stay a uniform size, so the grid still reads as a grid.

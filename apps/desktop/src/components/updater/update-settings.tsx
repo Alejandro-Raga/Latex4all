@@ -1,4 +1,9 @@
-import { RocketIcon, FlaskConicalIcon, Loader2Icon } from "lucide-react";
+import {
+  RocketIcon,
+  FlaskConicalIcon,
+  Loader2Icon,
+  RotateCcwIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSettingsStore, type UpdateChannel } from "@/stores/settings-store";
 import { useUpdater } from "@/hooks/use-updater";
@@ -30,7 +35,7 @@ export function UpdateSettings({ appVersion }: { appVersion?: string }) {
   const autoCheck = useSettingsStore((s) => s.autoCheckForUpdates);
   const setAutoCheck = useSettingsStore((s) => s.setAutoCheckForUpdates);
 
-  const { status, checkForUpdate } = useUpdater();
+  const { status, checkForUpdate, rollBack } = useUpdater();
 
   return (
     <div className="space-y-5 p-5">
@@ -38,9 +43,8 @@ export function UpdateSettings({ appVersion }: { appVersion?: string }) {
         <div>
           <span className="font-medium text-sm">Update channel</span>
           <p className="mt-0.5 text-muted-foreground text-xs leading-relaxed">
-            Switching from Test back to Release needs a manual reinstall — test
-            builds carry a higher version number than the newest release, so the
-            release channel sees them as newer and offers nothing.
+            Try the test channel whenever you like — you can return to Release
+            at any point and install the current release over the test build.
           </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
@@ -65,6 +69,34 @@ export function UpdateSettings({ appVersion }: { appVersion?: string }) {
           ))}
         </div>
       </div>
+
+      {channel === "release" && (
+        <div className="rounded-xl border border-border/60 bg-card/30 p-3">
+          <div className="font-medium text-sm">
+            Coming back from a test build?
+          </div>
+          <p className="mt-0.5 text-muted-foreground text-xs leading-relaxed">
+            Test builds are numbered above the newest release, so a normal check
+            finds nothing and leaves you on the test build. This installs the
+            current release over it instead. Your projects are untouched;
+            settings added by a newer build may be reset.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => rollBack()}
+            disabled={status.state === "checking"}
+            className="mt-2.5 gap-1.5"
+          >
+            {status.state === "checking" ? (
+              <Loader2Icon className="size-3.5 animate-spin" />
+            ) : (
+              <RotateCcwIcon className="size-3.5" />
+            )}
+            Return to the latest release
+          </Button>
+        </div>
+      )}
 
       <label className="flex items-center gap-2.5">
         <input

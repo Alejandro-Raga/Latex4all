@@ -11,7 +11,12 @@ export type UpdateStatus =
   | { state: "idle" }
   | { state: "checking" }
   | { state: "up-to-date" }
-  | { state: "available"; version: string; notes?: string }
+  | {
+      state: "available";
+      version: string;
+      notes?: string;
+      isDowngrade: boolean;
+    }
   | { state: "downloading"; percent: number }
   | { state: "installing" }
   | { state: "ready" }
@@ -22,6 +27,7 @@ interface UpdateInfo {
   currentVersion: string;
   notes: string | null;
   date: string | null;
+  isDowngrade: boolean;
 }
 
 interface DownloadProgress {
@@ -36,8 +42,14 @@ interface UpdaterState {
   launchCheckDone: boolean;
   setStatus: (status: UpdateStatus) => void;
   markLaunchChecked: () => void;
-  check: (channel: UpdateChannel) => Promise<void>;
-  install: (channel: UpdateChannel) => Promise<void>;
+  /**
+   * `allowDowngrade` lets the release channel offer a build older than the one
+   * installed, which is how a tester gets back off the test channel. It is
+   * never set by the launch check — a rollback only ever happens because
+   * somebody asked for one.
+   */
+  check: (channel: UpdateChannel, allowDowngrade?: boolean) => Promise<void>;
+  install: (channel: UpdateChannel, allowDowngrade?: boolean) => Promise<void>;
   restart: () => Promise<void>;
 }
 
@@ -56,24 +68,30 @@ export const useUpdaterStore = create<UpdaterState>()((set, get) => ({
   setStatus: (status) => set({ status }),
   markLaunchChecked: () => set({ launchCheckDone: true }),
 
-  check: async (channel) => {
+  check: async (channel, allowDowngrade = false) => {
     if (get().status.state === "checking") return;
 
     set({ status: { state: "checking" } });
     try {
       const update = await invoke<UpdateInfo | null>("updater_check", {
         channel,
+        allowDowngrade,
       });
       if (!update) {
         set({ status: { state: "up-to-date" } });
         return;
       }
-      log.info("Update available", { channel, version: update.version });
+      log.info("Update available", {
+        channel,
+        version: update.version,
+        isDowngrade: update.isDowngrade,
+      });
       set({
         status: {
           state: "available",
           version: update.version,
           notes: update.notes ?? undefined,
+          isDowngrade: update.isDowngrade,
         },
       });
     } catch (err) {
@@ -82,7 +100,7 @@ export const useUpdaterStore = create<UpdaterState>()((set, get) => ({
     }
   },
 
-  install: async (channel) => {
+  install: async (channel, allowDowngrade = false) => {
     let unlistenProgress: (() => void) | undefined;
     let unlistenFinished: (() => void) | undefined;
 
@@ -108,7 +126,7 @@ export const useUpdaterStore = create<UpdaterState>()((set, get) => ({
         set({ status: { state: "installing" } });
       });
 
-      await invoke("updater_install", { channel });
+      await invoke("updater_install", { channel, allowDowngrade });
       set({ status: { state: "ready" } });
     } catch (err) {
       log.error("Update install failed", { error: String(err) });

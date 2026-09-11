@@ -70,3 +70,6 @@ windows = { version = "0.61", features = ["Win32_Globalization", "Win32_System_C
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
+# Comparing the offered build against the installed one, so a rollback can be
+# labelled as one rather than presented as an update.
+semver = "1"

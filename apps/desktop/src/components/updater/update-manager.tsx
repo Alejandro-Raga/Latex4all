@@ -68,12 +68,16 @@ export function UpdateManager() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <DownloadIcon className="size-4" />
-                Update available — {status.version}
+                {status.isDowngrade
+                  ? `Roll back to ${status.version}`
+                  : `Update available — ${status.version}`}
               </DialogTitle>
               <DialogDescription>
-                {channel === "test"
-                  ? "A new test build is ready to install."
-                  : "A new release is ready to install."}
+                {status.isDowngrade
+                  ? "This is older than the build you are running. Your projects are untouched; settings added by a newer build may be reset."
+                  : channel === "test"
+                    ? "A new test build is ready to install."
+                    : "A new release is ready to install."}
               </DialogDescription>
             </DialogHeader>
             {status.notes && (
@@ -87,7 +91,7 @@ export function UpdateManager() {
               </Button>
               <Button onClick={installUpdate} className="gap-1.5">
                 <DownloadIcon className="size-3.5" />
-                Download &amp; install
+                {status.isDowngrade ? "Roll back" : "Download & install"}
               </Button>
             </DialogFooter>
           </>

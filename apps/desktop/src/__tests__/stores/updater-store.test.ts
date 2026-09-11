@@ -44,6 +44,7 @@ describe("updater store", () => {
 
       expect(mockInvoke).toHaveBeenCalledWith("updater_check", {
         channel: "test",
+        allowDowngrade: false,
       });
     });
 
@@ -53,6 +54,7 @@ describe("updater store", () => {
         currentVersion: "1.3.0",
         notes: "Fixes the thing",
         date: null,
+        isDowngrade: false,
       });
 
       await useUpdaterStore.getState().check("test");
@@ -61,6 +63,7 @@ describe("updater store", () => {
         state: "available",
         version: "1.3.57",
         notes: "Fixes the thing",
+        isDowngrade: false,
       });
     });
 
@@ -70,6 +73,7 @@ describe("updater store", () => {
         currentVersion: "1.3.0",
         notes: null,
         date: null,
+        isDowngrade: false,
       });
 
       await useUpdaterStore.getState().check("release");
@@ -78,6 +82,53 @@ describe("updater store", () => {
         state: "available",
         version: "1.4.0",
         notes: undefined,
+        isDowngrade: false,
+      });
+    });
+
+    it("does not allow a downgrade unless asked", async () => {
+      // The launch check goes through this path. A rollback must never be
+      // something the app decides to do on its own.
+      mockInvoke.mockResolvedValue(null);
+
+      await useUpdaterStore.getState().check("release");
+
+      expect(mockInvoke).toHaveBeenCalledWith("updater_check", {
+        channel: "release",
+        allowDowngrade: false,
+      });
+    });
+
+    it("asks for a downgrade when one is requested", async () => {
+      mockInvoke.mockResolvedValue(null);
+
+      await useUpdaterStore.getState().check("release", true);
+
+      expect(mockInvoke).toHaveBeenCalledWith("updater_check", {
+        channel: "release",
+        allowDowngrade: true,
+      });
+    });
+
+    it("surfaces an older build as a downgrade", async () => {
+      // Leaving the test channel: the release is numbered below the test build
+      // the user is running, and the UI has to say so rather than call it an
+      // update.
+      mockInvoke.mockResolvedValue({
+        version: "1.1.0",
+        currentVersion: "1.0.20",
+        notes: "Stable release",
+        date: null,
+        isDowngrade: true,
+      });
+
+      await useUpdaterStore.getState().check("release", true);
+
+      expect(useUpdaterStore.getState().status).toEqual({
+        state: "available",
+        version: "1.1.0",
+        notes: "Stable release",
+        isDowngrade: true,
       });
     });
 
@@ -111,6 +162,21 @@ describe("updater store", () => {
 
       expect(mockInvoke).toHaveBeenCalledWith("updater_install", {
         channel: "release",
+        allowDowngrade: false,
+      });
+    });
+
+    it("carries the downgrade permission into the install", async () => {
+      // install() re-checks; without the same flag the rollback the user just
+      // accepted would come back "no update available" and fail at the last
+      // step.
+      mockInvoke.mockResolvedValue(undefined);
+
+      await useUpdaterStore.getState().install("release", true);
+
+      expect(mockInvoke).toHaveBeenCalledWith("updater_install", {
+        channel: "release",
+        allowDowngrade: true,
       });
       expect(useUpdaterStore.getState().status).toEqual({ state: "ready" });
     });

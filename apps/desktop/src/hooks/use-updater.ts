@@ -36,8 +36,23 @@ export function useUpdater() {
 
   const installUpdate = useCallback(() => {
     if (!channel) return Promise.resolve();
-    return storeInstall(channel);
-  }, [channel, storeInstall]);
+    // Install re-checks, so it has to ask with the same permission that
+    // produced the offer — otherwise a rollback the user accepted would come
+    // back "no update available" and fail at the last step.
+    const allowDowngrade = status.state === "available" && status.isDowngrade;
+    return storeInstall(channel, allowDowngrade);
+  }, [channel, status, storeInstall]);
+
+  /**
+   * Ask the current channel for its build even if it is older than the one
+   * installed. This is how someone leaves the test channel: their build is
+   * numbered above the newest release, so an ordinary check finds nothing and
+   * would leave them stranded on a test build indefinitely.
+   */
+  const rollBack = useCallback(() => {
+    if (!channel) return Promise.resolve();
+    return storeCheck(channel, true);
+  }, [channel, storeCheck]);
 
   useEffect(() => {
     if (!channel || !autoCheck || launchCheckDone) return;
@@ -45,5 +60,12 @@ export function useUpdater() {
     void storeCheck(channel);
   }, [channel, autoCheck, launchCheckDone, markLaunchChecked, storeCheck]);
 
-  return { status, checkForUpdate, installUpdate, restart, setStatus };
+  return {
+    status,
+    checkForUpdate,
+    installUpdate,
+    rollBack,
+    restart,
+    setStatus,
+  };
 }
