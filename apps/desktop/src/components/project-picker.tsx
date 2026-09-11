@@ -49,6 +49,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import {
   PORTRAIT_ASPECT,
   pageAspectRatio,
+  pageFit,
   texSourceAspectRatio,
 } from "@/lib/preview-aspect-ratio";
 import { UpdateSettings } from "@/components/updater/update-settings";
@@ -507,7 +508,7 @@ export function ProjectPicker() {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] items-end gap-x-6 gap-y-6">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-6 gap-y-6">
                   {visibleProjects.map((project) => (
                     <ProjectPreviewCard
                       key={project.path}
@@ -902,21 +903,29 @@ function ProjectPreviewCard({
 
   return (
     <div className="group min-w-0">
-      {/* Height comes from the width and the page's own ratio, with no fixed
-          slot to escape. An earlier version centred the card inside a 3:4 box
-          and leaned on max-h-full to rein in anything taller — but A4 is 0.707,
-          taller than 3:4, and WKWebView will not shrink an aspect-ratio box's
-          width to honour max-height, so every ordinary document spilled over
-          its own title. The row is bottom-aligned instead (items-end on the
-          grid), which keeps titles on a shared baseline and, because the text
-          block below is a fixed height, keeps a wide deck's name as close to
-          its preview as a tall article's. */}
-      <div className="relative w-full" style={{ aspectRatio }}>
+      {/* The card is one uniform shape for the whole grid; the page inside it
+          is the part that varies. Letting the card itself take the page's
+          ratio was honest but restless to look at — an A4 card is 1.41x its
+          width and a 16:9 deck only 0.56x, so a mixed row was 2.5x apart in
+          height however it was aligned. A 3:4 card is near enough to A4 that
+          an ordinary document still fills it edge to edge. */}
+      <div className="relative aspect-[3/4] w-full">
         <button
-          className="relative h-full w-full overflow-hidden rounded-lg border border-border/70 bg-background text-left transition-all duration-200 hover:border-foreground/20 hover:shadow-md"
+          className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-muted/20 text-left transition-all duration-200 hover:border-foreground/20 hover:shadow-md"
           onClick={onOpen}
         >
-          <ProjectPreviewSurface preview={preview} projectName={project.name} />
+          <div
+            className={cn(
+              "overflow-hidden",
+              pageFit(aspectRatio) === "height" ? "h-full" : "w-full",
+            )}
+            style={{ aspectRatio }}
+          >
+            <ProjectPreviewSurface
+              preview={preview}
+              projectName={project.name}
+            />
+          </div>
         </button>
         <Button
           variant="ghost"

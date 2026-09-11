@@ -59,3 +59,28 @@ export function texSourceAspectRatio(content: string): number {
 
   return PORTRAIT_ASPECT;
 }
+
+/**
+ * The card's own shape, which is uniform across the grid. Near enough to A4
+ * that an ordinary document fills it edge to edge, so documents look exactly
+ * as they did before pages were measured at all.
+ */
+export const CARD_ASPECT = 3 / 4;
+
+/**
+ * Which edge of the card a page should be pinned to so it fits without being
+ * cropped: a page taller than the card is limited by height, a wider one by
+ * width.
+ *
+ * This is deliberately a branch rather than `max-width`/`max-height` on an
+ * aspect-ratio box. WKWebView will not shrink an aspect-ratio box's width to
+ * honour a max-height, so the natural-looking version of this overflows the
+ * card and runs over the title beneath it — which is exactly the bug that
+ * shipped in 1.0.17.
+ */
+export function pageFit(
+  aspectRatio: number,
+  cardAspectRatio: number = CARD_ASPECT,
+): "height" | "width" {
+  return aspectRatio < cardAspectRatio ? "height" : "width";
+}

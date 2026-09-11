@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
+  CARD_ASPECT,
   PORTRAIT_ASPECT,
   pageAspectRatio,
+  pageFit,
   texSourceAspectRatio,
 } from "@/lib/preview-aspect-ratio";
 
@@ -26,6 +28,38 @@ describe("preview-aspect-ratio", () => {
       expect(pageAspectRatio(595, Number.POSITIVE_INFINITY)).toBe(
         PORTRAIT_ASPECT,
       );
+    });
+  });
+
+  describe("pageFit", () => {
+    it("limits a page taller than the card by height", () => {
+      // A4 (0.707) is taller than the 3:4 card, so its height sets the size
+      // and the leftover shows at the sides.
+      expect(pageFit(1 / Math.SQRT2)).toBe("height");
+    });
+
+    it("limits a wide page by width", () => {
+      expect(pageFit(16 / 9)).toBe("width");
+      expect(pageFit(4 / 3)).toBe("width");
+    });
+
+    it("treats a page the same shape as the card as width-limited", () => {
+      // Either answer fits exactly; pinning to width keeps it flush with the
+      // card edges rather than leaving a sub-pixel seam.
+      expect(pageFit(CARD_ASPECT)).toBe("width");
+    });
+
+    it("never reports a fit that would overflow the card", () => {
+      for (const ratio of [0.3, 0.5, Math.SQRT1_2, 0.75, 1, 1.33, 1.78, 3]) {
+        const fit = pageFit(ratio);
+        // Card is 1 wide by 1/CARD_ASPECT tall in card-width units.
+        const [w, h] =
+          fit === "width"
+            ? [1, 1 / ratio]
+            : [ratio / CARD_ASPECT, 1 / CARD_ASPECT];
+        expect(w).toBeLessThanOrEqual(1.0001);
+        expect(h).toBeLessThanOrEqual(1 / CARD_ASPECT + 0.0001);
+      }
     });
   });
 

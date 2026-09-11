@@ -24,10 +24,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Per-version release notes for both update channels, shown in the update
   dialog rather than the previous placeholder text.
-- Project previews on the home screen now match the shape of the document, so
-  a presentation is a wide card and an article stays portrait.
+- Project previews on the home screen now show the real shape of the document:
+  a presentation appears as a wide slide, an article as a portrait page. The
+  cards themselves stay a uniform size, so the grid still reads as a grid.
 
 ### Fixed
 
-- Preview images no longer overlap the project name beneath them, and a
-  presentation's name no longer sits stranded below a gap.
+- Preview images no longer overlap the project name beneath them.
