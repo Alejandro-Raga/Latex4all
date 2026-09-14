@@ -13,15 +13,14 @@
 //! document's own language. Both come from the LibreOffice dictionary
 //! collection, pinned to one commit.
 //!
-//! Definitions are deliberately not part of this. MyThes records senses and
-//! their synonyms but no glosses, so outside English — where WordNet and, on
-//! macOS, Dictionary Services already answer — the popover shows synonyms and
-//! says plainly that it has no definition.
+//! Spanish also gets definitions and the thesaurus as prepared files (see
+//! `PreparedFile`), brotli-compressed so the whole pack stays a few megabytes.
 
 use serde::Serialize;
 use std::collections::HashMap;
 use sha2::Digest;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use tauri::{Emitter, WebviewWindow};
@@ -34,19 +33,11 @@ fn raw_url(path: &str) -> String {
     format!("https://raw.githubusercontent.com/LibreOffice/dictionaries/{DICTIONARIES_COMMIT}/{path}")
 }
 
-/// How a source file is encoded. Hunspell declares this in the affix file's
-/// `SET` line and MyThes on its first line; both are normalised to UTF-8 when
-/// the pack is installed, so nothing downstream has to care.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum SourceEncoding {
-    Utf8,
-    Latin1,
-}
-
 struct PackSource {
-    /// Path within the LibreOffice repository.
+    /// Path within the LibreOffice repository. Every pinned spelling file is
+    /// UTF-8; the one Latin-1 file upstream, the Spanish thesaurus, is served
+    /// as a prepared file instead.
     path: &'static str,
-    encoding: SourceEncoding,
     /// Name it is stored under, so runtime code never has to know the
     /// upstream naming (which differs per language: `fr.dic`, `es_ES.dic`,
     /// `de_DE_frami.dic`, ...).
@@ -60,75 +51,81 @@ pub struct LanguagePack {
     spelling: [PackSource; 2],
     /// English is served by the bundled WordNet, which has real definitions;
     /// pulling a 17 MB MyThes file to duplicate its synonyms would be waste.
-    thesaurus: Option<PackSource>,
+    thesaurus: Option<PreparedFile>,
     /// Definitions, where a usable source exists. English has WordNet already.
-    definitions: Option<DefinitionSource>,
-    /// Rounded total download, for the picker. Measured from the pinned commit.
+    definitions: Option<PreparedFile>,
+    /// Inflected form -> headword, so definitions are found for the words as
+    /// they actually appear in running text.
+    forms: Option<PreparedFile>,
+    /// What the prepared files' licences oblige us to show.
+    attribution: Option<&'static str>,
+    /// Rounded total download, for the picker: GitHub-compressed spelling
+    /// files from the pinned commit plus any prepared files.
     approx_bytes: u64,
 }
 
-fn aff(path: &'static str, encoding: SourceEncoding) -> PackSource {
-    PackSource { path, encoding, stored_as: "spelling.aff" }
+fn aff(path: &'static str) -> PackSource {
+    PackSource { path, stored_as: "spelling.aff" }
 }
 
-fn dic(path: &'static str, encoding: SourceEncoding) -> PackSource {
-    PackSource { path, encoding, stored_as: "spelling.dic" }
+fn dic(path: &'static str) -> PackSource {
+    PackSource { path, stored_as: "spelling.dic" }
 }
 
-fn thes(path: &'static str, encoding: SourceEncoding) -> PackSource {
-    PackSource { path, encoding, stored_as: "thesaurus.dat" }
-}
-
-/// A gzipped record file built by `scripts/build-spanish-definitions.mjs` and
-/// published as a release asset, rather than fetched from an upstream project
-/// like everything else here — no one distributes Wiktionary in a form small
-/// enough to download on demand, so the extract has to be prepared ahead of
-/// time.
-struct DefinitionSource {
+/// A brotli-compressed file built by `scripts/build-spanish-definitions.mjs`
+/// and published as a release asset, rather than fetched from an upstream
+/// project like the spelling files — no one distributes Wiktionary in a form
+/// small enough to download on demand, and upstream serves the thesaurus
+/// uncompressed at seven times the size.
+struct PreparedFile {
     url: &'static str,
     sha256: &'static str,
-    /// Shown in the language picker so the download size is not a surprise.
-    approx_bytes: u64,
-    /// CC BY-SA obliges us to say where it came from.
-    attribution: &'static str,
+    stored_as: &'static str,
 }
 
 fn catalogue() -> &'static [LanguagePack] {
-    use SourceEncoding::{Latin1, Utf8};
     static CATALOGUE: OnceLock<Vec<LanguagePack>> = OnceLock::new();
     CATALOGUE.get_or_init(|| {
         vec![
             LanguagePack {
                 code: "en-US",
                 label: "English (US)",
-                spelling: [aff("en/en_US.aff", Utf8), dic("en/en_US.dic", Utf8)],
+                spelling: [aff("en/en_US.aff"), dic("en/en_US.dic")],
                 thesaurus: None,
                 definitions: None,
-                approx_bytes: 660_000,
+                forms: None,
+                attribution: None,
+                approx_bytes: 200_000,
             },
             LanguagePack {
                 code: "en-GB",
                 label: "English (UK)",
-                spelling: [aff("en/en_GB.aff", Utf8), dic("en/en_GB.dic", Utf8)],
+                spelling: [aff("en/en_GB.aff"), dic("en/en_GB.dic")],
                 thesaurus: None,
                 definitions: None,
-                approx_bytes: 1_270_000,
+                forms: None,
+                attribution: None,
+                approx_bytes: 450_000,
             },
             LanguagePack {
                 code: "en-CA",
                 label: "English (Canada)",
-                spelling: [aff("en/en_CA.aff", Utf8), dic("en/en_CA.dic", Utf8)],
+                spelling: [aff("en/en_CA.aff"), dic("en/en_CA.dic")],
                 thesaurus: None,
                 definitions: None,
-                approx_bytes: 560_000,
+                forms: None,
+                attribution: None,
+                approx_bytes: 200_000,
             },
             LanguagePack {
                 code: "en-AU",
                 label: "English (Australia)",
-                spelling: [aff("en/en_AU.aff", Utf8), dic("en/en_AU.dic", Utf8)],
+                spelling: [aff("en/en_AU.aff"), dic("en/en_AU.dic")],
                 thesaurus: None,
                 definitions: None,
-                approx_bytes: 560_000,
+                forms: None,
+                attribution: None,
+                approx_bytes: 200_000,
             },
             // English and Spanish only. Adding a language here means committing
             // to its spelling, grammar and lookup paths all working; see
@@ -136,16 +133,24 @@ fn catalogue() -> &'static [LanguagePack] {
             LanguagePack {
                 code: "es",
                 label: "Spanish",
-                spelling: [aff("es/es_ES.aff", Utf8), dic("es/es_ES.dic", Utf8)],
-                // The only one of these still shipped as Latin-1.
-                thesaurus: Some(thes("es/th_es_v2.dat", Latin1)),
-                definitions: Some(DefinitionSource {
-                    url: "https://github.com/Alejandro-Raga/Latex4all/releases/download/dictionary-data-v1/es-definitions.dat.gz",
-                    sha256: "72f6d577633c7f693c9eec0bcc4f9938b733cf1997bb28b1a23efd6c6636b72b",
-                    approx_bytes: 4_500_000,
-                    attribution: "Definitions from Wiktionary (CC BY-SA 4.0)",
+                spelling: [aff("es/es_ES.aff"), dic("es/es_ES.dic")],
+                thesaurus: Some(PreparedFile {
+                    url: "https://github.com/Alejandro-Raga/Latex4all/releases/download/dictionary-data-v2/es-thesaurus.dat.br",
+                    sha256: "6e3e8060b089ed8d17a2ec653dc40404d5106f6d718537ede6845caff3a0a101",
+                    stored_as: "thesaurus.dat",
                 }),
-                approx_bytes: 8_260_000,
+                definitions: Some(PreparedFile {
+                    url: "https://github.com/Alejandro-Raga/Latex4all/releases/download/dictionary-data-v2/es-definitions.dat.br",
+                    sha256: "7e9f61e7827110a0bc7856c47fcd75a5c02df4ad2a62720c5b834de031b35540",
+                    stored_as: "definitions.dat",
+                }),
+                forms: Some(PreparedFile {
+                    url: "https://github.com/Alejandro-Raga/Latex4all/releases/download/dictionary-data-v2/es-forms.dat.br",
+                    sha256: "a3ec7ad65720f5352ffcf4a568d01b34b08b2fb56153120c0ced2378133ab3ce",
+                    stored_as: FORMS_FILE,
+                }),
+                attribution: Some("Definitions from Wiktionary (CC BY-SA 4.0)"),
+                approx_bytes: 4_150_000,
             },
         ]
     })
@@ -186,6 +191,8 @@ fn has_definitions(code: &str) -> bool {
         .map(|dir| dir.join("definitions.dat").is_file())
         .unwrap_or(false)
 }
+
+const FORMS_FILE: &str = "forms.dat";
 
 // ── Status ──
 
@@ -231,10 +238,7 @@ pub async fn list_language_packs() -> Result<Vec<LanguagePackInfo>, String> {
                 offers_thesaurus: pack.thesaurus.is_some(),
                 has_definitions: has_definitions(pack.code),
                 offers_definitions: pack.definitions.is_some(),
-                attribution: pack
-                    .definitions
-                    .as_ref()
-                    .map(|source| source.attribution.to_string()),
+                attribution: pack.attribution.map(str::to_string),
                 needs_update: is_installed(pack.code)
                     && ((pack.thesaurus.is_some() && !has_thesaurus(pack.code))
                         || (pack.definitions.is_some() && !has_definitions(pack.code))),
@@ -268,25 +272,21 @@ fn emit(window: &WebviewWindow, code: &str, message: impl Into<String>, percent:
     );
 }
 
-/// Latin-1 maps one byte to one code point, which is the whole conversion.
-/// Only UTF-8 and Latin-1 appear across the pinned files; anything else would
-/// have to be added here deliberately rather than guessed at.
-fn decode(bytes: Vec<u8>, encoding: SourceEncoding) -> String {
-    match encoding {
-        SourceEncoding::Latin1 => bytes.into_iter().map(|b| b as char).collect(),
-        SourceEncoding::Utf8 => {
-            let text = String::from_utf8_lossy(&bytes).into_owned();
-            // A BOM would otherwise become part of the first keyword and make
-            // the affix file's opening directive unparseable.
-            text.strip_prefix('\u{feff}').map(str::to_string).unwrap_or(text)
-        }
-    }
+fn decode(bytes: Vec<u8>) -> String {
+    let text = String::from_utf8_lossy(&bytes).into_owned();
+    // A BOM would otherwise become part of the first keyword and make the
+    // affix file's opening directive unparseable.
+    text.strip_prefix('\u{feff}').map(str::to_string).unwrap_or(text)
 }
 
 async fn fetch(client: &reqwest::Client, source: &PackSource) -> Result<String, String> {
     let url = raw_url(source.path);
+    // GitHub compresses these on request (the Spanish dictionary drops from
+    // 716 KB to 210 KB), but reqwest is built without automatic decompression,
+    // so ask for it here and undo it below.
     let response = client
         .get(&url)
+        .header(reqwest::header::ACCEPT_ENCODING, "gzip")
         .send()
         .await
         .map_err(|e| format!("Failed to download {}: {e}", source.path))?;
@@ -297,48 +297,67 @@ async fn fetch(client: &reqwest::Client, source: &PackSource) -> Result<String, 
             response.status()
         ));
     }
+    let gzipped = response
+        .headers()
+        .get(reqwest::header::CONTENT_ENCODING)
+        .is_some_and(|value| value.as_bytes().eq_ignore_ascii_case(b"gzip"));
     let bytes = response
         .bytes()
         .await
         .map_err(|e| format!("Download of {} was interrupted: {e}", source.path))?;
-    Ok(decode(bytes.to_vec(), source.encoding))
+    let bytes = if gzipped {
+        let mut plain = Vec::new();
+        flate2::read::GzDecoder::new(&bytes[..])
+            .read_to_end(&mut plain)
+            .map_err(|e| format!("{} could not be decompressed: {e}", source.path))?;
+        plain
+    } else {
+        bytes.to_vec()
+    };
+    Ok(decode(bytes))
 }
 
-/// Downloads, verifies and decompresses the definition database.
-async fn fetch_definitions(
-    client: &reqwest::Client,
-    source: &DefinitionSource,
-) -> Result<String, String> {
+/// Downloads, verifies and decompresses one prepared file, returning it in
+/// the form it is stored on disk.
+async fn fetch_prepared(client: &reqwest::Client, file: &PreparedFile) -> Result<String, String> {
     let response = client
-        .get(source.url)
+        .get(file.url)
         .send()
         .await
-        .map_err(|e| format!("Failed to download the definition database: {e}"))?;
+        .map_err(|e| format!("Failed to download {}: {e}", file.stored_as))?;
     if !response.status().is_success() {
         return Err(format!(
-            "Failed to download the definition database: server returned HTTP {}",
+            "Failed to download {}: server returned HTTP {}",
+            file.stored_as,
             response.status()
         ));
     }
     let compressed = response
         .bytes()
         .await
-        .map_err(|e| format!("Download of the definition database was interrupted: {e}"))?;
+        .map_err(|e| format!("Download of {} was interrupted: {e}", file.stored_as))?;
 
+    // These are our own artifacts rather than upstream files, so they are
+    // checksummed: nothing else would notice one served truncated or replaced.
     let digest = format!("{:x}", sha2::Sha256::digest(&compressed));
-    if digest != source.sha256 {
+    if digest != file.sha256 {
         return Err(format!(
-            "The downloaded definition database does not match its expected checksum \
+            "The downloaded {} does not match its expected checksum \
              (expected {}, got {digest}). Nothing was installed.",
-            source.sha256
+            file.stored_as, file.sha256
         ));
     }
 
     let mut text = String::new();
-    flate2::read::GzDecoder::new(&compressed[..])
+    brotli_decompressor::Decompressor::new(&compressed[..], 64 * 1024)
         .read_to_string(&mut text)
-        .map_err(|e| format!("The definition database could not be decompressed: {e}"))?;
-    Ok(text)
+        .map_err(|e| format!("{} could not be decompressed: {e}", file.stored_as))?;
+
+    if file.stored_as == FORMS_FILE {
+        expand_forms(&text)
+    } else {
+        Ok(text)
+    }
 }
 
 /// Downloads the spelling dictionary — and the thesaurus, where one exists —
@@ -356,34 +375,27 @@ pub async fn install_language_pack(window: WebviewWindow, code: String) -> Resul
         .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
 
     let mut downloaded: Vec<(&'static str, String)> = Vec::new();
-    let sources: Vec<&PackSource> = pack
-        .spelling
-        .iter()
-        .chain(pack.thesaurus.iter())
+    let prepared: Vec<&PreparedFile> = [&pack.thesaurus, &pack.definitions, &pack.forms]
+        .into_iter()
+        .flatten()
         .collect();
-    let total = sources.len();
-
-    for (index, source) in sources.into_iter().enumerate() {
+    let total = pack.spelling.len() + prepared.len();
+    let progress = |index: usize| {
         emit(
             &window,
             pack.code,
             format!("Downloading {} ({} of {total})…", pack.label, index + 1),
-            Some(((index * 100) / total) as u8),
+            Some(((index * 95) / total) as u8),
         );
+    };
+
+    for (index, source) in pack.spelling.iter().enumerate() {
+        progress(index);
         downloaded.push((source.stored_as, fetch(&client, source).await?));
     }
-
-    // The definition database is a prepared artifact rather than an upstream
-    // file, so it is checksummed: nothing else would notice if it were served
-    // truncated or replaced.
-    if let Some(source) = &pack.definitions {
-        emit(
-            &window,
-            pack.code,
-            format!("Downloading {} definitions…", pack.label),
-            Some(75),
-        );
-        downloaded.push(("definitions.dat", fetch_definitions(&client, source).await?));
+    for (index, file) in prepared.into_iter().enumerate() {
+        progress(pack.spelling.len() + index);
+        downloaded.push((file.stored_as, fetch_prepared(&client, file).await?));
     }
 
     emit(&window, pack.code, format!("Installing {}…", pack.label), Some(95));
@@ -443,6 +455,7 @@ struct Caches {
     dictionaries: HashMap<String, Option<&'static Dict>>,
     thesauri: HashMap<String, Option<&'static Thesaurus>>,
     definitions: HashMap<String, Option<&'static Definitions>>,
+    forms: HashMap<String, &'static Forms>,
 }
 
 fn caches() -> &'static Mutex<Caches> {
@@ -452,6 +465,7 @@ fn caches() -> &'static Mutex<Caches> {
             dictionaries: HashMap::new(),
             thesauri: HashMap::new(),
             definitions: HashMap::new(),
+            forms: HashMap::new(),
         })
     })
 }
@@ -463,6 +477,7 @@ fn forget_cached(code: &str) {
         caches.dictionaries.remove(code);
         caches.thesauri.remove(code);
         caches.definitions.remove(code);
+        caches.forms.remove(code);
     }
 }
 
@@ -703,6 +718,10 @@ impl Definitions {
         RecordFile::open(path).map(Self)
     }
 
+    fn contains(&self, term: &str) -> bool {
+        self.0.offsets.contains_key(&term.trim().to_lowercase())
+    }
+
     pub fn lookup(&self, term: &str) -> Vec<DefinitionSense> {
         self.0
             .lookup(term)
@@ -721,6 +740,243 @@ impl Definitions {
             })
             .collect()
     }
+}
+
+// ── Inflected forms ──
+
+/// Most headwords one word is resolved to. "fueron" is a form of *ir*, *irse*
+/// and *ser*; a fourth would push the useful ones out of the popover.
+const MAX_HEADWORDS: usize = 3;
+
+/// The headwords whose definitions answer `term`: the word itself when it has
+/// an entry, then whatever it is an inflected form of. When that finds nothing,
+/// regular patterns the Wiktionary tables don't list are undone and tried
+/// again (see `spanish_candidates`).
+pub fn headwords(code: &str, term: &str) -> Vec<String> {
+    let Some(definitions) = definitions(code) else {
+        return Vec::new();
+    };
+    let forms = forms(code);
+    let resolve = |word: &str| -> Vec<String> {
+        let mut found = Vec::new();
+        if definitions.contains(word) {
+            found.push(word.to_string());
+        }
+        for lemma in forms.map(|forms| forms.lookup(word)).unwrap_or_default() {
+            if definitions.contains(&lemma)
+                && !found.iter().any(|f: &String| f.eq_ignore_ascii_case(&lemma))
+            {
+                found.push(lemma);
+            }
+        }
+        found.truncate(MAX_HEADWORDS);
+        found
+    };
+
+    let term = term.trim();
+    let found = resolve(term);
+    if !found.is_empty() || !code.to_lowercase().starts_with("es") {
+        return found;
+    }
+    spanish_candidates(&term.to_lowercase())
+        .iter()
+        .map(|candidate| resolve(candidate))
+        .find(|found| !found.is_empty())
+        .unwrap_or_default()
+}
+
+/// Enclitic pronouns, longest first so "selo" is stripped whole.
+const SPANISH_CLITICS: [&str; 25] = [
+    "selos", "selas", "seles", "noslo", "nosla", "selo", "sela", "sele", "melo", "mela", "telo",
+    "tela", "oslo", "osla", "los", "las", "les", "nos", "me", "te", "se", "lo", "la", "le", "os",
+];
+
+/// Guesses at the word a Spanish form comes from, for what the form tables
+/// miss: participles agreeing in gender and number ("obtenidas"), adverbs in
+/// -mente ("parcialmente"), and pronouns attached to a verb ("investigarse",
+/// "diciéndolo"). Only ever tried when the word itself finds nothing, and each
+/// guess must still land on a real headword, so a wrong one costs nothing.
+fn spanish_candidates(word: &str) -> Vec<String> {
+    fn unaccent(word: &str) -> String {
+        word.chars()
+            .map(|c| match c {
+                'á' => 'a',
+                'é' => 'e',
+                'í' => 'i',
+                'ó' => 'o',
+                'ú' => 'u',
+                other => other,
+            })
+            .collect()
+    }
+
+    let mut bases: Vec<String> = Vec::new();
+    // Built on the feminine adjective: "claramente" -> "clara" -> *claro*.
+    if let Some(stem) = word.strip_suffix("mente").filter(|stem| stem.chars().count() >= 3) {
+        bases.push(stem.to_string());
+    }
+    for clitic in SPANISH_CLITICS {
+        let Some(stem) = word.strip_suffix(clitic).filter(|stem| stem.chars().count() >= 3) else {
+            continue;
+        };
+        // Attaching a pronoun often adds an accent: "diciéndolo", "dárselo".
+        let plain = unaccent(stem);
+        if ["ar", "er", "ir", "ndo", "ad", "ed", "id"].iter().any(|end| plain.ends_with(end)) {
+            if plain != stem {
+                bases.push(stem.to_string());
+            }
+            bases.push(plain);
+        }
+    }
+    bases.push(word.to_string());
+
+    let mut candidates = bases.clone();
+    for base in &bases {
+        let singulars = [base.strip_suffix("es"), base.strip_suffix('s')];
+        for singular in singulars.into_iter().flatten() {
+            candidates.push(singular.to_string());
+            if let Some(stem) = singular.strip_suffix('a') {
+                candidates.push(format!("{stem}o"));
+            }
+        }
+        if let Some(stem) = base.strip_suffix('a') {
+            candidates.push(format!("{stem}o"));
+        }
+    }
+    candidates.retain(|candidate| candidate != word && !candidate.is_empty());
+    candidates
+}
+
+/// Expands the front-coded transfer format (see the build script) into one
+/// `form|lemma;lemma` line per form, sorted by form, which `Forms` can search
+/// without holding it in memory.
+fn expand_forms(encoded: &str) -> Result<String, String> {
+    /// `<digits><rest>` -> (digits, rest)
+    fn split_count(field: &str) -> Option<(usize, &str)> {
+        let digits = field.len() - field.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+        Some((field[..digits].parse().ok()?, &field[digits..]))
+    }
+
+    let mut out = String::with_capacity(encoded.len() * 3);
+    let mut previous: Vec<char> = Vec::new();
+
+    for (number, line) in encoded.lines().enumerate() {
+        let bad = || format!("The forms file is malformed at line {}.", number + 1);
+        let (form_field, lemma_field) = line.split_once('|').ok_or_else(bad)?;
+        let (shared, rest) = split_count(form_field).ok_or_else(bad)?;
+        if shared > previous.len() {
+            return Err(bad());
+        }
+        let mut form: Vec<char> = previous[..shared].to_vec();
+        form.extend(rest.chars());
+
+        out.extend(form.iter());
+        out.push('|');
+        for (index, script) in lemma_field.split(';').enumerate() {
+            let (drop, append) = split_count(script).ok_or_else(bad)?;
+            if drop > form.len() {
+                return Err(bad());
+            }
+            if index > 0 {
+                out.push(';');
+            }
+            out.extend(form[..form.len() - drop].iter());
+            out.push_str(append);
+        }
+        out.push('\n');
+        previous = form;
+    }
+    Ok(out)
+}
+
+/// Sorted `form|lemma;lemma` lines, searched by bisecting the file on disk: a
+/// quarter of a million entries is more than is worth keeping resident for
+/// the occasional right-click.
+pub struct Forms {
+    path: PathBuf,
+    len: u64,
+}
+
+impl Forms {
+    fn open(path: &Path) -> Result<Self, String> {
+        let len = std::fs::metadata(path).map_err(|e| e.to_string())?.len();
+        Ok(Self {
+            path: path.to_path_buf(),
+            len,
+        })
+    }
+
+    /// The headwords `term` is an inflected form of, or empty when it is not
+    /// one (or is not known).
+    pub fn lookup(&self, term: &str) -> Vec<String> {
+        let key = term.trim().to_lowercase();
+        if key.is_empty() {
+            return Vec::new();
+        }
+        self.find(&key)
+            .map(|lemmas| lemmas.split(';').map(str::to_string).collect())
+            .unwrap_or_default()
+    }
+
+    fn find(&self, key: &str) -> Option<String> {
+        let file = std::fs::File::open(&self.path).ok()?;
+        let mut reader = BufReader::new(file);
+        // Bytes, not `String`: a seek can land inside a multi-byte character,
+        // and `read_line` would reject that partial line as invalid UTF-8.
+        let mut line = Vec::new();
+        let key = key.as_bytes();
+
+        // Invariant: `lo` is the start of a line, and the matching line, if
+        // any, starts in `lo..hi`.
+        let (mut lo, mut hi) = (0u64, self.len);
+        while hi - lo > 4096 {
+            let mid = lo + (hi - lo) / 2;
+            reader.seek(SeekFrom::Start(mid)).ok()?;
+            line.clear();
+            // Finish whichever line `mid` landed in; the next one starts at `next`.
+            let next = mid + reader.read_until(b'\n', &mut line).ok()? as u64;
+            if next >= hi {
+                hi = mid + 1;
+                continue;
+            }
+            line.clear();
+            reader.read_until(b'\n', &mut line).ok()?;
+            match form_of(&line).cmp(key) {
+                std::cmp::Ordering::Equal => return lemmas_of(&line),
+                std::cmp::Ordering::Less => lo = next,
+                std::cmp::Ordering::Greater => hi = next,
+            }
+        }
+
+        reader.seek(SeekFrom::Start(lo)).ok()?;
+        let mut position = lo;
+        while position < hi {
+            line.clear();
+            let read = reader.read_until(b'\n', &mut line).ok()?;
+            if read == 0 {
+                break;
+            }
+            position += read as u64;
+            match form_of(&line).cmp(key) {
+                std::cmp::Ordering::Equal => return lemmas_of(&line),
+                std::cmp::Ordering::Greater => break,
+                std::cmp::Ordering::Less => {}
+            }
+        }
+        None
+    }
+}
+
+fn form_of(line: &[u8]) -> &[u8] {
+    line.iter()
+        .position(|&b| b == b'|')
+        .map_or(line, |bar| &line[..bar])
+}
+
+fn lemmas_of(line: &[u8]) -> Option<String> {
+    let bar = line.iter().position(|&b| b == b'|')?;
+    let lemmas = std::str::from_utf8(&line[bar + 1..]).ok()?;
+    Some(lemmas.trim_end_matches(['\r', '\n']).to_string())
 }
 
 // ── Cached readers ──
@@ -745,6 +1001,64 @@ pub fn definitions(code: &str) -> Option<&'static Definitions> {
     let loaded = load_cached(code, "definitions.dat", Definitions::open, "definitions");
     caches.definitions.insert(code.to_string(), loaded);
     loaded
+}
+
+/// The form -> headword index for `code`, or `None` when there is none yet.
+///
+/// Packs installed before the index existed have definitions but no forms
+/// file. Rather than asking the user to update a pack that seems to work, the
+/// missing file (a few hundred KB) is fetched in the background on first use,
+/// and lookups pick it up as soon as it lands.
+pub fn forms(code: &str) -> Option<&'static Forms> {
+    let pack = pack_for(code)?;
+    let mut caches = caches().lock().ok()?;
+    if let Some(cached) = caches.forms.get(pack.code) {
+        return Some(*cached);
+    }
+    // Deliberately not caching a miss, so the background fetch takes effect.
+    match load_cached(pack.code, FORMS_FILE, Forms::open, "forms") {
+        Some(loaded) => {
+            caches.forms.insert(pack.code.to_string(), loaded);
+            Some(loaded)
+        }
+        None => {
+            drop(caches);
+            fetch_missing_forms(pack);
+            None
+        }
+    }
+}
+
+fn fetch_missing_forms(pack: &'static LanguagePack) {
+    static STARTED: AtomicBool = AtomicBool::new(false);
+    let Some(file) = &pack.forms else {
+        return;
+    };
+    if !is_installed(pack.code) || STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    tauri::async_runtime::spawn(async move {
+        let result = async {
+            let client = reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(20))
+                .read_timeout(std::time::Duration::from_secs(60))
+                .build()
+                .map_err(|e| e.to_string())?;
+            let text = fetch_prepared(&client, file).await?;
+            let dir = pack_dir(pack.code)?;
+            // Written aside and renamed, so a lookup never reads half a file.
+            let partial = dir.join(format!("{FORMS_FILE}.incoming"));
+            std::fs::write(&partial, text).map_err(|e| e.to_string())?;
+            std::fs::rename(&partial, dir.join(FORMS_FILE)).map_err(|e| e.to_string())
+        }
+        .await;
+        if let Err(error) = result {
+            eprintln!("[language-packs] {} forms could not be fetched: {error}", pack.code);
+            // Try again on a later lookup rather than never.
+            STARTED.store(false, Ordering::SeqCst);
+        }
+    });
 }
 
 /// Opens `file_name` from `code`'s pack and leaks it, so it is read at most
@@ -818,19 +1132,12 @@ mod tests {
     // ── Encoding ──
 
     #[test]
-    fn latin1_bytes_become_the_characters_they_stand_for() {
-        // "función" in ISO8859-1: ó is a single byte 0xF3.
-        let bytes = vec![b'f', b'u', b'n', b'c', b'i', 0xF3, b'n'];
-        assert_eq!(decode(bytes, SourceEncoding::Latin1), "función");
-    }
-
-    #[test]
     fn a_utf8_byte_order_mark_is_stripped() {
         // en_GB.aff carries one; left in place it would corrupt the first
         // directive and the whole affix file with it.
         let mut bytes = vec![0xEF, 0xBB, 0xBF];
         bytes.extend_from_slice(b"SET UTF-8\n");
-        assert_eq!(decode(bytes, SourceEncoding::Utf8), "SET UTF-8\n");
+        assert_eq!(decode(bytes), "SET UTF-8\n");
     }
 
     // ── Thesaurus ──
@@ -946,6 +1253,70 @@ mod tests {
         let path = write_thesaurus(tmp.path(), SAMPLE);
         let thesaurus = Thesaurus::open(&path).unwrap();
         assert!(thesaurus.lookup("xyzzy").is_empty());
+    }
+
+    // ── Inflected forms ──
+
+    #[test]
+    fn front_coded_forms_expand_to_one_line_per_form() {
+        // casas -> casa; casó -> casar; sugieren -> sugerir; fueron -> ir;ser
+        let encoded = "0casas|1\n3ó|1ar\n0fueron|6ir;6ser\n0sugieren|5erir\n";
+        assert_eq!(
+            expand_forms(encoded).unwrap(),
+            "casas|casa\ncasó|casar\nfueron|ir;ser\nsugieren|sugerir\n"
+        );
+    }
+
+    #[test]
+    fn malformed_forms_are_rejected_rather_than_misread() {
+        assert!(expand_forms("0casas\n").is_err());
+        assert!(expand_forms("9casas|1\n").is_err());
+        assert!(expand_forms("0casas|9\n").is_err());
+    }
+
+    fn write_forms(dir: &Path, count: usize) -> (Forms, Vec<String>) {
+        // Enough lines to exercise the bisection, with multi-byte characters
+        // so seeks land mid-character.
+        let mut words: Vec<String> = (0..count).map(|i| format!("ñandú{i:05}")).collect();
+        words.push("árbol".into());
+        words.push("sugieren".into());
+        words.sort();
+        let body: String = words.iter().map(|w| format!("{w}|lema-{w}\n")).collect();
+        let path = dir.join(FORMS_FILE);
+        std::fs::write(&path, body).unwrap();
+        (Forms::open(&path).unwrap(), words)
+    }
+
+    #[test]
+    fn every_form_is_found_by_bisection() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (forms, words) = write_forms(tmp.path(), 5000);
+        for word in &words {
+            assert_eq!(forms.lookup(word), vec![format!("lema-{word}")], "{word}");
+        }
+    }
+
+    #[test]
+    fn unknown_forms_find_nothing_and_case_is_ignored() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (forms, _) = write_forms(tmp.path(), 5000);
+        assert_eq!(forms.lookup(" SUGIEREN "), vec!["lema-sugieren"]);
+        for word in ["", "a", "ñandú", "ñandú99999", "zzz", "sugiere"] {
+            assert!(forms.lookup(word).is_empty(), "{word}");
+        }
+    }
+
+    #[test]
+    fn spanish_guesses_undo_agreement_adverbs_and_pronouns() {
+        let guesses = |word: &str| spanish_candidates(word);
+        assert!(guesses("obtenidas").contains(&"obtenido".to_string()));
+        assert!(guesses("parcialmente").contains(&"parcial".to_string()));
+        assert!(guesses("claramente").contains(&"claro".to_string()));
+        assert!(guesses("investigarse").contains(&"investigar".to_string()));
+        assert!(guesses("diciéndolo").contains(&"diciendo".to_string()));
+        assert!(guesses("dárselo").contains(&"dar".to_string()));
+        assert!(guesses("conductuales").contains(&"conductual".to_string()));
+        assert!(!guesses("casa").contains(&"casa".to_string()));
     }
 
     #[test]

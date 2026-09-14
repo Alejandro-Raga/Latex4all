@@ -549,7 +549,10 @@ pub fn lookup_dictionary_definition(
 
 /// Definitions, synonyms and antonyms from the installed language pack.
 ///
-/// Definitions come from the prepared Wiktionary database; synonyms are the
+/// Definitions come from the prepared Wiktionary database, looked up under
+/// every headword the word resolves to — running text is mostly inflected
+/// forms, which have no entry of their own ("sugieren" is answered by
+/// *sugerir*). Synonyms are the
 /// union of Wiktionary's and the MyThes thesaurus's, since the two disagree
 /// about coverage and neither is a superset. Antonyms exist only in the
 /// Wiktionary half — MyThes records none at all.
@@ -571,8 +574,16 @@ fn lookup_non_english(
         };
     }
 
-    let senses = definitions
-        .map(|source| source.lookup(term))
+    let entries: Vec<(String, Vec<crate::language_packs::DefinitionSense>)> = definitions
+        .map(|source| {
+            crate::language_packs::headwords(language, term)
+                .into_iter()
+                .map(|headword| {
+                    let senses = source.lookup(&headword);
+                    (headword, senses)
+                })
+                .collect()
+        })
         .unwrap_or_default();
 
     let mut synonyms: Vec<String> = Vec::new();
@@ -586,7 +597,7 @@ fn lookup_non_english(
         }
     };
 
-    for sense in &senses {
+    for sense in entries.iter().flat_map(|(_, senses)| senses) {
         for word in &sense.synonyms {
             push(&mut synonyms, word, MAX_THESAURUS_SYNONYMS);
         }
@@ -595,17 +606,26 @@ fn lookup_non_english(
         }
     }
     if let Some(thesaurus) = thesaurus {
-        for sense in thesaurus.lookup(term) {
-            for word in sense.synonyms {
-                push(&mut synonyms, &word, MAX_THESAURUS_SYNONYMS);
+        let words = std::iter::once(term).chain(entries.iter().map(|(headword, _)| headword.as_str()));
+        for word in words {
+            for sense in thesaurus.lookup(word) {
+                for synonym in sense.synonyms {
+                    push(&mut synonyms, &synonym, MAX_THESAURUS_SYNONYMS);
+                }
             }
         }
     }
 
+    let pack_definition = entries
+        .iter()
+        .filter_map(|(headword, senses)| format_pack_definition(headword, senses))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
     DictionaryLookupResult {
         // A dictionary the user installed themselves beats ours, exactly as it
         // does for English.
-        definition: system_definition.or_else(|| format_pack_definition(term, &senses)),
+        definition: system_definition.or_else(|| Some(pack_definition).filter(|d| !d.is_empty())),
         synonyms: None,
         synonym_list: Some(synonyms).filter(|s| !s.is_empty()),
         antonym_list: Some(antonyms).filter(|a| !a.is_empty()),

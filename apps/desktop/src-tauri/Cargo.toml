@@ -40,6 +40,8 @@ tectonic = { version = "0.15", default-features = true, features = ["external-ha
 #   Linux:   apt install libicu-dev libgraphite2-dev libharfbuzz-dev libfreetype-dev libfontconfig-dev
 #   Windows: vcpkg install harfbuzz[graphite2] freetype icu fontconfig (with TECTONIC_DEP_BACKEND=vcpkg)
 flate2 = "1"
+# Pure Rust; the prepared language-pack files are brotli (see language_packs.rs).
+brotli-decompressor = "5"
 tar = "0.4"
 # Pure-Rust Hunspell-compatible spell checker, used for languages the OS has
 # no dictionary for (see language_packs.rs). Deliberately not the C hunspell
