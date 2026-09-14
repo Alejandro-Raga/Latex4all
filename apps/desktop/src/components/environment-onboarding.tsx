@@ -87,7 +87,7 @@ export function EnvironmentOnboarding() {
   const finishUvInstall = useUvSetupStore((s) => s._finishInstall);
 
   // Grammar checking and Zotero are optional conveniences: they are offered
-  // here but deliberately excluded from `needsAttention`, so neither a 250 MB
+  // here but deliberately excluded from `needsAttention`, so neither a 300 MB
   // download nor a Zotero account is ever required to reach the workspace.
   const grammarStatus = useLanguageToolStore((s) => s.status);
   const grammarError = useLanguageToolStore((s) => s.error);
@@ -278,9 +278,11 @@ export function EnvironmentOnboarding() {
           showCloseButton={false}
           onEscapeKeyDown={(event) => event.preventDefault()}
           onInteractOutside={(event) => event.preventDefault()}
-          className="w-[min(29rem,calc(100vw-2rem))] gap-0 overflow-hidden rounded-2xl border-border/70 p-0 shadow-xl sm:max-w-none"
+          className="flex max-h-[calc(100dvh-2rem)] w-[min(29rem,calc(100vw-2rem))] flex-col gap-0 overflow-hidden rounded-2xl border-border/70 p-0 shadow-xl sm:max-w-none"
         >
-          <div className="flex flex-col items-center px-6 pt-6 pb-4 text-center">
+          {/* Scrolls on short windows so Done never ends up off-screen —
+              there is no other way out of this dialog. */}
+          <div className="flex shrink-0 flex-col items-center px-6 pt-6 pb-4 text-center">
             <img
               src="/icon-192.png"
               alt="Latex4All"
@@ -297,7 +299,7 @@ export function EnvironmentOnboarding() {
             </DialogHeader>
           </div>
 
-          <div className="px-4.5 pb-3">
+          <div className="min-h-0 overflow-y-auto px-4.5 pb-3">
             <div className="space-y-1.5">
               <SetupItem
                 state={
@@ -485,7 +487,7 @@ export function EnvironmentOnboarding() {
                               : "Running"
                             : grammarStatus === "stopped"
                               ? "Installed - server not running"
-                              : "Adds grammar and style checks (~250 MB)"
+                              : "Adds grammar and style checks (~300 MB)"
                 }
                 action={
                   grammarStatus === "ready"
@@ -606,7 +608,7 @@ export function EnvironmentOnboarding() {
             </div>
           </div>
 
-          <div className="flex justify-center px-6 pt-1 pb-4">
+          <div className="flex shrink-0 justify-center px-6 pt-1 pb-4">
             <Button
               disabled={!setupComplete}
               className="h-10 min-w-28 justify-center rounded-full px-7"

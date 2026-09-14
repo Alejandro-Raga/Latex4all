@@ -32,6 +32,12 @@ const JRE_MAJOR_VERSION: &str = "21";
 /// The server takes a while to load its rule sets on first start.
 const SERVER_READY_TIMEOUT_SECS: u64 = 90;
 const SERVER_POLL_INTERVAL_MS: u64 = 500;
+/// A download that stops receiving data this long is treated as dropped rather
+/// than left spinning forever.
+const DOWNLOAD_STALL_TIMEOUT_SECS: u64 = 60;
+/// Tries per download; a dropped connection mid-way through is common enough
+/// on flaky networks that one failure shouldn't end the install.
+const DOWNLOAD_ATTEMPTS: u32 = 3;
 /// LanguageTool's own default heap is generous; cap it so the editor keeps room.
 const SERVER_MAX_HEAP: &str = "-Xmx1g";
 
@@ -141,9 +147,39 @@ fn find_java() -> Option<PathBuf> {
 
 // ── Download & extract ──
 
-/// Streams `url` to `dest`, emitting progress as a percentage of the
-/// advertised content length.
+/// Streams `url` to `dest`, retrying from scratch when an attempt fails.
 async fn download(
+    window: &WebviewWindow,
+    url: &str,
+    dest: &Path,
+    phase: &'static str,
+    label: &str,
+) -> Result<(), String> {
+    let mut attempt = 1;
+    loop {
+        match download_once(window, url, dest, phase, label).await {
+            Ok(()) => return Ok(()),
+            Err(_) if attempt < DOWNLOAD_ATTEMPTS => {
+                emit(
+                    window,
+                    phase,
+                    format!("Retrying {label} ({}/{DOWNLOAD_ATTEMPTS})…", attempt + 1),
+                    None,
+                );
+                attempt += 1;
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+            Err(err) => {
+                let _ = tokio::fs::remove_file(dest).await;
+                return Err(err);
+            }
+        }
+    }
+}
+
+/// One attempt at streaming `url` to `dest`, emitting progress as a percentage
+/// of the advertised content length.
+async fn download_once(
     window: &WebviewWindow,
     url: &str,
     dest: &Path,
@@ -153,6 +189,8 @@ async fn download(
     emit(window, phase, format!("Downloading {label}…"), Some(0));
 
     let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .read_timeout(std::time::Duration::from_secs(DOWNLOAD_STALL_TIMEOUT_SECS))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
     let mut response = client
