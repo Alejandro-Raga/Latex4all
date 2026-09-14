@@ -57,6 +57,10 @@ export function EnvironmentOnboarding() {
   const keepOpenDuringCheckRef = useRef(false);
   const [hasOpenedForSetup, setHasOpenedForSetup] = useState(false);
   const [completedDismissed, setCompletedDismissed] = useState(false);
+  // Closed with the X before setup was finished. Unlike `completedDismissed`
+  // this isn't reset when something needs attention again, so a re-check
+  // can't pop the dialog back up; it returns on the next launch.
+  const [closedByUser, setClosedByUser] = useState(false);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const [skillsStatus, setSkillsStatus] = useState<SkillsStatus | null>(null);
   const [skillsChecking, setSkillsChecking] = useState(true);
@@ -213,6 +217,7 @@ export function EnvironmentOnboarding() {
   const shouldShow =
     initialCheckComplete &&
     !completedDismissed &&
+    !closedByUser &&
     (needsAttention ||
       (isCheckingSetup && keepOpenDuringCheckRef.current) ||
       hasOpenedForSetup);
@@ -273,9 +278,13 @@ export function EnvironmentOnboarding() {
 
   return (
     <>
-      <Dialog open={shouldShow} onOpenChange={() => undefined}>
+      <Dialog
+        open={shouldShow}
+        onOpenChange={(open) => {
+          if (!open) setClosedByUser(true);
+        }}
+      >
         <DialogContent
-          showCloseButton={false}
           onEscapeKeyDown={(event) => event.preventDefault()}
           onInteractOutside={(event) => event.preventDefault()}
           className="flex max-h-[calc(100dvh-2rem)] w-[min(29rem,calc(100vw-2rem))] flex-col gap-0 overflow-hidden rounded-2xl border-border/70 p-0 shadow-xl sm:max-w-none"
