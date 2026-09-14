@@ -3,9 +3,12 @@
 //! `grammar.rs` only knows how to talk to an HTTP endpoint; something has to
 //! put a server behind it. On macOS that has historically been the user's job
 //! (`brew install languagetool`), but Windows has no equivalent one-liner, so
-//! the app manages the whole thing: it downloads LanguageTool, downloads a JRE
-//! when the machine has no Java, starts the server on demand, and shuts it down
-//! with the app.
+//! the app manages the whole thing: it downloads LanguageTool and a private JRE,
+//! starts the server on demand, and shuts it down with the app.
+//!
+//! The JRE is always our own, never whatever `java` the machine happens to have:
+//! a system Java 8 or 11 (common on Windows) can't load LanguageTool's classes,
+//! and a 32-bit one can't reserve the heap the server needs.
 //!
 //! Everything lands under the per-user data directory — no admin rights, and
 //! nothing to clean up outside it. The server binds loopback only and is never
@@ -23,7 +26,7 @@ const LANGUAGE_TOOL_VERSION: &str = "6.6";
 const LANGUAGE_TOOL_URL: &str = "https://languagetool.org/download/LanguageTool-6.6.zip";
 
 /// Adoptium's "latest GA build of this major version" endpoint. LanguageTool
-/// 6.6 needs Java 17 or newer; 21 is the current LTS.
+/// 6.6 needs Java 17 or newer; 21 is an LTS.
 const JRE_MAJOR_VERSION: &str = "21";
 
 /// The server takes a while to load its rule sets on first start.
@@ -49,9 +52,9 @@ pub struct LanguageToolStatus {
     running: bool,
     /// True when the responding server is the one this app spawned.
     managed: bool,
-    /// Path to the `java` that would be used, or `None` if none was found.
+    /// Path to the private JRE's `java`, or `None` if it isn't there yet.
     java_path: Option<String>,
-    /// Whether that `java` is the private JRE we downloaded.
+    /// Whether the private JRE is present.
     java_bundled: bool,
     install_dir: String,
     version: String,
@@ -106,8 +109,15 @@ fn server_jar() -> Result<PathBuf, String> {
     Ok(install_dir()?.join("languagetool-server.jar"))
 }
 
-fn is_installed() -> bool {
+fn has_server_jar() -> bool {
     server_jar().map(|jar| jar.is_file()).unwrap_or(false)
+}
+
+/// Both halves are needed to run the server. Installs made before the private
+/// JRE was mandatory have only the jar, so they report as not installed and
+/// the Install button fetches the missing JRE.
+fn is_installed() -> bool {
+    has_server_jar() && find_java().is_some()
 }
 
 /// `bin/java` inside an unpacked JRE.
@@ -122,22 +132,11 @@ fn jre_java(dir: &Path) -> PathBuf {
     }
 }
 
-/// Locate a usable Java: our private JRE first (so behaviour doesn't change
-/// when the user installs or removes a system JDK), then `JAVA_HOME`, then PATH.
-fn find_java() -> Option<(PathBuf, bool)> {
-    if let Ok(dir) = jre_dir() {
-        let java = jre_java(&dir);
-        if java.is_file() {
-            return Some((java, true));
-        }
-    }
-    if let Ok(java_home) = std::env::var("JAVA_HOME") {
-        let java = jre_java(Path::new(&java_home));
-        if java.is_file() {
-            return Some((java, false));
-        }
-    }
-    which::which("java").ok().map(|path| (path, false))
+/// The private JRE's `java`, if it has been unpacked. `JAVA_HOME` and PATH are
+/// deliberately ignored — see the module docs.
+fn find_java() -> Option<PathBuf> {
+    let java = jre_java(&jre_dir().ok()?);
+    java.is_file().then_some(java)
 }
 
 // ── Download & extract ──
@@ -286,9 +285,7 @@ fn jre_download_url() -> Result<String, String> {
     } else if cfg!(target_arch = "aarch64") {
         "aarch64"
     } else {
-        return Err("No prebuilt JRE is available for this CPU architecture. \
-                    Install Java 17 or newer and try again."
-            .into());
+        return Err("No prebuilt Java runtime is available for this CPU architecture.".into());
     };
 
     Ok(format!(
@@ -312,18 +309,16 @@ pub async fn language_tool_status(
         installed: is_installed(),
         running: crate::grammar::check_grammar_server_available(server_url).await,
         managed,
-        java_path: java
-            .as_ref()
-            .map(|(path, _)| path.to_string_lossy().into_owned()),
-        java_bundled: java.map(|(_, bundled)| bundled).unwrap_or(false),
+        java_bundled: java.is_some(),
+        java_path: java.map(|path| path.to_string_lossy().into_owned()),
         install_dir: install_dir()?.to_string_lossy().into_owned(),
         version: LANGUAGE_TOOL_VERSION.to_string(),
     })
 }
 
-/// Downloads and unpacks LanguageTool, plus a private JRE if the machine has no
-/// Java. Roughly 250 MB (or 300 MB with the JRE) and several minutes on a
-/// typical connection; progress is reported through `languagetool-progress`.
+/// Downloads and unpacks whichever of the private JRE and LanguageTool is
+/// missing. Roughly 300 MB and several minutes on a typical connection;
+/// progress is reported through `languagetool-progress`.
 #[tauri::command]
 pub async fn install_language_tool(window: WebviewWindow) -> Result<(), String> {
     let install_dir = install_dir()?;
@@ -331,9 +326,12 @@ pub async fn install_language_tool(window: WebviewWindow) -> Result<(), String> 
     std::fs::create_dir_all(&staging)
         .map_err(|e| format!("Failed to create {}: {e}", staging.display()))?;
 
-    // 1. Java, only if the machine doesn't already have a usable one.
-    if find_java().is_none() {
+    // 1. The private JRE.
+    let fetched_jre = find_java().is_none();
+    if fetched_jre {
         let jre_dir = jre_dir()?;
+        // Clear out a half-finished previous attempt rather than merging into it.
+        let _ = std::fs::remove_dir_all(&jre_dir);
         let archive = staging.join("jre.zip");
         download(
             &window,
@@ -359,7 +357,12 @@ pub async fn install_language_tool(window: WebviewWindow) -> Result<(), String> 
         }
     }
 
-    // 2. LanguageTool itself.
+    // 2. LanguageTool itself. An install that used to rely on a system Java
+    // only lacked the JRE, so don't make it download LanguageTool again.
+    if fetched_jre && has_server_jar() {
+        emit(&window, "done", "LanguageTool is ready.", Some(100));
+        return Ok(());
+    }
     let archive = staging.join("languagetool.zip");
     download(
         &window,
@@ -382,7 +385,7 @@ pub async fn install_language_tool(window: WebviewWindow) -> Result<(), String> 
     .map_err(|e| e.to_string())??;
     let _ = std::fs::remove_file(&archive);
 
-    if !is_installed() {
+    if !has_server_jar() {
         return Err(format!(
             "LanguageTool unpacked to {} but languagetool-server.jar is missing.",
             install_dir.display()
@@ -407,9 +410,8 @@ pub async fn start_language_tool(
         return Err("LanguageTool is not installed yet.".into());
     }
 
-    let (java, _) = find_java().ok_or(
-        "No Java runtime was found. Reinstall LanguageTool from Settings to fetch a private one.",
-    )?;
+    let java = find_java()
+        .ok_or("The Java runtime is missing. Install the grammar checker again to fetch it.")?;
     let jar = server_jar()?;
     let port = port_from_url(&server_url)?;
 

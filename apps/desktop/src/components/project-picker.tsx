@@ -1610,7 +1610,7 @@ function EnvironmentStatus({ appVersion }: { appVersion: string }) {
                       : `LanguageTool ${grammarVersion ?? ""} running`.trim()
                     : grammarStatus === "stopped"
                       ? "Installed - server not running"
-                      : "Not installed (~250 MB)"
+                      : "Not installed (~300 MB)"
           }
           secondaryAction={
             grammarStatus === "stopped" && !grammarInstalling
