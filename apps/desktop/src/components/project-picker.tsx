@@ -54,6 +54,7 @@ import {
   MonitorIcon,
   MoonIcon,
   SunIcon,
+  UsersIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -88,6 +89,7 @@ import {
 } from "@/components/ui/dialog";
 import { ProjectWizard, type CreationMode } from "./project-wizard";
 import { ClaudeSetup } from "./claude-setup";
+import { JoinDialog } from "@/components/collab/join-dialog";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
 
@@ -139,6 +141,7 @@ let projectPreviewCompileQueue: Promise<void> = Promise.resolve();
 
 export function ProjectPicker() {
   const [showModeDialog, setShowModeDialog] = useState(false);
+  const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [wizardMode, setWizardMode] = useState<CreationMode | null>(null);
   const [appVersion, setAppVersion] = useState("");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -530,6 +533,14 @@ export function ProjectPicker() {
               </div>
 
               <Button
+                onClick={() => setShowJoinDialog(true)}
+                variant="secondary"
+                className="h-9 shrink-0 gap-1.5 rounded-lg px-3.5"
+              >
+                <UsersIcon className="size-4" />
+                Join
+              </Button>
+              <Button
                 onClick={handleOpenFolder}
                 variant="secondary"
                 className="h-9 shrink-0 gap-1.5 rounded-lg px-3.5"
@@ -699,6 +710,8 @@ export function ProjectPicker() {
           )}
         </div>
       </main>
+
+      <JoinDialog open={showJoinDialog} onOpenChange={setShowJoinDialog} />
 
       {/* New Project mode selection dialog */}
       <Dialog open={showModeDialog} onOpenChange={setShowModeDialog}>

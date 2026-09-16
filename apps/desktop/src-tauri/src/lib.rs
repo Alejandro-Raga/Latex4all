@@ -3,6 +3,7 @@
 mod anthropic_proxy;
 mod claude;
 mod claude_process;
+mod collab;
 mod dictionary;
 mod grammar;
 mod history;
@@ -581,6 +582,7 @@ pub fn run() {
         .manage(latex::LatexCompilerState::default())
         .manage(languagetool::LanguageToolProcess::default())
         .manage(zotero::ZoteroOAuthState::default())
+        .manage(collab::CollabState::default())
         .setup(|app| {
             // Safety net: force-show the main window after a timeout if the
             // frontend JS never calls `getCurrentWindow().show()`.
@@ -657,6 +659,11 @@ pub fn run() {
             zotero::zotero_complete_oauth,
             zotero::zotero_cancel_oauth,
             zotero::zotero_download_attachment,
+            collab::collab_host,
+            collab::collab_join,
+            collab::collab_send,
+            collab::collab_stop,
+            collab::collab_default_name,
             history::history_init,
             history::history_snapshot,
             history::history_list,

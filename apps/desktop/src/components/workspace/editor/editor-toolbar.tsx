@@ -22,6 +22,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { CollabButton } from "@/components/collab/collab-button";
 import { Button } from "@/components/ui/button";
 import vscodeIcon from "@/assets/vscode.svg";
 import {
@@ -541,6 +542,7 @@ export function EditorToolbar({
         </Popover>
       </div>
       <div data-tauri-drag-region className="flex-1 self-stretch" />
+      <CollabButton />
       {editors.length === 1 && (
         <TooltipIconButton
           tooltip={`Open in ${editors[0].name}`}

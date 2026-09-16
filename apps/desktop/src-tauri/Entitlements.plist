@@ -15,6 +15,9 @@
     <!-- Network access for API calls (Claude, Zotero, Tectonic bundle download) -->
     <key>com.apple.security.network.client</key>
     <true/>
+    <!-- Accepting collaborators' connections when sharing a project (collab.rs) -->
+    <key>com.apple.security.network.server</key>
+    <true/>
     <!-- File system access for user-selected project directories -->
     <key>com.apple.security.files.user-selected.read-write</key>
     <true/>

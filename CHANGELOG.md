@@ -18,6 +18,12 @@ URL changed. Branch layout, CI, refactors and tests belong in commit messages.
 
 Write entries under `## [Unreleased]
 
+### Added
+
+- Edit a project together in real time. Click Share in the editor to get an
+  invite code; others on the same network choose Join on the projects screen,
+  and everyone sees each other's changes and cursors as they type.
+
 ### Changed
 
 - Exporting a PDF now opens in the project's own folder rather than wherever

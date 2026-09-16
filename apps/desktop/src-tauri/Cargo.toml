@@ -33,6 +33,9 @@ dotenvy = "0.15"
 git2 = { version = "0.20", default-features = false, features = ["vendored-libgit2"] }
 chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
+# Live collaboration relay (collab.rs).
+tokio-tungstenite = "0.30"
+futures-util = "0.3"
 which = "7"
 tectonic = { version = "0.15", default-features = true, features = ["external-harfbuzz"] }
 # NOTE: Building tectonic requires external harfbuzz/graphite2/icu/freetype:

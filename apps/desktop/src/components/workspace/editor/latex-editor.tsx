@@ -70,6 +70,13 @@ import {
 } from "@/stores/claude-chat-store";
 import { useHistoryStore, type FileDiff } from "@/stores/history-store";
 import {
+  getCollabAwareness,
+  getSharedText,
+  getSharedUndoManager,
+  useCollabStore,
+} from "@/stores/collab-store";
+import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
+import {
   compileLatex,
   resolveCompileTarget,
   formatCompileError,
@@ -192,6 +199,7 @@ export function LatexEditor() {
   const setPdfData = useDocumentStore((s) => s.setPdfData);
   const setCompileError = useDocumentStore((s) => s.setCompileError);
   const saveAllFiles = useDocumentStore((s) => s.saveAllFiles);
+  const collabRevision = useCollabStore((s) => s.revision);
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const isTextFile =
@@ -886,20 +894,32 @@ export function LatexEditor() {
       ]),
     );
 
+    // In a live session the editor edits the shared text itself, so other
+    // people's changes and cursors show up as they type. Undo then only
+    // reverts your own edits.
+    const relativePath = activeFile?.relativePath ?? "";
+    const sharedText = getSharedText(relativePath);
+    const awareness = getCollabAwareness();
+    const undoManager = getSharedUndoManager(relativePath);
+    const collab =
+      sharedText && awareness && undoManager
+        ? yCollab(sharedText, awareness, { undoManager })
+        : null;
+
     const state = EditorState.create({
-      doc: currentContent,
+      doc: sharedText && collab ? sharedText.toString() : currentContent,
       extensions: [
         compileKeymap,
         lineNumbers(),
         drawSelection(),
         highlightActiveLine(),
         highlightActiveLineGutter(),
-        history(),
+        collab ?? history(),
         keymap.of([
           { key: "Tab", run: indentMore, shift: indentLess },
           ...closeBracketsKeymap,
           ...defaultKeymap,
-          ...historyKeymap,
+          ...(collab ? yUndoManagerKeymap : historyKeymap),
         ]),
         closeBrackets(),
         activeFile?.type === "bib"
@@ -1121,6 +1141,7 @@ export function LatexEditor() {
     setContent,
     setCursorPosition,
     setSelectionRange,
+    collabRevision,
   ]);
 
   // Dynamically switch editor theme when resolvedTheme changes
@@ -1187,11 +1208,12 @@ export function LatexEditor() {
       try {
         const scrollTop = view.scrollDOM.scrollTop;
         view.dispatch({
-          changes: {
-            from: 0,
-            to: view.state.doc.length,
-            insert: activeFileChange.newContent,
-          },
+          // Only the changed span, so a collaborator's edits elsewhere in the
+          // file aren't wiped and retyped by a whole-document replace.
+          changes: computeMinimalChange(
+            view.state.doc.toString(),
+            activeFileChange.newContent,
+          ),
           effects: mergeCompartmentRef.current.reconfigure(
             unifiedMergeView({
               original: activeFileChange.oldContent,
@@ -1225,11 +1247,12 @@ export function LatexEditor() {
       try {
         const scrollTop = view.scrollDOM.scrollTop;
         view.dispatch({
-          changes: {
-            from: 0,
-            to: view.state.doc.length,
-            insert: activeFileChange.newContent,
-          },
+          // Only the changed span, so a collaborator's edits elsewhere in the
+          // file aren't wiped and retyped by a whole-document replace.
+          changes: computeMinimalChange(
+            view.state.doc.toString(),
+            activeFileChange.newContent,
+          ),
           effects: mergeCompartmentRef.current.reconfigure(
             unifiedMergeView({
               original: activeFileChange.oldContent,
