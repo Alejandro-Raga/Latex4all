@@ -129,6 +129,31 @@ describe("release-notes", () => {
     it("collapses runs of blank lines", () => {
       expect(toPlainText("A\n\n\n\nB")).toBe("A\n\nB");
     });
+
+    it("joins lines the changelog wraps at 80 columns", () => {
+      const plain = toPlainText(
+        [
+          "### Added",
+          "",
+          "- Shared projects. Click Share in the editor to get an invite link, and",
+          "  anyone who opens it with Join works on the same project.",
+          "- Highlights and notes.",
+          "",
+          "A paragraph that",
+          "wraps too.",
+        ].join("\n"),
+      );
+      expect(plain).toBe(
+        [
+          "Added",
+          "",
+          "- Shared projects. Click Share in the editor to get an invite link, and anyone who opens it with Join works on the same project.",
+          "- Highlights and notes.",
+          "",
+          "A paragraph that wraps too.",
+        ].join("\n"),
+      );
+    });
   });
 
   describe("buildNotes", () => {

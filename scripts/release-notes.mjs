@@ -94,18 +94,37 @@ export function commitNotes(subjects, sinceLabel) {
  * Flatten markdown for the update dialog, which renders notes as pre-wrapped
  * plain text — leaving the markup in would show a reader literal `###` and
  * `**bold**` in the one place the notes are most likely to be read.
+ *
+ * The changelog is also hard-wrapped at 80 columns, which markdown renderers
+ * join back up but a pre-wrapped box shows as-is: every wrap a line break and
+ * every continuation indent a run of stray spaces. So wrapped lines are joined
+ * back into the paragraph or list item they belong to.
  */
 export function toPlainText(markdown) {
-  return markdown
-    .split(/\r?\n/)
-    .map((line) =>
-      line
-        .replace(/^\s*#{1,6}\s+/, "")
-        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-        .replace(/(\*\*|__)(.*?)\1/g, "$2")
-        .replace(/`([^`]*)`/g, "$1")
-        .trimEnd(),
-    )
+  const out = [];
+  let joinable = false;
+  for (const raw of markdown.split(/\r?\n/)) {
+    const isHeading = /^\s*#{1,6}\s+/.test(raw);
+    const line = raw
+      .replace(/^\s*#{1,6}\s+/, "")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/(\*\*|__)(.*?)\1/g, "$2")
+      .replace(/`([^`]*)`/g, "$1")
+      .trim();
+    if (line === "") {
+      out.push("");
+      joinable = false;
+    } else if (isHeading) {
+      out.push(line);
+      joinable = false;
+    } else if (/^([-*+]|\d+[.)])\s/.test(line) || !joinable) {
+      out.push(line);
+      joinable = true;
+    } else {
+      out[out.length - 1] += ` ${line}`;
+    }
+  }
+  return out
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
