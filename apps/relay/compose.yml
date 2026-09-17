@@ -1,6 +1,7 @@
 # The relay is reachable by anyone on the internet, so the container gets as
-# little as possible: no root, no writable filesystem, no capabilities, no
-# access to the host's files or Docker, and a ceiling on what it can consume.
+# little as possible: no root, nothing writable but its own data folder, no
+# capabilities, no access to the host's other files or Docker, and a ceiling on
+# what it can consume. Storage itself is capped by the relay (DEFAULT_LIMITS).
 services:
   relay:
     build: .
@@ -11,6 +12,9 @@ services:
       - "127.0.0.1:8082:8082"
     user: node
     read_only: true
+    volumes:
+      # Owned by uid 1000, which is both `usr` on the vm and `node` in here.
+      - ./data:/data
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     mem_limit: 256m

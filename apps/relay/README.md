@@ -1,20 +1,31 @@
 # Latex4All relay
 
-Lets people share a project over the internet. The host's app keeps a
-connection open to the relay; guests connect to the relay, and it hands each
-connection to the host, who checks the invite token. The relay stores nothing
-and never sees whether a token is valid. See the comment at the top of
-`relay.mjs` for the protocol, and `collab.rs` in the desktop app for the other
-side.
+Keeps shared projects in sync. Each project's changes are stored here so that
+whoever opens it next gets them, whether or not anyone else is online, and are
+passed on live to whoever has it open.
 
-It is open to anyone using the app, so everything it hands out is capped
-(`DEFAULT_LIMITS`): rooms, guests per room, connections per address, message
-size, and bandwidth per room.
+Everything is encrypted by the apps with a key that stays in the invite link:
+the relay stores and forwards ciphertext and only knows a hash of the access
+token. See the comment at the top of `relay.mjs` for the protocol, and
+`collab.rs` in the desktop app for the other side.
+
+It is open to anyone using the app, so everything is capped (`DEFAULT_LIMITS`):
+
+| | |
+| --- | --- |
+| Per project | 100 MB (updates, snapshot and files together) |
+| Per file | 25 MB |
+| Whole relay | 5 GB; no new projects past 90% |
+| Inactive projects | deleted after 180 days unopened |
+| New projects | 20 per address per day |
+
+plus connections per project and per address, message size, and bandwidth per
+project.
 
 ## Running
 
 ```sh
-node relay.mjs               # 127.0.0.1:8082; PORT and HOST override
+node relay.mjs               # 127.0.0.1:8082, data in ./data; PORT, HOST, DATA_DIR override
 node --test                  # tests
 ```
 
@@ -23,15 +34,13 @@ node --test                  # tests
 Runs on the `vm` host as a locked-down container (`compose.yml`), published at
 `https://collab.alejandroraga.com` by the Cloudflare Tunnel that also serves
 the blog. The tunnel is token-managed, so the route (that hostname →
-`http://localhost:8082`) lives in the Zero Trust dashboard.
+`http://localhost:8082`) lives in the Zero Trust dashboard. Stored projects are
+in `~/latex4all-relay/data` on the vm.
 
 To deploy a change:
 
 ```sh
-scp apps/relay/{package.json,relay.mjs,Dockerfile,compose.yml,.dockerignore} vm:latex4all-relay/
-ssh vm 'cd latex4all-relay && docker compose up -d --build'
-ssh vm 'curl -s 127.0.0.1:8082/health'   # "ok <open rooms>"
+scp apps/relay/{package.json,relay.mjs,storage.mjs,Dockerfile,compose.yml,.dockerignore} vm:latex4all-relay/
+ssh vm 'cd latex4all-relay && mkdir -p data && docker compose up -d --build'
+ssh vm 'curl -s 127.0.0.1:8082/health'   # "ok <stored projects>"
 ```
-
-The app has the relay's address built in (`RELAY_URL` in
-`src/stores/collab-store.ts`).
