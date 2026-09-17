@@ -21,8 +21,9 @@ Write entries under `## [Unreleased]
 ### Added
 
 - Edit a project together in real time. Click Share in the editor to get an
-  invite code; others on the same network choose Join on the projects screen,
-  and everyone sees each other's changes and cursors as they type.
+  invite code, from anywhere over the internet or on your local network;
+  others choose Join on the projects screen, and everyone sees each other's
+  changes and cursors as they type.
 
 ### Changed
 

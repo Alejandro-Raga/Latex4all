@@ -1,0 +1,23 @@
+# The relay is reachable by anyone on the internet, so the container gets as
+# little as possible: no root, no writable filesystem, no capabilities, no
+# access to the host's files or Docker, and a ceiling on what it can consume.
+services:
+  relay:
+    build: .
+    image: latex4all-relay
+    restart: unless-stopped
+    ports:
+      # Loopback only; cloudflared publishes it.
+      - "127.0.0.1:8082:8082"
+    user: node
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    cpus: 1.0
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: 1m
+        max-file: "3"

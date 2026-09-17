@@ -11,10 +11,17 @@
 //! Before joining, a guest downloads the project folder once from
 //! `/snapshot`, so it has the images, styles and everything else it needs to
 //! compile on its own. Only the text files are kept in sync after that.
+//!
+//! Guests reach the host in one of two ways. On the same network they connect
+//! straight to a port the host opens. Over the internet the host keeps a
+//! connection open to a public relay (apps/relay in this repo), and the relay
+//! hands each guest's connection over to it; the host checks the invite token
+//! either way, so the relay never decides who gets in.
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::net::{IpAddr, UdpSocket};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -27,8 +34,8 @@ use tokio::sync::{broadcast, watch};
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tokio_tungstenite::tungstenite::http::StatusCode;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
-use tokio_tungstenite::tungstenite::{Bytes, Message};
-use tokio_tungstenite::WebSocketStream;
+use tokio_tungstenite::tungstenite::{Bytes, Error as WsError, Message};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 /// Tried first so the address people share stays the same between sessions
 /// (and a port forward keeps working); any free port is used if it's taken.
@@ -41,6 +48,8 @@ const RELAY_BACKLOG: usize = 4096;
 const KEEPALIVE: Duration = Duration::from_secs(20);
 const SNAPSHOT_FILE_LIMIT: u64 = 100 * 1024 * 1024;
 const SNAPSHOT_TOTAL_LIMIT: u64 = 500 * 1024 * 1024;
+/// Files are sent in pieces this size; the relay refuses larger messages.
+const SNAPSHOT_CHUNK: usize = 1024 * 1024;
 /// Mirrors `IGNORED_DIRECTORY_NAMES` in src/lib/tauri/fs.ts.
 const SKIPPED_DIRECTORIES: &[&str] = &["node_modules", "__pycache__", "venv", "env"];
 
@@ -233,12 +242,151 @@ async fn handle_connection(
     let Ok(ws) = tokio_tungstenite::accept_hdr_async(stream, callback).await else {
         return;
     };
+    if let Some(route) = route {
+        serve_route(ws, route, &relay, &project_root, shutdown).await;
+    }
+}
+
+async fn serve_route<S>(
+    ws: WebSocketStream<S>,
+    route: Route,
+    relay: &Relay,
+    project_root: &Path,
+    shutdown: watch::Receiver<()>,
+) where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     match route {
-        Some(Route::Sync) => pump(ws, &relay, shutdown).await,
-        Some(Route::Snapshot) => {
-            let _ = send_snapshot(ws, &project_root).await;
+        Route::Sync => pump(ws, relay, shutdown).await,
+        Route::Snapshot => {
+            let _ = send_snapshot(ws, project_root).await;
         }
-        None => {}
+    }
+}
+
+// ─── Host, through the internet relay ───
+
+type ClientStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
+
+/// A relay address as typed (`https://collab.example.com`) turned into the
+/// WebSocket base the app connects to (`wss://collab.example.com`).
+fn relay_base(url: &str) -> Result<String, String> {
+    let url = url.trim();
+    let (scheme, rest) = if let Some(rest) = url.strip_prefix("https://") {
+        ("wss", rest)
+    } else if let Some(rest) = url.strip_prefix("http://") {
+        ("ws", rest)
+    } else if let Some(rest) = url.strip_prefix("wss://") {
+        ("wss", rest)
+    } else if let Some(rest) = url.strip_prefix("ws://") {
+        ("ws", rest)
+    } else {
+        ("wss", url)
+    };
+    let rest = rest.trim_end_matches('/');
+    if rest.is_empty()
+        || rest
+            .chars()
+            .any(|c| c.is_whitespace() || matches!(c, '?' | '#' | '@'))
+    {
+        return Err("That relay address isn't valid.".into());
+    }
+    Ok(format!("{scheme}://{rest}"))
+}
+
+fn is_hex_id(id: &str) -> bool {
+    id.len() == 32 && id.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// Turns a refused connection into something a person can act on.
+fn connection_error(err: WsError, what: &str) -> String {
+    match &err {
+        WsError::Http(response) => match response.status().as_u16() {
+            404 => "That session isn't running any more.".into(),
+            429 | 503 => "The relay is busy right now. Try again in a few minutes.".into(),
+            _ => format!("Couldn't reach {what}: {err}"),
+        },
+        _ => format!("Couldn't reach {what}: {err}"),
+    }
+}
+
+#[derive(Deserialize)]
+struct RelayRequest {
+    #[serde(rename = "type")]
+    kind: String,
+    id: String,
+    path: String,
+}
+
+/// Opens this host's room on the relay. Returns the control connection the
+/// relay announces guests on.
+async fn open_relay_room(base: &str, room: &str, secret: &str) -> Result<ClientStream, String> {
+    let url = format!("{base}/host?room={room}&secret={secret}");
+    tokio_tungstenite::connect_async_with_config(url, None, true)
+        .await
+        .map(|(ws, _)| ws)
+        .map_err(|e| connection_error(e, "the relay"))
+}
+
+/// Picks up guests the relay announces until the session stops. Returns true
+/// if the relay went away rather than the session being stopped here.
+async fn serve_via_relay(
+    control: ClientStream,
+    accept_base: String,
+    secret: Arc<str>,
+    token: Arc<str>,
+    relay: Arc<Relay>,
+    project_root: Arc<Path>,
+    mut shutdown: watch::Receiver<()>,
+) -> bool {
+    let (mut sink, mut stream) = control.split();
+    let mut keepalive = tokio::time::interval(KEEPALIVE);
+    keepalive.tick().await;
+    loop {
+        tokio::select! {
+            _ = shutdown.changed() => {
+                let _ = sink.send(Message::Close(None)).await;
+                return false;
+            }
+            _ = keepalive.tick() => {
+                if sink.send(Message::Ping(Bytes::new())).await.is_err() {
+                    return true;
+                }
+            }
+            incoming = stream.next() => match incoming {
+                Some(Ok(Message::Text(text))) => {
+                    let Ok(request) = serde_json::from_str::<RelayRequest>(&text) else {
+                        continue;
+                    };
+                    if request.kind != "connect" || !is_hex_id(&request.id) {
+                        continue;
+                    }
+                    match authorize(&request.path, &token) {
+                        Some(route) => {
+                            let url = format!("{accept_base}/{}?secret={secret}", request.id);
+                            let relay = relay.clone();
+                            let project_root = project_root.clone();
+                            let shutdown = shutdown.clone();
+                            tokio::spawn(async move {
+                                if let Ok((ws, _)) =
+                                    tokio_tungstenite::connect_async_with_config(url, None, true).await
+                                {
+                                    serve_route(ws, route, &relay, &project_root, shutdown).await;
+                                }
+                            });
+                        }
+                        None => {
+                            let reject = json!({ "type": "reject", "id": request.id });
+                            if sink.send(Message::text(reject.to_string())).await.is_err() {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return true,
+                Some(Ok(_)) => {}
+            },
+        }
     }
 }
 
@@ -246,6 +394,13 @@ async fn handle_connection(
 struct SnapshotHeader {
     name: String,
     files: usize,
+}
+
+/// Precedes each file, whose bytes then follow in one or more binary messages.
+#[derive(Serialize, Deserialize)]
+struct SnapshotFile {
+    path: String,
+    size: u64,
 }
 
 /// Every file a guest needs, as (path relative to the root with `/`
@@ -307,16 +462,24 @@ where
     ws.send(Message::text(header))
         .await
         .map_err(|e| e.to_string())?;
-    for (relative, absolute) in files {
+    for (path, absolute) in files {
         // A file that vanished since the listing is sent empty rather than
         // breaking the count the guest is expecting.
-        let bytes = tokio::fs::read(&absolute).await.unwrap_or_default();
-        ws.send(Message::text(relative))
+        let bytes = Bytes::from(tokio::fs::read(&absolute).await.unwrap_or_default());
+        let entry = SnapshotFile {
+            path,
+            size: bytes.len() as u64,
+        };
+        let entry = serde_json::to_string(&entry).map_err(|e| e.to_string())?;
+        ws.send(Message::text(entry))
             .await
             .map_err(|e| e.to_string())?;
-        ws.send(Message::binary(bytes))
-            .await
-            .map_err(|e| e.to_string())?;
+        for start in (0..bytes.len()).step_by(SNAPSHOT_CHUNK) {
+            let chunk = bytes.slice(start..(start + SNAPSHOT_CHUNK).min(bytes.len()));
+            ws.send(Message::Binary(chunk))
+                .await
+                .map_err(|e| e.to_string())?;
+        }
     }
     ws.close(None).await.map_err(|e| e.to_string())
 }
@@ -332,20 +495,27 @@ fn local_address() -> Option<IpAddr> {
 
 // ─── Guest ───
 
-/// `host:port/token`, as shown to whoever shares. Returns (host:port, token).
+/// An invite as shown to whoever shares — `wss://relay/r/<room>/<token>` over
+/// the internet, `host:port/token` on the same network. Returns the WebSocket
+/// base the guest's endpoints hang off, and the token.
 fn parse_invite(invite: &str) -> Result<(String, String), String> {
     let invalid = || "That invite code isn't valid.".to_string();
     let invite = invite.trim();
     let invite = invite.strip_prefix("latex4all://").unwrap_or(invite);
-    let (authority, token) = invite.rsplit_once('/').ok_or_else(invalid)?;
-    let authority_ok = !authority.is_empty()
-        && authority.contains(':')
-        && !authority
+    let (base, token) = invite.rsplit_once('/').ok_or_else(invalid)?;
+    if token.len() < 16 || !token.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(invalid());
+    }
+    if base.contains("://") {
+        return Ok((relay_base(base).map_err(|_| invalid())?, token.to_string()));
+    }
+    let authority_ok = !base.is_empty()
+        && base.contains(':')
+        && !base
             .chars()
             .any(|c| c.is_whitespace() || matches!(c, '/' | '?' | '#' | '@'));
-    let token_ok = token.len() >= 16 && token.chars().all(|c| c.is_ascii_hexdigit());
-    if authority_ok && token_ok {
-        Ok((authority.to_string(), token.to_string()))
+    if authority_ok {
+        Ok((format!("ws://{base}"), token.to_string()))
     } else {
         Err(invalid())
     }
@@ -385,18 +555,14 @@ fn unique_destination(parent: &Path, name: &str) -> PathBuf {
     candidate
 }
 
-async fn receive_snapshot(
-    authority: &str,
-    token: &str,
-    dest_parent: &Path,
-) -> Result<PathBuf, String> {
-    let url = format!("ws://{authority}/snapshot?token={token}");
+async fn receive_snapshot(base: &str, token: &str, dest_parent: &Path) -> Result<PathBuf, String> {
+    let url = format!("{base}/snapshot?token={token}");
     let config = WebSocketConfig::default()
-        .max_message_size(Some(SNAPSHOT_FILE_LIMIT as usize + 1024))
-        .max_frame_size(Some(SNAPSHOT_FILE_LIMIT as usize + 1024));
+        .max_message_size(Some(SNAPSHOT_CHUNK * 2))
+        .max_frame_size(Some(SNAPSHOT_CHUNK * 2));
     let (mut ws, _) = tokio_tungstenite::connect_async_with_config(url, Some(config), true)
         .await
-        .map_err(|e| format!("Couldn't reach the shared project: {e}"))?;
+        .map_err(|e| connection_error(e, "the shared project"))?;
 
     let header: SnapshotHeader = match ws.next().await {
         Some(Ok(Message::Text(text))) => serde_json::from_str(&text).map_err(|e| e.to_string())?,
@@ -406,16 +572,30 @@ async fn receive_snapshot(
     std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
 
     let result = async {
+        let interrupted = || "The download was interrupted.".to_string();
+        let mut total = 0u64;
         for _ in 0..header.files {
-            let relative = match ws.next().await {
-                Some(Ok(Message::Text(text))) => text.to_string(),
-                _ => return Err("The download was interrupted.".to_string()),
+            let entry: SnapshotFile = match ws.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    serde_json::from_str(&text).map_err(|_| interrupted())?
+                }
+                _ => return Err(interrupted()),
             };
-            let bytes = match ws.next().await {
-                Some(Ok(Message::Binary(bytes))) => bytes,
-                _ => return Err("The download was interrupted.".to_string()),
-            };
-            let Some(relative) = safe_relative_path(&relative) else {
+            total += entry.size;
+            if entry.size > SNAPSHOT_FILE_LIMIT || total > SNAPSHOT_TOTAL_LIMIT {
+                return Err("The shared project is too large.".to_string());
+            }
+            let mut bytes = Vec::with_capacity(entry.size as usize);
+            while (bytes.len() as u64) < entry.size {
+                match ws.next().await {
+                    Some(Ok(Message::Binary(chunk))) => bytes.extend_from_slice(&chunk),
+                    _ => return Err(interrupted()),
+                }
+            }
+            if bytes.len() as u64 != entry.size {
+                return Err(interrupted());
+            }
+            let Some(relative) = safe_relative_path(&entry.path) else {
                 continue;
             };
             let target = dest.join(relative);
@@ -479,41 +659,73 @@ pub struct HostInfo {
     invite: String,
 }
 
+/// Starts sharing `project_root` — through the relay at `relay_url` if one is
+/// given, otherwise on a port others on the same network can reach.
 #[tauri::command]
 pub async fn collab_host(
     window: WebviewWindow,
     state: tauri::State<'_, CollabState>,
     project_root: String,
+    relay_url: Option<String>,
 ) -> Result<HostInfo, String> {
     state.replace(None);
-    let listener = match TcpListener::bind(("0.0.0.0", PREFERRED_PORT)).await {
-        Ok(listener) => listener,
-        Err(_) => TcpListener::bind(("0.0.0.0", 0))
-            .await
-            .map_err(|e| format!("Couldn't start sharing: {e}"))?,
-    };
-    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     let token = uuid::Uuid::new_v4().simple().to_string();
-
+    let project_root: Arc<Path> = Arc::from(PathBuf::from(project_root));
     let relay = Relay::new();
     let (shutdown_tx, shutdown_rx) = watch::channel(());
-    spawn_local_bridge(&relay, shutdown_rx.clone(), webview_delivery(&window));
-    tokio::spawn(serve(
-        listener,
-        relay.clone(),
-        Arc::from(token.as_str()),
-        Arc::from(PathBuf::from(project_root)),
-        shutdown_rx,
-    ));
+
+    let invite = match relay_url.filter(|url| !url.trim().is_empty()) {
+        Some(url) => {
+            let base = relay_base(&url)?;
+            let room = uuid::Uuid::new_v4().simple().to_string();
+            let secret = uuid::Uuid::new_v4().simple().to_string();
+            let control = open_relay_room(&base, &room, &secret).await?;
+            let serving = serve_via_relay(
+                control,
+                format!("{base}/accept/{room}"),
+                Arc::from(secret.as_str()),
+                Arc::from(token.as_str()),
+                relay.clone(),
+                project_root,
+                shutdown_rx.clone(),
+            );
+            let window = window.clone();
+            let ended = shutdown_rx.clone();
+            tokio::spawn(async move {
+                // Tell the webview if the relay dropped us, not if we stopped.
+                if serving.await && ended.has_changed().is_ok() {
+                    let target = EventTarget::webview_window(window.label());
+                    let _ = window.emit_to(target, "collab://closed", ());
+                }
+            });
+            format!("{base}/r/{room}/{token}")
+        }
+        None => {
+            let listener = match TcpListener::bind(("0.0.0.0", PREFERRED_PORT)).await {
+                Ok(listener) => listener,
+                Err(_) => TcpListener::bind(("0.0.0.0", 0))
+                    .await
+                    .map_err(|e| format!("Couldn't start sharing: {e}"))?,
+            };
+            let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+            tokio::spawn(serve(
+                listener,
+                relay.clone(),
+                Arc::from(token.as_str()),
+                project_root,
+                shutdown_rx.clone(),
+            ));
+            let host = local_address().map_or_else(|| "127.0.0.1".to_string(), |ip| ip.to_string());
+            format!("{host}:{port}/{token}")
+        }
+    };
+
+    spawn_local_bridge(&relay, shutdown_rx, webview_delivery(&window));
     state.replace(Some(Session {
         relay,
         _shutdown: shutdown_tx,
     }));
-
-    let host = local_address().map_or_else(|| "127.0.0.1".to_string(), |ip| ip.to_string());
-    Ok(HostInfo {
-        invite: format!("{host}:{port}/{token}"),
-    })
+    Ok(HostInfo { invite })
 }
 
 #[derive(Serialize)]
@@ -530,13 +742,13 @@ pub async fn collab_join(
     dest_parent: String,
 ) -> Result<JoinInfo, String> {
     state.replace(None);
-    let (authority, token) = parse_invite(&invite)?;
-    let project_path = receive_snapshot(&authority, &token, Path::new(&dest_parent)).await?;
+    let (base, token) = parse_invite(&invite)?;
+    let project_path = receive_snapshot(&base, &token, Path::new(&dest_parent)).await?;
 
-    let url = format!("ws://{authority}/sync?token={token}");
+    let url = format!("{base}/sync?token={token}");
     let (ws, _) = tokio_tungstenite::connect_async_with_config(url, None, true)
         .await
-        .map_err(|e| format!("Couldn't join the shared project: {e}"))?;
+        .map_err(|e| connection_error(e, "the shared project"))?;
 
     let relay = Relay::new();
     let (shutdown_tx, shutdown_rx) = watch::channel(());
@@ -624,12 +836,39 @@ mod tests {
         let token = "0123456789abcdef0123456789abcdef";
         assert_eq!(
             parse_invite(&format!("  192.168.1.20:47100/{token}\n")).unwrap(),
-            ("192.168.1.20:47100".to_string(), token.to_string())
+            ("ws://192.168.1.20:47100".to_string(), token.to_string())
         );
+        let room = "fedcba9876543210fedcba9876543210";
+        assert_eq!(
+            parse_invite(&format!("wss://collab.example.com/r/{room}/{token}")).unwrap(),
+            (
+                format!("wss://collab.example.com/r/{room}"),
+                token.to_string()
+            )
+        );
+        assert!(parse_invite(&format!("wss://user@evil/r/{room}/{token}")).is_err());
         assert!(parse_invite(&format!("latex4all://host.local:1/{token}")).is_ok());
         assert!(parse_invite("192.168.1.20:47100").is_err());
         assert!(parse_invite(&format!("user@evil:1/{token}")).is_err());
         assert!(parse_invite("192.168.1.20:47100/not-hex-token-at-all").is_err());
+    }
+
+    #[test]
+    fn relay_addresses_become_websocket_urls() {
+        assert_eq!(
+            relay_base("https://collab.example.com/").unwrap(),
+            "wss://collab.example.com"
+        );
+        assert_eq!(
+            relay_base("collab.example.com").unwrap(),
+            "wss://collab.example.com"
+        );
+        assert_eq!(
+            relay_base("http://127.0.0.1:8082").unwrap(),
+            "ws://127.0.0.1:8082"
+        );
+        assert!(relay_base("https://").is_err());
+        assert!(relay_base("https://a b").is_err());
     }
 
     #[test]
@@ -665,6 +904,11 @@ mod tests {
         std::fs::write(root.join("main.tex"), "\\documentclass{article}").unwrap();
         std::fs::write(root.join("figures/plot.png"), [0u8, 159, 146, 150]).unwrap();
         std::fs::write(root.join(".latex4all/history"), "private").unwrap();
+        // Bigger than one chunk, so it has to be reassembled.
+        let big: Vec<u8> = (0..(SNAPSHOT_CHUNK * 2 + 17))
+            .map(|i| (i % 251) as u8)
+            .collect();
+        std::fs::write(root.join("figures/big.pdf"), &big).unwrap();
 
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let authority = listener.local_addr().unwrap().to_string();
@@ -692,7 +936,10 @@ mod tests {
         // The snapshot has the files but not the hidden history folder.
         let dest = std::env::temp_dir().join(format!("collab-guest-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dest).unwrap();
-        let project = receive_snapshot(&authority, token, &dest).await.unwrap();
+        let project = receive_snapshot(&format!("ws://{authority}"), token, &dest)
+            .await
+            .unwrap();
+        assert_eq!(std::fs::read(project.join("figures/big.pdf")).unwrap(), big);
         assert_eq!(
             std::fs::read_to_string(project.join("main.tex")).unwrap(),
             "\\documentclass{article}"
@@ -734,6 +981,77 @@ mod tests {
         .await;
         assert!(closed.is_ok());
 
+        std::fs::remove_dir_all(root).unwrap();
+        std::fs::remove_dir_all(dest).unwrap();
+    }
+
+    /// Hosting through a real relay. Needs one running, e.g.
+    /// `RELAY_URL=http://127.0.0.1:8082 cargo test -- --ignored`
+    /// with `node apps/relay/relay.mjs` started first.
+    #[tokio::test]
+    #[ignore]
+    async fn hosts_through_the_relay() {
+        let base = relay_base(&std::env::var("RELAY_URL").expect("RELAY_URL")).unwrap();
+        let token = uuid::Uuid::new_v4().simple().to_string();
+        let room = uuid::Uuid::new_v4().simple().to_string();
+        let secret = uuid::Uuid::new_v4().simple().to_string();
+        let root = std::env::temp_dir().join(format!("collab-relay-host-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("main.tex"), "\\begin{document}").unwrap();
+        let big: Vec<u8> = (0..(SNAPSHOT_CHUNK * 3 + 5))
+            .map(|i| (i % 253) as u8)
+            .collect();
+        std::fs::write(root.join("figure.png"), &big).unwrap();
+
+        let relay = Relay::new();
+        let (shutdown_tx, shutdown_rx) = watch::channel(());
+        let control = open_relay_room(&base, &room, &secret).await.unwrap();
+        let serving = tokio::spawn(serve_via_relay(
+            control,
+            format!("{base}/accept/{room}"),
+            Arc::from(secret.as_str()),
+            Arc::from(token.as_str()),
+            relay.clone(),
+            Arc::from(root.clone()),
+            shutdown_rx,
+        ));
+
+        let (guest_base, guest_token) = parse_invite(&format!("{base}/r/{room}/{token}")).unwrap();
+        let dest =
+            std::env::temp_dir().join(format!("collab-relay-guest-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dest).unwrap();
+        let project = receive_snapshot(&guest_base, &guest_token, &dest)
+            .await
+            .unwrap();
+        assert_eq!(std::fs::read(project.join("figure.png")).unwrap(), big);
+
+        // A wrong token is turned away by the host, through the relay.
+        let wrong = format!("{guest_base}/sync?token={}", uuid::Uuid::new_v4().simple());
+        let (mut intruder, _) = tokio_tungstenite::connect_async(wrong).await.unwrap();
+        let refused = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                match intruder.next().await {
+                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => return,
+                    _ => {}
+                }
+            }
+        })
+        .await;
+        assert!(refused.is_ok());
+
+        let sync = format!("{guest_base}/sync?token={guest_token}");
+        let (mut a, _) = tokio_tungstenite::connect_async(sync.clone())
+            .await
+            .unwrap();
+        let (mut b, _) = tokio_tungstenite::connect_async(sync).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        a.send(Message::binary(vec![4u8, 5, 6])).await.unwrap();
+        assert_eq!(next_binary(&mut b).await.as_ref(), [4, 5, 6]);
+        relay.publish(LOCAL_PEER, Bytes::from_static(&[7]));
+        assert_eq!(next_binary(&mut a).await.as_ref(), [7]);
+
+        drop(shutdown_tx);
+        assert!(!serving.await.unwrap());
         std::fs::remove_dir_all(root).unwrap();
         std::fs::remove_dir_all(dest).unwrap();
     }

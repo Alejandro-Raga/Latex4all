@@ -24,6 +24,9 @@ import { createLogger } from "@/lib/debug/logger";
 
 const log = createLogger("collab");
 
+/** Relays the connection when sharing over the internet (apps/relay). */
+const RELAY_URL = "https://collab.alejandroraga.com";
+
 /** How long a guest waits for the host to send the project's text. */
 const JOIN_TIMEOUT_MS = 15_000;
 
@@ -51,6 +54,7 @@ export interface CollabPeer {
 }
 
 type CollabStatus = "idle" | "connecting" | "live";
+export type ShareOver = "internet" | "network";
 
 interface CollabState {
   role: "host" | "guest" | null;
@@ -58,10 +62,12 @@ interface CollabState {
   invite: string | null;
   peers: CollabPeer[];
   displayName: string;
+  shareOver: ShareOver;
   /** Bumped whenever files start or stop being shared, so editors rebind. */
   revision: number;
 
   setDisplayName: (name: string) => void;
+  setShareOver: (over: ShareOver) => void;
   startSharing: () => Promise<void>;
   join: (invite: string) => Promise<void>;
   stop: () => void;
@@ -197,7 +203,10 @@ export const useCollabStore = create<CollabState>()(
         invite: null,
         peers: [],
         displayName: "",
+        shareOver: "internet",
         revision: 0,
+
+        setShareOver: (over) => set({ shareOver: over }),
 
         setDisplayName: (name) => {
           set({ displayName: name });
@@ -218,7 +227,10 @@ export const useCollabStore = create<CollabState>()(
           session = next;
           try {
             shareProjectText(next.doc, documents.files);
-            const { invite } = await hostCollabSession(documents.projectRoot);
+            const { invite } = await hostCollabSession(
+              documents.projectRoot,
+              get().shareOver === "internet" ? RELAY_URL : null,
+            );
             if (session !== next) return;
             attach(next);
             next.provider.connect();
@@ -284,7 +296,10 @@ export const useCollabStore = create<CollabState>()(
     },
     {
       name: "latex4all-collab",
-      partialize: (state) => ({ displayName: state.displayName }),
+      partialize: (state) => ({
+        displayName: state.displayName,
+        shareOver: state.shareOver,
+      }),
       onRehydrateStorage: () => (state) => {
         if (state && !state.displayName) {
           defaultCollabName()

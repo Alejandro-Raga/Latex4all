@@ -2,8 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { fromBase64, toBase64 } from "lib0/buffer";
 
-export function hostCollabSession(projectRoot: string) {
-  return invoke<{ invite: string }>("collab_host", { projectRoot });
+/** Shares through the relay at `relayUrl`, or on the local network if null. */
+export function hostCollabSession(
+  projectRoot: string,
+  relayUrl: string | null,
+) {
+  return invoke<{ invite: string }>("collab_host", { projectRoot, relayUrl });
 }
 
 /** Downloads the shared project into `destParent` and connects to it. */

@@ -9,6 +9,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useCollabStore, type CollabPeer } from "@/stores/collab-store";
+import { cn } from "@/lib/utils";
 
 function initials(name: string) {
   return (
@@ -40,6 +41,8 @@ export function CollabButton() {
   const peers = useCollabStore((s) => s.peers);
   const displayName = useCollabStore((s) => s.displayName);
   const setDisplayName = useCollabStore((s) => s.setDisplayName);
+  const shareOver = useCollabStore((s) => s.shareOver);
+  const setShareOver = useCollabStore((s) => s.setShareOver);
   const startSharing = useCollabStore((s) => s.startSharing);
   const stop = useCollabStore((s) => s.stop);
   const [copied, setCopied] = useState(false);
@@ -91,6 +94,28 @@ export function CollabButton() {
               placeholder="Your name"
               className="h-8 text-sm"
             />
+            <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-0.5">
+              {(
+                [
+                  ["internet", "Internet"],
+                  ["network", "Local network"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setShareOver(value)}
+                  className={cn(
+                    "rounded px-2 py-1 text-xs transition-colors",
+                    shareOver === value
+                      ? "bg-background font-medium shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <Button
               className="w-full"
               size="sm"
@@ -129,9 +154,11 @@ export function CollabButton() {
                     )}
                   </Button>
                 </div>
-                <p className="text-muted-foreground text-xs">
-                  Works on the same network.
-                </p>
+                {!invite.includes("://") && (
+                  <p className="text-muted-foreground text-xs">
+                    Works on the same network.
+                  </p>
+                )}
               </div>
             )}
             <div className="space-y-1.5">

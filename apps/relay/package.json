@@ -1,0 +1,14 @@
+{
+  "name": "@latex4all/relay",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Relay for Latex4All live collaboration over the internet",
+  "type": "module",
+  "scripts": {
+    "start": "node relay.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ws": "^8.21.0"
+  }
+}

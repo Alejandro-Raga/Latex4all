@@ -34,7 +34,7 @@ git2 = { version = "0.20", default-features = false, features = ["vendored-libgi
 chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
 # Live collaboration relay (collab.rs).
-tokio-tungstenite = "0.30"
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 which = "7"
 tectonic = { version = "0.15", default-features = true, features = ["external-harfbuzz"] }

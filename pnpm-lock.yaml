@@ -212,6 +212,12 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(@types/node@25.0.10)(jsdom@26.1.0)(msw@2.12.10(@types/node@25.0.10)(typescript@5.9.3))(vite@6.4.2(@types/node@25.0.10)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.16.9)(tsx@4.21.0)(yaml@2.8.2))
 
+  apps/relay:
+    dependencies:
+      ws:
+        specifier: '>=8.20.1'
+        version: 8.21.0
+
 packages:
 
   '@alloc/quick-lru@5.2.0':
