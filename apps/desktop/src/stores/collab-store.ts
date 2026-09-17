@@ -34,6 +34,11 @@ import { join } from "@/lib/tauri/fs";
 import { useDocumentStore } from "@/stores/document-store";
 import { useHistoryStore } from "@/stores/history-store";
 import { useProjectStore } from "@/stores/project-store";
+import {
+  moveAnnotationsIntoShared,
+  moveAnnotationsOutOfShared,
+  takeLocalAnnotations,
+} from "@/stores/annotations-store";
 import { createLogger } from "@/lib/debug/logger";
 
 const log = createLogger("collab");
@@ -135,6 +140,11 @@ export function followOpenProject() {
 /** The shared text for a file, while its project is open and shared. */
 export function getSharedText(relativePath: string): Y.Text | null {
   return active?.sync?.textAt(relativePath)?.text ?? null;
+}
+
+/** The shared document of the project at `root`, while it's open and synced. */
+export function getSharedDoc(root: string): Y.Doc | null {
+  return active?.sync && active.root === root ? active.session.doc : null;
 }
 
 export function getCollabAwareness(): Awareness | null {
@@ -366,12 +376,15 @@ export const useCollabStore = create<CollabState>()(
           set({ progress: "Sharing…" });
           try {
             await useDocumentStore.getState().saveAllFiles();
+            const annotations = await takeLocalAnnotations(root);
             const info = await parseLink(await createSharedProject());
             await writeLink(root, info.link);
             useProjectStore
               .getState()
               .rememberSharedProject(info.projectId, root);
             await inSequence(() => open(root, info));
+            const doc = getSharedDoc(root);
+            if (doc) await moveAnnotationsIntoShared(doc, root, annotations);
           } finally {
             set({ progress: null });
           }
@@ -465,6 +478,12 @@ export const useCollabStore = create<CollabState>()(
         stopSyncing: async () => {
           const current = active;
           if (!current) return;
+          await moveAnnotationsOutOfShared(
+            current.session.doc,
+            current.root,
+          ).catch((err) =>
+            log.warn("Couldn't keep annotations", { error: String(err) }),
+          );
           await inSequence(close);
           await removeLink(current.root);
           useProjectStore

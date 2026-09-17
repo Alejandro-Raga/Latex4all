@@ -20,10 +20,13 @@ import {
   BookMarkedIcon,
   ExternalLinkIcon,
   XIcon,
+  HighlighterIcon,
+  EyeOffIcon,
 } from "lucide-react";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { CollabButton } from "@/components/collab/collab-button";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import vscodeIcon from "@/assets/vscode.svg";
 import {
   DropdownMenu,
@@ -106,6 +109,8 @@ export function EditorToolbar({
   onCropToggle,
 }: EditorToolbarProps) {
   const vimMode = useSettingsStore((s) => s.vimMode);
+  const showAnnotations = useSettingsStore((s) => s.showAnnotations);
+  const setShowAnnotations = useSettingsStore((s) => s.setShowAnnotations);
   const setVimMode = useSettingsStore((s) => s.setVimMode);
   const grammarCheckEnabled = useSettingsStore((s) => s.grammarCheckEnabled);
   const setGrammarCheckEnabled = useSettingsStore(
@@ -542,6 +547,24 @@ export function EditorToolbar({
         </Popover>
       </div>
       <div data-tauri-drag-region className="flex-1 self-stretch" />
+      <TooltipIconButton
+        tooltip={
+          showAnnotations
+            ? "Hide highlights and notes"
+            : "Show highlights and notes"
+        }
+        onClick={() => setShowAnnotations(!showAnnotations)}
+        className={cn(
+          "shrink-0",
+          !showAnnotations && "text-muted-foreground/60",
+        )}
+      >
+        {showAnnotations ? (
+          <HighlighterIcon className="size-4" />
+        ) : (
+          <EyeOffIcon className="size-4" />
+        )}
+      </TooltipIconButton>
       <CollabButton />
       {editors.length === 1 && (
         <TooltipIconButton

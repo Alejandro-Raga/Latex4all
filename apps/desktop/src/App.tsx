@@ -5,6 +5,7 @@ import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 
 import { useDocumentStore } from "@/stores/document-store";
 import { followOpenProject } from "@/stores/collab-store";
+import { followAnnotations } from "@/stores/annotations-store";
 import { useClaudeChatStore } from "@/stores/claude-chat-store";
 import { ProjectPicker } from "@/components/project-picker";
 import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
@@ -194,6 +195,7 @@ export function App({ onReady }: { onReady?: () => void }) {
 
   // Shared projects connect as they open.
   useEffect(() => followOpenProject(), []);
+  useEffect(() => followAnnotations(), []);
 
   useEffect(() => {
     const preventNativeContextMenu = (event: MouseEvent) => {

@@ -85,6 +85,15 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { useLanguagePacksStore } from "@/stores/language-packs-store";
 import { EditorToolbar } from "./editor-toolbar";
 import { SelectionToolbar, type ToolbarAction } from "./selection-toolbar";
+import {
+  annotationAt,
+  annotationById,
+  annotationsExtension,
+  setAnnotations,
+} from "./annotations-extension";
+import { type AnnotationActions, AnnotationCard } from "./annotation-card";
+import { currentAuthor, useAnnotationsStore } from "@/stores/annotations-store";
+import type { AnnotationColor } from "@/lib/annotations/types";
 import { WordLookupPopover } from "./word-lookup-popover";
 import { matchCase } from "./match-case";
 import {
@@ -121,6 +130,7 @@ import {
   CopyIcon,
   XIcon,
   Loader2Icon,
+  MessageSquarePlusIcon,
 } from "lucide-react";
 import { ClaudeChatDrawer } from "@/components/claude-chat/claude-chat-drawer";
 import { ProposedChangesPanel } from "@/components/claude-chat/proposed-changes-panel";
@@ -202,6 +212,30 @@ export function LatexEditor() {
   const saveAllFiles = useDocumentStore((s) => s.saveAllFiles);
   const collabRevision = useCollabStore((s) => s.revision);
   const collabStatus = useCollabStore((s) => s.status);
+  const annotationSource = useAnnotationsStore((s) => s.source);
+  const annotationsVersion = useAnnotationsStore((s) => s.version);
+  const showAnnotations = useSettingsStore((s) => s.showAnnotations);
+  const annotationColor = useSettingsStore((s) => s.annotationColor);
+  /** The note card: a thread being hovered (`id`), or a new note being written. */
+  const [annotationCard, setAnnotationCard] = useState<{
+    id: string | null;
+    range?: { from: number; to: number };
+    anchor: { x: number; y: number };
+  } | null>(null);
+  const annotationCardRef = useRef(annotationCard);
+  annotationCardRef.current = annotationCard;
+  const annotationHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const annotationCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const cardHoveredRef = useRef(false);
+  const cardFocusedRef = useRef(false);
+  const highlightSelectionRef = useRef<
+    (from: number, to: number, color?: AnnotationColor) => void
+  >(() => {});
+  const composeNoteRef = useRef<(from: number, to: number) => void>(() => {});
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const isTextFile =
@@ -227,6 +261,7 @@ export function LatexEditor() {
     setCropMode(false);
     setWordLookup(null);
     setGrammarPopup(null);
+    setAnnotationCard(null);
   }, [activeFileId]);
 
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -884,6 +919,24 @@ export function LatexEditor() {
           run: (view) => wrapSelection(view, "textit"),
         },
         {
+          key: "Mod-Shift-h",
+          run: (view) => {
+            const { from, to } = view.state.selection.main;
+            if (from === to) return false;
+            highlightSelectionRef.current(from, to);
+            return true;
+          },
+        },
+        {
+          key: "Mod-Alt-m",
+          run: (view) => {
+            const { from, to } = view.state.selection.main;
+            if (from === to) return false;
+            composeNoteRef.current(from, to);
+            return true;
+          },
+        },
+        {
           key: "Mod-/",
           run: toggleComment,
         },
@@ -990,6 +1043,7 @@ export function LatexEditor() {
             useCollabStore.getState().status === "syncing",
           ),
         ),
+        annotationsExtension,
         updateListener,
         EditorView.lineWrapping,
         spellcheckExtension({
@@ -1151,6 +1205,29 @@ export function LatexEditor() {
     setContent,
     setCursorPosition,
     setSelectionRange,
+    collabRevision,
+  ]);
+
+  // The open file's highlights and notes, whenever they change.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !isTextFile) return;
+    const path = useDocumentStore
+      .getState()
+      .files.find((f) => f.id === activeFileId)?.relativePath;
+    view.dispatch({
+      effects: setAnnotations.of(
+        showAnnotations && annotationSource && path
+          ? annotationSource.rangesFor(path)
+          : [],
+      ),
+    });
+  }, [
+    annotationSource,
+    annotationsVersion,
+    showAnnotations,
+    activeFileId,
+    isTextFile,
     collabRevision,
   ]);
 
@@ -1377,6 +1454,12 @@ export function LatexEditor() {
         label: "Proofread",
         icon: <SpellCheckIcon className="size-4" />,
       },
+      {
+        id: "add-note",
+        label: "Add note",
+        icon: <MessageSquarePlusIcon className="size-4" />,
+        hint: "⌘⌥M",
+      },
     ],
     [],
   );
@@ -1387,6 +1470,11 @@ export function LatexEditor() {
         sendToolbarPromptWithSelectionContext(
           "Proofread and fix any errors in this text",
         );
+      } else if (actionId === "add-note") {
+        const range = useDocumentStore.getState().selectionRange;
+        if (range) composeNoteRef.current(range.start, range.end);
+        toolbarStickyRef.current = false;
+        setSelectionCoords(null);
       }
     },
     [sendToolbarPromptWithSelectionContext],
@@ -1397,6 +1485,147 @@ export function LatexEditor() {
     setSelectionCoords(null);
     setSelectionRange(null);
   }, [setSelectionRange]);
+
+  // ── Highlights and notes ──
+
+  const activePath = activeFile?.relativePath ?? null;
+
+  highlightSelectionRef.current = (from, to, color = annotationColor) => {
+    if (!annotationSource || !activePath) return;
+    const settings = useSettingsStore.getState();
+    settings.setAnnotationColor(color);
+    if (!settings.showAnnotations) settings.setShowAnnotations(true);
+    annotationSource.add(activePath, from, to, color);
+  };
+
+  composeNoteRef.current = (from, to) => {
+    const view = viewRef.current;
+    if (!view || !annotationSource || !activePath) return;
+    const settings = useSettingsStore.getState();
+    if (!settings.showAnnotations) settings.setShowAnnotations(true);
+    const coords = view.coordsAtPos(to);
+    setAnnotationCard({
+      id: null,
+      range: { from, to },
+      anchor: coords
+        ? { x: coords.left, y: coords.bottom }
+        : { x: window.innerWidth / 2, y: window.innerHeight / 3 },
+    });
+  };
+
+  const closeAnnotationCard = useCallback(() => {
+    if (annotationHoverTimer.current)
+      clearTimeout(annotationHoverTimer.current);
+    if (annotationCloseTimer.current)
+      clearTimeout(annotationCloseTimer.current);
+    annotationHoverTimer.current = null;
+    annotationCloseTimer.current = null;
+    cardHoveredRef.current = false;
+    cardFocusedRef.current = false;
+    setAnnotationCard(null);
+  }, []);
+
+  /** Hover cards close shortly after the pointer leaves; one being typed in stays. */
+  const scheduleAnnotationClose = useCallback(() => {
+    if (annotationCloseTimer.current) return;
+    annotationCloseTimer.current = setTimeout(() => {
+      annotationCloseTimer.current = null;
+      if (cardHoveredRef.current || cardFocusedRef.current) return;
+      setAnnotationCard((card) => (card && card.id !== null ? null : card));
+    }, 200);
+  }, []);
+
+  const handleEditorMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      const view = viewRef.current;
+      if (
+        !view ||
+        e.buttons !== 0 ||
+        !useSettingsStore.getState().showAnnotations ||
+        annotationCardRef.current?.id === null
+      ) {
+        return;
+      }
+      const glyph = (e.target as HTMLElement).closest?.(
+        ".cm-annotation-note",
+      ) as HTMLElement | null;
+      let found = glyph?.dataset.annotationId
+        ? annotationById(view.state, glyph.dataset.annotationId)
+        : null;
+      if (!found) {
+        const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+        if (pos != null) found = annotationAt(view.state, pos);
+      }
+      if (!found) {
+        if (annotationHoverTimer.current) {
+          clearTimeout(annotationHoverTimer.current);
+          annotationHoverTimer.current = null;
+        }
+        if (annotationCardRef.current) scheduleAnnotationClose();
+        return;
+      }
+      if (annotationCloseTimer.current) {
+        clearTimeout(annotationCloseTimer.current);
+        annotationCloseTimer.current = null;
+      }
+      if (annotationCardRef.current?.id === found.id) return;
+      if (cardFocusedRef.current) return;
+      if (annotationHoverTimer.current) {
+        clearTimeout(annotationHoverTimer.current);
+      }
+      const { id, to } = found;
+      annotationHoverTimer.current = setTimeout(() => {
+        annotationHoverTimer.current = null;
+        const current = viewRef.current;
+        const coords = current?.coordsAtPos(
+          Math.min(to, current.state.doc.length),
+        );
+        if (!coords) return;
+        cardHoveredRef.current = false;
+        setAnnotationCard({ id, anchor: { x: coords.left, y: coords.bottom } });
+      }, 350);
+    },
+    [scheduleAnnotationClose],
+  );
+
+  const cardAnnotation =
+    annotationCard?.id && annotationSource && activePath
+      ? (annotationSource
+          .rangesFor(activePath)
+          .find((a) => a.id === annotationCard.id) ?? null)
+      : null;
+  const cardAnnotationGone = Boolean(annotationCard?.id) && !cardAnnotation;
+
+  // Someone else removed the highlight being looked at.
+  useEffect(() => {
+    if (cardAnnotationGone) setAnnotationCard(null);
+  }, [cardAnnotationGone]);
+
+  const cardActions: AnnotationActions | null =
+    cardAnnotation && annotationSource
+      ? {
+          setColor: (color) => {
+            annotationSource.setColor(cardAnnotation.id, color);
+            useSettingsStore.getState().setAnnotationColor(color);
+          },
+          addComment: (text) =>
+            annotationSource.addComment(
+              cardAnnotation.id,
+              currentAuthor(),
+              text,
+            ),
+          editComment: (commentId, text) =>
+            annotationSource.editComment(cardAnnotation.id, commentId, text),
+          deleteComment: (commentId) =>
+            annotationSource.deleteComment(cardAnnotation.id, commentId),
+          setResolved: (resolved) =>
+            annotationSource.setResolved(cardAnnotation.id, resolved),
+          remove: () => {
+            annotationSource.remove(cardAnnotation.id);
+            closeAnnotationCard();
+          },
+        }
+      : null;
 
   // History review action handlers
   const handleHistoryRestore = useCallback(async () => {
@@ -1569,6 +1798,8 @@ export function LatexEditor() {
             <div
               ref={containerRef}
               onContextMenu={handleEditorContextMenu}
+              onMouseMove={handleEditorMouseMove}
+              onMouseLeave={scheduleAnnotationClose}
               onMouseDownCapture={(e) => {
                 // A right- (or middle-) click can itself select the word under
                 // the cursor, same as a native text view — treat that like a
@@ -1610,6 +1841,58 @@ export function LatexEditor() {
                   onSendPrompt={handleToolbarSendPrompt}
                   onAction={handleToolbarAction}
                   onDismiss={handleToolbarDismiss}
+                  highlightColor={annotationColor}
+                  onHighlight={(color) => {
+                    const range = useDocumentStore.getState().selectionRange;
+                    if (range) {
+                      highlightSelectionRef.current(
+                        range.start,
+                        range.end,
+                        color,
+                      );
+                    }
+                    handleToolbarDismiss();
+                  }}
+                />
+              )}
+            {annotationCard &&
+              (annotationCard.id === null || cardAnnotation) &&
+              !grammarPopup &&
+              !wordLookup && (
+                <AnnotationCard
+                  annotation={cardAnnotation}
+                  authorName={currentAuthor().name}
+                  anchor={annotationCard.anchor}
+                  actions={cardActions}
+                  onCompose={(text) => {
+                    const range = annotationCard.range;
+                    if (annotationSource && activePath && range) {
+                      annotationSource.add(
+                        activePath,
+                        range.from,
+                        range.to,
+                        annotationColor,
+                        { author: currentAuthor(), text },
+                      );
+                    }
+                    closeAnnotationCard();
+                  }}
+                  onDismiss={closeAnnotationCard}
+                  onPointerEnter={() => {
+                    cardHoveredRef.current = true;
+                    if (annotationCloseTimer.current) {
+                      clearTimeout(annotationCloseTimer.current);
+                      annotationCloseTimer.current = null;
+                    }
+                  }}
+                  onPointerLeave={() => {
+                    cardHoveredRef.current = false;
+                    scheduleAnnotationClose();
+                  }}
+                  onFocusChange={(focused) => {
+                    cardFocusedRef.current = focused;
+                    if (!focused) scheduleAnnotationClose();
+                  }}
                 />
               )}
             {wordLookup && !grammarPopup && (

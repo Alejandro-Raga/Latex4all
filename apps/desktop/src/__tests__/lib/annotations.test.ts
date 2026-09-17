@@ -1,0 +1,325 @@
+import { describe, expect, it } from "vitest";
+import * as Y from "yjs";
+import {
+  mapPosition,
+  quoteOf,
+  reanchor,
+  textDiff,
+} from "@/lib/annotations/anchoring";
+import {
+  type AnnotationFile,
+  LocalAnnotations,
+  type ProjectText,
+} from "@/lib/annotations/local-annotations";
+import { SharedAnnotations } from "@/lib/annotations/shared-annotations";
+import type { Author } from "@/lib/annotations/types";
+import {
+  addTextFile,
+  applyTextChange,
+  filesMap,
+} from "@/lib/collab/project-doc";
+
+const ana: Author = { name: "Ana", color: "#e11d48" };
+const ben: Author = { name: "Ben", color: "#2563eb" };
+
+/** What's highlighted, as text. */
+function spans(
+  text: string,
+  source: { rangesFor(path: string): Array<{ from: number; to: number }> },
+  path = "main.tex",
+) {
+  return source.rangesFor(path).map((a) => text.slice(a.from, a.to));
+}
+
+describe("anchoring", () => {
+  it("moves a highlight with edits, without growing it from outside", () => {
+    const text = "The quick brown fox";
+    const [from, to] = [4, 9]; // "quick"
+    const apply = (next: string) => {
+      const change = textDiff(text, next)!;
+      return next.slice(
+        mapPosition(from, change, 1),
+        mapPosition(to, change, -1),
+      );
+    };
+    expect(apply("Oh, The quick brown fox")).toBe("quick");
+    expect(apply("The very quick brown fox")).toBe("quick"); // typed right before
+    expect(apply("The quickest brown fox")).toBe("quick"); // typed right after
+    expect(apply("The qu-ick brown fox")).toBe("qu-ick"); // typed inside
+    expect(apply("The brown fox")).toBe(""); // deleted
+  });
+
+  it("finds quoted words again after an outside edit", () => {
+    const before = "alpha beta gamma. alpha beta delta.";
+    const second = before.lastIndexOf("beta");
+    const quote = quoteOf(before, second, second + 4);
+    const after = `Intro. ${before}`;
+    const found = reanchor(after, second, second + 4, quote)!;
+    expect(found.from).toBe(after.lastIndexOf("beta"));
+    expect(reanchor("nothing like it", second, second + 4, quote)).toBeNull();
+  });
+});
+
+describe("annotations in a project that isn't shared", () => {
+  function project(files: Record<string, string>) {
+    let listeners: Array<() => void> = [];
+    const text: ProjectText & { set(path: string, content?: string): void } = {
+      contentOf: (path) => files[path],
+      paths: () => Object.keys(files),
+      subscribe: (listener) => {
+        listeners.push(listener);
+        return () => {
+          listeners = listeners.filter((l) => l !== listener);
+        };
+      },
+      set(path, content) {
+        if (content === undefined) delete files[path];
+        else files[path] = content;
+        for (const l of listeners) l();
+      },
+    };
+    let saved: string | null = null;
+    const file: AnnotationFile = {
+      read: async () => saved,
+      write: async (json) => {
+        saved = json;
+      },
+    };
+    return { files, text, file };
+  }
+
+  it("keeps highlights on their words as the text is edited, and across reopening", async () => {
+    const p = project({ "main.tex": "We prove the theorem." });
+    const notes = await LocalAnnotations.load(p.file, p.text);
+    const from = p.files["main.tex"].indexOf("theorem");
+    const id = notes.add("main.tex", from, from + 7, "green", {
+      author: ana,
+      text: "Which one?",
+    })!;
+    notes.addComment(id, ben, "The second.");
+
+    p.text.set("main.tex", "Here we prove the main theorem.");
+    expect(spans(p.files["main.tex"], notes)).toEqual(["theorem"]);
+    await notes.flush();
+    notes.destroy();
+
+    // Edited in another program while the app was closed.
+    p.files["main.tex"] = "Abstract.\n\nHere we prove the main theorem.";
+    const reopened = await LocalAnnotations.load(p.file, p.text);
+    expect(spans(p.files["main.tex"], reopened)).toEqual(["theorem"]);
+    const [note] = reopened.rangesFor("main.tex");
+    expect(note.color).toBe("green");
+    expect(note.comments.map((c) => `${c.author}: ${c.text}`)).toEqual([
+      "Ana: Which one?",
+      "Ben: The second.",
+    ]);
+  });
+
+  it("follows a renamed file, and hides notes whose words are gone", async () => {
+    const p = project({ "a.tex": "alpha beta gamma" });
+    const notes = await LocalAnnotations.load(p.file, p.text);
+    notes.add("a.tex", 6, 10, "yellow"); // "beta"
+    p.text.set("a.tex");
+    p.text.set("chapters/a.tex", "alpha beta gamma");
+    expect(spans(p.files["chapters/a.tex"], notes, "chapters/a.tex")).toEqual([
+      "beta",
+    ]);
+
+    p.text.set("chapters/a.tex", "alpha gamma");
+    expect(notes.rangesFor("chapters/a.tex")).toEqual([]);
+  });
+});
+
+describe("annotations in a shared project", () => {
+  /** Two devices whose documents exchange every update. */
+  function pair(content: string) {
+    const a = new Y.Doc();
+    addTextFile(a, "main.tex", content);
+    const b = new Y.Doc();
+    Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
+    let online = true;
+    const outboxA: Uint8Array[] = [];
+    const outboxB: Uint8Array[] = [];
+    a.on("update", (u: Uint8Array, origin: unknown) => {
+      if (origin === "remote") return;
+      if (online) Y.applyUpdate(b, u, "remote");
+      else outboxA.push(u);
+    });
+    b.on("update", (u: Uint8Array, origin: unknown) => {
+      if (origin === "remote") return;
+      if (online) Y.applyUpdate(a, u, "remote");
+      else outboxB.push(u);
+    });
+    const textOf = (doc: Y.Doc) =>
+      [...filesMap(doc).values()][0].get("text") as Y.Text;
+    return {
+      a,
+      b,
+      textOf,
+      offline() {
+        online = false;
+      },
+      online() {
+        online = true;
+        for (const u of outboxA.splice(0)) Y.applyUpdate(b, u, "remote");
+        for (const u of outboxB.splice(0)) Y.applyUpdate(a, u, "remote");
+      },
+    };
+  }
+
+  it("shows the same highlights and threads on every device", () => {
+    const p = pair("Results are significant.");
+    const onA = new SharedAnnotations(p.a);
+    const onB = new SharedAnnotations(p.b);
+    let changesSeenByB = 0;
+    onB.subscribe(() => changesSeenByB++);
+
+    const from = "Results are ".length;
+    const id = onA.add("main.tex", from, from + 11, "pink", {
+      author: ana,
+      text: "p-value?",
+    })!;
+    expect(spans(p.textOf(p.b).toString(), onB)).toEqual(["significant"]);
+    expect(changesSeenByB).toBeGreaterThan(0);
+
+    // Replies written at the same time, one of them offline, are both kept.
+    p.offline();
+    onA.addComment(id, ana, "Also the sample size.");
+    onB.addComment(id, ben, "p < 0.01");
+    p.online();
+    const threadA = onA.rangesFor("main.tex")[0].comments.map((c) => c.text);
+    const threadB = onB.rangesFor("main.tex")[0].comments.map((c) => c.text);
+    expect(threadA).toEqual(threadB);
+    expect([...threadA].sort()).toEqual(
+      ["Also the sample size.", "p < 0.01", "p-value?"].sort(),
+    );
+
+    onB.setResolved(id, true);
+    expect(onA.rangesFor("main.tex")[0].resolved).toBe(true);
+    onA.remove(id);
+    expect(onB.rangesFor("main.tex")).toEqual([]);
+  });
+
+  it("stays on its words while others edit around and inside it", () => {
+    const p = pair("The quick brown fox");
+    const onA = new SharedAnnotations(p.a);
+    const onB = new SharedAnnotations(p.b);
+    onA.add("main.tex", 4, 9, "yellow"); // "quick"
+
+    const edit = (doc: Y.Doc, next: string) =>
+      applyTextChange(p.textOf(doc), next);
+    edit(p.b, "Oh, The quick brown fox");
+    edit(p.a, "Oh, The very quick brown fox"); // right before
+    edit(p.b, "Oh, The very quickest brown fox"); // right after
+    edit(p.a, "Oh, The very qu-ickest brown fox"); // inside
+    const text = p.textOf(p.a).toString();
+    expect(spans(text, onA)).toEqual(["qu-ick"]);
+    expect(spans(p.textOf(p.b).toString(), onB)).toEqual(["qu-ick"]);
+
+    edit(p.b, "Oh, The very brown fox");
+    expect(onA.rangesFor("main.tex")).toEqual([]);
+  });
+
+  it("forgets annotations of a deleted file without errors", () => {
+    const p = pair("text");
+    const onA = new SharedAnnotations(p.a);
+    onA.add("main.tex", 0, 4, "blue");
+    const [fileId] = [...filesMap(p.b).keys()];
+    filesMap(p.b).delete(fileId);
+    expect(onA.rangesFor("main.tex")).toEqual([]);
+  });
+
+  it("moves annotations into a project when it's shared, and back out", async () => {
+    const doc = new Y.Doc();
+    addTextFile(doc, "main.tex", "Alpha beta gamma");
+    const shared = new SharedAnnotations(doc);
+    shared.importLocal([
+      {
+        id: "n1",
+        path: "main.tex",
+        from: 6,
+        to: 10,
+        quote: quoteOf("Alpha beta gamma", 6, 10),
+        color: "purple",
+        resolved: false,
+        comments: [
+          {
+            id: "c1",
+            author: "Ana",
+            authorColor: "#e11d48",
+            text: "Greek",
+            at: 1,
+          },
+        ],
+      },
+    ]);
+    expect(spans("Alpha beta gamma", shared)).toEqual(["beta"]);
+    const exported = shared.exportLocal(() => "Alpha beta gamma");
+    expect(exported).toMatchObject([
+      {
+        id: "n1",
+        path: "main.tex",
+        from: 6,
+        to: 10,
+        color: "purple",
+        quote: { exact: "beta" },
+      },
+    ]);
+    expect(exported[0].comments[0].text).toBe("Greek");
+  });
+});
+
+describe("drawing annotations in the editor", () => {
+  it("marks highlighted text, shows a glyph for notes, and follows typing", async () => {
+    const { EditorState } = await import("@codemirror/state");
+    const { EditorView } = await import("@codemirror/view");
+    const { annotationAt, annotationsExtension, setAnnotations } = await import(
+      "@/components/workspace/editor/annotations-extension"
+    );
+
+    const a = new Y.Doc();
+    addTextFile(a, "main.tex", "Alpha beta gamma delta");
+    const b = new Y.Doc();
+    Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
+    a.on("update", (u: Uint8Array, origin: unknown) => {
+      if (origin !== "remote") Y.applyUpdate(b, u, "remote");
+    });
+    const onA = new SharedAnnotations(a);
+    const onB = new SharedAnnotations(b);
+
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: "Alpha beta gamma delta",
+        extensions: annotationsExtension,
+      }),
+    });
+    const refresh = () =>
+      view.dispatch({ effects: setAnnotations.of(onB.rangesFor("main.tex")) });
+    onB.subscribe(refresh);
+
+    const highlight = onA.add("main.tex", 6, 10, "green")!; // "beta"
+    const marked = () =>
+      [...view.dom.querySelectorAll(".cm-annotation")].map(
+        (el) => el.textContent,
+      );
+    expect(marked()).toEqual(["beta"]);
+    expect(view.dom.querySelector(".cm-annotation-green")).not.toBeNull();
+    expect(view.dom.querySelector(".cm-annotation-note")).toBeNull();
+
+    // A collaborator's note makes the quiet glyph appear.
+    onA.addComment(highlight, ana, "Greek letter");
+    expect(view.dom.querySelector(".cm-annotation-note")).not.toBeNull();
+
+    // Typing just before it moves it; hovering inside finds it.
+    view.dispatch({ changes: { from: 6, insert: "big " } });
+    expect(marked()).toEqual(["beta"]);
+    expect(annotationAt(view.state, 12)?.id).toBe(highlight);
+    expect(annotationAt(view.state, 2)).toBeNull();
+
+    // Resolving hides it until hovered, without losing it.
+    onA.setResolved(highlight, true);
+    expect(marked()).toEqual([]);
+    expect(annotationAt(view.state, 8)?.id).toBe(highlight);
+    view.destroy();
+  });
+});

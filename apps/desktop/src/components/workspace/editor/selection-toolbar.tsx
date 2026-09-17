@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUpIcon } from "lucide-react";
 import { useViewportAnchoredPosition } from "./use-viewport-anchored-position";
+import type { AnnotationColor } from "@/lib/annotations/types";
+import { ColorSwatches } from "./annotation-card";
 
 export interface ToolbarAction {
   id: string;
@@ -18,6 +20,9 @@ interface SelectionToolbarProps {
   onSendPrompt: (prompt: string) => void;
   onAction: (actionId: string) => void;
   onDismiss: () => void;
+  /** Highlights the selection in the chosen color. */
+  onHighlight?: (color: AnnotationColor) => void;
+  highlightColor?: AnnotationColor;
 }
 
 const TOOLBAR_WIDTH = 256;
@@ -29,6 +34,8 @@ export function SelectionToolbar({
   onSendPrompt,
   onAction,
   onDismiss,
+  onHighlight,
+  highlightColor,
 }: SelectionToolbarProps) {
   const [input, setInput] = useState("");
   const { ref: toolbarRef, coords } = useViewportAnchoredPosition(anchor);
@@ -109,6 +116,13 @@ export function SelectionToolbar({
           <ArrowUpIcon className="size-3.5" />
         </button>
       </div>
+
+      {onHighlight && (
+        <div className="flex items-center justify-between border-border border-b px-3 py-1.5">
+          <span className="text-muted-foreground text-xs">Highlight</span>
+          <ColorSwatches value={highlightColor} onPick={onHighlight} />
+        </div>
+      )}
 
       {/* Action buttons */}
       {actions.length > 0 && (
