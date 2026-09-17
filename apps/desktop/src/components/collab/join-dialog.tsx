@@ -21,14 +21,14 @@ export function JoinDialog({
   const displayName = useCollabStore((s) => s.displayName);
   const setDisplayName = useCollabStore((s) => s.setDisplayName);
   const join = useCollabStore((s) => s.join);
-  const status = useCollabStore((s) => s.status);
-  const [invite, setInvite] = useState("");
-  const joining = status === "connecting";
+  const progress = useCollabStore((s) => s.progress);
+  const [link, setLink] = useState("");
+  const joining = progress !== null;
 
   const handleJoin = async () => {
     try {
-      await join(invite);
-      setInvite("");
+      await join(link);
+      setLink("");
       onOpenChange(false);
     } catch (err) {
       toast.error("Couldn't join", {
@@ -47,14 +47,14 @@ export function JoinDialog({
           className="space-y-3"
           onSubmit={(e) => {
             e.preventDefault();
-            if (invite.trim() && !joining) handleJoin();
+            if (link.trim() && !joining) handleJoin();
           }}
         >
           <Input
             autoFocus
-            value={invite}
-            onChange={(e) => setInvite(e.target.value)}
-            placeholder="Invite code"
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            placeholder="Invite link"
             className="font-mono text-sm"
           />
           <Input
@@ -65,10 +65,10 @@ export function JoinDialog({
           <Button
             type="submit"
             className="w-full"
-            disabled={!invite.trim() || joining}
+            disabled={!link.trim() || joining}
           >
             {joining && <Loader2Icon className="size-4 animate-spin" />}
-            Join
+            {progress ?? "Join"}
           </Button>
         </form>
       </DialogContent>

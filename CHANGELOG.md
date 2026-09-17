@@ -20,10 +20,12 @@ Write entries under `## [Unreleased]
 
 ### Added
 
-- Edit a project together in real time. Click Share in the editor to get an
-  invite code, from anywhere over the internet or on your local network;
-  others choose Join on the projects screen, and everyone sees each other's
-  changes and cursors as they type.
+- Shared projects. Click Share in the editor to get an invite link; others
+  choose Join on the projects screen. Everyone's changes to text, figures and
+  files reach the others as they type, with their cursors shown. Opening a
+  shared project first catches up with whatever changed since you last had it
+  open, even if nobody else is online, and edits made offline merge in when
+  you reconnect. Everything is encrypted before it leaves your computer.
 
 ### Changed
 

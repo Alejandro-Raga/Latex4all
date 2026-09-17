@@ -1118,6 +1118,9 @@ function ProjectPreviewCard({
   onSetType: (type: string | null) => void;
   onCustomType: () => void;
 }) {
+  const isShared = useProjectStore((s) =>
+    Object.values(s.sharedProjects).includes(project.path),
+  );
   const [preview, setPreview] = useState<ProjectPreviewState>(() => {
     const cached = projectPreviewCache.get(projectPreviewCacheKey(project));
     return cached ? { status: "ready", data: cached } : { status: "loading" };
@@ -1213,6 +1216,12 @@ function ProjectPreviewCard({
                 )}
               />
             </Button>
+            {isShared && (
+              <span className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-background/85 px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground shadow-sm backdrop-blur-sm">
+                <UsersIcon className="size-3" />
+                Shared
+              </span>
+            )}
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>

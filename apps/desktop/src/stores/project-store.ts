@@ -26,6 +26,9 @@ interface ProjectState {
   /** How the grid is ordered. Persisted: opening a project unmounts the picker,
    *  and coming back to a different order than you left is disorienting. */
   projectSort: ProjectSort;
+  /** Shared project id → the folder it lives in on this device, so joining a
+   *  project that's already here opens it rather than downloading a copy. */
+  sharedProjects: Record<string, string>;
   /**
    * `times` is for projects the app discovered rather than watched being
    * opened: without it every one is stamped with the same instant and ordering
@@ -42,6 +45,8 @@ interface ProjectState {
   cacheProjectType: (path: string, type: string | null) => void;
   cacheProjectCreatedAt: (path: string, created: number) => void;
   setProjectSort: (sort: ProjectSort) => void;
+  rememberSharedProject: (projectId: string, path: string) => void;
+  forgetSharedProject: (projectId: string) => void;
 }
 
 /**
@@ -110,6 +115,21 @@ export const useProjectStore = create<ProjectState>()(
       projectTypes: {},
       createdAt: {},
       projectSort: "recent",
+      sharedProjects: {},
+
+      rememberSharedProject: (projectId, path) =>
+        set((state) => ({
+          sharedProjects: {
+            ...state.sharedProjects,
+            [projectId]: normalizeRecentPath(path),
+          },
+        })),
+
+      forgetSharedProject: (projectId) =>
+        set((state) => {
+          const { [projectId]: _, ...rest } = state.sharedProjects;
+          return { sharedProjects: rest };
+        }),
 
       setLastProjectFolder: (path) => set({ lastProjectFolder: path }),
 
@@ -229,6 +249,12 @@ export const useProjectStore = create<ProjectState>()(
           ),
           addedAt: movePathKey(state.addedAt, oldPath, normalizedNewPath),
           createdAt: movePathKey(state.createdAt, oldPath, normalizedNewPath),
+          sharedProjects: Object.fromEntries(
+            Object.entries(state.sharedProjects).map(([id, path]) => [
+              id,
+              isSameProjectPath(path, oldPath) ? normalizedNewPath : path,
+            ]),
+          ),
         }));
       },
     }),
@@ -242,6 +268,7 @@ export const useProjectStore = create<ProjectState>()(
         projectTypes: state.projectTypes,
         createdAt: state.createdAt,
         projectSort: state.projectSort,
+        sharedProjects: state.sharedProjects,
       }),
     },
   ),

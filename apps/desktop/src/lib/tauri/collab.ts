@@ -1,58 +1,131 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { fromBase64, toBase64 } from "lib0/buffer";
+import type { SyncEvent } from "@/lib/collab/shared-session";
 
-/** Shares through the relay at `relayUrl`, or on the local network if null. */
-export function hostCollabSession(
-  projectRoot: string,
-  relayUrl: string | null,
-) {
-  return invoke<{ invite: string }>("collab_host", { projectRoot, relayUrl });
+/** The commands in src-tauri/src/collab.rs. */
+
+export interface LinkInfo {
+  link: string;
+  projectId: string;
 }
 
-/** Downloads the shared project into `destParent` and connects to it. */
-export function joinCollabSession(invite: string, destParent: string) {
-  return invoke<{ projectPath: string }>("collab_join", {
-    invite,
-    destParent,
+/** Creates a shared project on the relay; returns its link. */
+export function createSharedProject() {
+  return invoke<string>("collab_create", { relayUrl: null });
+}
+
+/** Validates a pasted link. */
+export function parseLink(link: string) {
+  return invoke<LinkInfo>("collab_parse_link", { link });
+}
+
+export function readLink(projectRoot: string) {
+  return invoke<LinkInfo | null>("collab_read_link", { projectRoot });
+}
+
+export function writeLink(projectRoot: string, link: string) {
+  return invoke<void>("collab_write_link", { projectRoot, link });
+}
+
+export function removeLink(projectRoot: string) {
+  return invoke<void>("collab_remove_link", { projectRoot });
+}
+
+export async function loadDoc(projectRoot: string) {
+  const saved = await invoke<{
+    seq: number;
+    local: string;
+    data: string;
+  } | null>("collab_load_doc", { projectRoot });
+  return saved && { ...saved, data: fromBase64(saved.data) };
+}
+
+export function saveDoc(
+  projectRoot: string,
+  seq: number,
+  local: string,
+  data: Uint8Array,
+) {
+  return invoke<void>("collab_save_doc", {
+    projectRoot,
+    seq,
+    local,
+    data: toBase64(data),
   });
 }
 
-export function stopCollabSession() {
-  return invoke<void>("collab_stop");
+/** Connects this window; `projectRoot` is null while joining. */
+export function connect(
+  link: string,
+  after: number,
+  projectRoot: string | null,
+) {
+  return invoke<void>("collab_connect", { link, after, projectRoot });
+}
+
+export function disconnect() {
+  return invoke<void>("collab_disconnect");
+}
+
+export function publish(update: Uint8Array) {
+  return invoke<void>("collab_publish", { data: toBase64(update) });
+}
+
+export function sendAwareness(data: Uint8Array) {
+  return invoke<void>("collab_awareness", { data: toBase64(data) });
+}
+
+export function compact(
+  upTo: number,
+  snapshot: Uint8Array,
+  liveBlobs: string[],
+) {
+  return invoke<void>("collab_compact", {
+    upTo,
+    data: toBase64(snapshot),
+    liveBlobs,
+  });
+}
+
+export function uploadBlob(
+  link: string,
+  projectRoot: string,
+  relativePath: string,
+) {
+  return invoke<{ blobId: string; size: number }>("collab_upload_blob", {
+    link,
+    projectRoot,
+    relativePath,
+  });
+}
+
+export function downloadBlob(
+  link: string,
+  projectRoot: string,
+  relativePath: string,
+  blobId: string,
+) {
+  return invoke<void>("collab_download_blob", {
+    link,
+    projectRoot,
+    relativePath,
+    blobId,
+  });
+}
+
+/** Makes a folder for a joined project, numbered if the name is taken. */
+export function createProjectFolder(destParent: string, name: string) {
+  return invoke<string>("collab_create_folder", { destParent, name });
 }
 
 export function defaultCollabName() {
   return invoke<string>("collab_default_name");
 }
 
-export function sendCollabMessage(message: Uint8Array) {
-  invoke("collab_send", { data: toBase64(message) }).catch((err) =>
-    console.warn("[collab] Failed to send:", err),
+/** Sync events addressed to this window. */
+export function listenForSyncEvents(handler: (event: SyncEvent) => void) {
+  return getCurrentWebviewWindow().listen<SyncEvent>("collab://event", (e) =>
+    handler(e.payload),
   );
-}
-
-export interface CollabChannelHandlers {
-  onMessage: (message: Uint8Array) => void;
-  /** The relay dropped messages meant for this window. */
-  onResync: () => void;
-  /** The host ended the session or can no longer be reached. */
-  onClosed: () => void;
-}
-
-/** Listens for relay traffic addressed to this window. */
-export async function openCollabChannel(
-  handlers: CollabChannelHandlers,
-): Promise<() => void> {
-  const window = getCurrentWebviewWindow();
-  const unlisteners = await Promise.all([
-    window.listen<string>("collab://message", (event) =>
-      handlers.onMessage(fromBase64(event.payload)),
-    ),
-    window.listen("collab://resync", () => handlers.onResync()),
-    window.listen("collab://closed", () => handlers.onClosed()),
-  ]);
-  return () => {
-    for (const unlisten of unlisteners) unlisten();
-  };
 }

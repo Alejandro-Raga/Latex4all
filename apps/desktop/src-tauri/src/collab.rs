@@ -15,8 +15,9 @@
 //! **Local files**, in the project's `.latex4all/` (already kept out of
 //! history and away from Claude):
 //! - `collab.json` — the link;
-//! - `collab-doc.bin` — the Yjs document and the last relay seq it includes,
-//!   written together so one can't get ahead of the other;
+//! - `collab-doc.bin` — the Yjs document, the last relay seq it includes, and
+//!   the webview's record of which files it has written to disk, all written
+//!   together so none can get ahead of the others;
 //! - `collab-outbox.bin` — local changes the relay hasn't confirmed yet,
 //!   which is what lets offline edits reach everyone later.
 
@@ -834,6 +835,8 @@ pub fn collab_remove_link(project_root: String) -> Result<(), String> {
 #[derive(Serialize)]
 pub struct SavedDoc {
     seq: u64,
+    /// The webview's own JSON, stored alongside.
+    local: String,
     data: String,
 }
 
@@ -841,16 +844,27 @@ pub struct SavedDoc {
 pub fn collab_load_doc(project_root: String) -> Option<SavedDoc> {
     let buf = std::fs::read(state_dir(Path::new(&project_root)).join(DOC_FILE)).ok()?;
     let seq = u64::from_be_bytes(buf.get(0..8)?.try_into().ok()?);
+    let local_len = u32::from_be_bytes(buf.get(8..12)?.try_into().ok()?) as usize;
+    let local = String::from_utf8(buf.get(12..12 + local_len)?.to_vec()).ok()?;
     Some(SavedDoc {
         seq,
-        data: BASE64.encode(&buf[8..]),
+        local,
+        data: BASE64.encode(&buf[12 + local_len..]),
     })
 }
 
-/// Saves the document together with the last relay seq it includes.
+/// Saves the document, the last relay seq it includes, and the webview's
+/// local state, in one write.
 #[tauri::command]
-pub fn collab_save_doc(project_root: String, seq: u64, data: String) -> Result<(), String> {
+pub fn collab_save_doc(
+    project_root: String,
+    seq: u64,
+    local: String,
+    data: String,
+) -> Result<(), String> {
     let mut buf = seq.to_be_bytes().to_vec();
+    buf.extend_from_slice(&(local.len() as u32).to_be_bytes());
+    buf.extend_from_slice(local.as_bytes());
     buf.extend_from_slice(&decode(&data)?);
     write_atomic(&state_dir(Path::new(&project_root)).join(DOC_FILE), &buf)
 }
@@ -1093,9 +1107,18 @@ mod tests {
         let dir = temp_dir("files");
         let root = dir.to_string_lossy().into_owned();
         assert!(collab_load_doc(root.clone()).is_none());
-        collab_save_doc(root.clone(), 42, BASE64.encode([7u8, 8, 9])).unwrap();
+        collab_save_doc(
+            root.clone(),
+            42,
+            "{\"known\":{}}".into(),
+            BASE64.encode([7u8, 8, 9]),
+        )
+        .unwrap();
         let saved = collab_load_doc(root.clone()).unwrap();
-        assert_eq!((saved.seq, saved.data), (42, BASE64.encode([7u8, 8, 9])));
+        assert_eq!(
+            (saved.seq, saved.local.as_str(), saved.data),
+            (42, "{\"known\":{}}", BASE64.encode([7u8, 8, 9]))
+        );
 
         let link = Link::generate(DEFAULT_RELAY).unwrap().to_string();
         assert!(collab_read_link(root.clone()).is_none());

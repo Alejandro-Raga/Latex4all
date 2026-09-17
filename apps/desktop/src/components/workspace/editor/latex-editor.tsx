@@ -120,6 +120,7 @@ import {
   TagIcon,
   CopyIcon,
   XIcon,
+  Loader2Icon,
 } from "lucide-react";
 import { ClaudeChatDrawer } from "@/components/claude-chat/claude-chat-drawer";
 import { ProposedChangesPanel } from "@/components/claude-chat/proposed-changes-panel";
@@ -200,6 +201,7 @@ export function LatexEditor() {
   const setCompileError = useDocumentStore((s) => s.setCompileError);
   const saveAllFiles = useDocumentStore((s) => s.saveAllFiles);
   const collabRevision = useCollabStore((s) => s.revision);
+  const collabStatus = useCollabStore((s) => s.status);
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const isTextFile =
@@ -308,6 +310,7 @@ export function LatexEditor() {
   const themeCompartmentRef = useRef(new Compartment());
   const mergeCompartmentRef = useRef(new Compartment());
   const vimCompartmentRef = useRef(new Compartment());
+  const readOnlyCompartmentRef = useRef(new Compartment());
   const isMergeActiveRef = useRef(false);
   const pendingChangeRef = useRef<ProposedChange | null>(null);
   const handleKeepAllRef = useRef<() => void>(() => {});
@@ -980,6 +983,13 @@ export function LatexEditor() {
         highlightSelectionMatches(),
         mergeCompartmentRef.current.of([]),
         vimCompartmentRef.current.of([]),
+        // A shared project catching up with others' changes can't be edited
+        // yet, so nobody works on text that's about to change under them.
+        readOnlyCompartmentRef.current.of(
+          EditorState.readOnly.of(
+            useCollabStore.getState().status === "syncing",
+          ),
+        ),
         updateListener,
         EditorView.lineWrapping,
         spellcheckExtension({
@@ -1143,6 +1153,14 @@ export function LatexEditor() {
     setSelectionRange,
     collabRevision,
   ]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: readOnlyCompartmentRef.current.reconfigure(
+        EditorState.readOnly.of(collabStatus === "syncing"),
+      ),
+    });
+  }, [collabStatus]);
 
   // Dynamically switch editor theme when resolvedTheme changes
   useEffect(() => {
@@ -1559,6 +1577,19 @@ export function LatexEditor() {
               }}
               className={reviewingSnapshot ? "hidden" : "absolute inset-0"}
             />
+            {!reviewingSnapshot &&
+              (collabStatus === "syncing" || collabStatus === "offline") && (
+                <div className="pointer-events-none absolute top-2 right-4 z-10 flex items-center gap-1.5 rounded-md border border-border bg-background/95 px-2 py-1 text-muted-foreground text-xs shadow-sm">
+                  {collabStatus === "syncing" ? (
+                    <>
+                      <Loader2Icon className="size-3 animate-spin" />
+                      Updating…
+                    </>
+                  ) : (
+                    "Offline — your changes will sync when you reconnect"
+                  )}
+                </div>
+              )}
             {reviewingSnapshot && historyDiffResult && (
               <HistoryDiffView diffs={historyDiffResult} />
             )}
