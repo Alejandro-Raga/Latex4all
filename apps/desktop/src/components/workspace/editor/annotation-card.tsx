@@ -18,7 +18,10 @@ import {
 import { cn } from "@/lib/utils";
 import { useViewportAnchoredPosition } from "./use-viewport-anchored-position";
 
-export const SWATCH_CLASSES: Record<AnnotationColor, string> = {
+export const SWATCH_CLASSES: Record<
+  (typeof ANNOTATION_COLORS)[number],
+  string
+> = {
   yellow: "bg-yellow-400",
   green: "bg-green-400",
   blue: "bg-blue-400",
@@ -26,12 +29,18 @@ export const SWATCH_CLASSES: Record<AnnotationColor, string> = {
   purple: "bg-violet-400",
 };
 
+const SELECTED_SWATCH =
+  "ring-2 ring-foreground/40 ring-offset-1 ring-offset-background";
+
 export function ColorSwatches({
   value,
   onPick,
+  onClear,
 }: {
   value?: AnnotationColor;
   onPick: (color: AnnotationColor) => void;
+  /** Adds a "no highlight" swatch. */
+  onClear?: () => void;
 }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -44,11 +53,24 @@ export function ColorSwatches({
           className={cn(
             "size-3.5 rounded-full transition-transform hover:scale-110",
             SWATCH_CLASSES[color],
-            value === color &&
-              "ring-2 ring-foreground/40 ring-offset-1 ring-offset-background",
+            value === color && SELECTED_SWATCH,
           )}
         />
       ))}
+      {onClear && (
+        <button
+          type="button"
+          aria-label="No highlight"
+          title="No highlight"
+          onClick={onClear}
+          className={cn(
+            "relative size-3.5 overflow-hidden rounded-full border border-muted-foreground/50 transition-transform hover:scale-110",
+            value === "none" && SELECTED_SWATCH,
+          )}
+        >
+          <span className="absolute top-1/2 left-1/2 h-px w-[140%] -translate-x-1/2 -translate-y-1/2 -rotate-45 bg-muted-foreground/70" />
+        </button>
+      )}
     </div>
   );
 }
@@ -207,6 +229,8 @@ function Comment({
 
 export interface AnnotationActions {
   setColor: (color: AnnotationColor) => void;
+  /** Removes a plain highlight; a note keeps its thread and loses the color. */
+  clearHighlight: () => void;
   addComment: (text: string) => void;
   editComment: (commentId: string, text: string) => void;
   deleteComment: (commentId: string) => void;
@@ -295,14 +319,18 @@ export function AnnotationCard({
       ) : (
         <>
           <div className="flex items-center gap-2">
-            <ColorSwatches value={annotation.color} onPick={actions.setColor} />
+            <ColorSwatches
+              value={annotation.color}
+              onPick={actions.setColor}
+              onClear={actions.clearHighlight}
+            />
             {annotation.resolved && (
               <span className="text-muted-foreground text-xs">Resolved</span>
             )}
             <button
               type="button"
-              aria-label="Remove highlight"
-              title="Remove highlight"
+              aria-label="Delete"
+              title="Delete"
               onClick={actions.remove}
               className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
             >

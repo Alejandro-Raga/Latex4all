@@ -31,11 +31,16 @@ interface AnnotationsState {
   source: AnnotationSource | null;
   /** Bumped whenever any of them change. */
   version: number;
+  /** Whether the notes bar is showing. */
+  panelOpen: boolean;
+  setPanelOpen: (open: boolean) => void;
 }
 
-export const useAnnotationsStore = create<AnnotationsState>(() => ({
+export const useAnnotationsStore = create<AnnotationsState>((set) => ({
   source: null,
   version: 0,
+  panelOpen: false,
+  setPanelOpen: (open) => set({ panelOpen: open }),
 }));
 
 let current: {

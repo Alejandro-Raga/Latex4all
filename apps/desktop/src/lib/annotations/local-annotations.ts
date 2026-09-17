@@ -104,6 +104,13 @@ export class LocalAnnotations implements AnnotationSource {
     return this.items.filter((a) => !this.lost.has(a.id));
   }
 
+  listAll() {
+    const paths = new Set(this.items.map((a) => a.path));
+    return [...paths].flatMap((path) =>
+      this.rangesFor(path).map((annotation) => ({ path, annotation })),
+    );
+  }
+
   rangesFor(path: string): Annotation[] {
     return this.items
       .filter((a) => a.path === path && !this.lost.has(a.id) && a.from < a.to)

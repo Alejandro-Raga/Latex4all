@@ -28,9 +28,11 @@ Write entries under `## [Unreleased]
   you reconnect. Everything is encrypted before it leaves your computer.
 - Highlights and notes. Select text to highlight it in one of five colors or
   add a note (⌘⇧H, ⌘⌥M); hover a highlight to read its thread, reply, or
-  resolve it. They stay on their words as the text changes, sync with
-  everyone in a shared project, and never touch the .tex files. The
-  highlighter button in the editor toolbar hides them all.
+  resolve it, and pick "no color" to take a highlight off. Resolved notes
+  turn grey instead of vanishing. The notes bar lists every open and resolved
+  note in the project and jumps to it. Everything stays on its words as the
+  text changes, syncs with everyone in a shared project, and never touches
+  the .tex files.
 
 ### Changed
 

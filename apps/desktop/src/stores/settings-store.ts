@@ -1,9 +1,5 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import {
-  type AnnotationColor,
-  isAnnotationColor,
-} from "@/lib/annotations/types";
 
 type CompilerBackend = "tectonic" | "texlive";
 
@@ -78,9 +74,6 @@ interface SettingsState {
   /** Highlights and notes in the editor; hiding them keeps them, just out of sight. */
   showAnnotations: boolean;
   setShowAnnotations: (show: boolean) => void;
-  /** The color new highlights get: whichever was picked last. */
-  annotationColor: AnnotationColor;
-  setAnnotationColor: (color: AnnotationColor) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -128,8 +121,6 @@ export const useSettingsStore = create<SettingsState>()(
         set({ autoCheckForUpdates: enabled }),
       showAnnotations: true,
       setShowAnnotations: (show) => set({ showAnnotations: show }),
-      annotationColor: "yellow",
-      setAnnotationColor: (color) => set({ annotationColor: color }),
     }),
     {
       name: "latex4all-settings",
@@ -138,9 +129,6 @@ export const useSettingsStore = create<SettingsState>()(
         return {
           ...merged,
           checkLanguage: supportedCheckLanguage(merged.checkLanguage),
-          annotationColor: isAnnotationColor(merged.annotationColor)
-            ? merged.annotationColor
-            : "yellow",
         };
       },
     },

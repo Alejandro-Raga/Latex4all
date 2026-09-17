@@ -15,6 +15,8 @@ import { Sidebar } from "./sidebar";
 import { LatexEditor } from "./editor/latex-editor";
 import { PdfPreview } from "./preview/pdf-preview";
 import { QuickReferencePanel } from "./quick-reference-panel";
+import { NotesPanel } from "./notes-panel";
+import { useAnnotationsStore } from "@/stores/annotations-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { usePreviewStore } from "@/stores/preview-store";
 
@@ -43,6 +45,8 @@ export function WorkspaceLayout() {
   );
   const [codeVisible, setCodeVisible] = useState(true);
   const [quickRefOpen, setQuickRefOpen] = useState(false);
+  const notesOpen = useAnnotationsStore((s) => s.panelOpen);
+  const setNotesOpen = useAnnotationsStore((s) => s.setPanelOpen);
 
   const getCollapsedSidebarSize = useCallback(() => {
     const workspaceWidth =
@@ -249,6 +253,16 @@ export function WorkspaceLayout() {
         {quickRefOpen && (
           <Panel defaultSize={24} minSize={16} maxSize={45} className="min-w-0">
             <QuickReferencePanel onClose={() => setQuickRefOpen(false)} />
+          </Panel>
+        )}
+
+        {notesOpen && (
+          <PanelResizeHandle className="w-px bg-border transition-colors hover:bg-ring" />
+        )}
+
+        {notesOpen && (
+          <Panel defaultSize={20} minSize={14} maxSize={40} className="min-w-0">
+            <NotesPanel onClose={() => setNotesOpen(false)} />
           </Panel>
         )}
       </PanelGroup>

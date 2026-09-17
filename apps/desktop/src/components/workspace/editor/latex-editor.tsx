@@ -93,7 +93,11 @@ import {
 } from "./annotations-extension";
 import { type AnnotationActions, AnnotationCard } from "./annotation-card";
 import { currentAuthor, useAnnotationsStore } from "@/stores/annotations-store";
-import type { AnnotationColor } from "@/lib/annotations/types";
+import {
+  type AnnotationColor,
+  DEFAULT_ANNOTATION_COLOR,
+} from "@/lib/annotations/types";
+import { clearHighlight, clearHighlights } from "@/lib/annotations/actions";
 import { WordLookupPopover } from "./word-lookup-popover";
 import { matchCase } from "./match-case";
 import {
@@ -215,7 +219,6 @@ export function LatexEditor() {
   const annotationSource = useAnnotationsStore((s) => s.source);
   const annotationsVersion = useAnnotationsStore((s) => s.version);
   const showAnnotations = useSettingsStore((s) => s.showAnnotations);
-  const annotationColor = useSettingsStore((s) => s.annotationColor);
   /** The note card: a thread being hovered (`id`), or a new note being written. */
   const [annotationCard, setAnnotationCard] = useState<{
     id: string | null;
@@ -1490,12 +1493,20 @@ export function LatexEditor() {
 
   const activePath = activeFile?.relativePath ?? null;
 
-  highlightSelectionRef.current = (from, to, color = annotationColor) => {
+  highlightSelectionRef.current = (
+    from,
+    to,
+    color = DEFAULT_ANNOTATION_COLOR,
+  ) => {
     if (!annotationSource || !activePath) return;
     const settings = useSettingsStore.getState();
-    settings.setAnnotationColor(color);
     if (!settings.showAnnotations) settings.setShowAnnotations(true);
-    annotationSource.add(activePath, from, to, color);
+    // Recoloring what's already highlighted rather than stacking another.
+    const existing = annotationSource
+      .rangesFor(activePath)
+      .find((a) => a.from === from && a.to === to);
+    if (existing) annotationSource.setColor(existing.id, color);
+    else annotationSource.add(activePath, from, to, color);
   };
 
   composeNoteRef.current = (from, to) => {
@@ -1604,10 +1615,14 @@ export function LatexEditor() {
   const cardActions: AnnotationActions | null =
     cardAnnotation && annotationSource
       ? {
-          setColor: (color) => {
-            annotationSource.setColor(cardAnnotation.id, color);
-            useSettingsStore.getState().setAnnotationColor(color);
-          },
+          setColor: (color) =>
+            annotationSource.setColor(cardAnnotation.id, color),
+          clearHighlight: () =>
+            clearHighlight(
+              annotationSource,
+              cardAnnotation.id,
+              cardAnnotation.comments.length > 0,
+            ),
           addComment: (text) =>
             annotationSource.addComment(
               cardAnnotation.id,
@@ -1841,7 +1856,6 @@ export function LatexEditor() {
                   onSendPrompt={handleToolbarSendPrompt}
                   onAction={handleToolbarAction}
                   onDismiss={handleToolbarDismiss}
-                  highlightColor={annotationColor}
                   onHighlight={(color) => {
                     const range = useDocumentStore.getState().selectionRange;
                     if (range) {
@@ -1849,6 +1863,18 @@ export function LatexEditor() {
                         range.start,
                         range.end,
                         color,
+                      );
+                    }
+                    handleToolbarDismiss();
+                  }}
+                  onClearHighlight={() => {
+                    const range = useDocumentStore.getState().selectionRange;
+                    if (annotationSource && activePath && range) {
+                      clearHighlights(
+                        annotationSource,
+                        activePath,
+                        range.start,
+                        range.end,
                       );
                     }
                     handleToolbarDismiss();
@@ -1871,7 +1897,7 @@ export function LatexEditor() {
                         activePath,
                         range.from,
                         range.to,
-                        annotationColor,
+                        DEFAULT_ANNOTATION_COLOR,
                         { author: currentAuthor(), text },
                       );
                     }

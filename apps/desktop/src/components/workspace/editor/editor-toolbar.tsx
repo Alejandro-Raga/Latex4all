@@ -1,4 +1,4 @@
-import { RefObject, useCallback, useEffect, useState } from "react";
+import { RefObject, useCallback, useEffect, useMemo, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
@@ -22,9 +22,11 @@ import {
   XIcon,
   HighlighterIcon,
   EyeOffIcon,
+  MessageSquareIcon,
 } from "lucide-react";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { CollabButton } from "@/components/collab/collab-button";
+import { useAnnotationsStore } from "@/stores/annotations-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import vscodeIcon from "@/assets/vscode.svg";
@@ -110,6 +112,20 @@ export function EditorToolbar({
 }: EditorToolbarProps) {
   const vimMode = useSettingsStore((s) => s.vimMode);
   const showAnnotations = useSettingsStore((s) => s.showAnnotations);
+  const notesOpen = useAnnotationsStore((s) => s.panelOpen);
+  const setNotesOpen = useAnnotationsStore((s) => s.setPanelOpen);
+  const annotationSource = useAnnotationsStore((s) => s.source);
+  const annotationsVersion = useAnnotationsStore((s) => s.version);
+  const openNotes = useMemo(
+    () =>
+      annotationSource
+        ?.listAll()
+        .filter(
+          ({ annotation }) =>
+            annotation.comments.length > 0 && !annotation.resolved,
+        ).length ?? 0,
+    [annotationSource, annotationsVersion],
+  );
   const setShowAnnotations = useSettingsStore((s) => s.setShowAnnotations);
   const setVimMode = useSettingsStore((s) => s.setVimMode);
   const grammarCheckEnabled = useSettingsStore((s) => s.grammarCheckEnabled);
@@ -565,6 +581,17 @@ export function EditorToolbar({
           <EyeOffIcon className="size-4" />
         )}
       </TooltipIconButton>
+      <Button
+        variant={notesOpen ? "secondary" : "ghost"}
+        size="sm"
+        className="h-6 shrink-0 gap-1 px-1.5 text-xs"
+        onClick={() => setNotesOpen(!notesOpen)}
+        title="Notes"
+        aria-label="Notes"
+      >
+        <MessageSquareIcon className="size-3.5" />
+        {openNotes > 0 && <span>{openNotes}</span>}
+      </Button>
       <CollabButton />
       {editors.length === 1 && (
         <TooltipIconButton

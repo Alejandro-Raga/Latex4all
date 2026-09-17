@@ -3,6 +3,7 @@
  * files, never in them, so compiling and history see the .tex untouched.
  */
 
+/** The colors a highlight can be given. */
 export const ANNOTATION_COLORS = [
   "yellow",
   "green",
@@ -11,10 +12,17 @@ export const ANNOTATION_COLORS = [
   "purple",
 ] as const;
 
-export type AnnotationColor = (typeof ANNOTATION_COLORS)[number];
+/** `none`: a note whose highlight was taken away; the note stays. */
+export type AnnotationColor = (typeof ANNOTATION_COLORS)[number] | "none";
+
+/** What a new highlight or note gets. Picking another color only changes that one. */
+export const DEFAULT_ANNOTATION_COLOR: AnnotationColor = "yellow";
 
 export function isAnnotationColor(value: unknown): value is AnnotationColor {
-  return ANNOTATION_COLORS.includes(value as AnnotationColor);
+  return (
+    value === "none" ||
+    (ANNOTATION_COLORS as readonly unknown[]).includes(value)
+  );
 }
 
 export interface AnnotationComment {
@@ -50,6 +58,8 @@ export interface Author {
 export interface AnnotationSource {
   /** The file's annotations in current offsets; ones whose text is gone are left out. */
   rangesFor(path: string): Annotation[];
+  /** Every file's, for the notes bar. */
+  listAll(): Array<{ path: string; annotation: Annotation }>;
   add(
     path: string,
     from: number,

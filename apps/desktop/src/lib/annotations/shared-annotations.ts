@@ -52,6 +52,12 @@ export class SharedAnnotations implements AnnotationSource {
     return file?.kind === "text" ? file : null;
   }
 
+  listAll() {
+    return [...layout(this.doc).keys()].flatMap((path) =>
+      this.rangesFor(path).map((annotation) => ({ path, annotation })),
+    );
+  }
+
   rangesFor(path: string): Annotation[] {
     const file = this.textFor(path);
     if (!file) return [];

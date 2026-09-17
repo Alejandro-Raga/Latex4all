@@ -22,7 +22,8 @@ interface SelectionToolbarProps {
   onDismiss: () => void;
   /** Highlights the selection in the chosen color. */
   onHighlight?: (color: AnnotationColor) => void;
-  highlightColor?: AnnotationColor;
+  /** Takes highlights off the selection. */
+  onClearHighlight?: () => void;
 }
 
 const TOOLBAR_WIDTH = 256;
@@ -35,7 +36,7 @@ export function SelectionToolbar({
   onAction,
   onDismiss,
   onHighlight,
-  highlightColor,
+  onClearHighlight,
 }: SelectionToolbarProps) {
   const [input, setInput] = useState("");
   const { ref: toolbarRef, coords } = useViewportAnchoredPosition(anchor);
@@ -120,7 +121,7 @@ export function SelectionToolbar({
       {onHighlight && (
         <div className="flex items-center justify-between border-border border-b px-3 py-1.5">
           <span className="text-muted-foreground text-xs">Highlight</span>
-          <ColorSwatches value={highlightColor} onPick={onHighlight} />
+          <ColorSwatches onPick={onHighlight} onClear={onClearHighlight} />
         </div>
       )}
 

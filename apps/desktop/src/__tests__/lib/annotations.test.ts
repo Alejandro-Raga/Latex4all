@@ -12,6 +12,7 @@ import {
   type ProjectText,
 } from "@/lib/annotations/local-annotations";
 import { SharedAnnotations } from "@/lib/annotations/shared-annotations";
+import { clearHighlights } from "@/lib/annotations/actions";
 import type { Author } from "@/lib/annotations/types";
 import {
   addTextFile,
@@ -287,10 +288,13 @@ describe("drawing annotations in the editor", () => {
     const onA = new SharedAnnotations(a);
     const onB = new SharedAnnotations(b);
 
+    // Bound to B's shared text the way the editor is, so typing reaches it.
+    const { yCollab } = await import("y-codemirror.next");
+    const textB = [...filesMap(b).values()][0].get("text") as Y.Text;
     const view = new EditorView({
       state: EditorState.create({
-        doc: "Alpha beta gamma delta",
-        extensions: annotationsExtension,
+        doc: textB.toString(),
+        extensions: [annotationsExtension, yCollab(textB, null)],
       }),
     });
     const refresh = () =>
@@ -316,10 +320,95 @@ describe("drawing annotations in the editor", () => {
     expect(annotationAt(view.state, 12)?.id).toBe(highlight);
     expect(annotationAt(view.state, 2)).toBeNull();
 
-    // Resolving hides it until hovered, without losing it.
+    // Resolving greys it out, so it can still be found.
     onA.setResolved(highlight, true);
-    expect(marked()).toEqual([]);
-    expect(annotationAt(view.state, 8)?.id).toBe(highlight);
+    expect(marked()).toEqual(["beta"]);
+    expect(view.dom.querySelector(".cm-annotation-resolved")).not.toBeNull();
+    expect(view.dom.querySelector(".cm-annotation-green")).toBeNull();
+    expect(
+      view.dom.querySelector(".cm-annotation-note-resolved"),
+    ).not.toBeNull();
+    expect(annotationAt(view.state, 12)?.id).toBe(highlight);
     view.destroy();
+  });
+});
+
+describe("taking highlights off, and listing notes", () => {
+  it("removes plain highlights but keeps notes, without their color", async () => {
+    const doc = new Y.Doc();
+    addTextFile(doc, "main.tex", "one two three four");
+    addTextFile(doc, "intro.tex", "hello world");
+    const source = new SharedAnnotations(doc);
+    const plain = source.add("main.tex", 0, 3, "yellow")!; // "one"
+    const noted = source.add("main.tex", 4, 7, "blue", {
+      author: ana,
+      text: "check",
+    })!; // "two"
+    const outside = source.add("main.tex", 14, 18, "pink")!; // "four"
+    source.add("intro.tex", 0, 5, "green", { author: ben, text: "hi" });
+
+    clearHighlights(source, "main.tex", 2, 5); // touches "one" and "two"
+    const left = source.rangesFor("main.tex");
+    expect(left.map((a) => a.id).sort()).toEqual([noted, outside].sort());
+    expect(left.find((a) => a.id === noted)?.color).toBe("none");
+    expect(left.find((a) => a.id === plain)).toBeUndefined();
+
+    // The notes bar lists every file's.
+    const all = source.listAll();
+    expect(all.map((n) => n.path).sort()).toEqual([
+      "intro.tex",
+      "main.tex",
+      "main.tex",
+    ]);
+
+    // A note with no color draws no highlight, but its glyph stays.
+    const { EditorState } = await import("@codemirror/state");
+    const { EditorView } = await import("@codemirror/view");
+    const { annotationsExtension, setAnnotations } = await import(
+      "@/components/workspace/editor/annotations-extension"
+    );
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: "one two three four",
+        extensions: annotationsExtension,
+      }),
+    });
+    view.dispatch({ effects: setAnnotations.of(left) });
+    expect(
+      [...view.dom.querySelectorAll(".cm-annotation")].map(
+        (el) => el.textContent,
+      ),
+    ).toEqual(["four"]);
+    expect(view.dom.querySelectorAll(".cm-annotation-note").length).toBe(1);
+    view.destroy();
+  });
+
+  it("lists notes across files in a project that isn't shared", async () => {
+    const files: Record<string, string> = { "a.tex": "alpha", "b.tex": "beta" };
+    const text = {
+      contentOf: (path: string) => files[path],
+      paths: () => Object.keys(files),
+      subscribe: () => () => {},
+    };
+    let saved: string | null = null;
+    const local = await LocalAnnotations.load(
+      {
+        read: async () => saved,
+        write: async (json) => {
+          saved = json;
+        },
+      },
+      text,
+    );
+    local.add("a.tex", 0, 5, "yellow", { author: ana, text: "first" });
+    const plain = local.add("b.tex", 0, 4, "green")!;
+    expect(
+      local
+        .listAll()
+        .map((n) => n.path)
+        .sort(),
+    ).toEqual(["a.tex", "b.tex"]);
+    clearHighlights(local, "b.tex", 0, 4);
+    expect(local.listAll().map((n) => n.annotation.id)).not.toContain(plain);
   });
 });

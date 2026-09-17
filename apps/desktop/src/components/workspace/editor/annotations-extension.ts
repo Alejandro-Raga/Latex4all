@@ -15,7 +15,7 @@ import type { Annotation } from "@/lib/annotations/types";
 /**
  * Highlights and notes, drawn quietly: a soft background for a highlight, and
  * for one with a note a small faint glyph where it ends. Nothing goes in the
- * margin, so text never shifts. A resolved thread draws nothing until hovered.
+ * margin, so text never shifts. A resolved thread is greyed out.
  */
 
 /** Replaces the file's annotations (e.g. after someone else changed one). */
@@ -27,19 +27,24 @@ interface AnnotationsValue {
 }
 
 class NoteGlyph extends WidgetType {
-  constructor(readonly id: string) {
+  constructor(
+    readonly id: string,
+    readonly resolved: boolean,
+  ) {
     super();
   }
 
   eq(other: NoteGlyph) {
-    return other.id === this.id;
+    return other.id === this.id && other.resolved === this.resolved;
   }
 
   toDOM() {
     const glyph = document.createElement("span");
-    glyph.className = "cm-annotation-note";
+    glyph.className = this.resolved
+      ? "cm-annotation-note cm-annotation-note-resolved"
+      : "cm-annotation-note";
     glyph.dataset.annotationId = this.id;
-    glyph.setAttribute("aria-label", "Note");
+    glyph.setAttribute("aria-label", this.resolved ? "Resolved note" : "Note");
     // lucide "message-square", reduced.
     glyph.innerHTML =
       '<svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
@@ -56,16 +61,27 @@ function build(annotations: readonly Annotation[], length: number) {
   for (const a of annotations) {
     const from = Math.max(0, Math.min(a.from, length));
     const to = Math.max(0, Math.min(a.to, length));
-    if (from >= to || a.resolved) continue;
-    ranges.push(
-      Decoration.mark({
-        class: `cm-annotation cm-annotation-${a.color}`,
-        attributes: { "data-annotation-id": a.id },
-      }).range(from, to),
-    );
+    if (from >= to) continue;
+    // Resolved notes turn grey rather than vanishing, so they can be found.
+    const className = a.resolved
+      ? "cm-annotation cm-annotation-resolved"
+      : a.color === "none"
+        ? null
+        : `cm-annotation cm-annotation-${a.color}`;
+    if (className) {
+      ranges.push(
+        Decoration.mark({
+          class: className,
+          attributes: { "data-annotation-id": a.id },
+        }).range(from, to),
+      );
+    }
     if (a.comments.length > 0) {
       ranges.push(
-        Decoration.widget({ widget: new NoteGlyph(a.id), side: 1 }).range(to),
+        Decoration.widget({
+          widget: new NoteGlyph(a.id, a.resolved),
+          side: 1,
+        }).range(to),
       );
     }
   }
@@ -138,6 +154,12 @@ export const annotationsTheme = EditorView.baseTheme({
       ],
     ]),
   ),
+  "&light .cm-annotation-resolved": {
+    backgroundColor: "rgba(148, 163, 184, 0.28)",
+  },
+  "&dark .cm-annotation-resolved": {
+    backgroundColor: "rgba(148, 163, 184, 0.18)",
+  },
   ".cm-annotation": { borderRadius: "2px" },
   ".cm-annotation-note": {
     display: "inline-block",
@@ -147,6 +169,7 @@ export const annotationsTheme = EditorView.baseTheme({
     opacity: "0.45",
     cursor: "default",
   },
+  ".cm-annotation-note-resolved": { opacity: "0.3" },
   ".cm-annotation-note:hover": { opacity: "0.8" },
 });
 
