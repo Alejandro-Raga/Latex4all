@@ -194,7 +194,9 @@ test("keeps updates for whoever connects later, and passes them on live", async 
 
   // Someone who had seen up to 2 only gets 3.
   const c = await connect(relay, id, token);
-  await c.hello(2);
+  const caughtUp = await c.hello(2);
+  assert.equal(caughtUp.logEntries, 3);
+  assert.equal(caughtUp.logBytes, 5);
   assert.deepEqual(
     c.received.filter((m) => m.kind === "update").map((m) => m.seq),
     [3],

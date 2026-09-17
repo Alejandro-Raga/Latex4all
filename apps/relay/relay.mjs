@@ -18,7 +18,7 @@
 //   binary → [2][awareness]                pass on cursors; never stored
 //   binary → [3][u64 upTo][snapshot]       replace updates ≤ upTo with this
 //   binary ← [1][u64 seq][update]  [2][awareness]  [3][u64 upTo][snapshot]
-//   text   ← {"type":"caught-up","seq"} {"type":"ack","seq"}
+//   text   ← {"type":"caught-up","seq","logEntries","logBytes"} {"type":"ack","seq"}
 //            {"type":"snapshot-ack","upTo","ok"} {"type":"error","code"}
 //
 // The relay is open to anyone, so storage, connections and bandwidth are all
@@ -326,7 +326,13 @@ export function createRelay({
             for (const entry of entries) {
               ws.send(frame(FRAME.UPDATE, entry.seq, entry.data));
             }
-            reply({ type: "caught-up", seq: project.head });
+            // The log since the last snapshot, so clients know when to compact.
+            reply({
+              type: "caught-up",
+              seq: project.head,
+              logEntries: project.log.length,
+              logBytes: project.log.reduce((sum, e) => sum + e.data.length, 0),
+            });
             ws.ready = true;
           } else if (
             message?.type === "gc" &&

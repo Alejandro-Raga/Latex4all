@@ -1,287 +1,138 @@
-//! Live collaboration: a relay for Yjs messages between copies of the app.
+//! Shared projects: keeps a project in sync with everyone else on it.
 //!
-//! Whoever shares a project runs the relay. Other copies connect to it over a
-//! WebSocket, and every binary message one participant sends is passed on to
-//! all the others. The relay never looks inside the messages — the Yjs sync
-//! and awareness protocols in the webview are built to work over a plain
-//! broadcast like this. The webview is one more participant, reached through
-//! `collab_send` and the `collab://message` event rather than a socket, so it
-//! needs no network access of its own (nor a CSP exception).
+//! Every change goes through a relay (apps/relay in this repo), which stores
+//! it until the other people on the project have it, so opening a shared
+//! project always starts by catching up, whether or not anyone else is online.
+//! The webview owns the Yjs document; this side owns the connection, the
+//! encryption and the files that make the sync survive restarts.
 //!
-//! Before joining, a guest downloads the project folder once from
-//! `/snapshot`, so it has the images, styles and everything else it needs to
-//! compile on its own. Only the text files are kept in sync after that.
+//! **Keys.** A project's invite link is `<relay>/p/<projectId>#<key>`. Two
+//! keys are derived from the random 32-byte `key`: an access token, which is
+//! all the relay ever sees (and it keeps only its hash), and an AES-256-GCM
+//! key for everything sent — updates, cursors, snapshots and files. So the
+//! relay, and anything between it and the apps, only handles ciphertext.
 //!
-//! Guests reach the host in one of two ways. On the same network they connect
-//! straight to a port the host opens. Over the internet the host keeps a
-//! connection open to a public relay (apps/relay in this repo), and the relay
-//! hands each guest's connection over to it; the host checks the invite token
-//! either way, so the relay never decides who gets in.
+//! **Local files**, in the project's `.latex4all/` (already kept out of
+//! history and away from Claude):
+//! - `collab.json` — the link;
+//! - `collab-doc.bin` — the Yjs document and the last relay seq it includes,
+//!   written together so one can't get ahead of the other;
+//! - `collab-outbox.bin` — local changes the relay hasn't confirmed yet,
+//!   which is what lets offline edits reach everyone later.
 
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use base64::engine::general_purpose::{STANDARD as BASE64, URL_SAFE_NO_PAD};
+use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
+use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM, NONCE_LEN};
+use ring::rand::{SecureRandom, SystemRandom};
+use ring::{digest, hmac};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::net::{IpAddr, UdpSocket};
+use std::collections::{HashMap, VecDeque};
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::{Emitter, EventTarget, WebviewWindow};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, watch};
-use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
-use tokio_tungstenite::tungstenite::http::StatusCode;
+use tokio::sync::mpsc;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::{Bytes, Error as WsError, Message};
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::WebSocketStream;
 
-/// Tried first so the address people share stays the same between sessions
-/// (and a port forward keeps working); any free port is used if it's taken.
-const PREFERRED_PORT: u16 = 47_100;
-/// Messages the webview sends are tagged with this id; sockets get 1, 2, ….
-const LOCAL_PEER: u64 = 0;
-/// A participant this many messages behind is dropped: a gap in the Yjs
-/// update stream would leave its copy silently different from everyone's.
-const RELAY_BACKLOG: usize = 4096;
+/// Where projects are shared unless a link names another relay.
+pub const DEFAULT_RELAY: &str = "https://collab.alejandroraga.com";
+
+/// Keep in step with DEFAULT_LIMITS in apps/relay/relay.mjs.
+const MAX_UPDATE_BYTES: usize = 2 * 1024 * 1024;
+const MAX_FILE_BYTES: usize = 25 * 1024 * 1024 - 64;
+const MAX_MESSAGE_BYTES: usize = 32 * 1024 * 1024;
+
 const KEEPALIVE: Duration = Duration::from_secs(20);
-const SNAPSHOT_FILE_LIMIT: u64 = 100 * 1024 * 1024;
-const SNAPSHOT_TOTAL_LIMIT: u64 = 500 * 1024 * 1024;
-/// Files are sent in pieces this size; the relay refuses larger messages.
-const SNAPSHOT_CHUNK: usize = 1024 * 1024;
-/// Mirrors `IGNORED_DIRECTORY_NAMES` in src/lib/tauri/fs.ts.
-const SKIPPED_DIRECTORIES: &[&str] = &["node_modules", "__pycache__", "venv", "env"];
+const RETRY_DELAYS: [u64; 5] = [1, 2, 5, 10, 30];
 
-// ─── Relay ───
+const FRAME_UPDATE: u8 = 1;
+const FRAME_AWARENESS: u8 = 2;
+const FRAME_SNAPSHOT: u8 = 3;
 
-#[derive(Clone)]
-struct Packet {
-    from: u64,
-    data: Bytes,
+const LINK_FILE: &str = "collab.json";
+const DOC_FILE: &str = "collab-doc.bin";
+const OUTBOX_FILE: &str = "collab-outbox.bin";
+
+// ─── Links and keys ───
+
+#[derive(Clone, Debug, PartialEq)]
+struct Link {
+    /// `https://host[:port]`, without a trailing slash.
+    relay: String,
+    project_id: String,
+    key: [u8; 32],
 }
 
-struct Relay {
-    tx: broadcast::Sender<Packet>,
-    next_peer: AtomicU64,
-}
-
-impl Relay {
-    fn new() -> Arc<Self> {
-        let (tx, _) = broadcast::channel(RELAY_BACKLOG);
-        Arc::new(Self {
-            tx,
-            next_peer: AtomicU64::new(LOCAL_PEER + 1),
+impl Link {
+    fn parse(link: &str) -> Result<Self, String> {
+        let invalid = || "That link isn't a valid shared project link.".to_string();
+        let (url, key) = link.trim().split_once('#').ok_or_else(invalid)?;
+        let key: [u8; 32] = URL_SAFE_NO_PAD
+            .decode(key)
+            .ok()
+            .and_then(|k| k.try_into().ok())
+            .ok_or_else(invalid)?;
+        let (relay, project_id) = url.rsplit_once("/p/").ok_or_else(invalid)?;
+        let relay = relay_base(relay).map_err(|_| invalid())?;
+        if !is_hex(project_id, 32) {
+            return Err(invalid());
+        }
+        Ok(Self {
+            relay,
+            project_id: project_id.to_string(),
+            key,
         })
     }
 
-    fn publish(&self, from: u64, data: Bytes) {
-        // Err only means nobody else is listening yet, which is fine.
-        let _ = self.tx.send(Packet { from, data });
+    fn generate(relay: &str) -> Result<Self, String> {
+        let rng = SystemRandom::new();
+        let mut id = [0u8; 16];
+        let mut key = [0u8; 32];
+        rng.fill(&mut id).map_err(|_| "No randomness available")?;
+        rng.fill(&mut key).map_err(|_| "No randomness available")?;
+        Ok(Self {
+            relay: relay_base(relay)?,
+            project_id: hex(&id),
+            key,
+        })
     }
-}
 
-/// What the webview side of the relay should do with a packet.
-enum LocalEvent {
-    Message(Bytes),
-    /// Messages were dropped before reaching the webview; it has to ask its
-    /// peers for their full state again.
-    Resync,
-}
-
-/// Forwards everything other participants send to the webview. Runs until
-/// the session's shutdown sender is dropped.
-fn spawn_local_bridge(
-    relay: &Arc<Relay>,
-    mut shutdown: watch::Receiver<()>,
-    deliver: impl Fn(LocalEvent) + Send + 'static,
-) {
-    let mut rx = relay.tx.subscribe();
-    tokio::spawn(async move {
-        loop {
-            tokio::select! {
-                _ = shutdown.changed() => break,
-                packet = rx.recv() => match packet {
-                    Ok(packet) if packet.from != LOCAL_PEER => deliver(LocalEvent::Message(packet.data)),
-                    Ok(_) => {}
-                    Err(broadcast::error::RecvError::Lagged(_)) => deliver(LocalEvent::Resync),
-                    Err(broadcast::error::RecvError::Closed) => break,
-                },
-            }
-        }
-    });
-}
-
-/// Connects one WebSocket to the relay until either side goes away.
-async fn pump<S>(ws: WebSocketStream<S>, relay: &Relay, mut shutdown: watch::Receiver<()>)
-where
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    let peer = relay.next_peer.fetch_add(1, Ordering::Relaxed);
-    let mut rx = relay.tx.subscribe();
-    let (mut sink, mut stream) = ws.split();
-    let mut keepalive = tokio::time::interval(KEEPALIVE);
-    keepalive.tick().await;
-    loop {
-        tokio::select! {
-            _ = shutdown.changed() => {
-                // Whatever the webview sent just before stopping — its
-                // goodbye, so others stop showing its cursor — still goes out.
-                while let Ok(packet) = rx.try_recv() {
-                    if packet.from != peer && sink.send(Message::Binary(packet.data)).await.is_err() {
-                        break;
-                    }
-                }
-                break;
-            }
-            _ = keepalive.tick() => {
-                if sink.send(Message::Ping(Bytes::new())).await.is_err() {
-                    break;
-                }
-            }
-            incoming = stream.next() => match incoming {
-                Some(Ok(Message::Binary(data))) => relay.publish(peer, data),
-                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
-                Some(Ok(_)) => {}
-            },
-            packet = rx.recv() => match packet {
-                Ok(packet) if packet.from != peer => {
-                    if sink.send(Message::Binary(packet.data)).await.is_err() {
-                        break;
-                    }
-                }
-                Ok(_) => {}
-                Err(_) => break,
-            },
-        }
+    fn url(&self, path: &str) -> String {
+        format!("{}/p/{}{}", self.relay, self.project_id, path)
     }
-    let _ = sink.send(Message::Close(None)).await;
-}
 
-// ─── Host ───
-
-#[derive(Debug, PartialEq)]
-enum Route {
-    Sync,
-    Snapshot,
-}
-
-/// Which endpoint a request is for, or None if its token is wrong.
-fn authorize(path_and_query: &str, token: &str) -> Option<Route> {
-    let (path, query) = path_and_query
-        .split_once('?')
-        .unwrap_or((path_and_query, ""));
-    let route = match path {
-        "/sync" => Route::Sync,
-        "/snapshot" => Route::Snapshot,
-        _ => return None,
-    };
-    let given = query
-        .split('&')
-        .find_map(|pair| pair.strip_prefix("token="))?;
-    constant_time_eq(given.as_bytes(), token.as_bytes()).then_some(route)
-}
-
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
-}
-
-async fn serve(
-    listener: TcpListener,
-    relay: Arc<Relay>,
-    token: Arc<str>,
-    project_root: Arc<Path>,
-    mut shutdown: watch::Receiver<()>,
-) {
-    loop {
-        tokio::select! {
-            _ = shutdown.changed() => break,
-            accepted = listener.accept() => {
-                let Ok((stream, _)) = accepted else { continue };
-                tokio::spawn(handle_connection(
-                    stream,
-                    relay.clone(),
-                    token.clone(),
-                    project_root.clone(),
-                    shutdown.clone(),
-                ));
-            }
+    fn sync_url(&self) -> String {
+        let url = self.url("/sync");
+        match url.strip_prefix("https://") {
+            Some(rest) => format!("wss://{rest}"),
+            None => format!("ws://{}", url.trim_start_matches("http://")),
         }
     }
 }
 
-async fn handle_connection(
-    stream: TcpStream,
-    relay: Arc<Relay>,
-    token: Arc<str>,
-    project_root: Arc<Path>,
-    shutdown: watch::Receiver<()>,
-) {
-    let _ = stream.set_nodelay(true);
-    let mut route = None;
-    // The large error type is tungstenite's own handshake response.
-    #[allow(clippy::result_large_err)]
-    let callback = |request: &Request, response: Response| {
-        let target = request
-            .uri()
-            .path_and_query()
-            .map(|p| p.as_str())
-            .unwrap_or("");
-        match authorize(target, &token) {
-            Some(r) => {
-                route = Some(r);
-                Ok(response)
-            }
-            None => {
-                let mut refused = ErrorResponse::new(Some("Forbidden".into()));
-                *refused.status_mut() = StatusCode::FORBIDDEN;
-                Err(refused)
-            }
-        }
-    };
-    let Ok(ws) = tokio_tungstenite::accept_hdr_async(stream, callback).await else {
-        return;
-    };
-    if let Some(route) = route {
-        serve_route(ws, route, &relay, &project_root, shutdown).await;
+impl std::fmt::Display for Link {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}#{}", self.url(""), URL_SAFE_NO_PAD.encode(self.key))
     }
 }
 
-async fn serve_route<S>(
-    ws: WebSocketStream<S>,
-    route: Route,
-    relay: &Relay,
-    project_root: &Path,
-    shutdown: watch::Receiver<()>,
-) where
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    match route {
-        Route::Sync => pump(ws, relay, shutdown).await,
-        Route::Snapshot => {
-            let _ = send_snapshot(ws, project_root).await;
-        }
-    }
-}
-
-// ─── Host, through the internet relay ───
-
-type ClientStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
-
-/// A relay address as typed (`https://collab.example.com`) turned into the
-/// WebSocket base the app connects to (`wss://collab.example.com`).
+/// `https://host`, from whatever form of the relay's address was given.
 fn relay_base(url: &str) -> Result<String, String> {
     let url = url.trim();
     let (scheme, rest) = if let Some(rest) = url.strip_prefix("https://") {
-        ("wss", rest)
+        ("https", rest)
     } else if let Some(rest) = url.strip_prefix("http://") {
-        ("ws", rest)
-    } else if let Some(rest) = url.strip_prefix("wss://") {
-        ("wss", rest)
-    } else if let Some(rest) = url.strip_prefix("ws://") {
-        ("ws", rest)
+        ("http", rest)
     } else {
-        ("wss", url)
+        ("https", url)
     };
     let rest = rest.trim_end_matches('/');
     if rest.is_empty()
@@ -294,235 +145,572 @@ fn relay_base(url: &str) -> Result<String, String> {
     Ok(format!("{scheme}://{rest}"))
 }
 
-fn is_hex_id(id: &str) -> bool {
-    id.len() == 32 && id.chars().all(|c| c.is_ascii_hexdigit())
+fn is_hex(value: &str, len: usize) -> bool {
+    value.len() == len
+        && value
+            .bytes()
+            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-/// Turns a refused connection into something a person can act on.
-fn connection_error(err: WsError, what: &str) -> String {
-    match &err {
-        WsError::Http(response) => match response.status().as_u16() {
-            404 => "That session isn't running any more.".into(),
-            429 | 503 => "The relay is busy right now. Try again in a few minutes.".into(),
-            _ => format!("Couldn't reach {what}: {err}"),
-        },
-        _ => format!("Couldn't reach {what}: {err}"),
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Which kind of thing a ciphertext is. Bound into the encryption, so one
+/// can't be passed off as another, nor moved to a different project.
+#[derive(Clone, Copy)]
+enum Kind {
+    Update = 1,
+    Awareness = 2,
+    Snapshot = 3,
+    Blob = 4,
+}
+
+struct Keys {
+    project_id: String,
+    access_token: String,
+    cipher: LessSafeKey,
+    blob_ids: hmac::Key,
+    rng: SystemRandom,
+}
+
+impl Keys {
+    fn derive(link: &Link) -> Self {
+        let root = hmac::Key::new(hmac::HMAC_SHA256, &link.key);
+        let sub = |label: &str| hmac::sign(&root, format!("latex4all/{label}").as_bytes());
+        let cipher = UnboundKey::new(&AES_256_GCM, sub("encrypt").as_ref())
+            .map(LessSafeKey::new)
+            .unwrap_or_else(|_| unreachable!("a 32-byte key is always valid for AES-256"));
+        Self {
+            project_id: link.project_id.clone(),
+            access_token: hex(sub("access").as_ref()),
+            cipher,
+            blob_ids: hmac::Key::new(hmac::HMAC_SHA256, sub("blob-id").as_ref()),
+            rng: SystemRandom::new(),
+        }
+    }
+
+    fn access_hash(&self) -> String {
+        hex(digest::digest(&digest::SHA256, self.access_token.as_bytes()).as_ref())
+    }
+
+    fn aad(&self, kind: Kind) -> Vec<u8> {
+        let mut aad = self.project_id.as_bytes().to_vec();
+        aad.push(kind as u8);
+        aad
+    }
+
+    /// `nonce ‖ ciphertext ‖ tag`.
+    fn seal(&self, kind: Kind, plaintext: &[u8]) -> Result<Vec<u8>, String> {
+        let mut nonce = [0u8; NONCE_LEN];
+        self.rng
+            .fill(&mut nonce)
+            .map_err(|_| "No randomness available")?;
+        let mut sealed = plaintext.to_vec();
+        self.cipher
+            .seal_in_place_append_tag(
+                Nonce::assume_unique_for_key(nonce),
+                Aad::from(self.aad(kind)),
+                &mut sealed,
+            )
+            .map_err(|_| "Encryption failed")?;
+        let mut out = nonce.to_vec();
+        out.extend_from_slice(&sealed);
+        Ok(out)
+    }
+
+    fn open(&self, kind: Kind, data: &[u8]) -> Result<Vec<u8>, String> {
+        let corrupt = || "Received data that doesn't decrypt".to_string();
+        if data.len() < NONCE_LEN {
+            return Err(corrupt());
+        }
+        let (nonce, sealed) = data.split_at(NONCE_LEN);
+        let nonce = Nonce::try_assume_unique_for_key(nonce).map_err(|_| corrupt())?;
+        let mut sealed = sealed.to_vec();
+        let plain = self
+            .cipher
+            .open_in_place(nonce, Aad::from(self.aad(kind)), &mut sealed)
+            .map_err(|_| corrupt())?;
+        Ok(plain.to_vec())
+    }
+
+    /// Same file, same id, so the relay stores it once; without the key the
+    /// id says nothing about the content.
+    fn blob_id(&self, plaintext: &[u8]) -> String {
+        hex(hmac::sign(&self.blob_ids, plaintext).as_ref())
     }
 }
 
+// ─── Local files ───
+
+fn state_dir(project_root: &Path) -> PathBuf {
+    project_root.join(".latex4all")
+}
+
+fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let tmp = path.with_extension("tmp");
+    std::fs::write(&tmp, data).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+}
+
+/// Local changes the relay hasn't confirmed, oldest first. Kept on disk so a
+/// change made offline, or just before a crash, still goes out later. The
+/// relay confirms updates in the order they were sent.
+struct Outbox {
+    path: Option<PathBuf>,
+    entries: VecDeque<Vec<u8>>,
+}
+
+impl Outbox {
+    fn load(path: Option<PathBuf>) -> Self {
+        let mut entries = VecDeque::new();
+        if let Some(buf) = path.as_ref().and_then(|p| std::fs::read(p).ok()) {
+            let mut offset = 0;
+            while offset + 4 <= buf.len() {
+                let len = u32::from_be_bytes([
+                    buf[offset],
+                    buf[offset + 1],
+                    buf[offset + 2],
+                    buf[offset + 3],
+                ]) as usize;
+                if offset + 4 + len > buf.len() {
+                    break;
+                }
+                entries.push_back(buf[offset + 4..offset + 4 + len].to_vec());
+                offset += 4 + len;
+            }
+        }
+        Self { path, entries }
+    }
+
+    fn push(&mut self, update: Vec<u8>) {
+        if let Some(path) = &self.path {
+            let mut record = (update.len() as u32).to_be_bytes().to_vec();
+            record.extend_from_slice(&update);
+            let appended = std::fs::create_dir_all(path.parent().unwrap_or(Path::new(".")))
+                .and_then(|_| {
+                    std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(path)
+                })
+                .and_then(|mut file| file.write_all(&record));
+            if let Err(err) = appended {
+                eprintln!("[collab] Couldn't save a pending change: {err}");
+            }
+        }
+        self.entries.push_back(update);
+    }
+
+    /// The oldest change has been stored by the relay (or refused for good).
+    fn confirm(&mut self) {
+        self.entries.pop_front();
+        if self.entries.is_empty() {
+            if let Some(path) = &self.path {
+                let _ = std::fs::write(path, []);
+            }
+        }
+    }
+}
+
+// ─── Connection ───
+
+/// What the webview hears about, all on the `collab://event` channel.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum SyncEvent {
+    /// `connecting`, `online` or `offline`.
+    Status {
+        state: &'static str,
+    },
+    /// Everything the relay had has been delivered.
+    #[serde(rename_all = "camelCase")]
+    CaughtUp {
+        seq: u64,
+        log_entries: u64,
+        log_bytes: u64,
+        pending: usize,
+    },
+    Update {
+        seq: u64,
+        data: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    Snapshot {
+        up_to: u64,
+        data: String,
+    },
+    Awareness {
+        data: String,
+    },
+    /// The relay stored a local change as `seq`.
+    #[serde(rename_all = "camelCase")]
+    Ack {
+        seq: u64,
+        pending: usize,
+    },
+    #[serde(rename_all = "camelCase")]
+    SnapshotAck {
+        up_to: u64,
+        ok: bool,
+    },
+    /// `gone` (the project no longer exists, or the link is wrong), `quota`,
+    /// `too-large` or `corrupt`.
+    Error {
+        code: String,
+    },
+}
+
+enum Command {
+    Publish(Vec<u8>),
+    Awareness(Vec<u8>),
+    Compact {
+        up_to: u64,
+        snapshot: Vec<u8>,
+        live_blobs: Vec<String>,
+    },
+}
+
+enum SessionEnd {
+    Stopped,
+    Dropped,
+}
+
 #[derive(Deserialize)]
-struct RelayRequest {
+#[serde(rename_all = "camelCase")]
+struct RelayMessage {
     #[serde(rename = "type")]
     kind: String,
-    id: String,
-    path: String,
+    #[serde(default)]
+    seq: u64,
+    #[serde(default)]
+    log_entries: u64,
+    #[serde(default)]
+    log_bytes: u64,
+    #[serde(default)]
+    up_to: u64,
+    #[serde(default)]
+    ok: bool,
+    #[serde(default)]
+    code: String,
 }
 
-/// Opens this host's room on the relay. Returns the control connection the
-/// relay announces guests on.
-async fn open_relay_room(base: &str, room: &str, secret: &str) -> Result<ClientStream, String> {
-    let url = format!("{base}/host?room={room}&secret={secret}");
-    tokio_tungstenite::connect_async_with_config(url, None, true)
-        .await
-        .map(|(ws, _)| ws)
-        .map_err(|e| connection_error(e, "the relay"))
+/// Keeps one project connected until the command channel closes: reconnects
+/// with backoff, and holds local changes in the outbox while offline.
+async fn run_connection(
+    link: Link,
+    keys: Arc<Keys>,
+    mut after: u64,
+    mut outbox: Outbox,
+    mut commands: mpsc::UnboundedReceiver<Command>,
+    emit: impl Fn(SyncEvent),
+) {
+    let mut attempt = 0;
+    loop {
+        emit(SyncEvent::Status {
+            state: "connecting",
+        });
+        let request = link.sync_url().into_client_request().map(|mut request| {
+            if let Ok(value) = format!("Bearer {}", keys.access_token).parse() {
+                request.headers_mut().insert(AUTHORIZATION, value);
+            }
+            request
+        });
+        let config = WebSocketConfig::default()
+            .max_message_size(Some(MAX_MESSAGE_BYTES))
+            .max_frame_size(Some(MAX_MESSAGE_BYTES));
+        let connected = match request {
+            Ok(request) => {
+                tokio_tungstenite::connect_async_with_config(request, Some(config), true).await
+            }
+            Err(err) => Err(err),
+        };
+        match connected {
+            Ok((ws, _)) => {
+                attempt = 0;
+                match session(ws, &keys, &mut after, &mut outbox, &mut commands, &emit).await {
+                    SessionEnd::Stopped => return,
+                    SessionEnd::Dropped => {}
+                }
+            }
+            Err(WsError::Http(response)) if matches!(response.status().as_u16(), 401 | 404) => {
+                emit(SyncEvent::Error {
+                    code: "gone".into(),
+                });
+                return;
+            }
+            Err(_) => {}
+        }
+
+        emit(SyncEvent::Status { state: "offline" });
+        let delay = RETRY_DELAYS[attempt.min(RETRY_DELAYS.len() - 1)];
+        attempt += 1;
+        let wait = tokio::time::sleep(Duration::from_secs(delay));
+        tokio::pin!(wait);
+        loop {
+            tokio::select! {
+                _ = &mut wait => break,
+                command = commands.recv() => match command {
+                    None => return,
+                    Some(Command::Publish(update)) => outbox.push(update),
+                    Some(_) => {}
+                },
+            }
+        }
+    }
 }
 
-/// Picks up guests the relay announces until the session stops. Returns true
-/// if the relay went away rather than the session being stopped here.
-async fn serve_via_relay(
-    control: ClientStream,
-    accept_base: String,
-    secret: Arc<str>,
-    token: Arc<str>,
-    relay: Arc<Relay>,
-    project_root: Arc<Path>,
-    mut shutdown: watch::Receiver<()>,
-) -> bool {
-    let (mut sink, mut stream) = control.split();
+async fn session<S>(
+    ws: WebSocketStream<S>,
+    keys: &Keys,
+    after: &mut u64,
+    outbox: &mut Outbox,
+    commands: &mut mpsc::UnboundedReceiver<Command>,
+    emit: &impl Fn(SyncEvent),
+) -> SessionEnd
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let (mut sink, mut stream) = ws.split();
+
+    let sealed_frame = |kind: Kind, frame: u8, data: &[u8]| {
+        keys.seal(kind, data).map(|sealed| {
+            let mut out = vec![frame];
+            out.extend_from_slice(&sealed);
+            Message::Binary(Bytes::from(out))
+        })
+    };
+
+    let hello = json!({ "type": "hello", "after": *after }).to_string();
+    if sink.send(Message::text(hello)).await.is_err() {
+        return SessionEnd::Dropped;
+    }
+    // Whatever didn't get confirmed last time goes again. If the relay had in
+    // fact stored some of it, the copies are harmless: Yjs ignores updates it
+    // already has.
+    for update in outbox.entries.iter() {
+        let Ok(frame) = sealed_frame(Kind::Update, FRAME_UPDATE, update) else {
+            continue;
+        };
+        if sink.send(frame).await.is_err() {
+            return SessionEnd::Dropped;
+        }
+    }
+
     let mut keepalive = tokio::time::interval(KEEPALIVE);
     keepalive.tick().await;
     loop {
         tokio::select! {
-            _ = shutdown.changed() => {
-                let _ = sink.send(Message::Close(None)).await;
-                return false;
-            }
-            _ = keepalive.tick() => {
-                if sink.send(Message::Ping(Bytes::new())).await.is_err() {
-                    return true;
+            command = commands.recv() => match command {
+                None => {
+                    let _ = sink.send(Message::Close(None)).await;
+                    return SessionEnd::Stopped;
                 }
-            }
+                Some(Command::Publish(update)) => {
+                    let frame = sealed_frame(Kind::Update, FRAME_UPDATE, &update);
+                    outbox.push(update);
+                    let Ok(frame) = frame else { continue };
+                    if sink.send(frame).await.is_err() {
+                        return SessionEnd::Dropped;
+                    }
+                }
+                Some(Command::Awareness(data)) => {
+                    if let Ok(frame) = sealed_frame(Kind::Awareness, FRAME_AWARENESS, &data) {
+                        if sink.send(frame).await.is_err() {
+                            return SessionEnd::Dropped;
+                        }
+                    }
+                }
+                Some(Command::Compact { up_to, snapshot, live_blobs }) => {
+                    let Ok(sealed) = keys.seal(Kind::Snapshot, &snapshot) else { continue };
+                    let mut frame = vec![FRAME_SNAPSHOT];
+                    frame.extend_from_slice(&up_to.to_be_bytes());
+                    frame.extend_from_slice(&sealed);
+                    let gc = json!({ "type": "gc", "liveBlobs": live_blobs }).to_string();
+                    if sink.send(Message::Binary(Bytes::from(frame))).await.is_err()
+                        || sink.send(Message::text(gc)).await.is_err()
+                    {
+                        return SessionEnd::Dropped;
+                    }
+                }
+            },
             incoming = stream.next() => match incoming {
+                Some(Ok(Message::Binary(data))) => handle_frame(&data, keys, after, emit),
                 Some(Ok(Message::Text(text))) => {
-                    let Ok(request) = serde_json::from_str::<RelayRequest>(&text) else {
+                    let Ok(message) = serde_json::from_str::<RelayMessage>(&text) else {
                         continue;
                     };
-                    if request.kind != "connect" || !is_hex_id(&request.id) {
-                        continue;
-                    }
-                    match authorize(&request.path, &token) {
-                        Some(route) => {
-                            let url = format!("{accept_base}/{}?secret={secret}", request.id);
-                            let relay = relay.clone();
-                            let project_root = project_root.clone();
-                            let shutdown = shutdown.clone();
-                            tokio::spawn(async move {
-                                if let Ok((ws, _)) =
-                                    tokio_tungstenite::connect_async_with_config(url, None, true).await
-                                {
-                                    serve_route(ws, route, &relay, &project_root, shutdown).await;
-                                }
+                    match message.kind.as_str() {
+                        "caught-up" => {
+                            *after = (*after).max(message.seq);
+                            emit(SyncEvent::Status { state: "online" });
+                            emit(SyncEvent::CaughtUp {
+                                seq: *after,
+                                log_entries: message.log_entries,
+                                log_bytes: message.log_bytes,
+                                pending: outbox.entries.len(),
                             });
                         }
-                        None => {
-                            let reject = json!({ "type": "reject", "id": request.id });
-                            if sink.send(Message::text(reject.to_string())).await.is_err() {
-                                return true;
-                            }
+                        "ack" => {
+                            outbox.confirm();
+                            // Updates reach this socket in seq order, so
+                            // everything before an ack has been delivered.
+                            *after = (*after).max(message.seq);
+                            emit(SyncEvent::Ack { seq: *after, pending: outbox.entries.len() });
                         }
+                        "error" => {
+                            // The relay refused the oldest change for good;
+                            // retrying it would only be refused again. It
+                            // stays in everyone's document, and reaches the
+                            // relay with the next snapshot.
+                            outbox.confirm();
+                            emit(SyncEvent::Error { code: message.code });
+                        }
+                        "snapshot-ack" => emit(SyncEvent::SnapshotAck {
+                            up_to: message.up_to,
+                            ok: message.ok,
+                        }),
+                        _ => {}
                     }
                 }
-                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return true,
+                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return SessionEnd::Dropped,
                 Some(Ok(_)) => {}
             },
+            _ = keepalive.tick() => {
+                if sink.send(Message::Ping(Bytes::new())).await.is_err() {
+                    return SessionEnd::Dropped;
+                }
+            }
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct SnapshotHeader {
-    name: String,
-    files: usize,
-}
-
-/// Precedes each file, whose bytes then follow in one or more binary messages.
-#[derive(Serialize, Deserialize)]
-struct SnapshotFile {
-    path: String,
-    size: u64,
-}
-
-/// Every file a guest needs, as (path relative to the root with `/`
-/// separators, absolute path). Follows the same skipping rules as the file
-/// tree, and leaves out symlinks so nothing outside the folder is sent.
-fn list_project_files(root: &Path) -> Result<Vec<(String, PathBuf)>, String> {
-    fn walk(
-        dir: &Path,
-        prefix: &str,
-        total: &mut u64,
-        out: &mut Vec<(String, PathBuf)>,
-    ) -> Result<(), String> {
-        let entries = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') {
-                continue;
-            }
-            let Ok(meta) = entry.path().symlink_metadata() else {
-                continue;
-            };
-            let relative = format!("{prefix}{name}");
-            if meta.is_dir() {
-                if SKIPPED_DIRECTORIES.contains(&name.to_lowercase().as_str()) {
-                    continue;
-                }
-                walk(&entry.path(), &format!("{relative}/"), total, out)?;
-            } else if meta.is_file() && meta.len() <= SNAPSHOT_FILE_LIMIT {
-                *total += meta.len();
-                if *total > SNAPSHOT_TOTAL_LIMIT {
-                    return Err("This project is too large to share.".into());
-                }
-                out.push((relative, entry.path()));
-            }
-        }
-        Ok(())
-    }
-    let mut out = Vec::new();
-    walk(root, "", &mut 0, &mut out)?;
-    Ok(out)
-}
-
-async fn send_snapshot<S>(mut ws: WebSocketStream<S>, root: &Path) -> Result<(), String>
-where
-    S: AsyncRead + AsyncWrite + Unpin,
-{
-    let owned_root = root.to_path_buf();
-    let files = tokio::task::spawn_blocking(move || list_project_files(&owned_root))
-        .await
-        .map_err(|e| e.to_string())??;
-    let header = SnapshotHeader {
-        name: root
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default(),
-        files: files.len(),
+fn handle_frame(data: &[u8], keys: &Keys, after: &mut u64, emit: &impl Fn(SyncEvent)) {
+    let corrupt = || {
+        emit(SyncEvent::Error {
+            code: "corrupt".into(),
+        })
     };
-    let header = serde_json::to_string(&header).map_err(|e| e.to_string())?;
-    ws.send(Message::text(header))
-        .await
-        .map_err(|e| e.to_string())?;
-    for (path, absolute) in files {
-        // A file that vanished since the listing is sent empty rather than
-        // breaking the count the guest is expecting.
-        let bytes = Bytes::from(tokio::fs::read(&absolute).await.unwrap_or_default());
-        let entry = SnapshotFile {
-            path,
-            size: bytes.len() as u64,
-        };
-        let entry = serde_json::to_string(&entry).map_err(|e| e.to_string())?;
-        ws.send(Message::text(entry))
-            .await
-            .map_err(|e| e.to_string())?;
-        for start in (0..bytes.len()).step_by(SNAPSHOT_CHUNK) {
-            let chunk = bytes.slice(start..(start + SNAPSHOT_CHUNK).min(bytes.len()));
-            ws.send(Message::Binary(chunk))
-                .await
-                .map_err(|e| e.to_string())?;
+    let Some(&frame) = data.first() else { return };
+    let seq_of = |data: &[u8]| {
+        data.get(1..9)
+            .and_then(|b| b.try_into().ok())
+            .map(u64::from_be_bytes)
+    };
+    match frame {
+        FRAME_UPDATE => {
+            let Some(seq) = seq_of(data) else { return };
+            *after = (*after).max(seq);
+            match keys.open(Kind::Update, &data[9..]) {
+                Ok(plain) => emit(SyncEvent::Update {
+                    seq,
+                    data: BASE64.encode(plain),
+                }),
+                Err(_) => corrupt(),
+            }
         }
-    }
-    ws.close(None).await.map_err(|e| e.to_string())
-}
-
-/// The address other machines on the network would reach this one at. The
-/// UDP "connect" only picks a route; nothing is sent.
-fn local_address() -> Option<IpAddr> {
-    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
-    socket.connect("8.8.8.8:80").ok()?;
-    let ip = socket.local_addr().ok()?.ip();
-    (!ip.is_unspecified()).then_some(ip)
-}
-
-// ─── Guest ───
-
-/// An invite as shown to whoever shares — `wss://relay/r/<room>/<token>` over
-/// the internet, `host:port/token` on the same network. Returns the WebSocket
-/// base the guest's endpoints hang off, and the token.
-fn parse_invite(invite: &str) -> Result<(String, String), String> {
-    let invalid = || "That invite code isn't valid.".to_string();
-    let invite = invite.trim();
-    let invite = invite.strip_prefix("latex4all://").unwrap_or(invite);
-    let (base, token) = invite.rsplit_once('/').ok_or_else(invalid)?;
-    if token.len() < 16 || !token.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(invalid());
-    }
-    if base.contains("://") {
-        return Ok((relay_base(base).map_err(|_| invalid())?, token.to_string()));
-    }
-    let authority_ok = !base.is_empty()
-        && base.contains(':')
-        && !base
-            .chars()
-            .any(|c| c.is_whitespace() || matches!(c, '/' | '?' | '#' | '@'));
-    if authority_ok {
-        Ok((format!("ws://{base}"), token.to_string()))
-    } else {
-        Err(invalid())
+        FRAME_SNAPSHOT => {
+            let Some(up_to) = seq_of(data) else { return };
+            *after = (*after).max(up_to);
+            match keys.open(Kind::Snapshot, &data[9..]) {
+                Ok(plain) => emit(SyncEvent::Snapshot {
+                    up_to,
+                    data: BASE64.encode(plain),
+                }),
+                Err(_) => corrupt(),
+            }
+        }
+        FRAME_AWARENESS => {
+            if let Ok(plain) = keys.open(Kind::Awareness, &data[1..]) {
+                emit(SyncEvent::Awareness {
+                    data: BASE64.encode(plain),
+                });
+            }
+        }
+        _ => {}
     }
 }
 
-/// A relative path from the host, turned into one that cannot leave the
-/// destination folder.
+// ─── Relay HTTP: creating projects and files ───
+
+fn http_error(status: u16) -> String {
+    match status {
+        401 | 404 => "This shared project no longer exists.".into(),
+        413 => "too-large".into(),
+        429 => "Too many new shared projects today. Try again tomorrow.".into(),
+        507 => "quota".into(),
+        _ => format!("The relay answered {status}."),
+    }
+}
+
+async fn create_on_relay(link: &Link) -> Result<(), String> {
+    let keys = Keys::derive(link);
+    let body = json!({ "accessHash": keys.access_hash() }).to_string();
+    let response = reqwest::Client::new()
+        .post(link.url(""))
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| format!("Couldn't reach the relay: {e}"))?;
+    match response.status().as_u16() {
+        201 => Ok(()),
+        507 => Err("The relay is full right now. Try again later.".into()),
+        status => Err(http_error(status)),
+    }
+}
+
+/// Uploads a file; returns its id and size.
+async fn upload_blob(link: &Link, file: &Path) -> Result<(String, u64), String> {
+    let data = tokio::fs::read(file).await.map_err(|e| e.to_string())?;
+    if data.len() > MAX_FILE_BYTES {
+        return Err("too-large".into());
+    }
+    let keys = Keys::derive(link);
+    let id = keys.blob_id(&data);
+    let body = keys.seal(Kind::Blob, &data)?;
+    let response = reqwest::Client::new()
+        .put(link.url(&format!("/blobs/{id}")))
+        .bearer_auth(&keys.access_token)
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| format!("Couldn't reach the relay: {e}"))?;
+    match response.status().as_u16() {
+        200 | 201 => Ok((id, data.len() as u64)),
+        status => Err(http_error(status)),
+    }
+}
+
+async fn download_blob(link: &Link, blob_id: &str, dest: &Path) -> Result<(), String> {
+    if !is_hex(blob_id, 64) {
+        return Err("Invalid file id".into());
+    }
+    let keys = Keys::derive(link);
+    let response = reqwest::Client::new()
+        .get(link.url(&format!("/blobs/{blob_id}")))
+        .bearer_auth(&keys.access_token)
+        .send()
+        .await
+        .map_err(|e| format!("Couldn't reach the relay: {e}"))?;
+    let status = response.status().as_u16();
+    if status != 200 {
+        return Err(http_error(status));
+    }
+    let sealed = response.bytes().await.map_err(|e| e.to_string())?;
+    let data = keys.open(Kind::Blob, &sealed)?;
+    if keys.blob_id(&data) != blob_id {
+        return Err("A downloaded file didn't match what was shared.".into());
+    }
+    write_atomic(dest, &data)
+}
+
+// ─── Paths ───
+
+/// A relative path from another device, turned into one that cannot leave
+/// the project folder.
 fn safe_relative_path(path: &str) -> Option<PathBuf> {
     if path.is_empty() || path.contains(['\\', ':', '\0']) {
         return None;
@@ -534,7 +722,13 @@ fn safe_relative_path(path: &str) -> Option<PathBuf> {
         .then_some(candidate)
 }
 
-/// A folder name from the host, made safe and not already taken.
+fn project_file(project_root: &str, relative_path: &str) -> Result<PathBuf, String> {
+    safe_relative_path(relative_path)
+        .map(|relative| Path::new(project_root).join(relative))
+        .ok_or_else(|| "Invalid file path".to_string())
+}
+
+/// A folder name from another device, made safe and not already taken.
 fn unique_destination(parent: &Path, name: &str) -> PathBuf {
     let cleaned: String = name
         .chars()
@@ -555,237 +749,240 @@ fn unique_destination(parent: &Path, name: &str) -> PathBuf {
     candidate
 }
 
-async fn receive_snapshot(base: &str, token: &str, dest_parent: &Path) -> Result<PathBuf, String> {
-    let url = format!("{base}/snapshot?token={token}");
-    let config = WebSocketConfig::default()
-        .max_message_size(Some(SNAPSHOT_CHUNK * 2))
-        .max_frame_size(Some(SNAPSHOT_CHUNK * 2));
-    let (mut ws, _) = tokio_tungstenite::connect_async_with_config(url, Some(config), true)
-        .await
-        .map_err(|e| connection_error(e, "the shared project"))?;
-
-    let header: SnapshotHeader = match ws.next().await {
-        Some(Ok(Message::Text(text))) => serde_json::from_str(&text).map_err(|e| e.to_string())?,
-        _ => return Err("The shared project didn't send its files.".into()),
-    };
-    let dest = unique_destination(dest_parent, &header.name);
-    std::fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
-
-    let result = async {
-        let interrupted = || "The download was interrupted.".to_string();
-        let mut total = 0u64;
-        for _ in 0..header.files {
-            let entry: SnapshotFile = match ws.next().await {
-                Some(Ok(Message::Text(text))) => {
-                    serde_json::from_str(&text).map_err(|_| interrupted())?
-                }
-                _ => return Err(interrupted()),
-            };
-            total += entry.size;
-            if entry.size > SNAPSHOT_FILE_LIMIT || total > SNAPSHOT_TOTAL_LIMIT {
-                return Err("The shared project is too large.".to_string());
-            }
-            let mut bytes = Vec::with_capacity(entry.size as usize);
-            while (bytes.len() as u64) < entry.size {
-                match ws.next().await {
-                    Some(Ok(Message::Binary(chunk))) => bytes.extend_from_slice(&chunk),
-                    _ => return Err(interrupted()),
-                }
-            }
-            if bytes.len() as u64 != entry.size {
-                return Err(interrupted());
-            }
-            let Some(relative) = safe_relative_path(&entry.path) else {
-                continue;
-            };
-            let target = dest.join(relative);
-            if let Some(parent) = target.parent() {
-                tokio::fs::create_dir_all(parent)
-                    .await
-                    .map_err(|e| e.to_string())?;
-            }
-            tokio::fs::write(&target, &bytes)
-                .await
-                .map_err(|e| e.to_string())?;
-        }
-        Ok(())
-    }
-    .await;
-
-    if let Err(err) = result {
-        let _ = std::fs::remove_dir_all(&dest);
-        return Err(err);
-    }
-    Ok(dest)
-}
-
 // ─── Commands ───
 
-struct Session {
-    relay: Arc<Relay>,
-    /// Never sent on; dropping it is what tells every task to stop.
-    _shutdown: watch::Sender<()>,
-}
-
+/// One connection per window, since each window can have its own project open.
 #[derive(Default)]
 pub struct CollabState {
-    session: Mutex<Option<Session>>,
+    connections: Mutex<HashMap<String, mpsc::UnboundedSender<Command>>>,
 }
 
 impl CollabState {
-    fn replace(&self, session: Option<Session>) {
-        if let Ok(mut current) = self.session.lock() {
-            *current = session;
-        }
-    }
-}
-
-fn webview_delivery(window: &WebviewWindow) -> impl Fn(LocalEvent) + Send + 'static {
-    let window = window.clone();
-    move |event| {
-        let target = EventTarget::webview_window(window.label());
-        let _ = match event {
-            LocalEvent::Message(data) => {
-                window.emit_to(target, "collab://message", BASE64.encode(&data))
+    fn send(&self, window: &WebviewWindow, command: Command) {
+        if let Ok(connections) = self.connections.lock() {
+            if let Some(tx) = connections.get(window.label()) {
+                let _ = tx.send(command);
             }
-            LocalEvent::Resync => window.emit_to(target, "collab://resync", ()),
-        };
+        }
     }
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HostInfo {
-    invite: String,
+fn decode(data: &str) -> Result<Vec<u8>, String> {
+    BASE64.decode(data).map_err(|e| e.to_string())
 }
 
-/// Starts sharing `project_root` — through the relay at `relay_url` if one is
-/// given, otherwise on a port others on the same network can reach.
+/// Creates a new shared project on the relay and returns its link. Nothing
+/// is written locally until the webview links a folder to it.
 #[tauri::command]
-pub async fn collab_host(
-    window: WebviewWindow,
-    state: tauri::State<'_, CollabState>,
-    project_root: String,
-    relay_url: Option<String>,
-) -> Result<HostInfo, String> {
-    state.replace(None);
-    let token = uuid::Uuid::new_v4().simple().to_string();
-    let project_root: Arc<Path> = Arc::from(PathBuf::from(project_root));
-    let relay = Relay::new();
-    let (shutdown_tx, shutdown_rx) = watch::channel(());
-
-    let invite = match relay_url.filter(|url| !url.trim().is_empty()) {
-        Some(url) => {
-            let base = relay_base(&url)?;
-            let room = uuid::Uuid::new_v4().simple().to_string();
-            let secret = uuid::Uuid::new_v4().simple().to_string();
-            let control = open_relay_room(&base, &room, &secret).await?;
-            let serving = serve_via_relay(
-                control,
-                format!("{base}/accept/{room}"),
-                Arc::from(secret.as_str()),
-                Arc::from(token.as_str()),
-                relay.clone(),
-                project_root,
-                shutdown_rx.clone(),
-            );
-            let window = window.clone();
-            let ended = shutdown_rx.clone();
-            tokio::spawn(async move {
-                // Tell the webview if the relay dropped us, not if we stopped.
-                if serving.await && ended.has_changed().is_ok() {
-                    let target = EventTarget::webview_window(window.label());
-                    let _ = window.emit_to(target, "collab://closed", ());
-                }
-            });
-            format!("{base}/r/{room}/{token}")
-        }
-        None => {
-            let listener = match TcpListener::bind(("0.0.0.0", PREFERRED_PORT)).await {
-                Ok(listener) => listener,
-                Err(_) => TcpListener::bind(("0.0.0.0", 0))
-                    .await
-                    .map_err(|e| format!("Couldn't start sharing: {e}"))?,
-            };
-            let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-            tokio::spawn(serve(
-                listener,
-                relay.clone(),
-                Arc::from(token.as_str()),
-                project_root,
-                shutdown_rx.clone(),
-            ));
-            let host = local_address().map_or_else(|| "127.0.0.1".to_string(), |ip| ip.to_string());
-            format!("{host}:{port}/{token}")
-        }
-    };
-
-    spawn_local_bridge(&relay, shutdown_rx, webview_delivery(&window));
-    state.replace(Some(Session {
-        relay,
-        _shutdown: shutdown_tx,
-    }));
-    Ok(HostInfo { invite })
+pub async fn collab_create(relay_url: Option<String>) -> Result<String, String> {
+    let link = Link::generate(relay_url.as_deref().unwrap_or(DEFAULT_RELAY))?;
+    create_on_relay(&link).await?;
+    Ok(link.to_string())
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct JoinInfo {
-    project_path: String,
+pub struct LinkInfo {
+    link: String,
+    project_id: String,
 }
 
+/// Checks a link someone pasted, and says which project it is.
 #[tauri::command]
-pub async fn collab_join(
-    window: WebviewWindow,
-    state: tauri::State<'_, CollabState>,
-    invite: String,
-    dest_parent: String,
-) -> Result<JoinInfo, String> {
-    state.replace(None);
-    let (base, token) = parse_invite(&invite)?;
-    let project_path = receive_snapshot(&base, &token, Path::new(&dest_parent)).await?;
+pub fn collab_parse_link(link: String) -> Result<LinkInfo, String> {
+    let link = Link::parse(&link)?;
+    Ok(LinkInfo {
+        project_id: link.project_id.clone(),
+        link: link.to_string(),
+    })
+}
 
-    let url = format!("{base}/sync?token={token}");
-    let (ws, _) = tokio_tungstenite::connect_async_with_config(url, None, true)
-        .await
-        .map_err(|e| connection_error(e, "the shared project"))?;
-
-    let relay = Relay::new();
-    let (shutdown_tx, shutdown_rx) = watch::channel(());
-    spawn_local_bridge(&relay, shutdown_rx.clone(), webview_delivery(&window));
-    let pump_relay = relay.clone();
-    let ended = shutdown_rx.clone();
-    tokio::spawn(async move {
-        pump(ws, &pump_relay, shutdown_rx).await;
-        // Only tell the webview if the host went away, not if we left.
-        if ended.has_changed().is_ok() {
-            let target = EventTarget::webview_window(window.label());
-            let _ = window.emit_to(target, "collab://closed", ());
-        }
-    });
-    state.replace(Some(Session {
-        relay,
-        _shutdown: shutdown_tx,
-    }));
-
-    Ok(JoinInfo {
-        project_path: project_path.to_string_lossy().into_owned(),
+/// The link of the shared project in this folder, if it is one.
+#[tauri::command]
+pub fn collab_read_link(project_root: String) -> Option<LinkInfo> {
+    let path = state_dir(Path::new(&project_root)).join(LINK_FILE);
+    let stored: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+    let link = Link::parse(stored.get("link")?.as_str()?).ok()?;
+    Some(LinkInfo {
+        project_id: link.project_id.clone(),
+        link: link.to_string(),
     })
 }
 
 #[tauri::command]
-pub fn collab_send(state: tauri::State<'_, CollabState>, data: String) -> Result<(), String> {
-    let bytes = BASE64.decode(data).map_err(|e| e.to_string())?;
-    let session = state.session.lock().map_err(|e| e.to_string())?;
-    if let Some(session) = session.as_ref() {
-        session.relay.publish(LOCAL_PEER, Bytes::from(bytes));
+pub fn collab_write_link(project_root: String, link: String) -> Result<(), String> {
+    let link = Link::parse(&link)?;
+    let dir = state_dir(Path::new(&project_root));
+    let body = json!({ "link": link.to_string() }).to_string();
+    write_atomic(&dir.join(LINK_FILE), body.as_bytes())
+}
+
+/// Stops treating this folder as a shared project. The files stay.
+#[tauri::command]
+pub fn collab_remove_link(project_root: String) -> Result<(), String> {
+    let dir = state_dir(Path::new(&project_root));
+    for name in [LINK_FILE, DOC_FILE, OUTBOX_FILE] {
+        match std::fs::remove_file(dir.join(name)) {
+            Ok(()) => {}
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.to_string()),
+        }
     }
     Ok(())
 }
 
+#[derive(Serialize)]
+pub struct SavedDoc {
+    seq: u64,
+    data: String,
+}
+
 #[tauri::command]
-pub fn collab_stop(state: tauri::State<'_, CollabState>) {
-    state.replace(None);
+pub fn collab_load_doc(project_root: String) -> Option<SavedDoc> {
+    let buf = std::fs::read(state_dir(Path::new(&project_root)).join(DOC_FILE)).ok()?;
+    let seq = u64::from_be_bytes(buf.get(0..8)?.try_into().ok()?);
+    Some(SavedDoc {
+        seq,
+        data: BASE64.encode(&buf[8..]),
+    })
+}
+
+/// Saves the document together with the last relay seq it includes.
+#[tauri::command]
+pub fn collab_save_doc(project_root: String, seq: u64, data: String) -> Result<(), String> {
+    let mut buf = seq.to_be_bytes().to_vec();
+    buf.extend_from_slice(&decode(&data)?);
+    write_atomic(&state_dir(Path::new(&project_root)).join(DOC_FILE), &buf)
+}
+
+/// Connects this window to a shared project, replacing any earlier
+/// connection. `after` is the last seq the saved document includes; with no
+/// `project_root` (while joining) local changes aren't kept across restarts.
+#[tauri::command]
+pub fn collab_connect(
+    window: WebviewWindow,
+    state: tauri::State<'_, CollabState>,
+    link: String,
+    after: u64,
+    project_root: Option<String>,
+) -> Result<(), String> {
+    let link = Link::parse(&link)?;
+    let keys = Arc::new(Keys::derive(&link));
+    let outbox =
+        Outbox::load(project_root.map(|root| state_dir(Path::new(&root)).join(OUTBOX_FILE)));
+    let (tx, rx) = mpsc::unbounded_channel();
+    {
+        let mut connections = state.connections.lock().map_err(|e| e.to_string())?;
+        connections.insert(window.label().to_string(), tx);
+    }
+    let target = window.clone();
+    tauri::async_runtime::spawn(run_connection(
+        link,
+        keys,
+        after,
+        outbox,
+        rx,
+        move |event| {
+            let _ = target.emit_to(
+                EventTarget::webview_window(target.label()),
+                "collab://event",
+                event,
+            );
+        },
+    ));
+    Ok(())
+}
+
+#[tauri::command]
+pub fn collab_disconnect(window: WebviewWindow, state: tauri::State<'_, CollabState>) {
+    if let Ok(mut connections) = state.connections.lock() {
+        connections.remove(window.label());
+    }
+}
+
+#[tauri::command]
+pub fn collab_publish(
+    window: WebviewWindow,
+    state: tauri::State<'_, CollabState>,
+    data: String,
+) -> Result<(), String> {
+    let update = decode(&data)?;
+    if update.len() > MAX_UPDATE_BYTES {
+        return Err("too-large".into());
+    }
+    state.send(&window, Command::Publish(update));
+    Ok(())
+}
+
+#[tauri::command]
+pub fn collab_awareness(
+    window: WebviewWindow,
+    state: tauri::State<'_, CollabState>,
+    data: String,
+) -> Result<(), String> {
+    state.send(&window, Command::Awareness(decode(&data)?));
+    Ok(())
+}
+
+/// Replaces the relay's history up to `up_to` with the whole document, and
+/// lets it delete files no longer used.
+#[tauri::command]
+pub fn collab_compact(
+    window: WebviewWindow,
+    state: tauri::State<'_, CollabState>,
+    up_to: u64,
+    data: String,
+    live_blobs: Vec<String>,
+) -> Result<(), String> {
+    let live_blobs = live_blobs.into_iter().filter(|b| is_hex(b, 64)).collect();
+    state.send(
+        &window,
+        Command::Compact {
+            up_to,
+            snapshot: decode(&data)?,
+            live_blobs,
+        },
+    );
+    Ok(())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadedBlob {
+    blob_id: String,
+    size: u64,
+}
+
+#[tauri::command]
+pub async fn collab_upload_blob(
+    link: String,
+    project_root: String,
+    relative_path: String,
+) -> Result<UploadedBlob, String> {
+    let link = Link::parse(&link)?;
+    let file = project_file(&project_root, &relative_path)?;
+    let (blob_id, size) = upload_blob(&link, &file).await?;
+    Ok(UploadedBlob { blob_id, size })
+}
+
+#[tauri::command]
+pub async fn collab_download_blob(
+    link: String,
+    project_root: String,
+    relative_path: String,
+    blob_id: String,
+) -> Result<(), String> {
+    let link = Link::parse(&link)?;
+    let file = project_file(&project_root, &relative_path)?;
+    download_blob(&link, &blob_id, &file).await
+}
+
+/// Creates the folder a joined project goes in, next to the user's others.
+#[tauri::command]
+pub fn collab_create_folder(dest_parent: String, name: String) -> Result<String, String> {
+    let path = unique_destination(Path::new(&dest_parent), &name);
+    std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 /// A starting point for the name others see; the user can change it.
@@ -802,89 +999,123 @@ pub fn collab_default_name() -> String {
 mod tests {
     use super::*;
 
-    async fn next_binary<S: AsyncRead + AsyncWrite + Unpin>(ws: &mut WebSocketStream<S>) -> Bytes {
-        let read = async {
-            loop {
-                if let Some(Ok(Message::Binary(data))) = ws.next().await {
-                    return data;
-                }
-            }
-        };
-        tokio::time::timeout(Duration::from_secs(2), read)
-            .await
-            .unwrap()
+    fn temp_dir(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("collab-{label}-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
     }
 
     #[test]
-    fn authorize_checks_route_and_token() {
-        let token = "0123456789abcdef0123456789abcdef";
+    fn links_round_trip_and_reject_garbage() {
+        let link = Link::generate("https://collab.example.com/").unwrap();
+        let text = link.to_string();
+        assert!(text.starts_with("https://collab.example.com/p/"));
+        assert_eq!(Link::parse(&format!("  {text}\n")).unwrap(), link);
         assert_eq!(
-            authorize(&format!("/sync?token={token}"), token),
-            Some(Route::Sync)
+            link.sync_url(),
+            format!("wss://collab.example.com/p/{}/sync", link.project_id)
         );
-        assert_eq!(
-            authorize(&format!("/snapshot?x=1&token={token}"), token),
-            Some(Route::Snapshot)
-        );
-        assert_eq!(authorize("/sync?token=nope", token), None);
-        assert_eq!(authorize("/sync", token), None);
-        assert_eq!(authorize(&format!("/other?token={token}"), token), None);
+        let local = Link::generate("http://127.0.0.1:8082").unwrap();
+        assert!(local.sync_url().starts_with("ws://127.0.0.1:8082/p/"));
+
+        let (url, key) = text.split_once('#').unwrap();
+        assert!(Link::parse(url).is_err());
+        assert!(Link::parse(&format!("{url}#{}", &key[1..])).is_err());
+        assert!(Link::parse(&format!("https://collab.example.com/p/nothex#{key}")).is_err());
+        assert!(Link::parse(&format!("https://user@evil/p/{}#{key}", link.project_id)).is_err());
     }
 
     #[test]
-    fn invites_parse_and_reject_garbage() {
-        let token = "0123456789abcdef0123456789abcdef";
+    fn encryption_round_trips_and_detects_tampering() {
+        let link = Link::generate(DEFAULT_RELAY).unwrap();
+        let keys = Keys::derive(&link);
+        let sealed = keys.seal(Kind::Update, b"\\section{Intro}").unwrap();
+        assert!(!sealed.windows(7).any(|w| w == b"section"));
         assert_eq!(
-            parse_invite(&format!("  192.168.1.20:47100/{token}\n")).unwrap(),
-            ("ws://192.168.1.20:47100".to_string(), token.to_string())
+            keys.open(Kind::Update, &sealed).unwrap(),
+            b"\\section{Intro}"
         );
-        let room = "fedcba9876543210fedcba9876543210";
-        assert_eq!(
-            parse_invite(&format!("wss://collab.example.com/r/{room}/{token}")).unwrap(),
-            (
-                format!("wss://collab.example.com/r/{room}"),
-                token.to_string()
-            )
+
+        let mut tampered = sealed.clone();
+        *tampered.last_mut().unwrap() ^= 1;
+        assert!(keys.open(Kind::Update, &tampered).is_err());
+        // An update can't be replayed as a snapshot, or into another project.
+        assert!(keys.open(Kind::Snapshot, &sealed).is_err());
+        let other = Keys::derive(&Link {
+            project_id: "0".repeat(32),
+            ..link.clone()
+        });
+        assert!(other.open(Kind::Update, &sealed).is_err());
+        // Same content, different ciphertext each time.
+        assert_ne!(
+            sealed,
+            keys.seal(Kind::Update, b"\\section{Intro}").unwrap()
         );
-        assert!(parse_invite(&format!("wss://user@evil/r/{room}/{token}")).is_err());
-        assert!(parse_invite(&format!("latex4all://host.local:1/{token}")).is_ok());
-        assert!(parse_invite("192.168.1.20:47100").is_err());
-        assert!(parse_invite(&format!("user@evil:1/{token}")).is_err());
-        assert!(parse_invite("192.168.1.20:47100/not-hex-token-at-all").is_err());
     }
 
     #[test]
-    fn relay_addresses_become_websocket_urls() {
+    fn derived_keys_are_independent() {
+        let link = Link::generate(DEFAULT_RELAY).unwrap();
+        let keys = Keys::derive(&link);
+        assert!(is_hex(&keys.access_token, 64));
+        assert!(!keys.access_token.contains(&hex(&link.key)));
         assert_eq!(
-            relay_base("https://collab.example.com/").unwrap(),
-            "wss://collab.example.com"
+            keys.blob_id(b"figure"),
+            Keys::derive(&link).blob_id(b"figure")
         );
-        assert_eq!(
-            relay_base("collab.example.com").unwrap(),
-            "wss://collab.example.com"
+        let another = Link::generate(DEFAULT_RELAY).unwrap();
+        assert_ne!(
+            keys.blob_id(b"figure"),
+            Keys::derive(&another).blob_id(b"figure")
         );
-        assert_eq!(
-            relay_base("http://127.0.0.1:8082").unwrap(),
-            "ws://127.0.0.1:8082"
-        );
-        assert!(relay_base("https://").is_err());
-        assert!(relay_base("https://a b").is_err());
     }
 
     #[test]
-    fn relative_paths_cannot_escape() {
+    fn outbox_survives_restarts_and_empties_when_confirmed() {
+        let dir = temp_dir("outbox");
+        let path = dir.join(".latex4all").join(OUTBOX_FILE);
+        let mut outbox = Outbox::load(Some(path.clone()));
+        outbox.push(vec![1, 2]);
+        outbox.push(vec![3]);
+        let reloaded = Outbox::load(Some(path.clone()));
+        assert_eq!(reloaded.entries, VecDeque::from([vec![1, 2], vec![3]]));
+
+        outbox.confirm();
+        assert_eq!(outbox.entries.len(), 1);
+        outbox.confirm();
+        assert_eq!(std::fs::read(&path).unwrap().len(), 0);
+        assert!(Outbox::load(Some(path)).entries.is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn local_files_save_and_load() {
+        let dir = temp_dir("files");
+        let root = dir.to_string_lossy().into_owned();
+        assert!(collab_load_doc(root.clone()).is_none());
+        collab_save_doc(root.clone(), 42, BASE64.encode([7u8, 8, 9])).unwrap();
+        let saved = collab_load_doc(root.clone()).unwrap();
+        assert_eq!((saved.seq, saved.data), (42, BASE64.encode([7u8, 8, 9])));
+
+        let link = Link::generate(DEFAULT_RELAY).unwrap().to_string();
+        assert!(collab_read_link(root.clone()).is_none());
+        collab_write_link(root.clone(), link.clone()).unwrap();
+        assert_eq!(collab_read_link(root.clone()).unwrap().link, link);
+        collab_remove_link(root.clone()).unwrap();
+        assert!(collab_read_link(root.clone()).is_none());
+        assert!(collab_load_doc(root).is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn paths_from_others_cannot_escape() {
         assert!(safe_relative_path("figures/plot.png").is_some());
         assert!(safe_relative_path("../outside.tex").is_none());
         assert!(safe_relative_path("a/../../b").is_none());
         assert!(safe_relative_path("/etc/passwd").is_none());
         assert!(safe_relative_path("C:\\Windows").is_none());
-        assert!(safe_relative_path("a\\..\\b").is_none());
         assert!(safe_relative_path("").is_none());
-    }
-
-    #[test]
-    fn destinations_do_not_overwrite() {
-        let dir = std::env::temp_dir().join(format!("collab-dest-{}", uuid::Uuid::new_v4()));
+        let dir = temp_dir("dest");
         std::fs::create_dir_all(dir.join("Thesis")).unwrap();
         assert_eq!(unique_destination(&dir, "Thesis"), dir.join("Thesis (2)"));
         assert_eq!(
@@ -894,165 +1125,173 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
-    /// Two sockets and the local webview: whatever one sends, the others get.
-    #[tokio::test]
-    async fn relay_broadcasts_to_everyone_else() {
-        let token = "0123456789abcdef0123456789abcdef";
-        let root = std::env::temp_dir().join(format!("collab-relay-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(root.join("figures")).unwrap();
-        std::fs::create_dir_all(root.join(".latex4all")).unwrap();
-        std::fs::write(root.join("main.tex"), "\\documentclass{article}").unwrap();
-        std::fs::write(root.join("figures/plot.png"), [0u8, 159, 146, 150]).unwrap();
-        std::fs::write(root.join(".latex4all/history"), "private").unwrap();
-        // Bigger than one chunk, so it has to be reassembled.
-        let big: Vec<u8> = (0..(SNAPSHOT_CHUNK * 2 + 17))
-            .map(|i| (i % 251) as u8)
-            .collect();
-        std::fs::write(root.join("figures/big.pdf"), &big).unwrap();
-
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let authority = listener.local_addr().unwrap().to_string();
-        let relay = Relay::new();
-        let (shutdown_tx, shutdown_rx) = watch::channel(());
-        let (local_tx, mut local_rx) = tokio::sync::mpsc::unbounded_channel();
-        spawn_local_bridge(&relay, shutdown_rx.clone(), move |event| {
-            if let LocalEvent::Message(data) = event {
-                let _ = local_tx.send(data);
-            }
-        });
-        tokio::spawn(serve(
-            listener,
-            relay.clone(),
-            Arc::from(token),
-            Arc::from(root.clone()),
-            shutdown_rx,
+    /// Starts a connection whose events land in a channel.
+    fn start(
+        link: &Link,
+        after: u64,
+        outbox: Outbox,
+    ) -> (
+        mpsc::UnboundedSender<Command>,
+        mpsc::UnboundedReceiver<SyncEvent>,
+    ) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let (events_tx, events_rx) = mpsc::unbounded_channel();
+        tokio::spawn(run_connection(
+            link.clone(),
+            Arc::new(Keys::derive(link)),
+            after,
+            outbox,
+            rx,
+            move |event| {
+                let _ = events_tx.send(event);
+            },
         ));
+        (tx, events_rx)
+    }
 
-        // Wrong token is refused.
-        let refused =
-            tokio_tungstenite::connect_async(format!("ws://{authority}/sync?token=bad")).await;
-        assert!(refused.is_err());
-
-        // The snapshot has the files but not the hidden history folder.
-        let dest = std::env::temp_dir().join(format!("collab-guest-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dest).unwrap();
-        let project = receive_snapshot(&format!("ws://{authority}"), token, &dest)
-            .await
-            .unwrap();
-        assert_eq!(std::fs::read(project.join("figures/big.pdf")).unwrap(), big);
-        assert_eq!(
-            std::fs::read_to_string(project.join("main.tex")).unwrap(),
-            "\\documentclass{article}"
-        );
-        assert_eq!(
-            std::fs::read(project.join("figures/plot.png")).unwrap(),
-            [0u8, 159, 146, 150]
-        );
-        assert!(!project.join(".latex4all").exists());
-
-        let url = format!("ws://{authority}/sync?token={token}");
-        let (mut a, _) = tokio_tungstenite::connect_async(url.clone()).await.unwrap();
-        let (mut b, _) = tokio_tungstenite::connect_async(url).await.unwrap();
-        tokio::time::sleep(Duration::from_millis(50)).await;
-
-        a.send(Message::binary(vec![1u8, 2, 3])).await.unwrap();
-        assert_eq!(next_binary(&mut b).await.as_ref(), [1, 2, 3]);
-        assert_eq!(local_rx.recv().await.unwrap().as_ref(), [1, 2, 3]);
-
-        relay.publish(LOCAL_PEER, Bytes::from_static(&[9]));
-        assert_eq!(next_binary(&mut a).await.as_ref(), [9]);
-        assert_eq!(next_binary(&mut b).await.as_ref(), [9]);
-
-        // A sender never hears its own message back.
-        assert!(tokio::time::timeout(Duration::from_millis(200), a.next())
-            .await
-            .is_err());
-
-        // Stopping the session closes everyone's connection.
-        drop(shutdown_tx);
-        let closed = tokio::time::timeout(Duration::from_secs(2), async {
+    async fn wait_for(
+        events: &mut mpsc::UnboundedReceiver<SyncEvent>,
+        mut matches: impl FnMut(&SyncEvent) -> bool,
+    ) -> SyncEvent {
+        tokio::time::timeout(Duration::from_secs(10), async {
             loop {
-                match b.next().await {
-                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => return,
-                    _ => {}
+                let event = events.recv().await.expect("connection ended");
+                if matches(&event) {
+                    return event;
                 }
             }
         })
-        .await;
-        assert!(closed.is_ok());
-
-        std::fs::remove_dir_all(root).unwrap();
-        std::fs::remove_dir_all(dest).unwrap();
+        .await
+        .expect("timed out")
     }
 
-    /// Hosting through a real relay. Needs one running, e.g.
+    /// Against a real relay, e.g.
     /// `RELAY_URL=http://127.0.0.1:8082 cargo test -- --ignored`
     /// with `node apps/relay/relay.mjs` started first.
     #[tokio::test]
     #[ignore]
-    async fn hosts_through_the_relay() {
-        let base = relay_base(&std::env::var("RELAY_URL").expect("RELAY_URL")).unwrap();
-        let token = uuid::Uuid::new_v4().simple().to_string();
-        let room = uuid::Uuid::new_v4().simple().to_string();
-        let secret = uuid::Uuid::new_v4().simple().to_string();
-        let root = std::env::temp_dir().join(format!("collab-relay-host-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&root).unwrap();
-        std::fs::write(root.join("main.tex"), "\\begin{document}").unwrap();
-        let big: Vec<u8> = (0..(SNAPSHOT_CHUNK * 3 + 5))
-            .map(|i| (i % 253) as u8)
-            .collect();
-        std::fs::write(root.join("figure.png"), &big).unwrap();
+    async fn syncs_through_the_relay() {
+        let relay = std::env::var("RELAY_URL").expect("RELAY_URL");
+        let link = Link::parse(&collab_create(Some(relay.clone())).await.unwrap()).unwrap();
 
-        let relay = Relay::new();
-        let (shutdown_tx, shutdown_rx) = watch::channel(());
-        let control = open_relay_room(&base, &room, &secret).await.unwrap();
-        let serving = tokio::spawn(serve_via_relay(
-            control,
-            format!("{base}/accept/{room}"),
-            Arc::from(secret.as_str()),
-            Arc::from(token.as_str()),
-            relay.clone(),
-            Arc::from(root.clone()),
-            shutdown_rx,
-        ));
-
-        let (guest_base, guest_token) = parse_invite(&format!("{base}/r/{room}/{token}")).unwrap();
-        let dest =
-            std::env::temp_dir().join(format!("collab-relay-guest-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dest).unwrap();
-        let project = receive_snapshot(&guest_base, &guest_token, &dest)
-            .await
-            .unwrap();
-        assert_eq!(std::fs::read(project.join("figure.png")).unwrap(), big);
-
-        // A wrong token is turned away by the host, through the relay.
-        let wrong = format!("{guest_base}/sync?token={}", uuid::Uuid::new_v4().simple());
-        let (mut intruder, _) = tokio_tungstenite::connect_async(wrong).await.unwrap();
-        let refused = tokio::time::timeout(Duration::from_secs(5), async {
-            loop {
-                match intruder.next().await {
-                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => return,
-                    _ => {}
-                }
-            }
+        // A shares while online.
+        let dir_a = temp_dir("device-a");
+        let outbox_a = Outbox::load(Some(dir_a.join(OUTBOX_FILE)));
+        let (a, mut a_events) = start(&link, 0, outbox_a);
+        wait_for(&mut a_events, |e| matches!(e, SyncEvent::CaughtUp { .. })).await;
+        a.send(Command::Publish(b"first".to_vec())).unwrap();
+        a.send(Command::Publish(b"second".to_vec())).unwrap();
+        let ack = wait_for(&mut a_events, |e| {
+            matches!(e, SyncEvent::Ack { pending: 0, .. })
         })
         .await;
-        assert!(refused.is_ok());
+        assert_eq!(ack, SyncEvent::Ack { seq: 2, pending: 0 });
+        drop(a);
 
-        let sync = format!("{guest_base}/sync?token={guest_token}");
-        let (mut a, _) = tokio_tungstenite::connect_async(sync.clone())
+        // B made a change while offline: it's in B's outbox on disk, and
+        // goes out as soon as B connects.
+        let dir_b = temp_dir("device-b");
+        let mut offline = Outbox::load(Some(dir_b.join(OUTBOX_FILE)));
+        offline.push(b"written on a plane".to_vec());
+        let (b, mut b_events) = start(&link, 0, Outbox::load(Some(dir_b.join(OUTBOX_FILE))));
+        let mut received = Vec::new();
+        wait_for(&mut b_events, |e| {
+            if let SyncEvent::Update { data, .. } = e {
+                received.push(BASE64.decode(data).unwrap());
+            }
+            matches!(e, SyncEvent::CaughtUp { .. })
+        })
+        .await;
+        assert_eq!(received, vec![b"first".to_vec(), b"second".to_vec()]);
+        wait_for(&mut b_events, |e| {
+            matches!(e, SyncEvent::Ack { pending: 0, .. })
+        })
+        .await;
+        assert_eq!(std::fs::read(dir_b.join(OUTBOX_FILE)).unwrap().len(), 0);
+
+        // A reopens from where it left off and gets only B's change.
+        let (a, mut a_events) = start(&link, 2, Outbox::load(None));
+        let update = wait_for(&mut a_events, |e| matches!(e, SyncEvent::Update { .. })).await;
+        assert_eq!(
+            update,
+            SyncEvent::Update {
+                seq: 3,
+                data: BASE64.encode(b"written on a plane")
+            }
+        );
+        wait_for(&mut a_events, |e| matches!(e, SyncEvent::CaughtUp { .. })).await;
+
+        // Live: cursors from B reach A decrypted.
+        b.send(Command::Awareness(b"cursor".to_vec())).unwrap();
+        let cursor = wait_for(&mut a_events, |e| matches!(e, SyncEvent::Awareness { .. })).await;
+        assert_eq!(
+            cursor,
+            SyncEvent::Awareness {
+                data: BASE64.encode(b"cursor")
+            }
+        );
+
+        // Compaction: someone opening fresh gets one snapshot instead.
+        a.send(Command::Compact {
+            up_to: 3,
+            snapshot: b"everything".to_vec(),
+            live_blobs: vec![],
+        })
+        .unwrap();
+        let compacted = wait_for(&mut a_events, |e| {
+            matches!(e, SyncEvent::SnapshotAck { .. })
+        })
+        .await;
+        assert_eq!(compacted, SyncEvent::SnapshotAck { up_to: 3, ok: true });
+        let (_c, mut c_events) = start(&link, 0, Outbox::load(None));
+        let snapshot = wait_for(&mut c_events, |e| matches!(e, SyncEvent::Snapshot { .. })).await;
+        assert_eq!(
+            snapshot,
+            SyncEvent::Snapshot {
+                up_to: 3,
+                data: BASE64.encode(b"everything")
+            }
+        );
+
+        // Files: encrypted up, verified down, stored once.
+        let figure: Vec<u8> = (0..300_000).map(|i| (i % 251) as u8).collect();
+        std::fs::write(dir_a.join("figure.png"), &figure).unwrap();
+        let (id, size) = upload_blob(&link, &dir_a.join("figure.png")).await.unwrap();
+        assert_eq!(size, figure.len() as u64);
+        assert_eq!(
+            upload_blob(&link, &dir_a.join("figure.png"))
+                .await
+                .unwrap()
+                .0,
+            id
+        );
+        download_blob(&link, &id, &dir_b.join("figures/figure.png"))
             .await
             .unwrap();
-        let (mut b, _) = tokio_tungstenite::connect_async(sync).await.unwrap();
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        a.send(Message::binary(vec![4u8, 5, 6])).await.unwrap();
-        assert_eq!(next_binary(&mut b).await.as_ref(), [4, 5, 6]);
-        relay.publish(LOCAL_PEER, Bytes::from_static(&[7]));
-        assert_eq!(next_binary(&mut a).await.as_ref(), [7]);
+        assert_eq!(
+            std::fs::read(dir_b.join("figures/figure.png")).unwrap(),
+            figure
+        );
 
-        drop(shutdown_tx);
-        assert!(!serving.await.unwrap());
-        std::fs::remove_dir_all(root).unwrap();
-        std::fs::remove_dir_all(dest).unwrap();
+        // The wrong key is turned away.
+        let wrong = Link {
+            key: [7; 32],
+            ..link.clone()
+        };
+        let (_w, mut w_events) = start(&wrong, 0, Outbox::load(None));
+        let refused = wait_for(&mut w_events, |e| matches!(e, SyncEvent::Error { .. })).await;
+        assert_eq!(
+            refused,
+            SyncEvent::Error {
+                code: "gone".into()
+            }
+        );
+        assert!(download_blob(&wrong, &id, &dir_b.join("x.png"))
+            .await
+            .is_err());
+
+        drop(b);
+        std::fs::remove_dir_all(dir_a).unwrap();
+        std::fs::remove_dir_all(dir_b).unwrap();
     }
 }

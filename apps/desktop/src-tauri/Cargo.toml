@@ -33,9 +33,11 @@ dotenvy = "0.15"
 git2 = { version = "0.20", default-features = false, features = ["vendored-libgit2"] }
 chrono = "0.4"
 uuid = { version = "1", features = ["v4"] }
-# Live collaboration relay (collab.rs).
+# Shared projects (collab.rs): the relay connection, and the encryption of
+# everything sent through it. ring is already here via rustls.
 tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
+ring = "0.17"
 which = "7"
 tectonic = { version = "0.15", default-features = true, features = ["external-harfbuzz"] }
 # NOTE: Building tectonic requires external harfbuzz/graphite2/icu/freetype:
