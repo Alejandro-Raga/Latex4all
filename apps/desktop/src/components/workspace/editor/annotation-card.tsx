@@ -15,6 +15,7 @@ import {
   type AnnotationColor,
   type AnnotationComment,
 } from "@/lib/annotations/types";
+import type { AnnotationActions } from "@/lib/annotations/actions";
 import { cn } from "@/lib/utils";
 import { useViewportAnchoredPosition } from "./use-viewport-anchored-position";
 
@@ -76,7 +77,7 @@ export function ColorSwatches({
 }
 
 /** A text box that sends on Enter (Shift+Enter for a new line). */
-function NoteInput({
+export function NoteInput({
   placeholder,
   initial = "",
   autoFocus,
@@ -161,7 +162,7 @@ function NoteInput({
   );
 }
 
-function Comment({
+export function Comment({
   comment,
   mine,
   onEdit,
@@ -227,16 +228,7 @@ function Comment({
   );
 }
 
-export interface AnnotationActions {
-  setColor: (color: AnnotationColor) => void;
-  /** Removes a plain highlight; a note keeps its thread and loses the color. */
-  clearHighlight: () => void;
-  addComment: (text: string) => void;
-  editComment: (commentId: string, text: string) => void;
-  deleteComment: (commentId: string) => void;
-  setResolved: (resolved: boolean) => void;
-  remove: () => void;
-}
+export type { AnnotationActions } from "@/lib/annotations/actions";
 
 const CARD_WIDTH = 288;
 

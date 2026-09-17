@@ -1,3 +1,4 @@
+import type { SourceBox } from "@/lib/annotations/pdf-placement";
 import { invoke } from "@tauri-apps/api/core";
 import { resolveTexRoot, type ProjectFile } from "@/stores/document-store";
 import { createLogger } from "@/lib/debug/logger";
@@ -71,6 +72,24 @@ export interface SynctexResult {
   file: string;
   line: number;
   column: number;
+}
+
+/** Where lines of a source file were typeset in the last build. */
+export async function synctexView(
+  projectDir: string,
+  file: string,
+  lines: number[],
+): Promise<SourceBox[]> {
+  try {
+    return await invoke<SourceBox[]>("synctex_view", {
+      projectDir,
+      file,
+      lines,
+    });
+  } catch (err) {
+    log.debug("SyncTeX view failed", { file, error: String(err) });
+    return [];
+  }
 }
 
 export async function synctexEdit(

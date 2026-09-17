@@ -13,6 +13,7 @@ mod latex;
 mod skills;
 mod slash_commands;
 mod spellcheck;
+mod synctex;
 mod updater;
 mod uv;
 mod wordnet;
@@ -630,6 +631,7 @@ pub fn run() {
             updater::updater_install,
             latex::compile_latex,
             latex::synctex_edit,
+            latex::synctex_view,
             latex::detect_texlive,
             claude::check_claude_status,
             claude::install_claude_cli,

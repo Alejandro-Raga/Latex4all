@@ -5,6 +5,7 @@ import type {
   WorkerResponse,
 } from "./types";
 import { createLogger } from "@/lib/debug/logger";
+import type { PageChar, PdfMark } from "@/lib/annotations/pdf-placement";
 
 const log = createLogger("mupdf-worker");
 
@@ -17,6 +18,9 @@ export interface MupdfClient {
   drawPage(docId: number, pageIndex: number, dpi: number): Promise<ImageData>;
   getPageText(docId: number, pageIndex: number): Promise<StructuredTextData>;
   getPageLinks(docId: number, pageIndex: number): Promise<LinkData[]>;
+  getPageChars(docId: number, pageIndex: number): Promise<PageChar[]>;
+  /** `pdf` is transferred to the worker; pass a copy you don't need back. */
+  addAnnotations(pdf: ArrayBuffer, marks: PdfMark[]): Promise<ArrayBuffer>;
   renderThumbnail(
     docId: number,
     pageIndex: number,
@@ -138,6 +142,8 @@ function createClient(): MupdfClient {
       call("drawPage", docId, pageIndex, dpi),
     getPageText: (docId, pageIndex) => call("getPageText", docId, pageIndex),
     getPageLinks: (docId, pageIndex) => call("getPageLinks", docId, pageIndex),
+    getPageChars: (docId, pageIndex) => call("getPageChars", docId, pageIndex),
+    addAnnotations: (pdf, marks) => call("addAnnotations", pdf, marks),
     renderThumbnail: (docId, pageIndex, targetWidth) =>
       call("renderThumbnail", docId, pageIndex, targetWidth),
     destroy: () => worker.terminate(),

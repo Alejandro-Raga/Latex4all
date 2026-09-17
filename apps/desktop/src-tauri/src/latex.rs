@@ -1029,32 +1029,26 @@ pub async fn compile_latex(
     }
 }
 
-#[tauri::command]
-pub async fn synctex_edit(
-    state: tauri::State<'_, LatexCompilerState>,
-    project_dir: String,
-    page: u32,
-    x: f64,
-    y: f64,
-) -> Result<SynctexResult, String> {
+/// The SyncTeX data of a project's last build, and the directory it was built in.
+async fn read_synctex(
+    state: &tauri::State<'_, LatexCompilerState>,
+    project_dir: &str,
+) -> Result<(String, PathBuf), String> {
     let builds = state.last_builds.lock().await;
     let build = builds
-        .get(&project_dir)
+        .get(project_dir)
         .ok_or("No build found for this project")?;
-
     let synctex_gz = build
         .work_dir
         .join(format!("{}.synctex.gz", build.main_file_name));
     let synctex_plain = build
         .work_dir
         .join(format!("{}.synctex", build.main_file_name));
-
     let work_dir = build.work_dir.clone();
     drop(builds); // Release lock before I/O
 
-    // Read, decompress, and parse synctex data (blocking I/O + CPU work → offload)
-    let (mut file, line, column) = tokio::task::spawn_blocking(move || {
-        let synctex_data = if synctex_gz.exists() {
+    let data = tokio::task::spawn_blocking(move || {
+        if synctex_gz.exists() {
             let compressed = std::fs::read(&synctex_gz)
                 .map_err(|e| format!("Failed to read synctex.gz: {}", e))?;
             let mut decoder = flate2::read::GzDecoder::new(&compressed[..]);
@@ -1068,28 +1062,49 @@ pub async fn synctex_edit(
                 .map_err(|e| format!("Failed to read synctex: {}", e))
         } else {
             Err("No synctex data found. Recompile with synctex enabled.".to_string())
-        }?;
+        }
+    })
+    .await
+    .map_err(|e| format!("Synctex task panicked: {}", e))??;
+    Ok((data, work_dir))
+}
 
-        parse_synctex_data(&synctex_data, page, x, y)
+#[tauri::command]
+pub async fn synctex_edit(
+    state: tauri::State<'_, LatexCompilerState>,
+    project_dir: String,
+    page: u32,
+    x: f64,
+    y: f64,
+) -> Result<SynctexResult, String> {
+    let (data, work_dir) = read_synctex(&state, &project_dir).await?;
+    let (file, line, column) = tokio::task::spawn_blocking(move || {
+        parse_synctex_data(&data, page, x, y)
             .ok_or_else(|| "Could not resolve source location".to_string())
     })
     .await
     .map_err(|e| format!("Synctex task panicked: {}", e))??;
 
-    // Normalize: strip work_dir prefix and "./" or ".\\" prefix
-    let work_dir_str = work_dir.to_string_lossy().to_string();
-    if let Some(rest) = file.strip_prefix(&format!("{}/", work_dir_str)) {
-        file = rest.to_string();
-    } else if let Some(rest) = file.strip_prefix(&format!("{}\\", work_dir_str)) {
-        file = rest.to_string();
-    }
-    if let Some(rest) = file.strip_prefix("./") {
-        file = rest.to_string();
-    } else if let Some(rest) = file.strip_prefix(".\\") {
-        file = rest.to_string();
-    }
-
+    let file = crate::synctex::normalize_synctex_path(&file, &work_dir.to_string_lossy());
     Ok(SynctexResult { file, line, column })
+}
+
+/// Where `lines` of `file` (relative to the project) were typeset in the last
+/// build — for drawing highlights over the PDF.
+#[tauri::command]
+pub async fn synctex_view(
+    state: tauri::State<'_, LatexCompilerState>,
+    project_dir: String,
+    file: String,
+    lines: Vec<u32>,
+) -> Result<Vec<crate::synctex::SynctexBox>, String> {
+    let (data, work_dir) = read_synctex(&state, &project_dir).await?;
+    tokio::task::spawn_blocking(move || {
+        let lines: std::collections::HashSet<u32> = lines.into_iter().collect();
+        crate::synctex::forward_boxes(&data, &work_dir.to_string_lossy(), &file, &lines)
+    })
+    .await
+    .map_err(|e| format!("Synctex task panicked: {}", e))
 }
 
 /// Clear in-memory build state on app exit.

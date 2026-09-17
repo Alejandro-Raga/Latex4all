@@ -97,7 +97,8 @@ import {
   type AnnotationColor,
   DEFAULT_ANNOTATION_COLOR,
 } from "@/lib/annotations/types";
-import { clearHighlight, clearHighlights } from "@/lib/annotations/actions";
+import { annotationActions, clearHighlights } from "@/lib/annotations/actions";
+import { HoverIntent } from "@/lib/annotations/hover-intent";
 import { WordLookupPopover } from "./word-lookup-popover";
 import { matchCase } from "./match-case";
 import {
@@ -227,14 +228,27 @@ export function LatexEditor() {
   } | null>(null);
   const annotationCardRef = useRef(annotationCard);
   annotationCardRef.current = annotationCard;
-  const annotationHoverTimer = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const annotationCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const cardHoveredRef = useRef(false);
   const cardFocusedRef = useRef(false);
+  const hoverIntentRef = useRef<HoverIntent | null>(null);
+  hoverIntentRef.current ??= new HoverIntent({
+    openDelay: 350,
+    closeDelay: 200,
+    onOpen: (id) => {
+      const view = viewRef.current;
+      const annotation = view ? annotationById(view.state, id) : null;
+      if (!view || !annotation) return;
+      const coords = view.coordsAtPos(
+        Math.min(annotation.to, view.state.doc.length),
+      );
+      if (!coords) return;
+      setAnnotationCard({ id, anchor: { x: coords.left, y: coords.bottom } });
+    },
+    // A note being written stays until it's sent or cancelled.
+    onClose: () =>
+      setAnnotationCard((card) => (card && card.id !== null ? null : card)),
+    isPinned: () => cardFocusedRef.current,
+  });
+  const hoverIntent = hoverIntentRef.current;
   const highlightSelectionRef = useRef<
     (from: number, to: number, color?: AnnotationColor) => void
   >(() => {});
@@ -1525,26 +1539,10 @@ export function LatexEditor() {
   };
 
   const closeAnnotationCard = useCallback(() => {
-    if (annotationHoverTimer.current)
-      clearTimeout(annotationHoverTimer.current);
-    if (annotationCloseTimer.current)
-      clearTimeout(annotationCloseTimer.current);
-    annotationHoverTimer.current = null;
-    annotationCloseTimer.current = null;
-    cardHoveredRef.current = false;
+    hoverIntent.reset();
     cardFocusedRef.current = false;
     setAnnotationCard(null);
-  }, []);
-
-  /** Hover cards close shortly after the pointer leaves; one being typed in stays. */
-  const scheduleAnnotationClose = useCallback(() => {
-    if (annotationCloseTimer.current) return;
-    annotationCloseTimer.current = setTimeout(() => {
-      annotationCloseTimer.current = null;
-      if (cardHoveredRef.current || cardFocusedRef.current) return;
-      setAnnotationCard((card) => (card && card.id !== null ? null : card));
-    }, 200);
-  }, []);
+  }, [hoverIntent]);
 
   const handleEditorMouseMove = useCallback(
     (e: React.MouseEvent) => {
@@ -1567,36 +1565,9 @@ export function LatexEditor() {
         const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
         if (pos != null) found = annotationAt(view.state, pos);
       }
-      if (!found) {
-        if (annotationHoverTimer.current) {
-          clearTimeout(annotationHoverTimer.current);
-          annotationHoverTimer.current = null;
-        }
-        if (annotationCardRef.current) scheduleAnnotationClose();
-        return;
-      }
-      if (annotationCloseTimer.current) {
-        clearTimeout(annotationCloseTimer.current);
-        annotationCloseTimer.current = null;
-      }
-      if (annotationCardRef.current?.id === found.id) return;
-      if (cardFocusedRef.current) return;
-      if (annotationHoverTimer.current) {
-        clearTimeout(annotationHoverTimer.current);
-      }
-      const { id, to } = found;
-      annotationHoverTimer.current = setTimeout(() => {
-        annotationHoverTimer.current = null;
-        const current = viewRef.current;
-        const coords = current?.coordsAtPos(
-          Math.min(to, current.state.doc.length),
-        );
-        if (!coords) return;
-        cardHoveredRef.current = false;
-        setAnnotationCard({ id, anchor: { x: coords.left, y: coords.bottom } });
-      }, 350);
+      hoverIntent.over(found?.id ?? null);
     },
-    [scheduleAnnotationClose],
+    [hoverIntent],
   );
 
   const cardAnnotation =
@@ -1614,32 +1585,12 @@ export function LatexEditor() {
 
   const cardActions: AnnotationActions | null =
     cardAnnotation && annotationSource
-      ? {
-          setColor: (color) =>
-            annotationSource.setColor(cardAnnotation.id, color),
-          clearHighlight: () =>
-            clearHighlight(
-              annotationSource,
-              cardAnnotation.id,
-              cardAnnotation.comments.length > 0,
-            ),
-          addComment: (text) =>
-            annotationSource.addComment(
-              cardAnnotation.id,
-              currentAuthor(),
-              text,
-            ),
-          editComment: (commentId, text) =>
-            annotationSource.editComment(cardAnnotation.id, commentId, text),
-          deleteComment: (commentId) =>
-            annotationSource.deleteComment(cardAnnotation.id, commentId),
-          setResolved: (resolved) =>
-            annotationSource.setResolved(cardAnnotation.id, resolved),
-          remove: () => {
-            annotationSource.remove(cardAnnotation.id);
-            closeAnnotationCard();
-          },
-        }
+      ? annotationActions(
+          annotationSource,
+          cardAnnotation,
+          currentAuthor,
+          closeAnnotationCard,
+        )
       : null;
 
   // History review action handlers
@@ -1814,7 +1765,7 @@ export function LatexEditor() {
               ref={containerRef}
               onContextMenu={handleEditorContextMenu}
               onMouseMove={handleEditorMouseMove}
-              onMouseLeave={scheduleAnnotationClose}
+              onMouseLeave={() => hoverIntent.leave()}
               onMouseDownCapture={(e) => {
                 // A right- (or middle-) click can itself select the word under
                 // the cursor, same as a native text view — treat that like a
@@ -1904,20 +1855,11 @@ export function LatexEditor() {
                     closeAnnotationCard();
                   }}
                   onDismiss={closeAnnotationCard}
-                  onPointerEnter={() => {
-                    cardHoveredRef.current = true;
-                    if (annotationCloseTimer.current) {
-                      clearTimeout(annotationCloseTimer.current);
-                      annotationCloseTimer.current = null;
-                    }
-                  }}
-                  onPointerLeave={() => {
-                    cardHoveredRef.current = false;
-                    scheduleAnnotationClose();
-                  }}
+                  onPointerEnter={() => hoverIntent.enterCard()}
+                  onPointerLeave={() => hoverIntent.leaveCard()}
                   onFocusChange={(focused) => {
                     cardFocusedRef.current = focused;
-                    if (!focused) scheduleAnnotationClose();
+                    if (!focused) hoverIntent.scheduleClose();
                   }}
                 />
               )}

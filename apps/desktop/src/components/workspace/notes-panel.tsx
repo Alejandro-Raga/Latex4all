@@ -8,10 +8,14 @@ import {
   XIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SWATCH_CLASSES } from "@/components/workspace/editor/annotation-card";
+import {
+  Comment,
+  NoteInput,
+  SWATCH_CLASSES,
+} from "@/components/workspace/editor/annotation-card";
 import type { Annotation } from "@/lib/annotations/types";
 import { cn } from "@/lib/utils";
-import { useAnnotationsStore } from "@/stores/annotations-store";
+import { currentAuthor, useAnnotationsStore } from "@/stores/annotations-store";
 import { useDocumentStore } from "@/stores/document-store";
 
 interface Note {
@@ -29,10 +33,13 @@ function barClass(annotation: Annotation) {
 function NoteItem({
   note,
   showFile,
+  expanded,
   onOpen,
 }: {
   note: Note;
   showFile: boolean;
+  /** Showing the whole thread and a reply box. */
+  expanded: boolean;
   onOpen: () => void;
 }) {
   const source = useAnnotationsStore((s) => s.source);
@@ -65,7 +72,12 @@ function NoteItem({
               “{note.quote}”
             </span>
           )}
-          <span className="line-clamp-3 block whitespace-pre-wrap break-words text-sm">
+          <span
+            className={cn(
+              "block whitespace-pre-wrap break-words text-sm",
+              !expanded && "line-clamp-3",
+            )}
+          >
             {first.text}
           </span>
           <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
@@ -85,6 +97,27 @@ function NoteItem({
           </span>
         </span>
       </button>
+      {expanded && source && (
+        <div className="space-y-2.5 px-2 pt-1 pb-2.5 pl-4">
+          {annotation.comments.slice(1).map((comment) => (
+            <Comment
+              key={comment.id}
+              comment={comment}
+              mine={comment.author === currentAuthor().name}
+              onEdit={(text) =>
+                source.editComment(annotation.id, comment.id, text)
+              }
+              onDelete={() => source.deleteComment(annotation.id, comment.id)}
+            />
+          ))}
+          <NoteInput
+            placeholder="Reply…"
+            onSubmit={(text) =>
+              source.addComment(annotation.id, currentAuthor(), text)
+            }
+          />
+        </div>
+      )}
       {source && (
         <div className="absolute top-1.5 right-1.5 flex gap-0.5 rounded-md bg-background/90 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
           {annotation.resolved ? (
@@ -134,6 +167,7 @@ export function NotesPanel({ onClose }: { onClose: () => void }) {
   const version = useAnnotationsStore((s) => s.version);
   const files = useDocumentStore((s) => s.files);
   const [tab, setTab] = useState<"open" | "resolved">("open");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const notes = useMemo<Note[]>(() => {
     if (!source) return [];
     return source
@@ -223,7 +257,13 @@ export function NotesPanel({ onClose }: { onClose: () => void }) {
               key={note.annotation.id}
               note={note}
               showFile={manyFiles}
-              onOpen={() => goTo(note)}
+              expanded={expandedId === note.annotation.id}
+              onOpen={() => {
+                goTo(note);
+                setExpandedId((id) =>
+                  id === note.annotation.id ? null : note.annotation.id,
+                );
+              }}
             />
           ))
         )}

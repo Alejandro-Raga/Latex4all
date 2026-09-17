@@ -59,6 +59,19 @@ import {
   type CaptureResult,
 } from "./pdf-viewer";
 import { resolveTexRoot } from "@/stores/document-store";
+import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { AnnotationCard } from "@/components/workspace/editor/annotation-card";
+import { annotationActions } from "@/lib/annotations/actions";
+import { HoverIntent } from "@/lib/annotations/hover-intent";
+import type { PdfMark } from "@/lib/annotations/pdf-placement";
+import { getMupdfClient } from "@/lib/mupdf/mupdf-client";
+import { currentAuthor, useAnnotationsStore } from "@/stores/annotations-store";
 import { createLogger } from "@/lib/debug/logger";
 
 const log = createLogger("pdf-preview");
@@ -112,6 +125,41 @@ export function PdfPreview() {
   const requestJumpToPosition = useDocumentStore(
     (s) => s.requestJumpToPosition,
   );
+
+  // ── Highlights and notes over the PDF ──
+  const annotationSource = useAnnotationsStore((s) => s.source);
+  useAnnotationsStore((s) => s.version); // re-render the card as its thread changes
+  const [noteCard, setNoteCard] = useState<{
+    id: string;
+    anchor: { x: number; y: number };
+  } | null>(null);
+  const notePointRef = useRef({ x: 0, y: 0 });
+  const noteCardFocusedRef = useRef(false);
+  const noteHoverRef = useRef<HoverIntent | null>(null);
+  noteHoverRef.current ??= new HoverIntent({
+    openDelay: 350,
+    closeDelay: 200,
+    onOpen: (id) =>
+      setNoteCard({
+        id,
+        anchor: { x: notePointRef.current.x, y: notePointRef.current.y + 12 },
+      }),
+    onClose: () => setNoteCard(null),
+    isPinned: () => noteCardFocusedRef.current,
+  });
+  const noteHover = noteHoverRef.current;
+  const closeNoteCard = useCallback(() => {
+    noteHover.reset();
+    noteCardFocusedRef.current = false;
+    setNoteCard(null);
+  }, [noteHover]);
+  const pdfMarksRef = useRef<PdfMark[]>([]);
+  const [exportChoiceOpen, setExportChoiceOpen] = useState(false);
+  const noteCardAnnotation =
+    noteCard && annotationSource
+      ? (annotationSource.listAll().find((n) => n.annotation.id === noteCard.id)
+          ?.annotation ?? null)
+      : null;
 
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState<number>(0);
@@ -462,7 +510,18 @@ export function PdfPreview() {
     setScale((s) => Math.max(0.25, s - 0.1));
   };
 
-  const handleExport = async () => {
+  /** With highlights and notes to offer, ask first whether to include them. */
+  const handleExport = () => {
+    if (!getCurrentPdfBytes()) return;
+    const exportable = pdfMarksRef.current.some(
+      (m) => !m.resolved && (m.color !== "none" || m.comments.length > 0),
+    );
+    if (exportable) setExportChoiceOpen(true);
+    else void exportPdf(false);
+  };
+
+  const exportPdf = async (withNotes: boolean) => {
+    setExportChoiceOpen(false);
     const currentPdf = getCurrentPdfBytes();
     if (!currentPdf) return;
     const mainFile = files.find(
@@ -483,7 +542,23 @@ export function PdfPreview() {
       filters: [{ name: "PDF", extensions: ["pdf"] }],
     });
     if (!filePath) return;
-    await writeFile(filePath, new Uint8Array(currentPdf));
+    let bytes = new Uint8Array(currentPdf);
+    if (withNotes) {
+      try {
+        // The compiled PDF stays as it is; the annotations go into a copy.
+        const annotated = await getMupdfClient().addAnnotations(
+          currentPdf.slice().buffer,
+          pdfMarksRef.current,
+        );
+        bytes = new Uint8Array(annotated);
+      } catch (err) {
+        toast.error("Couldn't add highlights and notes", {
+          description: err instanceof Error ? err.message : String(err),
+        });
+        return;
+      }
+    }
+    await writeFile(filePath, bytes);
   };
 
   const handleCurrentPageChange = useCallback(
@@ -770,6 +845,24 @@ export function PdfPreview() {
                   onScaleChange={isActive ? handleScaleChange : undefined}
                   onTextClick={isActive ? handleTextClick : undefined}
                   onSynctexClick={isActive ? handleSynctexClick : undefined}
+                  notesProjectRoot={
+                    isActive && projectRoot ? projectRoot : undefined
+                  }
+                  onNotesChange={
+                    isActive
+                      ? (marks) => {
+                          pdfMarksRef.current = marks;
+                        }
+                      : undefined
+                  }
+                  onNoteHover={
+                    isActive
+                      ? (id, x, y) => {
+                          notePointRef.current = { x, y };
+                          noteHover.over(id);
+                        }
+                      : undefined
+                  }
                   onTextSelect={isActive ? handleTextSelect : undefined}
                   onFirstPageSize={
                     isActive
@@ -1059,6 +1152,41 @@ export function PdfPreview() {
           </div>
         </div>
       )}
+      {noteCard && noteCardAnnotation && annotationSource && (
+        <AnnotationCard
+          annotation={noteCardAnnotation}
+          authorName={currentAuthor().name}
+          anchor={noteCard.anchor}
+          actions={annotationActions(
+            annotationSource,
+            noteCardAnnotation,
+            currentAuthor,
+            closeNoteCard,
+          )}
+          onDismiss={closeNoteCard}
+          onPointerEnter={() => noteHover.enterCard()}
+          onPointerLeave={() => noteHover.leaveCard()}
+          onFocusChange={(focused) => {
+            noteCardFocusedRef.current = focused;
+            if (!focused) noteHover.scheduleClose();
+          }}
+        />
+      )}
+      <Dialog open={exportChoiceOpen} onOpenChange={setExportChoiceOpen}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Export PDF</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            <Button onClick={() => void exportPdf(true)}>
+              With highlights and notes
+            </Button>
+            <Button variant="outline" onClick={() => void exportPdf(false)}>
+              Without
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

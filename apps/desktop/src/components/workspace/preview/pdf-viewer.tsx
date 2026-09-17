@@ -1,3 +1,5 @@
+import type { PdfMark } from "@/lib/annotations/pdf-placement";
+import { markAt, usePdfMarks } from "./use-pdf-annotations";
 import {
   useCallback,
   useMemo,
@@ -216,6 +218,12 @@ interface PdfViewerProps {
   isActive?: boolean;
   /** Highlight/underline marks to overlay, e.g. imported from Zotero. */
   annotations?: PdfAnnotationRect[];
+  /** Draw the project's highlights and notes over the pages (the project root). */
+  notesProjectRoot?: string;
+  /** The highlights and notes currently placed on the PDF. */
+  onNotesChange?: (marks: PdfMark[]) => void;
+  /** The pointer is over a highlight or note (null: over none). */
+  onNoteHover?: (id: string | null, clientX: number, clientY: number) => void;
   /** Controlled — each call site owns (and can persist) its own dark-mode state,
    * so toggling it in one viewer never affects another. */
   darkMode: boolean;
@@ -241,6 +249,9 @@ export function PdfViewer({
   rootFileId,
   isActive = true,
   annotations,
+  notesProjectRoot,
+  onNotesChange,
+  onNoteHover,
   darkMode,
   onToggleDarkMode,
   onError,
@@ -264,6 +275,31 @@ export function PdfViewer({
   const [visiblePages, setVisiblePages] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
   const docIdRef = useRef(0);
+  /** docIdRef as state, so placing highlights follows a newly opened PDF. */
+  const [loadedDocId, setLoadedDocId] = useState(0);
+  const marks = usePdfMarks({
+    docId: loadedDocId,
+    projectRoot: notesProjectRoot ?? null,
+    enabled: Boolean(notesProjectRoot) && isActive,
+  });
+  const marksRef = useRef(marks);
+  marksRef.current = marks;
+  const onNotesChangeRef = useRef(onNotesChange);
+  onNotesChangeRef.current = onNotesChange;
+  const onNoteHoverRef = useRef(onNoteHover);
+  onNoteHoverRef.current = onNoteHover;
+  useEffect(() => {
+    onNotesChangeRef.current?.(marks);
+  }, [marks]);
+  const marksByPage = useMemo(() => {
+    const map = new Map<number, PdfMark[]>();
+    for (const mark of marks) {
+      const list = map.get(mark.pageIndex) ?? [];
+      list.push(mark);
+      map.set(mark.pageIndex, list);
+    }
+    return map;
+  }, [marks]);
   const loadGenRef = useRef(0);
 
   const annotationsByPage = useMemo(() => {
@@ -517,6 +553,7 @@ export function PdfViewer({
     // Synchronous cache hit for a different doc (file switch to cached PDF)
     if (syncResult) {
       docIdRef.current = syncResult.docId;
+      setLoadedDocId(syncResult.docId);
       setPageSizes(syncResult.pageSizes);
       setLoading(false);
 
@@ -545,6 +582,7 @@ export function PdfViewer({
         if (gen !== loadGenRef.current) return;
 
         docIdRef.current = docId;
+        setLoadedDocId(docId);
         setPageSizes(sizes);
         setLoading(false);
 
@@ -616,6 +654,43 @@ export function PdfViewer({
     ro.observe(container);
     return () => ro.disconnect();
   }, [onContainerResize]);
+
+  // Hovering highlights and notes drawn over the pages. Found by position
+  // rather than by element, so the layer never gets in the way of selecting
+  // text or following links.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const handleMove = (e: MouseEvent) => {
+      const report = onNoteHoverRef.current;
+      if (!report) return;
+      if (e.buttons !== 0 || marksRef.current.length === 0) {
+        report(null, e.clientX, e.clientY);
+        return;
+      }
+      const pageEl = (e.target as HTMLElement).closest(
+        ".mupdf-page",
+      ) as HTMLElement | null;
+      const pageNumber = Number(pageEl?.getAttribute("data-page-number") ?? 0);
+      if (!pageEl || pageNumber === 0) {
+        report(null, e.clientX, e.clientY);
+        return;
+      }
+      const rect = pageEl.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / scaleRef.current;
+      const y = (e.clientY - rect.top) / scaleRef.current;
+      const mark = markAt(marksRef.current, pageNumber - 1, x, y);
+      report(mark?.id ?? null, e.clientX, e.clientY);
+    };
+    const handleLeave = (e: MouseEvent) =>
+      onNoteHoverRef.current?.(null, e.clientX, e.clientY);
+    container.addEventListener("mousemove", handleMove);
+    container.addEventListener("mouseleave", handleLeave);
+    return () => {
+      container.removeEventListener("mousemove", handleMove);
+      container.removeEventListener("mouseleave", handleLeave);
+    };
+  }, []);
 
   // Native dblclick listener for synctex
   useEffect(() => {
@@ -1220,6 +1295,8 @@ export function PdfViewer({
               pageHeight={size.height}
               isVisible={visiblePages.has(i + 1)}
               annotations={annotationsByPage.get(i)}
+              notes={marksByPage.get(i)}
+              invertNotes={darkMode}
             />
           ))}
         </div>

@@ -4,6 +4,7 @@ import { createLogger } from "@/lib/debug/logger";
 import { APP_VISIBILITY_RESTORED } from "@/lib/debug/log-store";
 import type { StructuredTextData, LinkData } from "@/lib/mupdf/types";
 import type { PdfAnnotationRect } from "./pdf-viewer";
+import type { PdfMark } from "@/lib/annotations/pdf-placement";
 
 const log = createLogger("mupdf-page");
 const RENDER_SCALE_DEBOUNCE_MS = 260;
@@ -16,6 +17,10 @@ interface MupdfPageProps {
   pageHeight: number;
   isVisible: boolean;
   annotations?: PdfAnnotationRect[];
+  /** The project's highlights and notes on this page. */
+  notes?: PdfMark[];
+  /** Keep their true colors while the PDF is shown inverted (dark mode). */
+  invertNotes?: boolean;
 }
 
 /** Check if a canvas appears blank (GPU context was silently invalidated).
@@ -43,6 +48,8 @@ export const MupdfPage = memo(function MupdfPage({
   pageHeight,
   isVisible,
   annotations,
+  notes,
+  invertNotes,
 }: MupdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [textData, setTextData] = useState<StructuredTextData | null>(null);
@@ -265,6 +272,54 @@ export const MupdfPage = memo(function MupdfPage({
               );
             }),
           )}
+        </div>
+      )}
+      {/* The project's own highlights and notes. Hover is detected by
+          position in the viewer, so this layer never takes the pointer. */}
+      {notes && notes.length > 0 && (
+        <div
+          className="pdf-notes-layer"
+          style={
+            invertNotes ? { filter: "invert(1) hue-rotate(180deg)" } : undefined
+          }
+        >
+          {notes.map((mark) =>
+            mark.rects.map((rect, i) => (
+              <div
+                key={`${mark.id}-${i}`}
+                className={`pdf-note pdf-note-${mark.resolved ? "resolved" : mark.color}`}
+                style={{
+                  left: `${(rect.x / pageWidth) * 100}%`,
+                  top: `${(rect.y / pageHeight) * 100}%`,
+                  width: `${(rect.w / pageWidth) * 100}%`,
+                  height: `${(rect.h / pageHeight) * 100}%`,
+                }}
+              />
+            )),
+          )}
+          {notes
+            .filter((mark) => mark.comments.length > 0 && mark.rects.length > 0)
+            .map((mark) => {
+              const last = mark.rects[mark.rects.length - 1];
+              return (
+                <svg
+                  key={`${mark.id}-glyph`}
+                  className={
+                    mark.resolved
+                      ? "pdf-note-glyph pdf-note-glyph-resolved"
+                      : "pdf-note-glyph"
+                  }
+                  viewBox="0 0 24 24"
+                  style={{
+                    left: `${((last.x + last.w) / pageWidth) * 100}%`,
+                    top: `${((last.y - 3) / pageHeight) * 100}%`,
+                  }}
+                  aria-hidden="true"
+                >
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              );
+            })}
         </div>
       )}
     </div>

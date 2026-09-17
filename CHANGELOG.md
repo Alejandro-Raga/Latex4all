@@ -32,7 +32,10 @@ tag.
 - Highlights and notes. Select text to highlight it or add a note (⌘⇧H,
   ⌘⌥M). Hover a highlight to read the note, reply, resolve it or change its
   color. Resolved notes turn grey, and the notes bar lists every note in the
-  project and jumps to it. In a shared project everyone sees them.
+  project, lets you reply there and jumps to it. Highlights and notes also
+  appear over the compiled PDF, and exporting the PDF asks whether to include
+  them, as annotations any PDF reader shows. In a shared project everyone sees
+  them.
 
 ### Fixed
 

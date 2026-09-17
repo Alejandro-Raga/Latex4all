@@ -1,4 +1,21 @@
-import type { AnnotationSource } from "./types";
+import type {
+  Annotation,
+  AnnotationColor,
+  AnnotationSource,
+  Author,
+} from "./types";
+
+/** What can be done from a highlight's card. */
+export interface AnnotationActions {
+  setColor: (color: AnnotationColor) => void;
+  /** Removes a plain highlight; a note keeps its thread and loses the color. */
+  clearHighlight: () => void;
+  addComment: (text: string) => void;
+  editComment: (commentId: string, text: string) => void;
+  deleteComment: (commentId: string) => void;
+  setResolved: (resolved: boolean) => void;
+  remove: () => void;
+}
 
 /**
  * Takes the highlight off `[from, to)`: plain highlights there go, and notes
@@ -27,4 +44,27 @@ export function clearHighlight(
 ) {
   if (hasNote) source.setColor(id, "none");
   else source.remove(id);
+}
+
+/** The card's actions on one annotation, wherever the card is shown. */
+export function annotationActions(
+  source: AnnotationSource,
+  annotation: Annotation,
+  author: () => Author,
+  onRemoved: () => void,
+): AnnotationActions {
+  const { id } = annotation;
+  return {
+    setColor: (color) => source.setColor(id, color),
+    clearHighlight: () =>
+      clearHighlight(source, id, annotation.comments.length > 0),
+    addComment: (text) => source.addComment(id, author(), text),
+    editComment: (commentId, text) => source.editComment(id, commentId, text),
+    deleteComment: (commentId) => source.deleteComment(id, commentId),
+    setResolved: (resolved) => source.setResolved(id, resolved),
+    remove: () => {
+      source.remove(id);
+      onRemoved();
+    },
+  };
 }

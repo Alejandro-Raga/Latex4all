@@ -229,3 +229,42 @@
   position: absolute;
   opacity: 0.85;
 }
+
+/* The project's highlights and notes over the PDF: the same soft colors as in
+   the editor, grey once resolved. Never takes the pointer. */
+.pdf-notes-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.pdf-note {
+  position: absolute;
+  border-radius: 1px;
+  mix-blend-mode: multiply;
+}
+
+.pdf-note-yellow { background-color: rgba(250, 204, 21, 0.35); }
+.pdf-note-green { background-color: rgba(74, 222, 128, 0.35); }
+.pdf-note-blue { background-color: rgba(96, 165, 250, 0.35); }
+.pdf-note-pink { background-color: rgba(244, 114, 182, 0.35); }
+.pdf-note-purple { background-color: rgba(167, 139, 250, 0.35); }
+.pdf-note-resolved { background-color: rgba(148, 163, 184, 0.35); }
+
+.pdf-note-glyph {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin-left: 1px;
+  fill: none;
+  stroke: #475569;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.55;
+}
+
+.pdf-note-glyph-resolved {
+  opacity: 0.3;
+}

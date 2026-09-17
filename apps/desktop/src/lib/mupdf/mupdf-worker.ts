@@ -1,4 +1,6 @@
 import type { PDFDocument } from "mupdf";
+import type { PdfMark } from "@/lib/annotations/pdf-placement";
+import { addHighlightAnnotations, readPageChars } from "./pdf-annotations";
 
 type MupdfModule = typeof import("mupdf");
 
@@ -171,6 +173,21 @@ methods.getPageText = (docId: number, pageIndex: number): unknown => {
   });
 
   return { blocks };
+};
+
+/** Every character with its box, for placing highlights over the page. */
+methods.getPageChars = (docId: number, pageIndex: number): unknown => {
+  const doc = documentMap.get(docId)!;
+  return readPageChars(doc.loadPage(pageIndex));
+};
+
+/** A copy of a PDF with highlights and notes written in, for export. */
+methods.addAnnotations = (pdf: ArrayBuffer, marks: PdfMark[]): ArrayBuffer => {
+  const out = addHighlightAnnotations(mupdf, new Uint8Array(pdf), marks);
+  return out.buffer.slice(
+    out.byteOffset,
+    out.byteOffset + out.byteLength,
+  ) as ArrayBuffer;
 };
 
 methods.getPageLinks = (docId: number, pageIndex: number): unknown[] => {
