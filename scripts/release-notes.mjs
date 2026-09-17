@@ -6,11 +6,12 @@
 // fails, so a release cannot ship with placeholder notes the way every build
 // did before this existed.
 //
-// Test builds can't work that way — their versions are CI run numbers, so
-// there is nothing to write an entry for ahead of time. Their notes are the
-// commit subjects since the last stable release, which is also the window a
-// tester actually cares about: everything in this build that isn't in the
-// release they came from.
+// Test builds can't have a section of their own — their versions are CI run
+// numbers, unknown ahead of time. They use the `## [Unreleased]` section
+// instead, which covers the same window a tester cares about: everything in
+// this build that isn't in the release they came from. Only if that section is
+// empty do they fall back to the commit subjects since the last stable
+// release, which read as a developer's log rather than notes.
 //
 // Two output formats, because the two consumers are different: markdown for
 // the GitHub release body, and plain text for the updater manifest, whose
@@ -126,6 +127,9 @@ export function buildNotes({ channel, version, changelog, runGit = git }) {
     return section;
   }
 
+  const unreleased = extractChangelogSection(changelog, "Unreleased");
+  if (unreleased) return unreleased;
+
   const since = lastStableTag(runGit);
   const range = since ? `${since}..HEAD` : "HEAD";
   return commitNotes(commitSubjects(range, runGit), since);
@@ -148,10 +152,10 @@ function main(argv) {
     throw new Error("--version is required for the release channel");
   }
 
-  const changelog =
-    channel === "release"
-      ? readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8")
-      : "";
+  const changelog = readFileSync(
+    new URL("../CHANGELOG.md", import.meta.url),
+    "utf8",
+  );
 
   const notes = buildNotes({ channel, version, changelog });
   process.stdout.write(`${format === "plain" ? toPlainText(notes) : notes}\n`);

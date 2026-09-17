@@ -154,10 +154,26 @@ describe("release-notes", () => {
       ).toThrow(/no section for 1\.4\.0/);
     });
 
-    it("uses commits since the last stable release on the test channel", () => {
-      const notes = buildNotes({ channel: "test", changelog: "", runGit });
-      expect(notes).toContain("Changes since v1.3.0:");
-      expect(notes).toContain("- Subject one");
+    it("uses the Unreleased section on the test channel", () => {
+      const notes = buildNotes({
+        channel: "test",
+        changelog:
+          "# Changelog\n\n## [Unreleased]\n\n### Added\n\n- Shared projects\n\n## [1.3.0]\n\n- Older\n",
+        runGit,
+      });
+      expect(notes).toBe("### Added\n\n- Shared projects");
+      expect(notes).not.toContain("Subject one");
+    });
+
+    it("falls back to commits when there is nothing unreleased", () => {
+      for (const changelog of [
+        "",
+        "## [Unreleased]\n\n## [1.3.0]\n\n- Older\n",
+      ]) {
+        const notes = buildNotes({ channel: "test", changelog, runGit });
+        expect(notes).toContain("Changes since v1.3.0:");
+        expect(notes).toContain("- Subject one");
+      }
     });
   });
 });

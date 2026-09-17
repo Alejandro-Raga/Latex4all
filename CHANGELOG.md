@@ -7,37 +7,47 @@ section matching that version and uses it for both the GitHub release body and
 the notes shown in the app's update dialog. If the section is missing or empty
 the build fails on purpose, so a release cannot ship with placeholder notes.
 
-Test-channel builds are deliberately *not* listed here — their versions are CI
-run numbers, so there is nothing to write in advance. Their notes are generated
-from the commit subjects since the last stable release.
+Test-channel builds use the `## [Unreleased]` section below as their notes,
+so keep it current as features land; only if it is empty do they fall back to
+the commit subjects since the last stable release.
 
 **Entries are for users.** A change earns a line here if someone could notice
 it: a new feature, or a fix to something that was broken for them. Describe the
 symptom, not the plumbing — "updates stopped being offered" rather than which
 URL changed. Branch layout, CI, refactors and tests belong in commit messages.
 
-Write entries under `## [Unreleased]
+Write entries under `## [Unreleased]` and rename it to `## [x.y.z]` when you
+tag.
+
+## [Unreleased]
 
 ### Added
 
-- Shared projects. Click Share in the editor to get an invite link; others
-  choose Join on the projects screen. Everyone's changes to text, figures and
-  files reach the others as they type, with their cursors shown. Opening a
-  shared project first catches up with whatever changed since you last had it
-  open, even if nobody else is online, and edits made offline merge in when
-  you reconnect. Everything is encrypted before it leaves your computer.
-- Highlights and notes. Select text to highlight it in one of five colors or
-  add a note (⌘⇧H, ⌘⌥M); hover a highlight to read its thread, reply, or
-  resolve it, and pick "no color" to take a highlight off. Resolved notes
-  turn grey instead of vanishing. The notes bar lists every open and resolved
-  note in the project and jumps to it. Everything stays on its words as the
-  text changes, syncs with everyone in a shared project, and never touches
-  the .tex files.
+- Shared projects. Click Share in the editor to get an invite link, and
+  anyone who opens it with Join works on the same project: text, figures and
+  files stay in sync, with everyone's cursors shown. Changes are kept until
+  the others open the project, so nobody starts from an old copy, and edits
+  made offline merge in on reconnecting. Everything is encrypted on your
+  computer before it's sent.
+- Highlights and notes. Select text to highlight it or add a note (⌘⇧H,
+  ⌘⌥M). Hover a highlight to read the note, reply, resolve it or change its
+  color. Resolved notes turn grey, and the notes bar lists every note in the
+  project and jumps to it. In a shared project everyone sees them.
+
+### Fixed
+
+- Right-clicking a Spanish word finds its definition for plurals, verb forms
+  and other inflections, not only the dictionary form. The Spanish language
+  pack is also half the size to download.
+- The setup window can always be closed: it has a close button, and on small
+  screens its list scrolls instead of pushing Done out of reach.
+- Grammar checking works on computers with an older Java installed, as is
+  common on Windows. Its downloads also retry instead of hanging on a stalled
+  connection.
 
 ### Changed
 
-- Exporting a PDF now opens in the project's own folder rather than wherever
-  the save dialog was last pointed.
+- Exporting a PDF opens the save dialog in the project's own folder.
 
 ## [1.1.3] - 2026-09-11
 
