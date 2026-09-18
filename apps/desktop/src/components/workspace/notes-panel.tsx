@@ -22,6 +22,7 @@ interface Note {
 }
 
 function barClass(annotation: Annotation) {
+  if (annotation.suggestion?.settled) return "bg-slate-400/60";
   if (annotation.suggestion?.conflict) return "bg-orange-500";
   if (annotation.suggestion) return "bg-green-500";
   if (annotation.resolved) return "bg-slate-400/60";
@@ -44,6 +45,7 @@ function NoteItem({
   const source = useAnnotationsStore((s) => s.source);
   const { annotation } = note;
   const { suggestion } = annotation;
+  const settled = suggestion?.settled;
   const [first] = annotation.comments;
   // A suggestion's thread is all replies; a note's starts with the note.
   const thread = suggestion
@@ -51,15 +53,21 @@ function NoteItem({
     : annotation.comments.slice(1);
   const replies = thread.length;
   const latestAt =
+    settled?.at ??
     annotation.comments[annotation.comments.length - 1]?.at ??
     suggestion?.at ??
     0;
-  const who = suggestion
+  const who = settled
     ? {
-        name: suggestionTitle(suggestion, currentAuthor().name),
-        color: suggestion.authorColor,
+        name: `${settled.accepted ? "Accepted" : "Rejected"} by ${settled.by || "someone"}`,
+        color: "",
       }
-    : { name: first.author, color: first.authorColor };
+    : suggestion
+      ? {
+          name: suggestionTitle(suggestion, currentAuthor().name),
+          color: suggestion.authorColor,
+        }
+      : { name: first.author, color: first.authorColor };
 
   return (
     <div className="group relative">
@@ -74,7 +82,13 @@ function NoteItem({
             barClass(annotation),
           )}
         />
-        <span className="min-w-0 flex-1 space-y-1">
+        <span
+          className={cn(
+            "min-w-0 flex-1 space-y-1",
+            // A record of what was accepted or rejected, greyed out.
+            settled && "opacity-60",
+          )}
+        >
           {suggestion ? (
             <>
               {showFile && (
@@ -83,7 +97,7 @@ function NoteItem({
                 </span>
               )}
               <SuggestionDiff
-                quote={note.quote}
+                quote={settled ? settled.original : note.quote}
                 text={suggestion.text}
                 className={cn(!expanded && "line-clamp-3")}
               />
@@ -154,7 +168,18 @@ function NoteItem({
       )}
       {source && (
         <div className="absolute top-1.5 right-1.5 flex gap-0.5 rounded-md bg-background/90 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-          {suggestion ? (
+          {settled ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              title="Delete"
+              aria-label="Delete"
+              onClick={() => source.remove(annotation.id)}
+            >
+              <Trash2Icon className="size-3" />
+            </Button>
+          ) : suggestion ? (
             <>
               <Button
                 variant="ghost"

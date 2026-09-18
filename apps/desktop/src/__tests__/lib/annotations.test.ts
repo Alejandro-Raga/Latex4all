@@ -32,6 +32,15 @@ function spans(
   return source.rangesFor(path).map((a) => text.slice(a.from, a.to));
 }
 
+/** Suggestions still waiting to be accepted or rejected. */
+function openSuggestions(source: {
+  rangesFor(path: string): Array<{ suggestion?: { settled?: unknown } }>;
+}) {
+  return source
+    .rangesFor("main.tex")
+    .filter((a) => a.suggestion && !a.suggestion.settled);
+}
+
 describe("anchoring", () => {
   it("moves a highlight with edits, without growing it from outside", () => {
     const text = "The quick brown fox";
@@ -144,17 +153,17 @@ describe("annotations in a project that isn't shared", () => {
     const id = notes.suggest("main.tex", from, from + 5, "show", ana)!;
     notes.settleSuggestion(id, true, ben);
     expect(p.files["main.tex"]).toBe("We show the theorem.");
-    expect(notes.rangesFor("main.tex")).toEqual([]);
+    expect(openSuggestions(notes)).toEqual([]);
 
     undo(view);
     expect(p.files["main.tex"]).toBe("We prove the theorem.");
-    const [back] = notes.rangesFor("main.tex");
+    const [back] = openSuggestions(notes) as ReturnType<typeof notes.rangesFor>;
     expect(back.suggestion?.text).toBe("show");
     expect(p.files["main.tex"].slice(back.from, back.to)).toBe("prove");
 
     redo(view);
     expect(p.files["main.tex"]).toBe("We show the theorem.");
-    expect(notes.rangesFor("main.tex")).toEqual([]);
+    expect(openSuggestions(notes)).toEqual([]);
     // One more undo, and another: the suggestion, then nothing.
     undo(view);
     undo(view);
@@ -177,7 +186,19 @@ describe("annotations in a project that isn't shared", () => {
     reopened.settleSuggestion(first.id, true, ben);
     reopened.settleSuggestion(rejected, false, ben);
     expect(p.files["main.tex"]).toBe("We show the theorem.");
-    expect(reopened.rangesFor("main.tex")).toEqual([]);
+    // Both stay, resolved, as a record of what happened.
+    const records = reopened.rangesFor("main.tex");
+    expect(records.every((a) => a.resolved)).toBe(true);
+    expect(
+      records.map((a) => [
+        a.suggestion?.settled?.accepted,
+        a.suggestion?.settled?.original,
+        a.suggestion?.text,
+      ]),
+    ).toEqual([
+      [true, "prove", "show"],
+      [false, "We", "One"],
+    ]);
   });
 
   it("keeps highlights on their words as the text is edited, and across reopening", async () => {
@@ -310,7 +331,15 @@ describe("annotations in a shared project", () => {
 
     onB.settleSuggestion(seen.id, true, ben);
     expect(p.textOf(p.a).toString()).toBe("Results are suggestive.");
-    expect(onA.rangesFor("main.tex")).toEqual([]);
+    // Kept, resolved, on the new text: a record of who accepted what.
+    const [record] = onA.rangesFor("main.tex");
+    expect(record.resolved).toBe(true);
+    expect(record.suggestion?.settled).toMatchObject({
+      accepted: true,
+      by: "Ben",
+      original: "significant",
+    });
+    expect(spans(p.textOf(p.a).toString(), onA)).toEqual(["suggestive"]);
   });
 
   it("leaves the text alone when a suggestion is rejected", () => {
@@ -319,10 +348,13 @@ describe("annotations in a shared project", () => {
     const id = onA.suggest("main.tex", 0, 7, "", ana)!;
     onA.settleSuggestion(id, false, ben);
     expect(p.textOf(p.b).toString()).toBe("Results are significant.");
-    expect(onA.rangesFor("main.tex")).toEqual([]);
+    expect(openSuggestions(onA)).toEqual([]);
+    expect(onA.rangesFor("main.tex")[0].suggestion?.settled?.accepted).toBe(
+      false,
+    );
   });
 
-  it("keeps a suggestion's discussion as a resolved note on the new text", () => {
+  it("keeps a suggestion's discussion, and a deletion's record, once accepted", () => {
     const p = pair("Results are significant.");
     const onA = new SharedAnnotations(p.a);
     const onB = new SharedAnnotations(p.b);
@@ -332,13 +364,16 @@ describe("annotations in a shared project", () => {
     onB.settleSuggestion(id, true, ben);
 
     const [note] = onA.rangesFor("main.tex");
-    expect(note.suggestion).toBeUndefined();
     expect(note.resolved).toBe(true);
-    expect(note.comments.map((c) => c.text)).toEqual([
-      "Agreed, softer.",
-      "Accepted the suggestion.",
-    ]);
+    expect(note.comments.map((c) => c.text)).toEqual(["Agreed, softer."]);
     expect(spans(p.textOf(p.a).toString(), onA)).toEqual(["suggestive"]);
+
+    // Deleting text leaves nothing to sit on; the record is kept anyway.
+    const gone = onA.suggest("main.tex", 0, "Results ".length, "", ana)!;
+    onA.settleSuggestion(gone, true, ben);
+    expect(p.textOf(p.a).toString()).toBe("are suggestive.");
+    const record = onB.rangesFor("main.tex").find((a) => a.id === gone);
+    expect(record?.suggestion?.settled?.original).toBe("Results ");
   });
 
   it("undoes and redoes accepting a suggestion as one step", async () => {
@@ -361,11 +396,12 @@ describe("annotations in a shared project", () => {
     expect(p.textOf(p.b).toString()).toBe("Results are significant.");
     const [back] = onB.rangesFor("main.tex");
     expect(back.suggestion?.text).toBe("suggestive");
+    expect(back.suggestion?.settled).toBeUndefined();
     expect(spans(p.textOf(p.b).toString(), onB)).toEqual(["significant"]);
 
     undo.redo();
     expect(p.textOf(p.b).toString()).toBe("Results are suggestive.");
-    expect(onB.rangesFor("main.tex")).toEqual([]);
+    expect(openSuggestions(onB)).toEqual([]);
     // Ben's suggestion was never A's to undo.
     undo.undo();
     undo.undo();

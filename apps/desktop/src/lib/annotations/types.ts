@@ -50,6 +50,23 @@ export interface AnnotationSuggestion {
   at: number;
   /** From two people editing the same text at once, not proposed by hand. */
   conflict?: boolean;
+  /** Once accepted or rejected: kept, greyed out, as a record of it. */
+  settled?: SuggestionOutcome;
+}
+
+export interface SuggestionOutcome {
+  accepted: boolean;
+  /** Who accepted or rejected it. */
+  by: string;
+  /** ms since epoch */
+  at: number;
+  /** The text it would replace, as it was then. */
+  original: string;
+}
+
+/** Still waiting to be accepted or rejected. */
+export function isOpenSuggestion(annotation: Annotation) {
+  return Boolean(annotation.suggestion && !annotation.suggestion.settled);
 }
 
 /** An annotation as it currently sits in its file. */
@@ -99,8 +116,8 @@ export interface AnnotationSource {
     author: Author,
   ): string | null;
   /**
-   * Accepts (makes the change) or rejects a suggestion. One with a
-   * discussion stays as a resolved note, saying which it was.
+   * Accepts (makes the change) or rejects a suggestion. It stays, resolved,
+   * as a record of which it was.
    */
   settleSuggestion(id: string, accept: boolean, author: Author): void;
   remove(id: string): void;

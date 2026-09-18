@@ -141,7 +141,13 @@ export class LocalAnnotations implements AnnotationSource {
 
   rangesFor(path: string): Annotation[] {
     return this.items
-      .filter((a) => a.path === path && !this.lost.has(a.id) && a.from < a.to)
+      .filter(
+        (a) =>
+          a.path === path &&
+          !this.lost.has(a.id) &&
+          // A settled suggestion is kept even where its text is now gone.
+          (a.from < a.to || (a.from === a.to && a.suggestion?.settled)),
+      )
       .map(({ id, from, to, color, resolved, comments, suggestion }) => ({
         id,
         from,
@@ -212,46 +218,42 @@ export class LocalAnnotations implements AnnotationSource {
   settleSuggestion(id: string, accept: boolean, author: Author) {
     const item = this.items.find((a) => a.id === id);
     const suggestion = item?.suggestion;
-    if (!item || !suggestion) return;
+    if (!item || !suggestion || suggestion.settled) return;
     const content = this.text.contentOf(item.path);
-    const replace =
-      accept &&
-      content !== undefined &&
-      !this.lost.has(id) &&
-      item.from < item.to;
+    const found =
+      content !== undefined && !this.lost.has(id) && item.from < item.to;
+    const replace = accept && found;
     const { from, to } = item;
+    const original = found ? content.slice(from, to) : "";
     this.commit(
       item.path,
       (items) => {
-        const index = items.findIndex((a) => a.id === id);
-        const a = items[index];
-        // A discussion stays on the text that replaced what it was about.
+        const a = items.find((x) => x.id === id);
+        if (!a) return;
         if (replace) {
+          const change = {
+            start: from,
+            deleteCount: to - from,
+            insert: suggestion.text,
+          };
           for (const other of items) {
             if (other === a) continue;
-            const change = {
-              start: from,
-              deleteCount: to - from,
-              insert: suggestion.text,
-            };
             other.from = mapPosition(other.from, change, 1);
             other.to = mapPosition(other.to, change, -1);
           }
+          // The record stays on the text that replaced what it was about.
           a.to = from + suggestion.text.length;
         }
-        if (a.comments.length === 0) {
-          items.splice(index, 1);
-          return;
-        }
-        delete a.suggestion;
+        a.suggestion = {
+          ...suggestion,
+          settled: {
+            accepted: accept,
+            by: author.name,
+            at: Date.now(),
+            original,
+          },
+        };
         a.resolved = true;
-        a.comments = [
-          ...a.comments,
-          comment(
-            author,
-            accept ? "Accepted the suggestion." : "Rejected the suggestion.",
-          ),
-        ];
       },
       replace ? { from, to, insert: suggestion.text } : undefined,
     );

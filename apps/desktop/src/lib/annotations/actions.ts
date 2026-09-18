@@ -65,7 +65,7 @@ export function annotationActions(
     setResolved: (resolved) => source.setResolved(id, resolved),
     settleSuggestion: (accept) => {
       source.settleSuggestion(id, accept, author());
-      if (annotation.comments.length === 0) onRemoved();
+      onRemoved();
     },
     remove: () => {
       source.remove(id);

@@ -701,7 +701,7 @@ describe("edits to the same text made out of sync", () => {
     const expected = { "main.tex": "The results are excellent." };
     expect(a.workspace.snapshot()).toEqual(expected);
     expect(b.workspace.snapshot()).toEqual(expected);
-    expect(conflictsOn(b)).toEqual([]);
+    expect(conflictsOn(b).every((c) => c.suggestion?.settled)).toBe(true);
   });
 
   it("keeps an edit to text someone else deleted meanwhile", async () => {

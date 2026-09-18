@@ -42,7 +42,8 @@ tag.
 - Suggested edits. Right-click text, or select it, and choose "Suggest edit"
   (⌘⌥E) to write what it should say. It shows with a green underline; anyone
   can accept or reject it from the text or the notes bar, and reply to it
-  like a note.
+  like a note. Accepted and rejected suggestions stay in the notes bar's
+  Resolved tab, greyed out, with who settled them and when.
 - Chat in shared projects, next to Notes: messages and images for everyone on
   the project. Messages are deleted after 30 days.
 - Warnings when a shared project can't sync: when it's nearly full or full,

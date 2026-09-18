@@ -128,8 +128,8 @@ export function EditorToolbar({
         ?.listAll()
         .filter(
           ({ annotation }) =>
-            annotation.suggestion ||
-            (annotation.comments.length > 0 && !annotation.resolved),
+            !annotation.resolved &&
+            (annotation.suggestion || annotation.comments.length > 0),
         ).length ?? 0,
     [annotationSource, annotationsVersion],
   );

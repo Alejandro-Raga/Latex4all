@@ -1250,7 +1250,10 @@ export function LatexEditor() {
     view.dispatch({
       effects: setAnnotations.of(
         showAnnotations && annotationSource && path
-          ? annotationSource.rangesFor(path)
+          ? // Settled suggestions are a record in the notes bar, not marks.
+            annotationSource
+              .rangesFor(path)
+              .filter((a) => !a.suggestion?.settled)
           : [],
       ),
     });

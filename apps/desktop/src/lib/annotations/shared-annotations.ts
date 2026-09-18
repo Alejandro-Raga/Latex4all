@@ -108,17 +108,29 @@ export function fileUndoManager(doc: Y.Doc, text: Y.Text, fileId: string) {
 
 function readSuggestion(value: unknown): AnnotationSuggestion | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const { text, author, authorColor, at, conflict } = value as Record<
+  const { text, author, authorColor, at, conflict, settled } = value as Record<
     string,
     unknown
   >;
   if (typeof text !== "string") return undefined;
+  const outcome = settled as Record<string, unknown> | undefined;
   return {
     text,
     author: typeof author === "string" ? author : "",
     authorColor: typeof authorColor === "string" ? authorColor : "",
     at: typeof at === "number" ? at : 0,
     ...(conflict === true ? { conflict: true } : {}),
+    ...(outcome && typeof outcome === "object"
+      ? {
+          settled: {
+            accepted: outcome.accepted === true,
+            by: typeof outcome.by === "string" ? outcome.by : "",
+            at: typeof outcome.at === "number" ? outcome.at : 0,
+            original:
+              typeof outcome.original === "string" ? outcome.original : "",
+          },
+        }
+      : {}),
   };
 }
 
@@ -180,7 +192,10 @@ export class SharedAnnotations implements AnnotationSource {
       const from = this.resolve(entry.get("from"), file.text);
       const to = this.resolve(entry.get("to"), file.text);
       const color = entry.get("color");
-      if (from === null || to === null || from >= to) return;
+      const suggestion = readSuggestion(entry.get("suggestion"));
+      if (from === null || to === null || from > to) return;
+      // A settled suggestion is kept even where its text is now gone.
+      if (from === to && !suggestion?.settled) return;
       result.push({
         id,
         from,
@@ -188,7 +203,7 @@ export class SharedAnnotations implements AnnotationSource {
         color: isAnnotationColor(color) ? color : "yellow",
         resolved: entry.get("resolved") === true,
         comments: readComments(entry),
-        suggestion: readSuggestion(entry.get("suggestion")),
+        suggestion,
       });
     });
     return result;
@@ -332,7 +347,7 @@ export class SharedAnnotations implements AnnotationSource {
   settleSuggestion(id: string, accept: boolean, author: Author) {
     const entry = this.map.get(id);
     const suggestion = readSuggestion(entry?.get("suggestion"));
-    if (!entry || !suggestion) return;
+    if (!entry || !suggestion || suggestion.settled) return;
     const file = [...layout(this.doc).values()].find(
       (f) => f.fileId === entry.get("fileId"),
     );
@@ -340,32 +355,26 @@ export class SharedAnnotations implements AnnotationSource {
       const text = file?.kind === "text" ? file.text : null;
       const from = text && this.resolve(entry.get("from"), text);
       const to = text && this.resolve(entry.get("to"), text);
-      const kept = readComments(entry).length > 0;
-      if (accept && text && from != null && to != null && from < to) {
+      const found = text && from != null && to != null && from < to;
+      const original = found ? text.toString().slice(from, to) : "";
+      if (accept && found) {
         text.delete(from, to - from);
         if (suggestion.text) text.insert(from, suggestion.text);
-        // A discussion stays on the text that replaced what it was about.
-        if (kept && suggestion.text) {
-          const ends = anchors(text, from, from + suggestion.text.length);
-          entry.set("from", ends.from);
-          entry.set("to", ends.to);
-        }
+        // The record stays on the text that replaced what it was about.
+        const ends = anchors(text, from, from + suggestion.text.length);
+        entry.set("from", ends.from);
+        entry.set("to", ends.to);
       }
-      if (!kept) {
-        this.map.delete(id);
-        return;
-      }
-      entry.delete("suggestion");
+      entry.set("suggestion", {
+        ...suggestion,
+        settled: {
+          accepted: accept,
+          by: author.name,
+          at: Date.now(),
+          original,
+        },
+      });
       entry.set("resolved", true);
-      const comments = entry.get("comments");
-      if (comments instanceof Y.Array) {
-        comments.push([
-          comment(
-            author,
-            accept ? "Accepted the suggestion." : "Rejected the suggestion.",
-          ),
-        ]);
-      }
     }, this.originOf(entry));
   }
 
