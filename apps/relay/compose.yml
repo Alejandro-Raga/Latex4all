@@ -11,6 +11,9 @@ services:
       # Loopback only; cloudflared publishes it.
       - "127.0.0.1:8082:8082"
     user: node
+    environment:
+      # Set in .env next to this file; see the README.
+      MIN_PROTOCOL: ${MIN_PROTOCOL:-1}
     read_only: true
     volumes:
       # Owned by uid 1000, which is both `usr` on the vm and `node` in here.

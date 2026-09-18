@@ -34,7 +34,7 @@ node --test                  # tests
 426, which the app shows as "update Latex4All". Apps only compress what they
 send once it's 2 or more, since older apps can't read compressed data. So:
 deploy the relay, ship the app, and once everyone has updated set
-`MIN_PROTOCOL=2` (in `compose.yml`'s `environment`) and redeploy.
+`MIN_PROTOCOL=2` in `.env` beside `compose.yml` on the vm and redeploy.
 
 ## Deployment
 
