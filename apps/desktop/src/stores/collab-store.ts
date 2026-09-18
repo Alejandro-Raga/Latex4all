@@ -190,15 +190,57 @@ let introduceTimer: ReturnType<typeof setTimeout> | null = null;
 /** A change to your own entry in the people map; not something to undo. */
 const INTRODUCING = Symbol("introducing");
 
-/** Records your name and color in the open shared project. */
-function introduce() {
-  if (!active?.sync) return;
-  const { displayName, color } = useCollabStore.getState();
+/**
+ * Whether to take the color a project already has for your name, or give it
+ * yours. A name is a person, so the same name on another computer is you:
+ * opening a project, or taking a name it knows, takes that name's color;
+ * picking one yourself gives it yours.
+ */
+export function settleColor(
+  known: string | undefined,
+  mine: string,
+  picked: boolean,
+): { use: string; record: boolean } {
+  if (!picked && known && PEER_COLORS.includes(known)) {
+    return { use: known, record: false };
+  }
+  return { use: mine, record: Boolean(mine) && known !== mine };
+}
+
+function myName() {
   // As notes and messages are signed; see currentAuthor.
-  const name = displayName.trim() || "Me";
+  return useCollabStore.getState().displayName.trim() || "Me";
+}
+
+/** Shows your color on your cursor, for the others. */
+function showColor(color: string) {
+  const awareness = getCollabAwareness();
+  const user = awareness?.getLocalState()?.user;
+  if (awareness && user) {
+    awareness.setLocalStateField("user", {
+      ...user,
+      color,
+      colorLight: `${color}33`,
+    });
+  }
+}
+
+/**
+ * Settles your name's color in the open shared project: `picked` when you
+ * just chose it.
+ */
+function introduce(picked = false) {
+  if (!active?.sync) return;
+  const { color } = useCollabStore.getState();
+  const name = myName();
   const people = peopleMap(active.session.doc);
-  if (color && people.get(name) !== color) {
-    active.session.doc.transact(() => people.set(name, color), INTRODUCING);
+  const { use, record } = settleColor(people.get(name), color, picked);
+  if (use !== color) {
+    useCollabStore.setState({ color: use });
+    showColor(use);
+  }
+  if (record) {
+    active.session.doc.transact(() => people.set(name, use), INTRODUCING);
   }
 }
 
@@ -330,9 +372,12 @@ export const useCollabStore = create<CollabState>()(
 
       function trackPeople(target: Active) {
         const people = peopleMap(target.session.doc);
-        const changed = () => {
-          if (active === target) {
-            set((s) => ({ peopleVersion: s.peopleVersion + 1 }));
+        const changed = (event: Y.YMapEvent<string>) => {
+          if (active !== target) return;
+          set((s) => ({ peopleVersion: s.peopleVersion + 1 }));
+          // You, on another computer, picked another color.
+          if (!event.transaction.local && event.keysChanged.has(myName())) {
+            introduce();
           }
         };
         people.observe(changed);
@@ -561,23 +606,15 @@ export const useCollabStore = create<CollabState>()(
 
         setColor: (color) => {
           set({ color });
-          introduce();
-          const awareness = getCollabAwareness();
-          const user = awareness?.getLocalState()?.user;
-          if (awareness && user) {
-            awareness.setLocalStateField("user", {
-              ...user,
-              color,
-              colorLight: `${color}33`,
-            });
-          }
+          showColor(color);
+          introduce(true);
         },
 
         setDisplayName: (name) => {
           set({ displayName: name });
           // Once they've stopped typing it.
           if (introduceTimer) clearTimeout(introduceTimer);
-          introduceTimer = setTimeout(introduce, 1500);
+          introduceTimer = setTimeout(() => introduce(), 1500);
           const awareness = getCollabAwareness();
           const user = awareness?.getLocalState()?.user;
           if (awareness && user) {

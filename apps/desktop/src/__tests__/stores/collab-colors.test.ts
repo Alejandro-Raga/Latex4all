@@ -16,3 +16,26 @@ describe("people's colors", () => {
     expect(colorOf("Me", "#e11d48")).toBe("#7c3aed");
   });
 });
+
+describe("the same person on another computer", () => {
+  it("takes the color the project has for their name, unless they pick one", async () => {
+    const { settleColor } = await import("@/stores/collab-store");
+    // Opening a project where this name already has a color: take it.
+    expect(settleColor("#2563eb", "#e11d48", false)).toEqual({
+      use: "#2563eb",
+      record: false,
+    });
+    // Picking a color: it's the name's from now on, everywhere.
+    expect(settleColor("#2563eb", "#e11d48", true)).toEqual({
+      use: "#e11d48",
+      record: true,
+    });
+    // A name the project doesn't know yet gets this computer's color.
+    expect(settleColor(undefined, "#e11d48", false)).toEqual({
+      use: "#e11d48",
+      record: true,
+    });
+    // Nothing odd from the document ends up as your color.
+    expect(settleColor("url(x)", "#e11d48", false).use).toBe("#e11d48");
+  });
+});
