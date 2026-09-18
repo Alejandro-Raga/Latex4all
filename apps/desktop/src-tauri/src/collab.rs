@@ -543,6 +543,14 @@ pub enum SyncEvent {
         at: u64,
         data: String,
     },
+    /// How much of its allowance the project uses, and whether the relay as
+    /// a whole is nearly full; after catching up and with each stored change.
+    #[serde(rename_all = "camelCase")]
+    Usage {
+        project_bytes: u64,
+        max_project_bytes: u64,
+        relay_nearly_full: bool,
+    },
     /// The relay stored a local change as `seq`.
     #[serde(rename_all = "camelCase")]
     Ack {
@@ -601,6 +609,12 @@ struct RelayMessage {
     min_protocol: u32,
     #[serde(default)]
     chat_days: u64,
+    #[serde(default)]
+    project_bytes: u64,
+    #[serde(default)]
+    max_project_bytes: u64,
+    #[serde(default)]
+    relay_nearly_full: bool,
 }
 
 /// Keeps one project connected until the command channel closes: reconnects
@@ -748,6 +762,9 @@ where
         }
     }
 
+    // From the last catch-up, to put each ack's figure in context.
+    let mut max_project_bytes = 0;
+    let mut relay_nearly_full = false;
     let mut keepalive = tokio::time::interval(KEEPALIVE);
     keepalive.tick().await;
     loop {
@@ -814,6 +831,15 @@ where
                                 pending: outbox.entries.len(),
                                 chat_days: message.chat_days,
                             });
+                            if message.max_project_bytes > 0 {
+                                max_project_bytes = message.max_project_bytes;
+                                relay_nearly_full = message.relay_nearly_full;
+                                emit(SyncEvent::Usage {
+                                    project_bytes: message.project_bytes,
+                                    max_project_bytes,
+                                    relay_nearly_full,
+                                });
+                            }
                         }
                         "chat-ack" => {
                             if let Some(data) = chat_pending.pop_front() {
@@ -837,6 +863,13 @@ where
                             // everything before an ack has been delivered.
                             **after = (**after).max(message.seq);
                             emit(SyncEvent::Ack { seq: **after, pending: outbox.entries.len() });
+                            if max_project_bytes > 0 {
+                                emit(SyncEvent::Usage {
+                                    project_bytes: message.project_bytes,
+                                    max_project_bytes,
+                                    relay_nearly_full,
+                                });
+                            }
                         }
                         "error" => {
                             // The relay refused the oldest change for good;

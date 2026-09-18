@@ -152,6 +152,11 @@ class Project {
     this.chatHead = Math.max(meta.chatHead ?? 0, this.chat.at(-1)?.seq ?? 0);
   }
 
+  /** What counts against the project's limit: everything but its chat. */
+  get usedBytes() {
+    return this.bytes - chatBytes(this.chat);
+  }
+
   checkAccess(token) {
     if (typeof token !== "string") return false;
     const given = Buffer.from(hashToken(token));
@@ -175,7 +180,7 @@ class Project {
     // Text keeps working past the limit for a while, so a big figure never
     // stops people writing; blobs are refused at the limit itself.
     if (
-      this.bytes + growth > limits.maxProjectBytes * 1.1 ||
+      this.usedBytes + growth > limits.maxProjectBytes * 1.1 ||
       this.storage.totalBytes + growth > limits.maxTotalBytes * 1.05
     ) {
       return null;
@@ -209,7 +214,7 @@ class Project {
       sizeOf(path.join(this.dir, "snapshot.bin"));
     const after = logBytes + data.length + 8;
     if (
-      this.bytes - before + after >
+      this.usedBytes - before + after >
       this.storage.limits.maxProjectBytes * 1.1
     ) {
       return false;
@@ -296,7 +301,7 @@ class Project {
     const { limits } = this.storage;
     return (
       size <= limits.maxFileBytes &&
-      this.bytes + size <= limits.maxProjectBytes &&
+      this.usedBytes + size <= limits.maxProjectBytes &&
       this.storage.totalBytes + size <= limits.maxTotalBytes
     );
   }
@@ -349,6 +354,11 @@ export class Storage {
     for (const id of this.projectIds()) {
       this.totalBytes += this.bytesOnDisk(path.join(dir, id));
     }
+  }
+
+  /** Whether the relay as a whole is close to what it may store. */
+  get nearlyFull() {
+    return this.totalBytes >= this.limits.maxTotalBytes * 0.9;
   }
 
   projectIds() {

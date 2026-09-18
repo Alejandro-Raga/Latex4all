@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { CheckIcon, CopyIcon, Loader2Icon, UsersIcon } from "lucide-react";
+import {
+  AlertTriangleIcon,
+  CheckIcon,
+  CopyIcon,
+  Loader2Icon,
+  UsersIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { megabytes } from "@/lib/collab/sync-warnings";
 import { cn } from "@/lib/utils";
 import { type CollabPeer, useCollabStore } from "@/stores/collab-store";
 
@@ -57,9 +64,13 @@ export function CollabButton() {
   const setDisplayName = useCollabStore((s) => s.setDisplayName);
   const share = useCollabStore((s) => s.share);
   const stopSyncing = useCollabStore((s) => s.stopSyncing);
+  const warnings = useCollabStore((s) => s.warnings);
+  const usage = useCollabStore((s) => s.usage);
   const [copied, setCopied] = useState(false);
 
   const shared = status !== "none";
+  const failing = warnings.some((w) => w.level === "error");
+  const warningColor = failing ? "text-red-500" : "text-amber-500";
 
   const handleShare = () => {
     share().catch((err) =>
@@ -94,9 +105,14 @@ export function CollabButton() {
           ) : (
             <UsersIcon className="size-3.5" />
           )}
-          {shared && (
-            <span className={cn("size-1.5 rounded-full", STATUS[status].dot)} />
-          )}
+          {shared &&
+            (warnings.length > 0 ? (
+              <AlertTriangleIcon className={cn("size-3.5", warningColor)} />
+            ) : (
+              <span
+                className={cn("size-1.5 rounded-full", STATUS[status].dot)}
+              />
+            ))}
           {shared ? "Shared" : "Share"}
         </Button>
       </PopoverTrigger>
@@ -131,7 +147,37 @@ export function CollabButton() {
               <span className="text-muted-foreground">
                 {STATUS[status].label}
               </span>
+              {usage && (
+                <span
+                  className={cn(
+                    "ml-auto shrink-0",
+                    usage.projectBytes >= usage.maxProjectBytes * 0.8
+                      ? warningColor
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {megabytes(usage.projectBytes)} of{" "}
+                  {megabytes(usage.maxProjectBytes)} MB
+                </span>
+              )}
             </div>
+            {warnings.length > 0 && (
+              <div className="space-y-1.5">
+                {warnings.map((warning) => (
+                  <div key={warning.id} className="flex gap-1.5 text-xs">
+                    <AlertTriangleIcon
+                      className={cn(
+                        "mt-px size-3.5 shrink-0",
+                        warning.level === "error"
+                          ? "text-red-500"
+                          : "text-amber-500",
+                      )}
+                    />
+                    <span>{warning.text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             {link && (
               <div className="flex gap-1.5">
                 <Input

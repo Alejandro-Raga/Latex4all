@@ -25,7 +25,8 @@
 //   binary ← [1][u64 seq][update]  [2][awareness]  [3][u64 upTo][snapshot]
 //            [4][u64 seq][u64 at][message]
 //   text   ← {"type":"caught-up","seq","logEntries","logBytes","minProtocol",
-//            "chatDays"} {"type":"ack","seq"} {"type":"snapshot-ack","upTo","ok"}
+//            "chatDays","projectBytes","maxProjectBytes","relayNearlyFull"}
+//            {"type":"ack","seq","projectBytes"} {"type":"snapshot-ack","upTo","ok"}
 //            {"type":"error","code"} {"type":"chat-ack","seq","at"}
 //            {"type":"chat-error","code"}
 //
@@ -376,6 +377,10 @@ export function createRelay({
               logBytes: project.log.reduce((sum, e) => sum + e.data.length, 0),
               minProtocol: config.minProtocol,
               chatDays: config.chatDays,
+              // So the apps can warn before the project or the relay fills up.
+              projectBytes: project.usedBytes,
+              maxProjectBytes: config.maxProjectBytes,
+              relayNearlyFull: storage.nearlyFull,
             });
             ws.ready = true;
           } else if (
@@ -403,7 +408,7 @@ export function createRelay({
             reply({ type: "error", code: "quota" });
             return;
           }
-          reply({ type: "ack", seq });
+          reply({ type: "ack", seq, projectBytes: project.usedBytes });
           broadcast(frame(FRAME.UPDATE, seq, update));
         } else if (type === FRAME.AWARENESS) {
           charge(id, ws, data.length);

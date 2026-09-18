@@ -19,6 +19,12 @@ export type SyncEvent =
   | { type: "snapshot"; upTo: number; data: string }
   | { type: "awareness"; data: string }
   | { type: "chat"; seq: number; at: number; data: string }
+  | {
+      type: "usage";
+      projectBytes: number;
+      maxProjectBytes: number;
+      relayNearlyFull: boolean;
+    }
   | { type: "ack"; seq: number; pending: number }
   | { type: "snapshotAck"; upTo: number; ok: boolean }
   | { type: "error"; code: string };

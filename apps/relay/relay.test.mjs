@@ -510,3 +510,30 @@ test("deletes chat after 30 days, and the oldest past the chat allowance", async
   assert.equal((await c.chat([9])).seq, 4);
   await c.close();
 });
+
+test("tells apps how full the project and the relay are, not counting chat", async () => {
+  const relay = await startRelay({
+    limits: { maxProjectBytes: 1000, maxTotalBytes: 1000 },
+  });
+  const { id, token } = await createProject(relay);
+  const a = await connect(relay, id, token);
+  const caughtUp = await a.hello(0, 0);
+  assert.equal(caughtUp.projectBytes, 0);
+  assert.equal(caughtUp.maxProjectBytes, 1000);
+  assert.equal(caughtUp.relayNearlyFull, false);
+
+  assert.equal((await a.update(Buffer.alloc(88))).projectBytes, 100);
+  // Chat has its own allowance: the project is still at 100.
+  await a.chat(Buffer.alloc(500));
+  assert.equal((await a.update(Buffer.alloc(8))).projectBytes, 120);
+  await a.close();
+
+  // 640 of the relay's 1000 so far; past 90% it says so.
+  const b = await connect(relay, id, token);
+  assert.equal((await b.hello()).relayNearlyFull, false);
+  await b.chat(Buffer.alloc(300));
+  await b.close();
+  const c = await connect(relay, id, token);
+  assert.equal((await c.hello()).relayNearlyFull, true);
+  await c.close();
+});

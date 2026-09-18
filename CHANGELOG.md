@@ -39,9 +39,25 @@ tag.
   appear over the compiled PDF, and exporting the PDF asks whether to include
   them, as annotations any PDF reader shows. In a shared project everyone sees
   them.
+- Suggested edits. Right-click text, or select it, and choose "Suggest edit"
+  (⌘⌥E) to write what it should say. It shows with a green underline; anyone
+  can accept or reject it from the text or the notes bar, and reply to it
+  like a note.
+- Chat in shared projects, next to Notes: messages and images for everyone on
+  the project. Messages are deleted after 30 days.
+- Warnings when a shared project can't sync: when it's nearly full or full,
+  when a file is too large to share or couldn't be sent or received, or when
+  Latex4All needs updating. They show on the Shared button, along with how
+  much space the project uses.
 
 ### Fixed
 
+- When two people change the same words while out of sync, you get one
+  version whole instead of both mixed letter by letter, and the other is
+  offered as a suggestion.
+- Claude's edits, and undoing them, no longer erase what you or a
+  collaborator wrote in the meantime.
+- A note's icon stays at the end of its highlight while you type after it.
 - Right-clicking a Spanish word finds its definition for plurals, verb forms
   and other inflections, not only the dictionary form. The Spanish language
   pack is also half the size to download.

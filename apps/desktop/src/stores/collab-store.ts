@@ -14,6 +14,13 @@ import {
 import { documentStoreWorkspace } from "@/lib/collab/store-workspace";
 import { settleConcurrentEdits } from "@/lib/collab/concurrent-edits";
 import {
+  type SyncWarning,
+  USAGE_WARNING_IDS,
+  type Usage,
+  usageWarnings,
+  warningForError,
+} from "@/lib/collab/sync-warnings";
+import {
   type LinkInfo,
   compact,
   connect,
@@ -90,6 +97,10 @@ interface CollabState {
   revision: number;
   /** What a share or join in progress is doing. */
   progress: string | null;
+  /** Problems with syncing, until they're resolved. */
+  warnings: SyncWarning[];
+  /** The relay's latest figures for the open project. */
+  usage: Usage | null;
 
   setDisplayName: (name: string) => void;
   share: () => Promise<void>;
@@ -218,6 +229,38 @@ function showConflicts(found: Array<{ path: string; from: number }>) {
   );
 }
 
+function announce(warning: SyncWarning) {
+  if (warning.level === "error") toast.error(warning.text);
+  else toast.warning(warning.text);
+}
+
+/** Keeps a problem on show in the Shared button, and says so once. */
+function warnAbout(message: string) {
+  log.warn("Sync problem", { message });
+  const warning = warningForError(message);
+  if (!warning) return;
+  const { warnings } = useCollabStore.getState();
+  if (warnings.some((w) => w.id === warning.id)) return;
+  useCollabStore.setState({ warnings: [...warnings, warning] });
+  announce(warning);
+}
+
+/** The relay's figures: warns as the project or the relay fills up. */
+function applyUsage(usage: Usage) {
+  const { warnings } = useCollabStore.getState();
+  const fresh = usageWarnings(usage);
+  for (const warning of fresh) {
+    if (!warnings.some((w) => w.id === warning.id)) announce(warning);
+  }
+  useCollabStore.setState({
+    usage,
+    warnings: [
+      ...warnings.filter((w) => !USAGE_WARNING_IDS.includes(w.id)),
+      ...fresh,
+    ],
+  });
+}
+
 const shownErrors = new Set<string>();
 function reportError(message: string) {
   log.warn("Sync problem", { message });
@@ -301,9 +344,7 @@ export const useCollabStore = create<CollabState>()(
         target.session = new SharedSession(
           {
             publish: (update) => {
-              publish(update).catch((err) =>
-                reportError(describeError(String(err))),
-              );
+              publish(update).catch((err) => warnAbout(String(err)));
             },
             awareness: (data) => {
               sendAwareness(data).catch(() => {});
@@ -311,7 +352,13 @@ export const useCollabStore = create<CollabState>()(
             compact: (upTo, snapshot, blobs) => {
               compact(upTo, snapshot, blobs).catch(() => {});
             },
-            save: (seq, local, state) => saveDoc(root, seq, local, state),
+            save: (seq, local, state) =>
+              saveDoc(root, seq, local, state).catch((err) => {
+                warnAbout(
+                  "Couldn't save this project's sync progress on this computer. Check there's free disk space.",
+                );
+                throw err;
+              }),
           },
           {
             local: () => target.sync?.knownFiles() ?? known,
@@ -332,16 +379,25 @@ export const useCollabStore = create<CollabState>()(
               }
             },
             onError: (code) => {
-              if (code.startsWith("chat-"))
+              if (code.startsWith("chat-")) {
                 useChatStore.getState().markFailed();
-              if (code !== "corrupt") reportError(describeError(code));
+                reportError(describeError(code));
+              } else {
+                warnAbout(code);
+              }
             },
           },
         );
         const { session } = target;
         if (saved) session.load(saved.seq, saved.data);
         active = target;
-        set({ status: "syncing", link: info.link, peers: [] });
+        set({
+          status: "syncing",
+          link: info.link,
+          peers: [],
+          warnings: [],
+          usage: null,
+        });
 
         const chat = useChatStore.getState();
         chat.reset();
@@ -357,6 +413,10 @@ export const useCollabStore = create<CollabState>()(
             // Chat has nothing to do with the document; it's shown as it comes.
             if (event.type === "chat") {
               useChatStore.getState().receive(event);
+              return;
+            }
+            if (event.type === "usage") {
+              if (active === target) applyUsage(event);
               return;
             }
             if (event.type === "caughtUp") {
@@ -385,7 +445,7 @@ export const useCollabStore = create<CollabState>()(
           session.doc,
           documentStoreWorkspace(root, info.link),
           known,
-          { onLayoutChanged: bumpRevision, onError: reportError },
+          { onLayoutChanged: bumpRevision, onError: warnAbout },
         );
         await target.sync.start();
         if (active !== target) return;
@@ -413,6 +473,8 @@ export const useCollabStore = create<CollabState>()(
           status: "none",
           link: null,
           peers: [],
+          warnings: [],
+          usage: null,
           revision: s.revision + 1,
         }));
       }
@@ -427,6 +489,8 @@ export const useCollabStore = create<CollabState>()(
         displayName: "",
         revision: 0,
         progress: null,
+        warnings: [],
+        usage: null,
 
         setDisplayName: (name) => {
           set({ displayName: name });
