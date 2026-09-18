@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useProposedChangesStore } from "@/stores/proposed-changes-store";
+import { useDocumentStore } from "@/stores/document-store";
 
 // Mock the document store (used by keepChange/undoChange)
 vi.mock("@/stores/document-store", () => ({
@@ -97,6 +98,38 @@ describe("useProposedChangesStore", () => {
         toolName: "Edit",
       });
       useProposedChangesStore.getState().resolveChange("tool-1");
+      expect(useProposedChangesStore.getState().changes).toHaveLength(0);
+    });
+  });
+
+  describe("undoChange", () => {
+    it("takes out only Claude's change, keeping what was written since", async () => {
+      const file = {
+        id: "main.tex",
+        relativePath: "main.tex",
+        content: "Intro, by a collaborator.\nClaude's line.\nEnd.",
+      };
+      const updateFileContent = vi.fn((_: string, content: string) => {
+        file.content = content;
+      });
+      const saveFile = vi.fn(() => Promise.resolve());
+      vi.mocked(useDocumentStore.getState).mockReturnValue({
+        files: [file],
+        updateFileContent,
+        saveFile,
+        reloadFile: vi.fn(),
+      } as never);
+      useProposedChangesStore.getState().addChange({
+        id: "tool-1",
+        filePath: "main.tex",
+        absolutePath: "/project/main.tex",
+        oldContent: "Intro.\nEnd.",
+        newContent: "Intro.\nClaude's line.\nEnd.",
+        toolName: "Edit",
+      });
+      await useProposedChangesStore.getState().undoChange("tool-1");
+      expect(file.content).toBe("Intro, by a collaborator.\nEnd.");
+      expect(saveFile).toHaveBeenCalledWith("main.tex");
       expect(useProposedChangesStore.getState().changes).toHaveLength(0);
     });
   });

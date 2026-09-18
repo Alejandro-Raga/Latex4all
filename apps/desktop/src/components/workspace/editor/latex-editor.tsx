@@ -76,6 +76,7 @@ import {
   useCollabStore,
 } from "@/stores/collab-store";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
+import { mergeText, textChanges } from "@/lib/text-merge";
 import {
   compileLatex,
   resolveCompileTarget,
@@ -154,37 +155,9 @@ function getActiveFileContent(): string {
   return activeFile?.content ?? "";
 }
 
-/**
- * Smallest single replacement that turns `oldText` into `newText`, found by
- * trimming the common prefix/suffix. Used to sync store content into
- * CodeMirror without a full-document replace, which would otherwise clear
- * the mapped selection (cursor snaps to the document start) whenever content
- * changes outside a CodeMirror transaction (e.g. inserting text from a chat
- * code block via the store instead of the editor itself).
- */
-function computeMinimalChange(
-  oldText: string,
-  newText: string,
-): { from: number; to: number; insert: string } {
-  const maxStart = Math.min(oldText.length, newText.length);
-  let start = 0;
-  while (
-    start < maxStart &&
-    oldText.charCodeAt(start) === newText.charCodeAt(start)
-  ) {
-    start++;
-  }
-  let oldEnd = oldText.length;
-  let newEnd = newText.length;
-  while (
-    oldEnd > start &&
-    newEnd > start &&
-    oldText.charCodeAt(oldEnd - 1) === newText.charCodeAt(newEnd - 1)
-  ) {
-    oldEnd--;
-    newEnd--;
-  }
-  return { from: start, to: oldEnd, insert: newText.slice(start, newEnd) };
+/** The edits that apply Claude's change (`base` → `proposed`) to `current`. */
+function claudeEdits(current: string, base: string, proposed: string) {
+  return textChanges(current, mergeText(base, current, proposed).text);
 }
 
 /** Per-file editor state cache: fileId → { cursor, scrollTop } */
@@ -391,7 +364,7 @@ export function LatexEditor() {
     isMergeActiveRef.current = false;
     setMergeChunkInfo({ total: 0, current: 0 });
     view.dispatch({ effects: mergeCompartmentRef.current.reconfigure([]) });
-    setContent(change.newContent);
+    setContent(view.state.doc.toString());
     useProposedChangesStore.getState().keepChange(change.id);
     pendingChangeRef.current = null;
     // Auto-navigate to next file with pending changes (only if file exists)
@@ -415,16 +388,19 @@ export function LatexEditor() {
     isMergeActiveRef.current = false;
     setMergeChunkInfo({ total: 0, current: 0 });
     view.dispatch({ effects: mergeCompartmentRef.current.reconfigure([]) });
+    // Only Claude's edits come out; anything written since stays.
+    const current = view.state.doc.toString();
+    const reverted = mergeText(
+      change.newContent,
+      current,
+      change.oldContent,
+    ).text;
     view.dispatch({
-      changes: {
-        from: 0,
-        to: view.state.doc.length,
-        insert: change.oldContent,
-      },
+      changes: textChanges(current, reverted),
       annotations: Transaction.addToHistory.of(false),
     });
-    setContent(change.oldContent);
-    useProposedChangesStore.getState().undoChange(change.id);
+    setContent(reverted);
+    useProposedChangesStore.getState().undoChange(change.id, reverted);
     pendingChangeRef.current = null;
     // Auto-navigate to next file with pending changes (only if file exists)
     const remaining = useProposedChangesStore.getState().changes;
@@ -466,7 +442,9 @@ export function LatexEditor() {
         view.dispatch({ effects: mergeCompartmentRef.current.reconfigure([]) });
         setContent(finalContent);
         if (finalContent === change.oldContent) {
-          useProposedChangesStore.getState().undoChange(change.id);
+          useProposedChangesStore
+            .getState()
+            .undoChange(change.id, finalContent);
         } else {
           useProposedChangesStore.getState().keepChange(change.id);
         }
@@ -780,7 +758,9 @@ export function LatexEditor() {
                 });
                 setContent(finalContent);
                 if (finalContent === change.oldContent) {
-                  useProposedChangesStore.getState().undoChange(change.id);
+                  useProposedChangesStore
+                    .getState()
+                    .undoChange(change.id, finalContent);
                 } else {
                   useProposedChangesStore.getState().keepChange(change.id);
                 }
@@ -1293,7 +1273,9 @@ export function LatexEditor() {
     const currentContent = view.state.doc.toString();
     if (currentContent !== content) {
       view.dispatch({
-        changes: computeMinimalChange(currentContent, content),
+        // Only what differs, so the cursor stays put and a collaborator's
+        // edits in between aren't wiped and retyped.
+        changes: textChanges(currentContent, content),
       });
     }
   }, [activeFileContent, isTextFile]);
@@ -1315,15 +1297,17 @@ export function LatexEditor() {
     if (activeFileChange && !isMergeActiveRef.current) {
       // Activate merge view: load newContent + enable merge extension in ONE atomic dispatch
       log.debug(`ACTIVATING merge view for: ${activeFileChange.filePath}`);
+      const base = activeFileChange.oldContent;
       pendingChangeRef.current = activeFileChange;
       isMergeActiveRef.current = true;
       try {
         const scrollTop = view.scrollDOM.scrollTop;
         view.dispatch({
-          // Only the changed span, so a collaborator's edits elsewhere in the
-          // file aren't wiped and retyped by a whole-document replace.
-          changes: computeMinimalChange(
+          // Only Claude's edits, applied to the text as it is now, so a
+          // collaborator's edits since aren't undone.
+          changes: claudeEdits(
             view.state.doc.toString(),
+            base,
             activeFileChange.newContent,
           ),
           effects: mergeCompartmentRef.current.reconfigure(
@@ -1355,14 +1339,17 @@ export function LatexEditor() {
       log.debug(
         `UPDATING merge view (stacked edit) for: ${activeFileChange.filePath}`,
       );
+      const base =
+        pendingChangeRef.current?.newContent ?? activeFileChange.oldContent;
       pendingChangeRef.current = activeFileChange;
       try {
         const scrollTop = view.scrollDOM.scrollTop;
         view.dispatch({
-          // Only the changed span, so a collaborator's edits elsewhere in the
-          // file aren't wiped and retyped by a whole-document replace.
-          changes: computeMinimalChange(
+          // Only Claude's edits, applied to the text as it is now, so a
+          // collaborator's edits since aren't undone.
+          changes: claudeEdits(
             view.state.doc.toString(),
+            base,
             activeFileChange.newContent,
           ),
           effects: mergeCompartmentRef.current.reconfigure(

@@ -5,6 +5,7 @@ import {
   type Annotation,
   type AnnotationColor,
   type AnnotationComment,
+  type AnnotationConflict,
   type AnnotationSource,
   type Author,
   isAnnotationColor,
@@ -28,6 +29,37 @@ export function annotationsMap(doc: Y.Doc) {
 
 /** Changes to annotations made on this device. */
 export const ANNOTATING = Symbol("annotating");
+
+function readConflict(value: unknown): AnnotationConflict | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const { text, author, authorColor } = value as Record<string, unknown>;
+  return typeof text === "string"
+    ? {
+        text,
+        author: typeof author === "string" ? author : "",
+        authorColor: typeof authorColor === "string" ? authorColor : "",
+      }
+    : undefined;
+}
+
+/**
+ * Marks `[from, to)` of a file's text as changed by two people at once, with
+ * the version that didn't make it in. Call inside a transaction.
+ */
+export function addConflict(
+  doc: Y.Doc,
+  fileId: string,
+  text: Y.Text,
+  from: number,
+  to: number,
+  conflict: AnnotationConflict,
+) {
+  const entry = newEntry(fileId, text, from, to, "pink", false, []);
+  entry.set("conflict", { ...conflict });
+  const id = newAnnotationId();
+  annotationsMap(doc).set(id, entry);
+  return id;
+}
 
 function readComments(entry: Y.Map<unknown>): AnnotationComment[] {
   const comments = entry.get("comments");
@@ -75,6 +107,7 @@ export class SharedAnnotations implements AnnotationSource {
         color: isAnnotationColor(color) ? color : "yellow",
         resolved: entry.get("resolved") === true,
         comments: readComments(entry),
+        conflict: readConflict(entry.get("conflict")),
       });
     });
     return result;
@@ -93,7 +126,7 @@ export class SharedAnnotations implements AnnotationSource {
     this.doc.transact(() => {
       this.map.set(
         id,
-        this.entry(
+        newEntry(
           file.fileId,
           file.text,
           from,
@@ -116,7 +149,7 @@ export class SharedAnnotations implements AnnotationSource {
           continue;
         this.map.set(
           item.id,
-          this.entry(
+          newEntry(
             file.fileId,
             file.text,
             item.from,
@@ -191,6 +224,26 @@ export class SharedAnnotations implements AnnotationSource {
     this.edit(id, (entry) => entry.set("resolved", resolved));
   }
 
+  settleConflict(id: string, useOther: boolean) {
+    const entry = this.map.get(id);
+    const conflict = readConflict(entry?.get("conflict"));
+    if (!entry || !conflict) return;
+    const file = [...layout(this.doc).values()].find(
+      (f) => f.fileId === entry.get("fileId"),
+    );
+    this.doc.transact(() => {
+      if (useOther && file?.kind === "text") {
+        const from = this.resolve(entry.get("from"), file.text);
+        const to = this.resolve(entry.get("to"), file.text);
+        if (from !== null && to !== null && from < to) {
+          file.text.delete(from, to - from);
+          if (conflict.text) file.text.insert(from, conflict.text);
+        }
+      }
+      this.map.delete(id);
+    }, ANNOTATING);
+  }
+
   remove(id: string) {
     this.doc.transact(() => this.map.delete(id), ANNOTATING);
   }
@@ -215,39 +268,6 @@ export class SharedAnnotations implements AnnotationSource {
     if (entry) this.doc.transact(() => change(entry), ANNOTATING);
   }
 
-  private entry(
-    fileId: string,
-    text: Y.Text,
-    from: number,
-    to: number,
-    color: AnnotationColor,
-    resolved: boolean,
-    comments: AnnotationComment[],
-  ) {
-    const entry = new Y.Map<unknown>();
-    entry.set("fileId", fileId);
-    // The start sticks to the first highlighted character and the end to
-    // the last, so typing just outside a highlight never joins it.
-    entry.set(
-      "from",
-      Y.relativePositionToJSON(
-        Y.createRelativePositionFromTypeIndex(text, from, 0),
-      ),
-    );
-    entry.set(
-      "to",
-      Y.relativePositionToJSON(
-        Y.createRelativePositionFromTypeIndex(text, to, -1),
-      ),
-    );
-    entry.set("color", color);
-    entry.set("resolved", resolved);
-    const list = new Y.Array<AnnotationComment>();
-    list.push(comments);
-    entry.set("comments", list);
-    return entry;
-  }
-
   private resolve(json: unknown, text: Y.Text): number | null {
     if (!json || typeof json !== "object") return null;
     const absolute = Y.createAbsolutePositionFromRelativePosition(
@@ -266,4 +286,37 @@ function comment(author: Author, text: string): AnnotationComment {
     text,
     at: Date.now(),
   };
+}
+
+function newEntry(
+  fileId: string,
+  text: Y.Text,
+  from: number,
+  to: number,
+  color: AnnotationColor,
+  resolved: boolean,
+  comments: AnnotationComment[],
+) {
+  const entry = new Y.Map<unknown>();
+  entry.set("fileId", fileId);
+  // The start sticks to the first highlighted character and the end to
+  // the last, so typing just outside a highlight never joins it.
+  entry.set(
+    "from",
+    Y.relativePositionToJSON(
+      Y.createRelativePositionFromTypeIndex(text, from, 0),
+    ),
+  );
+  entry.set(
+    "to",
+    Y.relativePositionToJSON(
+      Y.createRelativePositionFromTypeIndex(text, to, -1),
+    ),
+  );
+  entry.set("color", color);
+  entry.set("resolved", resolved);
+  const list = new Y.Array<AnnotationComment>();
+  list.push(comments);
+  entry.set("comments", list);
+  return entry;
 }

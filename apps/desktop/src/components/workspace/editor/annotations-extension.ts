@@ -63,11 +63,13 @@ function build(annotations: readonly Annotation[], length: number) {
     const to = Math.max(0, Math.min(a.to, length));
     if (from >= to) continue;
     // Resolved notes turn grey rather than vanishing, so they can be found.
-    const className = a.resolved
-      ? "cm-annotation cm-annotation-resolved"
-      : a.color === "none"
-        ? null
-        : `cm-annotation cm-annotation-${a.color}`;
+    const className = a.conflict
+      ? "cm-annotation cm-annotation-conflict"
+      : a.resolved
+        ? "cm-annotation cm-annotation-resolved"
+        : a.color === "none"
+          ? null
+          : `cm-annotation cm-annotation-${a.color}`;
     if (className) {
       ranges.push(
         Decoration.mark({
@@ -159,6 +161,18 @@ export const annotationsTheme = EditorView.baseTheme({
   },
   "&dark .cm-annotation-resolved": {
     backgroundColor: "rgba(148, 163, 184, 0.18)",
+  },
+  // Text two people changed at once: underlined, so it reads as needing a
+  // look rather than as someone's highlight.
+  "&light .cm-annotation-conflict": {
+    backgroundColor: "rgba(249, 115, 22, 0.16)",
+    textDecoration: "underline wavy rgba(234, 88, 12, 0.8)",
+    textUnderlineOffset: "3px",
+  },
+  "&dark .cm-annotation-conflict": {
+    backgroundColor: "rgba(249, 115, 22, 0.14)",
+    textDecoration: "underline wavy rgba(251, 146, 60, 0.8)",
+    textUnderlineOffset: "3px",
   },
   ".cm-annotation": { borderRadius: "2px" },
   ".cm-annotation-note": {

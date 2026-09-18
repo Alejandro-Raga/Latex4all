@@ -24,6 +24,7 @@ import { clearZoomCache } from "@/components/workspace/preview/pdf-preview";
 import { clearEditorStateCache } from "@/components/workspace/editor/latex-editor";
 import { useProjectStore } from "@/stores/project-store";
 import { createLogger } from "@/lib/debug/logger";
+import { mergeText } from "@/lib/text-merge";
 
 const log = createLogger("document");
 const PROJECT_RENAME_LOCK_RETRY_DELAYS_MS = [150, 300, 600, 1000];
@@ -37,8 +38,29 @@ export interface ProjectFile {
   content?: string;
   dataUrl?: string;
   isDirty: boolean;
+  /** The text as last read from or saved to disk, to tell what someone else
+   *  (Claude, another editor) changed there from unsaved edits here. */
+  diskContent?: string;
   /** File size in bytes (from stat). Used to skip auto-loading large files. */
   fileSize?: number;
+}
+
+/**
+ * `file` once its copy on disk reads `disk`: whatever changed on disk since
+ * it was last read or saved is merged into the unsaved edits here, so
+ * neither side's changes are lost.
+ */
+export function withDiskContent(file: ProjectFile, disk: string): ProjectFile {
+  if (file.diskContent === disk && file.content !== undefined) return file;
+  if (
+    !file.isDirty ||
+    file.content === undefined ||
+    file.diskContent === undefined
+  ) {
+    return { ...file, content: disk, diskContent: disk, isDirty: false };
+  }
+  const { text } = mergeText(file.diskContent, file.content, disk);
+  return { ...file, content: text, diskContent: disk, isDirty: text !== disk };
 }
 
 // ── PDF bytes cache (kept outside Zustand to avoid React diffing large buffers) ──
@@ -339,6 +361,15 @@ let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 // Store reference set after creation to avoid TDZ issues
 let storeRef: typeof useDocumentStore | null = null;
 
+/** `file` once `written` is on disk; edits made while it was being written stay unsaved. */
+function savedAs(file: ProjectFile, written: string): ProjectFile {
+  return {
+    ...file,
+    diskContent: written,
+    isDirty: file.content !== written,
+  };
+}
+
 function scheduleAutoSave() {
   if (autoSaveTimer) clearTimeout(autoSaveTimer);
   autoSaveTimer = setTimeout(async () => {
@@ -478,6 +509,7 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
         if (!isLargeNonEssential) {
           try {
             pf.content = await readTexFileContent(f.absolutePath);
+            pf.diskContent = pf.content;
           } catch {
             pf.content = "";
           }
@@ -923,9 +955,10 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
     const file = state.files.find((f) => f.id === id);
     if (!file || !file.isDirty || file.content == null) return;
 
-    await writeTexFileContent(file.absolutePath, file.content);
+    const written = file.content;
+    await writeTexFileContent(file.absolutePath, written);
     set((s) => ({
-      files: s.files.map((f) => (f.id === id ? { ...f, isDirty: false } : f)),
+      files: s.files.map((f) => (f.id === id ? savedAs(f, written) : f)),
     }));
   },
 
@@ -938,15 +971,18 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
       dirtyFiles.map((f) => writeTexFileContent(f.absolutePath, f.content!)),
     );
     // Only mark successfully saved files as clean
-    const savedIds = new Set<string>();
+    const saved = new Map<string, string>();
     results.forEach((r, i) => {
-      if (r.status === "fulfilled") savedIds.add(dirtyFiles[i].id);
+      if (r.status === "fulfilled") {
+        saved.set(dirtyFiles[i].id, dirtyFiles[i].content!);
+      }
     });
-    if (savedIds.size > 0) {
+    if (saved.size > 0) {
       set((s) => ({
-        files: s.files.map((f) =>
-          savedIds.has(f.id) ? { ...f, isDirty: false } : f,
-        ),
+        files: s.files.map((f) => {
+          const written = saved.get(f.id);
+          return written === undefined ? f : savedAs(f, written);
+        }),
       }));
     }
   },
@@ -992,6 +1028,7 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
           absolutePath: fullPath,
           type,
           content: type !== "image" ? content : undefined,
+          diskContent: type !== "image" ? content : undefined,
           isDirty: false,
         },
       ],
@@ -1111,10 +1148,10 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
     if (!file) return;
 
     if (file.type === "tex" || file.type === "bib") {
-      const content = await readTexFileContent(file.absolutePath);
+      const disk = await readTexFileContent(file.absolutePath);
       set((s) => ({
         files: s.files.map((f) =>
-          f.id === file.id ? { ...f, content, isDirty: false } : f,
+          f.id === file.id ? withDiskContent(f, disk) : f,
         ),
         contentGeneration: s.contentGeneration + 1,
       }));
@@ -1122,7 +1159,7 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
   },
 
   refreshFiles: async () => {
-    const { projectRoot, files, activeFileId } = get();
+    const { projectRoot, files } = get();
     if (!projectRoot) return;
 
     const { files: fsFiles, folders: fsFolders } =
@@ -1130,39 +1167,34 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
     const existingMap = new Map(files.map((f) => [f.relativePath, f]));
     const diskPaths = new Set(fsFiles.map((f) => f.relativePath));
 
-    const merged: ProjectFile[] = [];
+    // What disk says about files already loaded. It's merged into them as
+    // they are once it's all read, since edits can land in the meantime.
+    const reread = new Map<string, { fileSize: number; disk?: string }>();
+    const added = new Map<string, ProjectFile>();
 
     for (const fsFile of fsFiles) {
       const existing = existingMap.get(fsFile.relativePath);
 
       if (existing) {
-        // Existing file — reload content from disk unless the user has unsaved edits
-        if (existing.isDirty) {
-          merged.push(existing);
-        } else {
-          const updated = { ...existing, fileSize: fsFile.fileSize };
-          if (
-            updated.type === "tex" ||
-            updated.type === "bib" ||
-            updated.type === "style" ||
-            updated.type === "other"
-          ) {
-            const isLargeNonEssential =
-              updated.type === "other" &&
-              fsFile.fileSize > LARGE_FILE_THRESHOLD;
-            // Only reload if it was previously loaded (not a skipped large file)
-            if (!isLargeNonEssential || updated.content !== undefined) {
-              try {
-                updated.content = await readTexFileContent(
-                  updated.absolutePath,
-                );
-              } catch {
-                /* keep previous content */
-              }
+        let disk: string | undefined;
+        if (
+          existing.type === "tex" ||
+          existing.type === "bib" ||
+          existing.type === "style" ||
+          existing.type === "other"
+        ) {
+          const isLargeNonEssential =
+            existing.type === "other" && fsFile.fileSize > LARGE_FILE_THRESHOLD;
+          // Only reload if it was previously loaded (not a skipped large file)
+          if (!isLargeNonEssential || existing.content !== undefined) {
+            try {
+              disk = await readTexFileContent(existing.absolutePath);
+            } catch {
+              /* keep previous content */
             }
           }
-          merged.push(updated);
         }
+        reread.set(fsFile.relativePath, { fileSize: fsFile.fileSize, disk });
       } else {
         // New file on disk
         const pf: ProjectFile = {
@@ -1184,6 +1216,7 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
         ) {
           try {
             pf.content = await readTexFileContent(pf.absolutePath);
+            pf.diskContent = pf.content;
           } catch {
             /* skip unreadable */
           }
@@ -1198,27 +1231,45 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
           }
         }
         // PDF files and large files are loaded on-demand
-        merged.push(pf);
+        added.set(pf.relativePath, pf);
       }
     }
 
-    // Keep dirty files that were deleted from disk (user hasn't saved yet)
-    for (const f of files) {
-      if (!diskPaths.has(f.relativePath) && f.isDirty) {
-        merged.push(f);
+    set((s) => {
+      const current = new Map(s.files.map((f) => [f.relativePath, f]));
+      const merged: ProjectFile[] = [];
+      for (const fsFile of fsFiles) {
+        const path = fsFile.relativePath;
+        const now = current.get(path);
+        const read = reread.get(path);
+        if (now && read) {
+          let file =
+            now.fileSize === read.fileSize
+              ? now
+              : { ...now, fileSize: read.fileSize };
+          if (read.disk !== undefined) file = withDiskContent(file, read.disk);
+          merged.push(file);
+        } else if (now) {
+          merged.push(now);
+        } else if (!read) {
+          const pf = added.get(path);
+          if (pf) merged.push(pf);
+        }
       }
-    }
-
-    const newActiveId = merged.some((f) => f.id === activeFileId)
-      ? activeFileId
-      : (merged[0]?.id ?? "");
-
-    set((s) => ({
-      files: merged,
-      folders: fsFolders,
-      activeFileId: newActiveId,
-      contentGeneration: s.contentGeneration + 1,
-    }));
+      // Keep dirty files that were deleted from disk (user hasn't saved yet)
+      for (const f of s.files) {
+        if (!diskPaths.has(f.relativePath) && f.isDirty) merged.push(f);
+      }
+      const activeId = merged.some((f) => f.id === s.activeFileId)
+        ? s.activeFileId
+        : (merged[0]?.id ?? "");
+      return {
+        files: merged,
+        folders: fsFolders,
+        activeFileId: activeId,
+        contentGeneration: s.contentGeneration + 1,
+      };
+    });
   },
 
   loadFileContent: async (id) => {
@@ -1228,7 +1279,9 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
     try {
       const content = await readTexFileContent(file.absolutePath);
       set((s) => ({
-        files: s.files.map((f) => (f.id === id ? { ...f, content } : f)),
+        files: s.files.map((f) =>
+          f.id === id ? { ...f, content, diskContent: content } : f,
+        ),
       }));
     } catch {
       set((s) => ({

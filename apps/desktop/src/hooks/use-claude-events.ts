@@ -7,7 +7,7 @@ import {
   useClaudeChatStore,
   type ClaudeStreamMessage,
 } from "@/stores/claude-chat-store";
-import { useDocumentStore } from "@/stores/document-store";
+import { useDocumentStore, withDiskContent } from "@/stores/document-store";
 import { useHistoryStore } from "@/stores/history-store";
 import { useProposedChangesStore } from "@/stores/proposed-changes-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -151,7 +151,10 @@ export function useClaudeEvents() {
 
       const oldContent = file.content ?? "";
       try {
-        const newContent = await readTexFileContent(file.absolutePath);
+        // Claude's edit on top of what's here now, which may include unsaved
+        // edits (or a collaborator's) that Claude's copy on disk lacks.
+        const disk = await readTexFileContent(file.absolutePath);
+        const newContent = withDiskContent(file, disk).content ?? disk;
         if (oldContent !== newContent) {
           useProposedChangesStore.getState().addChange({
             id: toolUseId,

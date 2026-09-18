@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { textChanges } from "@/lib/text-merge";
 
 /**
  * The shape of a shared project's Yjs document.
@@ -125,43 +126,17 @@ export function liveBlobs(doc: Y.Doc) {
   return [...ids];
 }
 
-function isHighSurrogate(code: number) {
-  return code >= 0xd800 && code <= 0xdbff;
-}
-
-function isLowSurrogate(code: number) {
-  return code >= 0xdc00 && code <= 0xdfff;
-}
-
 /**
- * Makes `ytext` read `next` by replacing only the part that differs, so
- * someone else's edit elsewhere in the file, and their cursor, survive.
+ * Makes `ytext` read `next` by changing only the words that differ, so
+ * someone else's edits elsewhere in the file, cursors and highlights survive.
  */
 export function applyTextChange(ytext: Y.Text, next: string) {
-  const current = ytext.toString();
-  if (current === next) return;
-  const max = Math.min(current.length, next.length);
-  let start = 0;
-  while (start < max && current.charCodeAt(start) === next.charCodeAt(start)) {
-    start++;
+  const edits = textChanges(ytext.toString(), next);
+  for (let i = edits.length - 1; i >= 0; i--) {
+    const { from, to, insert } = edits[i];
+    if (to > from) ytext.delete(from, to - from);
+    if (insert) ytext.insert(from, insert);
   }
-  // Never split an emoji or other surrogate pair across the boundary.
-  if (start > 0 && isHighSurrogate(current.charCodeAt(start - 1))) start--;
-  let end = 0;
-  while (
-    end < max - start &&
-    current.charCodeAt(current.length - 1 - end) ===
-      next.charCodeAt(next.length - 1 - end)
-  ) {
-    end++;
-  }
-  if (end > 0 && isLowSurrogate(current.charCodeAt(current.length - end))) {
-    end--;
-  }
-  const deleteCount = current.length - start - end;
-  const insert = next.slice(start, next.length - end);
-  if (deleteCount > 0) ytext.delete(start, deleteCount);
-  if (insert) ytext.insert(start, insert);
 }
 
 /** A quick fingerprint of a file's text, to tell whether it changed on disk. */

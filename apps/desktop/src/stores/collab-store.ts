@@ -12,6 +12,7 @@ import {
   type SyncEvent,
 } from "@/lib/collab/shared-session";
 import { documentStoreWorkspace } from "@/lib/collab/store-workspace";
+import { settleConcurrentEdits } from "@/lib/collab/concurrent-edits";
 import {
   type LinkInfo,
   compact,
@@ -34,6 +35,7 @@ import { join } from "@/lib/tauri/fs";
 import { useDocumentStore } from "@/stores/document-store";
 import { useHistoryStore } from "@/stores/history-store";
 import { useProjectStore } from "@/stores/project-store";
+import { useSettingsStore } from "@/stores/settings-store";
 import {
   moveAnnotationsIntoShared,
   moveAnnotationsOutOfShared,
@@ -184,6 +186,30 @@ function describeError(code: string) {
   }
 }
 
+/** Points the user to text two people changed at once. */
+function showConflicts(found: Array<{ path: string; from: number }>) {
+  useSettingsStore.getState().setShowAnnotations(true);
+  const [first] = found;
+  toast.warning(
+    found.length === 1
+      ? "You and someone else edited the same text."
+      : `You and someone else edited the same text in ${found.length} places.`,
+    {
+      duration: 10_000,
+      action: {
+        label: "Show",
+        onClick: () => {
+          const documents = useDocumentStore.getState();
+          if (documents.activeFileId !== first.path) {
+            documents.setActiveFile(first.path);
+          }
+          documents.requestJumpToPosition(first.from);
+        },
+      },
+    },
+  );
+}
+
 const shownErrors = new Set<string>();
 function reportError(message: string) {
   log.warn("Sync problem", { message });
@@ -286,6 +312,16 @@ export const useCollabStore = create<CollabState>()(
             },
             onCaughtUp: (changed) => {
               if (changed) recordCollaboratorChanges(target);
+            },
+            onConcurrentEdits: (base, mine, theirs) => {
+              const { doc } = target.session;
+              const found = settleConcurrentEdits(doc, base, mine, theirs, {
+                name: get().displayName.trim() || "Anonymous",
+                color: peerColor(doc.clientID),
+              });
+              if (found.length > 0 && active === target) {
+                showConflicts(found);
+              }
             },
             onError: (code) => {
               if (code !== "corrupt") reportError(describeError(code));

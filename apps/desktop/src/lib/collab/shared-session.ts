@@ -51,6 +51,23 @@ interface Hooks {
   /** Caught up with the relay; `changed` if others' changes came in. */
   onCaughtUp?: (changed: boolean) => void;
   onError?: (code: string) => void;
+  /**
+   * Caught up after changes were made both here and elsewhere without the
+   * other knowing: the document as of the last time they agreed, plus each
+   * side's changes since. Called after they've been merged into `doc`.
+   */
+  onConcurrentEdits?: (base: Y.Doc, mine: Y.Doc, theirs: Y.Doc) => void;
+}
+
+/** Keeping track while this device can't see others' changes. */
+interface Apart {
+  /** The document as of the last time this device was up to date. */
+  base: Uint8Array;
+  editedHere: boolean;
+  /** This device's document, just before others' changes came in. */
+  mine: Uint8Array | null;
+  /** `base` plus others' changes. */
+  theirs: Y.Doc | null;
 }
 
 /**
@@ -67,6 +84,7 @@ export class SharedSession {
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private offlineTimer: ReturnType<typeof setTimeout> | null = null;
   private destroyed = false;
+  private apart: Apart | null = null;
 
   constructor(
     private readonly transport: SessionTransport,
@@ -80,6 +98,7 @@ export class SharedSession {
   load(seq: number, state: Uint8Array) {
     if (state.length > 0) Y.applyUpdate(this.doc, state, LOADED);
     this.seq = seq;
+    this.startApart();
   }
 
   /** Call once the connection has been asked for. */
@@ -94,14 +113,12 @@ export class SharedSession {
     if (this.destroyed) return;
     switch (event.type) {
       case "update":
-        Y.applyUpdate(this.doc, fromBase64(event.data), REMOTE);
+        this.receive(fromBase64(event.data));
         this.advance(event.seq);
-        this.changedSinceCaughtUp = true;
         break;
       case "snapshot":
-        Y.applyUpdate(this.doc, fromBase64(event.data), REMOTE);
+        this.receive(fromBase64(event.data));
         this.advance(event.upTo);
-        this.changedSinceCaughtUp = true;
         break;
       case "ack":
         this.advance(event.seq);
@@ -109,6 +126,7 @@ export class SharedSession {
       case "caughtUp": {
         this.advance(event.seq);
         this.setStatus("synced");
+        this.endApart();
         const changed = this.changedSinceCaughtUp;
         this.changedSinceCaughtUp = false;
         this.hooks.onCaughtUp?.(changed);
@@ -192,6 +210,44 @@ export class SharedSession {
     }
   }
 
+  private receive(update: Uint8Array) {
+    const apart = this.apart;
+    if (apart?.editedHere) {
+      if (!apart.mine) {
+        apart.mine = Y.encodeStateAsUpdate(this.doc);
+        apart.theirs = docFrom(apart.base);
+      }
+      Y.applyUpdate(apart.theirs!, update, REMOTE);
+    }
+    Y.applyUpdate(this.doc, update, REMOTE);
+    this.changedSinceCaughtUp = true;
+  }
+
+  private startApart() {
+    if (this.apart) return;
+    this.apart = {
+      base: Y.encodeStateAsUpdate(this.doc),
+      editedHere: false,
+      mine: null,
+      theirs: null,
+    };
+  }
+
+  private endApart() {
+    const apart = this.apart;
+    this.apart = null;
+    if (!apart?.mine || !apart.theirs) return;
+    const base = docFrom(apart.base);
+    const mine = docFrom(apart.mine);
+    try {
+      this.hooks.onConcurrentEdits?.(base, mine, apart.theirs);
+    } finally {
+      base.destroy();
+      mine.destroy();
+      apart.theirs.destroy();
+    }
+  }
+
   private advance(seq: number) {
     if (seq > this.seq) this.seq = seq;
     this.scheduleSave();
@@ -200,6 +256,7 @@ export class SharedSession {
   private setStatus(status: SessionStatus) {
     if (this.status === status) return;
     this.status = status;
+    if (status === "offline") this.startApart();
     if (status !== "syncing" && this.offlineTimer) {
       clearTimeout(this.offlineTimer);
       this.offlineTimer = null;
@@ -209,6 +266,7 @@ export class SharedSession {
 
   private handleDocUpdate = (update: Uint8Array, origin: unknown) => {
     if (origin === REMOTE || origin === LOADED) return;
+    if (this.apart) this.apart.editedHere = true;
     this.transport.publish(update);
     this.scheduleSave();
   };
@@ -226,4 +284,10 @@ export class SharedSession {
       ]),
     );
   };
+}
+
+function docFrom(state: Uint8Array) {
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, state);
+  return doc;
 }

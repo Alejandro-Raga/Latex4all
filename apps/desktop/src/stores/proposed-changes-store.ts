@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { useDocumentStore } from "./document-store";
 import { writeTexFileContent } from "@/lib/tauri/fs";
 import { createLogger } from "@/lib/debug/logger";
+import { mergeText } from "@/lib/text-merge";
 
 const log = createLogger("proposed-changes");
 
@@ -22,10 +23,30 @@ interface ProposedChangesState {
   addChange: (change: Omit<ProposedChange, "timestamp">) => void;
   resolveChange: (id: string) => void;
   keepChange: (id: string) => void;
-  undoChange: (id: string) => Promise<void>;
+  /** `content`: the file with the change taken out, if already worked out. */
+  undoChange: (id: string, content?: string) => Promise<void>;
   keepAll: () => void;
   undoAll: () => Promise<void>;
   getChangeForFile: (relativePath: string) => ProposedChange | undefined;
+}
+
+/**
+ * Takes Claude's change back out of a file. Only that change: whatever was
+ * written there since, here or by a collaborator, stays.
+ */
+async function takeOut(change: ProposedChange, content?: string) {
+  const documents = useDocumentStore.getState();
+  const file = documents.files.find((f) => f.relativePath === change.filePath);
+  if (file?.content === undefined) {
+    await writeTexFileContent(change.absolutePath, change.oldContent);
+    await documents.reloadFile(change.filePath);
+    return;
+  }
+  const next =
+    content ??
+    mergeText(change.newContent, file.content, change.oldContent).text;
+  if (next !== file.content) documents.updateFileContent(file.id, next);
+  await useDocumentStore.getState().saveFile(file.id);
 }
 
 export const useProposedChangesStore = create<ProposedChangesState>()(
@@ -74,9 +95,12 @@ export const useProposedChangesStore = create<ProposedChangesState>()(
         .getState()
         .files.find((f) => f.relativePath === change.filePath);
       if (file?.content != null) {
-        writeTexFileContent(change.absolutePath, file.content).catch((err) =>
-          log.error("Failed to write kept change", { error: String(err) }),
-        );
+        useDocumentStore
+          .getState()
+          .saveFile(file.id)
+          .catch((err) =>
+            log.error("Failed to write kept change", { error: String(err) }),
+          );
       }
 
       // Remove from pending
@@ -85,16 +109,12 @@ export const useProposedChangesStore = create<ProposedChangesState>()(
       }));
     },
 
-    undoChange: async (id) => {
+    undoChange: async (id, content) => {
       const change = get().changes.find((c) => c.id === id);
       if (!change) return;
 
       log.info(`Undoing change on ${change.filePath}`);
-      // Restore oldContent to disk
-      await writeTexFileContent(change.absolutePath, change.oldContent);
-
-      // Reload the file in document store (will pick up oldContent from disk)
-      await useDocumentStore.getState().reloadFile(change.filePath);
+      await takeOut(change, content);
 
       // Remove from pending
       set((state) => ({
@@ -113,10 +133,7 @@ export const useProposedChangesStore = create<ProposedChangesState>()(
     undoAll: async () => {
       const { changes } = get();
       log.info(`Undoing all ${changes.length} changes`);
-      for (const change of changes) {
-        await writeTexFileContent(change.absolutePath, change.oldContent);
-        await useDocumentStore.getState().reloadFile(change.filePath);
-      }
+      for (const change of changes) await takeOut(change);
       set({ changes: [] });
     },
 

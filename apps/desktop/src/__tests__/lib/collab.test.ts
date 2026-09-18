@@ -22,6 +22,8 @@ import {
   SharedSession,
   type SyncEvent,
 } from "@/lib/collab/shared-session";
+import { settleConcurrentEdits } from "@/lib/collab/concurrent-edits";
+import { SharedAnnotations } from "@/lib/annotations/shared-annotations";
 
 // ─── A relay and devices, in memory ───
 
@@ -250,11 +252,14 @@ class Device {
   sync: ProjectSync | null = null;
   saved: { seq: number; local: string; state: Uint8Array } | null = null;
   errors: string[] = [];
+  /** Where overlapping edits were found on catching up. */
+  conflicts: Array<{ path: string; from: number }> = [];
   private buffered: SyncEvent[] | null = null;
 
   constructor(
     readonly relay: FakeRelay,
     readonly workspace: FakeWorkspace,
+    readonly name = "Someone",
   ) {}
 
   get after() {
@@ -292,7 +297,17 @@ class Device {
           this.saved = { seq, local, state };
         },
       },
-      { local: () => this.sync?.knownFiles() ?? {} },
+      {
+        local: () => this.sync?.knownFiles() ?? {},
+        onConcurrentEdits: (base, mine, theirs) => {
+          this.conflicts.push(
+            ...settleConcurrentEdits(session.doc, base, mine, theirs, {
+              name: this.name,
+              color: "#000",
+            }),
+          );
+        },
+      },
     );
     if (this.saved) session.load(this.saved.seq, this.saved.state);
     this.session = session;
@@ -615,6 +630,122 @@ describe("shared projects", () => {
     expect(a.session!.awareness.getStates().get(bId)?.user.name).toBe("Ben");
     await b.close();
     expect(a.session!.awareness.getStates().has(bId)).toBe(false);
+  });
+});
+
+describe("edits to the same text made out of sync", () => {
+  async function pair(content: string) {
+    const relay = new FakeRelay();
+    const a = new Device(
+      relay,
+      new FakeWorkspace(relay, { "main.tex": content }),
+      "Ana",
+    );
+    await a.open();
+    const b = new Device(relay, new FakeWorkspace(relay), "Ben");
+    await b.open();
+    await settleAll(a, b);
+    return { a, b };
+  }
+
+  function conflictsOn(device: Device) {
+    return new SharedAnnotations(device.session!.doc)
+      .rangesFor("main.tex")
+      .filter((x) => x.conflict);
+  }
+
+  it("keeps one version whole and marks it with the other", async () => {
+    const { a, b } = await pair("Intro.\nThe results are good.\nEnd.");
+    b.goOffline();
+    a.workspace.setText("main.tex", "Intro.\nThe findings are mediocre.\nEnd.");
+    b.workspace.setText("main.tex", "Intro.\nThe results are excellent.\nEnd.");
+    await settleAll(a, b);
+    b.goOnline();
+    await settleAll(a, b);
+
+    const expected = { "main.tex": "Intro.\nThe findings are mediocre.\nEnd." };
+    expect(a.workspace.snapshot()).toEqual(expected);
+    expect(b.workspace.snapshot()).toEqual(expected);
+    expect(b.conflicts).toEqual([
+      { path: "main.tex", from: expected["main.tex"].indexOf("mediocre") },
+    ]);
+    // Everyone sees it, with Ben's version.
+    for (const device of [a, b]) {
+      const [conflict] = conflictsOn(device);
+      const text = device.workspace.snapshot()["main.tex"];
+      expect(text.slice(conflict.from, conflict.to)).toBe("mediocre");
+      expect(conflict.conflict).toMatchObject({
+        text: "excellent",
+        author: "Ben",
+      });
+    }
+  });
+
+  it("uses the other version when asked, for everyone", async () => {
+    const { a, b } = await pair("The results are good.");
+    b.goOffline();
+    a.workspace.setText("main.tex", "The results are mediocre.");
+    b.workspace.setText("main.tex", "The results are excellent.");
+    await settleAll(a, b);
+    b.goOnline();
+    await settleAll(a, b);
+
+    const [conflict] = conflictsOn(a);
+    new SharedAnnotations(a.session!.doc).settleConflict(conflict.id, true);
+    await settleAll(a, b);
+    const expected = { "main.tex": "The results are excellent." };
+    expect(a.workspace.snapshot()).toEqual(expected);
+    expect(b.workspace.snapshot()).toEqual(expected);
+    expect(conflictsOn(b)).toEqual([]);
+  });
+
+  it("keeps an edit to text someone else deleted meanwhile", async () => {
+    const { a, b } = await pair("Keep. Drop this. Keep.");
+    b.goOffline();
+    a.workspace.setText("main.tex", "Keep. Keep.");
+    b.workspace.setText("main.tex", "Keep. Drop this, edited. Keep.");
+    await settleAll(a, b);
+    b.goOnline();
+    await settleAll(a, b);
+
+    expect(a.workspace.snapshot()["main.tex"]).toBe(
+      "Keep. Drop this, edited. Keep.",
+    );
+    const [conflict] = conflictsOn(a);
+    expect(conflict.conflict).toMatchObject({ text: "", author: "" });
+  });
+
+  it("marks nothing when the edits were to different parts", async () => {
+    const { a, b } = await pair("Intro.\nMethods.\nResults.");
+    b.goOffline();
+    a.workspace.setText("main.tex", "Introduction.\nMethods.\nResults.");
+    b.workspace.setText("main.tex", "Intro.\nMethods.\nResults, finally.");
+    await settleAll(a, b);
+    b.goOnline();
+    await settleAll(a, b);
+
+    expect(b.workspace.snapshot()["main.tex"]).toBe(
+      "Introduction.\nMethods.\nResults, finally.",
+    );
+    expect(b.conflicts).toEqual([]);
+    expect(conflictsOn(a)).toEqual([]);
+  });
+
+  it("catches an edit made outside the app while it was closed", async () => {
+    const { a, b } = await pair("The results are good.");
+    await b.close();
+    a.workspace.setText("main.tex", "The results are mediocre.");
+    await settleAll(a);
+    // e.g. in another editor, with the app closed.
+    b.workspace.disk.set("main.tex", "The results are excellent.");
+    await b.workspace.refresh();
+    await b.open();
+    await settleAll(a, b);
+
+    expect(b.workspace.snapshot()["main.tex"]).toBe(
+      "The results are mediocre.",
+    );
+    expect(conflictsOn(b)[0]?.conflict?.text).toBe("excellent");
   });
 });
 

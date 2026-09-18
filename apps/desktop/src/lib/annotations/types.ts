@@ -35,6 +35,18 @@ export interface AnnotationComment {
   edited?: number;
 }
 
+/**
+ * Text two people changed at once without seeing each other's change. One
+ * version stays in the file; this is the other.
+ */
+export interface AnnotationConflict {
+  /** "" if they deleted it. */
+  text: string;
+  /** Whose version this is; "" if not known. */
+  author: string;
+  authorColor: string;
+}
+
 /** An annotation as it currently sits in its file. */
 export interface Annotation {
   id: string;
@@ -44,6 +56,7 @@ export interface Annotation {
   resolved: boolean;
   /** Empty for a plain highlight. */
   comments: AnnotationComment[];
+  conflict?: AnnotationConflict;
 }
 
 export interface Author {
@@ -72,6 +85,8 @@ export interface AnnotationSource {
   editComment(id: string, commentId: string, text: string): void;
   deleteComment(id: string, commentId: string): void;
   setResolved(id: string, resolved: boolean): void;
+  /** Settles a conflict: with the other version (`useOther`) or as it is. */
+  settleConflict?(id: string, useOther: boolean): void;
   remove(id: string): void;
   /** Called when annotations change (not when text moves them). */
   subscribe(listener: () => void): () => void;

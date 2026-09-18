@@ -14,6 +14,7 @@ import {
   type Annotation,
   type AnnotationColor,
   type AnnotationComment,
+  type AnnotationConflict,
 } from "@/lib/annotations/types";
 import type { AnnotationActions } from "@/lib/annotations/actions";
 import { cn } from "@/lib/utils";
@@ -230,6 +231,53 @@ export function Comment({
 
 export type { AnnotationActions } from "@/lib/annotations/actions";
 
+/** Text two people changed at once: the version that didn't make it in. */
+function ConflictChoice({
+  conflict,
+  authorName,
+  onSettle,
+}: {
+  conflict: AnnotationConflict;
+  authorName: string;
+  onSettle: (useOther: boolean) => void;
+}) {
+  const whose =
+    conflict.author === authorName
+      ? "Your version"
+      : conflict.author
+        ? `${conflict.author}'s version`
+        : "Someone else's version";
+  return (
+    <div className="space-y-2">
+      <div className="text-muted-foreground text-xs">
+        {conflict.text ? whose : "Someone else deleted this."}
+      </div>
+      {conflict.text && (
+        <div className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-muted px-2 py-1.5 font-mono text-xs">
+          {conflict.text}
+        </div>
+      )}
+      <div className="flex gap-1.5">
+        <Button
+          size="sm"
+          className="h-7 px-2.5 text-xs"
+          onClick={() => onSettle(true)}
+        >
+          {conflict.text ? "Use this" : "Delete it"}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2.5 text-xs"
+          onClick={() => onSettle(false)}
+        >
+          Keep current
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 const CARD_WIDTH = 288;
 
 /**
@@ -300,7 +348,13 @@ export function AnnotationCard({
         visibility: coords ? "visible" : "hidden",
       }}
     >
-      {!annotation || !actions ? (
+      {annotation?.conflict && actions ? (
+        <ConflictChoice
+          conflict={annotation.conflict}
+          authorName={authorName}
+          onSettle={actions.settleConflict}
+        />
+      ) : !annotation || !actions ? (
         <NoteInput
           placeholder="Add a note…"
           autoFocus

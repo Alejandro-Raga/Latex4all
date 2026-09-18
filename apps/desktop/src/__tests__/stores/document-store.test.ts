@@ -433,6 +433,49 @@ describe("useDocumentStore", () => {
     });
   });
 
+  describe("reloadFile", () => {
+    it("adds what changed on disk to unsaved edits, rather than dropping either", async () => {
+      useDocumentStore.setState({
+        files: [
+          makeFile({
+            content: "Line one, by a collaborator.\nLine two.",
+            diskContent: "Line one.\nLine two.",
+            isDirty: true,
+          }),
+        ],
+      });
+      vi.mocked(readTextFile).mockResolvedValue(
+        "Line one.\nLine two, by Claude.",
+      );
+      await useDocumentStore.getState().reloadFile("main.tex");
+      const file = useDocumentStore.getState().files[0];
+      expect(file.content).toBe(
+        "Line one, by a collaborator.\nLine two, by Claude.",
+      );
+      expect(file.diskContent).toBe("Line one.\nLine two, by Claude.");
+      expect(file.isDirty).toBe(true);
+    });
+  });
+
+  describe("saveFile", () => {
+    it("leaves edits made while writing unsaved", async () => {
+      let finish = () => {};
+      vi.mocked(writeTextFile).mockImplementation(
+        () => new Promise<void>((resolve) => (finish = resolve)),
+      );
+      useDocumentStore.setState({
+        files: [makeFile({ content: "first", isDirty: true })],
+      });
+      const saving = useDocumentStore.getState().saveFile("main.tex");
+      useDocumentStore.getState().updateFileContent("main.tex", "second");
+      finish();
+      await saving;
+      const file = useDocumentStore.getState().files[0];
+      expect(file.diskContent).toBe("first");
+      expect(file.isDirty).toBe(true);
+    });
+  });
+
   describe("updateFileContent", () => {
     it("updates content and marks dirty", () => {
       useDocumentStore.getState().updateFileContent("main.tex", "New content");

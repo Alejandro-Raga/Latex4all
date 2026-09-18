@@ -14,6 +14,7 @@ export interface AnnotationActions {
   editComment: (commentId: string, text: string) => void;
   deleteComment: (commentId: string) => void;
   setResolved: (resolved: boolean) => void;
+  settleConflict: (useOther: boolean) => void;
   remove: () => void;
 }
 
@@ -62,6 +63,10 @@ export function annotationActions(
     editComment: (commentId, text) => source.editComment(id, commentId, text),
     deleteComment: (commentId) => source.deleteComment(id, commentId),
     setResolved: (resolved) => source.setResolved(id, resolved),
+    settleConflict: (useOther) => {
+      source.settleConflict?.(id, useOther);
+      onRemoved();
+    },
     remove: () => {
       source.remove(id);
       onRemoved();
