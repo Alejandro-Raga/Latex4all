@@ -50,7 +50,6 @@ impl Channel {
             Channel::Test => TEST_ENDPOINT,
         }
     }
-
 }
 
 #[derive(Debug, Serialize)]
@@ -149,10 +148,7 @@ pub async fn updater_check(
 /// mean guarding it behind a mutex whose contents can silently go stale when
 /// the user switches channels. One extra manifest fetch is cheaper than that.
 #[tauri::command]
-pub async fn updater_install(
-    app: AppHandle,
-    channel: Channel,
-) -> Result<(), String> {
+pub async fn updater_install(app: AppHandle, channel: Channel) -> Result<(), String> {
     // Always permissive, unlike the check. The check decides what to *offer*,
     // and is strict on the release channel so a downgrade is never proposed by
     // itself. By the time this runs the user has read what will be installed
@@ -192,7 +188,6 @@ pub async fn updater_install(
 
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {

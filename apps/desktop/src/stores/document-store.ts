@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create, type StoreApi } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import {
   scanProjectFolder,
@@ -100,6 +100,8 @@ interface DocumentState {
 
   openProject: (rootPath: string) => Promise<void>;
   renameProject: (newName: string) => Promise<void>;
+  /** Moves the open project's folder into `destinationParent`. */
+  moveProject: (destinationParent: string) => Promise<void>;
   closeProject: () => void;
   setActiveFile: (id: string) => void;
   addFile: (file: Omit<ProjectFile, "id" | "isDirty">) => string;
@@ -352,6 +354,81 @@ function scheduleAutoSave() {
   }, 2000);
 }
 
+type StoreSet = StoreApi<DocumentState>["setState"];
+
+/**
+ * Puts the open project somewhere else on disk — a rename or a move — and
+ * opens it again there: everything is saved and settled first, then the paths
+ * the app remembers are pointed at the new folder.
+ */
+async function relocateOpenProject(
+  get: () => DocumentState,
+  set: StoreSet,
+  oldRoot: string,
+  newRoot: string,
+  moveFolder: (from: string, to: string) => Promise<void>,
+) {
+  const state = get();
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = null;
+  }
+  await waitForCompileToFinish(get);
+
+  const chatState = useClaudeChatStore.getState();
+  const streamingTabs =
+    "tabs" in chatState && Array.isArray(chatState.tabs)
+      ? chatState.tabs.filter((tab) => tab.isStreaming)
+      : [];
+  if (streamingTabs.length > 0) {
+    await Promise.all(
+      streamingTabs.map((tab) =>
+        invoke("cancel_claude_execution", { tabId: tab.id }).catch(() => {}),
+      ),
+    );
+    await sleep(250);
+  }
+
+  await state.saveAllFiles();
+  const dirtyFiles = get().files.filter((f) => f.isDirty && f.content != null);
+  if (dirtyFiles.length > 0) {
+    throw new Error("Save failed. Please save changes first.");
+  }
+
+  clearPdfBytesCache();
+  clearScrollPositionCache();
+  clearZoomCache();
+  clearEditorStateCache();
+  useHistoryStore.getState().reset();
+  set((s) => ({
+    pdfRevision: s.pdfRevision + 1,
+    compileError: null,
+    compileErrorCache: new Map(),
+    lastCompiledGenerations: new Map(),
+  }));
+  await clearDocCache();
+  await sleep(150);
+
+  await moveFolder(oldRoot, newRoot);
+  try {
+    await invoke("migrate_project_sessions", {
+      oldProjectPath: oldRoot,
+      newProjectPath: newRoot,
+    });
+  } catch (err) {
+    log.warn("Failed to migrate project sessions after moving", {
+      oldRoot,
+      newRoot,
+      error: String(err),
+    });
+  }
+  const projectStore = useProjectStore.getState();
+  projectStore.renameRecentProject(oldRoot, newRoot);
+  projectStore.setLastProjectFolder(splitProjectRoot(newRoot).parentPath);
+
+  await get().openProject(newRoot);
+}
+
 export const useDocumentStore = create<DocumentState>()((set, get) => ({
   projectRoot: null,
   files: [],
@@ -462,67 +539,27 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
     const oldRoot = state.projectRoot;
     const newRoot = buildRenamedProjectRoot(oldRoot, newName);
     if (newRoot === normalizeProjectRoot(oldRoot)) return;
-
-    if (autoSaveTimer) {
-      clearTimeout(autoSaveTimer);
-      autoSaveTimer = null;
-    }
-    await waitForCompileToFinish(get);
-
-    const chatState = useClaudeChatStore.getState();
-    const streamingTabs =
-      "tabs" in chatState && Array.isArray(chatState.tabs)
-        ? chatState.tabs.filter((tab) => tab.isStreaming)
-        : [];
-    if (streamingTabs.length > 0) {
-      await Promise.all(
-        streamingTabs.map((tab) =>
-          invoke("cancel_claude_execution", { tabId: tab.id }).catch(() => {}),
-        ),
-      );
-      await sleep(250);
-    }
-
-    await state.saveAllFiles();
-    const dirtyFiles = get().files.filter(
-      (f) => f.isDirty && f.content != null,
+    await relocateOpenProject(
+      get,
+      set,
+      oldRoot,
+      newRoot,
+      renameProjectRootWithRetry,
     );
-    if (dirtyFiles.length > 0) {
-      throw new Error("Save failed. Please save changes before renaming.");
-    }
+  },
 
-    clearPdfBytesCache();
-    clearScrollPositionCache();
-    clearZoomCache();
-    clearEditorStateCache();
-    useHistoryStore.getState().reset();
-    set((s) => ({
-      pdfRevision: s.pdfRevision + 1,
-      compileError: null,
-      compileErrorCache: new Map(),
-      lastCompiledGenerations: new Map(),
-    }));
-    await clearDocCache();
-    await sleep(150);
+  moveProject: async (destinationParent: string) => {
+    const state = get();
+    if (!state.projectRoot) throw new Error("No project open");
 
-    await renameProjectRootWithRetry(oldRoot, newRoot);
-    try {
-      await invoke("migrate_project_sessions", {
-        oldProjectPath: oldRoot,
-        newProjectPath: newRoot,
-      });
-    } catch (err) {
-      log.warn("Failed to migrate project sessions after rename", {
-        oldRoot,
-        newRoot,
-        error: String(err),
-      });
-    }
-    const projectStore = useProjectStore.getState();
-    projectStore.renameRecentProject(oldRoot, newRoot);
-    projectStore.setLastProjectFolder(splitProjectRoot(newRoot).parentPath);
-
-    await get().openProject(newRoot);
+    const oldRoot = state.projectRoot;
+    const { folderName, separator } = splitProjectRoot(oldRoot);
+    const parent = normalizeProjectRoot(destinationParent);
+    const newRoot = `${parent}${parent.endsWith(separator) ? "" : separator}${folderName}`;
+    if (newRoot === normalizeProjectRoot(oldRoot)) return;
+    await relocateOpenProject(get, set, oldRoot, newRoot, (from, to) =>
+      invoke("move_project", { oldPath: from, newPath: to }),
+    );
   },
 
   closeProject: () => {

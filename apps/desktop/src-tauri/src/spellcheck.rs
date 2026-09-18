@@ -103,7 +103,12 @@ mod macos {
         );
 
         guesses
-            .map(|arr| arr.iter().map(|s| s.to_string()).take(MAX_SUGGESTIONS).collect())
+            .map(|arr| {
+                arr.iter()
+                    .map(|s| s.to_string())
+                    .take(MAX_SUGGESTIONS)
+                    .collect()
+            })
             .unwrap_or_default()
     }
 }

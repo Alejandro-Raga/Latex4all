@@ -96,10 +96,7 @@ pub async fn check_grammar(
 
     let resp = client
         .post(format!("{base}/v2/check"))
-        .form(&[
-            ("text", text.as_str()),
-            ("language", language.as_str()),
-        ])
+        .form(&[("text", text.as_str()), ("language", language.as_str())])
         .send()
         .await
         .map_err(|e| format!("Failed to reach LanguageTool server at {base}: {e}"))?;

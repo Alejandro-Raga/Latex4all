@@ -162,8 +162,7 @@ mod macos {
         let cf_term = CFString::new(term);
         let definition =
             find_dictionary(language, false).and_then(|dict| define_with(dict, &cf_term));
-        let synonyms =
-            find_dictionary(language, true).and_then(|dict| define_with(dict, &cf_term));
+        let synonyms = find_dictionary(language, true).and_then(|dict| define_with(dict, &cf_term));
         (definition, synonyms)
     }
 
@@ -316,7 +315,12 @@ struct Progress {
     percent: Option<u8>,
 }
 
-fn emit(window: &WebviewWindow, phase: &'static str, message: impl Into<String>, percent: Option<u8>) {
+fn emit(
+    window: &WebviewWindow,
+    phase: &'static str,
+    message: impl Into<String>,
+    percent: Option<u8>,
+) {
     let _ = window.emit(
         "dictionary-progress",
         Progress {
@@ -335,7 +339,12 @@ fn emit(window: &WebviewWindow, phase: &'static str, message: impl Into<String>,
 #[tauri::command]
 pub async fn install_dictionary(window: WebviewWindow) -> Result<(), String> {
     let dest = user_dictionary_dir()?;
-    emit(&window, "download", "Downloading the dictionary database…", Some(0));
+    emit(
+        &window,
+        "download",
+        "Downloading the dictionary database…",
+        Some(0),
+    );
 
     let client = reqwest::Client::builder()
         .build()
@@ -389,7 +398,12 @@ pub async fn install_dictionary(window: WebviewWindow) -> Result<(), String> {
         ));
     }
 
-    emit(&window, "extract", "Unpacking the dictionary database…", None);
+    emit(
+        &window,
+        "extract",
+        "Unpacking the dictionary database…",
+        None,
+    );
     tauri::async_runtime::spawn_blocking(move || extract_database(&archive, &dest))
         .await
         .map_err(|e| e.to_string())??;
@@ -459,12 +473,8 @@ fn extract_database(archive: &[u8], dest: &Path) -> Result<(), String> {
         std::fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
     }
-    std::fs::rename(&staging, dest).map_err(|e| {
-        format!(
-            "Failed to move the dictionary into {}: {e}",
-            dest.display()
-        )
-    })?;
+    std::fs::rename(&staging, dest)
+        .map_err(|e| format!("Failed to move the dictionary into {}: {e}", dest.display()))?;
     Ok(())
 }
 
@@ -523,9 +533,7 @@ pub fn lookup_dictionary_definition(
         None
     };
 
-    let wordnet_definition = wordnet_entry
-        .as_ref()
-        .and_then(wordnet::format_definition);
+    let wordnet_definition = wordnet_entry.as_ref().and_then(wordnet::format_definition);
 
     // Only surface the structured lists when the system thesaurus came up
     // empty — otherwise the frontend would show two competing synonym sets.
@@ -591,7 +599,9 @@ fn lookup_non_english(
     let push = |list: &mut Vec<String>, word: &str, limit: usize| {
         if list.len() < limit
             && !word.eq_ignore_ascii_case(term)
-            && !list.iter().any(|existing| existing.eq_ignore_ascii_case(word))
+            && !list
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(word))
         {
             list.push(word.to_string());
         }
@@ -606,7 +616,8 @@ fn lookup_non_english(
         }
     }
     if let Some(thesaurus) = thesaurus {
-        let words = std::iter::once(term).chain(entries.iter().map(|(headword, _)| headword.as_str()));
+        let words =
+            std::iter::once(term).chain(entries.iter().map(|(headword, _)| headword.as_str()));
         for word in words {
             for sense in thesaurus.lookup(word) {
                 for synonym in sense.synonyms {
@@ -688,7 +699,11 @@ mod tests {
         write(&mut header, 100, b"0000644\0"); // mode
         write(&mut header, 108, b"0000000\0"); // uid
         write(&mut header, 116, b"0000000\0"); // gid
-        write(&mut header, 124, format!("{:011o}\0", contents.len()).as_bytes());
+        write(
+            &mut header,
+            124,
+            format!("{:011o}\0", contents.len()).as_bytes(),
+        );
         write(&mut header, 136, b"00000000000\0"); // mtime
         write(&mut header, 148, b"        "); // checksum field, spaces while summing
         write(&mut header, 156, b"0"); // typeflag: regular file
@@ -710,8 +725,7 @@ mod tests {
         }
         tar_bytes.extend_from_slice(&[0u8; 1024]); // end-of-archive marker
 
-        let mut encoder =
-            flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
         encoder.write_all(&tar_bytes).unwrap();
         encoder.finish().unwrap()
     }
@@ -794,8 +808,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dest = tmp.path().join("wordnet");
         std::fs::create_dir_all(&dest).unwrap();
-        std::fs::write(dest.join("stale.txt"), "old")
-            .unwrap();
+        std::fs::write(dest.join("stale.txt"), "old").unwrap();
 
         let entries = complete_entries();
         let archive = fake_archive(&as_refs(&entries));

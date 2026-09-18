@@ -17,11 +17,11 @@
 //! `PreparedFile`), brotli-compressed so the whole pack stays a few megabytes.
 
 use serde::Serialize;
-use std::collections::HashMap;
 use sha2::Digest;
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use tauri::{Emitter, WebviewWindow};
 
@@ -30,7 +30,9 @@ use tauri::{Emitter, WebviewWindow};
 const DICTIONARIES_COMMIT: &str = "32b006a2c22a4ac7e8ed3f03346f7b3d85a970a4";
 
 fn raw_url(path: &str) -> String {
-    format!("https://raw.githubusercontent.com/LibreOffice/dictionaries/{DICTIONARIES_COMMIT}/{path}")
+    format!(
+        "https://raw.githubusercontent.com/LibreOffice/dictionaries/{DICTIONARIES_COMMIT}/{path}"
+    )
 }
 
 struct PackSource {
@@ -65,11 +67,17 @@ pub struct LanguagePack {
 }
 
 fn aff(path: &'static str) -> PackSource {
-    PackSource { path, stored_as: "spelling.aff" }
+    PackSource {
+        path,
+        stored_as: "spelling.aff",
+    }
 }
 
 fn dic(path: &'static str) -> PackSource {
-    PackSource { path, stored_as: "spelling.dic" }
+    PackSource {
+        path,
+        stored_as: "spelling.dic",
+    }
 }
 
 /// A brotli-compressed file built by `scripts/build-spanish-definitions.mjs`
@@ -157,7 +165,9 @@ fn catalogue() -> &'static [LanguagePack] {
 }
 
 fn pack_for(code: &str) -> Option<&'static LanguagePack> {
-    catalogue().iter().find(|p| p.code.eq_ignore_ascii_case(code))
+    catalogue()
+        .iter()
+        .find(|p| p.code.eq_ignore_ascii_case(code))
 }
 
 // ── Storage ──
@@ -276,7 +286,9 @@ fn decode(bytes: Vec<u8>) -> String {
     let text = String::from_utf8_lossy(&bytes).into_owned();
     // A BOM would otherwise become part of the first keyword and make the
     // affix file's opening directive unparseable.
-    text.strip_prefix('\u{feff}').map(str::to_string).unwrap_or(text)
+    text.strip_prefix('\u{feff}')
+        .map(str::to_string)
+        .unwrap_or(text)
 }
 
 async fn fetch(client: &reqwest::Client, source: &PackSource) -> Result<String, String> {
@@ -398,7 +410,12 @@ pub async fn install_language_pack(window: WebviewWindow, code: String) -> Resul
         downloaded.push((file.stored_as, fetch_prepared(&client, file).await?));
     }
 
-    emit(&window, pack.code, format!("Installing {}…", pack.label), Some(95));
+    emit(
+        &window,
+        pack.code,
+        format!("Installing {}…", pack.label),
+        Some(95),
+    );
 
     // Written to a staging directory and swapped in, so a failed download can
     // never leave a half-written pack that `is_installed` would accept.
@@ -417,7 +434,10 @@ pub async fn install_language_pack(window: WebviewWindow, code: String) -> Resul
     let dic = staging.join("spelling.dic");
     load_dictionary(&aff, &dic).map_err(|e| {
         let _ = std::fs::remove_dir_all(&staging);
-        format!("The downloaded {} dictionary could not be read: {e}", pack.label)
+        format!(
+            "The downloaded {} dictionary could not be read: {e}",
+            pack.label
+        )
     })?;
 
     let _ = std::fs::remove_dir_all(&dest);
@@ -429,7 +449,12 @@ pub async fn install_language_pack(window: WebviewWindow, code: String) -> Resul
         .map_err(|e| format!("Failed to install the {} pack: {e}", pack.label))?;
 
     forget_cached(pack.code);
-    emit(&window, pack.code, format!("{} is ready.", pack.label), Some(100));
+    emit(
+        &window,
+        pack.code,
+        format!("{} is ready.", pack.label),
+        Some(100),
+    );
     Ok(())
 }
 
@@ -764,7 +789,9 @@ pub fn headwords(code: &str, term: &str) -> Vec<String> {
         }
         for lemma in forms.map(|forms| forms.lookup(word)).unwrap_or_default() {
             if definitions.contains(&lemma)
-                && !found.iter().any(|f: &String| f.eq_ignore_ascii_case(&lemma))
+                && !found
+                    .iter()
+                    .any(|f: &String| f.eq_ignore_ascii_case(&lemma))
             {
                 found.push(lemma);
             }
@@ -812,16 +839,25 @@ fn spanish_candidates(word: &str) -> Vec<String> {
 
     let mut bases: Vec<String> = Vec::new();
     // Built on the feminine adjective: "claramente" -> "clara" -> *claro*.
-    if let Some(stem) = word.strip_suffix("mente").filter(|stem| stem.chars().count() >= 3) {
+    if let Some(stem) = word
+        .strip_suffix("mente")
+        .filter(|stem| stem.chars().count() >= 3)
+    {
         bases.push(stem.to_string());
     }
     for clitic in SPANISH_CLITICS {
-        let Some(stem) = word.strip_suffix(clitic).filter(|stem| stem.chars().count() >= 3) else {
+        let Some(stem) = word
+            .strip_suffix(clitic)
+            .filter(|stem| stem.chars().count() >= 3)
+        else {
             continue;
         };
         // Attaching a pronoun often adds an accent: "diciéndolo", "dárselo".
         let plain = unaccent(stem);
-        if ["ar", "er", "ir", "ndo", "ad", "ed", "id"].iter().any(|end| plain.ends_with(end)) {
+        if ["ar", "er", "ir", "ndo", "ad", "ed", "id"]
+            .iter()
+            .any(|end| plain.ends_with(end))
+        {
             if plain != stem {
                 bases.push(stem.to_string());
             }
@@ -1054,7 +1090,10 @@ fn fetch_missing_forms(pack: &'static LanguagePack) {
         }
         .await;
         if let Err(error) = result {
-            eprintln!("[language-packs] {} forms could not be fetched: {error}", pack.code);
+            eprintln!(
+                "[language-packs] {} forms could not be fetched: {error}",
+                pack.code
+            );
             // Try again on a later lookup rather than never.
             STARTED.store(false, Ordering::SeqCst);
         }
@@ -1100,7 +1139,12 @@ mod tests {
     fn every_pack_names_an_affix_and_a_dictionary() {
         for pack in catalogue() {
             let stored: Vec<&str> = pack.spelling.iter().map(|s| s.stored_as).collect();
-            assert_eq!(stored, vec!["spelling.aff", "spelling.dic"], "{}", pack.code);
+            assert_eq!(
+                stored,
+                vec!["spelling.aff", "spelling.dic"],
+                "{}",
+                pack.code
+            );
             assert!(pack.approx_bytes > 0, "{}", pack.code);
         }
     }

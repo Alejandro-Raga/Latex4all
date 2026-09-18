@@ -234,6 +234,59 @@ describe("useDocumentStore", () => {
     });
   });
 
+  describe("moveProject", () => {
+    it("moves the folder to the chosen place and reopens it there", async () => {
+      vi.mocked(invoke).mockResolvedValue(undefined as never);
+      vi.mocked(readDir).mockResolvedValue([
+        { name: "main.tex", isDirectory: false },
+      ] as any);
+      vi.mocked(readTextFile).mockResolvedValue("\\documentclass{article}");
+      useProjectStore.setState({
+        recentProjects: [
+          { path: "/work/thesis", name: "thesis", lastOpened: 1 },
+        ],
+        lastProjectFolder: "/work",
+        sharedProjects: { abc: "/work/thesis" },
+      });
+      useDocumentStore.setState({
+        projectRoot: "/work/thesis",
+        files: [makeFile({ absolutePath: "/work/thesis/main.tex" })],
+      });
+
+      await useDocumentStore.getState().moveProject("/Volumes/Backup/Papers");
+
+      // Renaming can't cross drives, so this goes through Rust.
+      expect(invoke).toHaveBeenCalledWith("move_project", {
+        oldPath: "/work/thesis",
+        newPath: "/Volumes/Backup/Papers/thesis",
+      });
+      expect(useDocumentStore.getState().projectRoot).toBe(
+        "/Volumes/Backup/Papers/thesis",
+      );
+      expect(useProjectStore.getState().recentProjects[0]).toMatchObject({
+        path: "/Volumes/Backup/Papers/thesis",
+        name: "thesis",
+      });
+      // A shared project keeps pointing at its folder.
+      expect(useProjectStore.getState().sharedProjects.abc).toBe(
+        "/Volumes/Backup/Papers/thesis",
+      );
+      expect(useProjectStore.getState().lastProjectFolder).toBe(
+        "/Volumes/Backup/Papers",
+      );
+    });
+
+    it("does nothing when the project is already there", async () => {
+      vi.mocked(invoke).mockClear();
+      useDocumentStore.setState({ projectRoot: "/work/thesis", files: [] });
+      await useDocumentStore.getState().moveProject("/work");
+      expect(invoke).not.toHaveBeenCalledWith(
+        "move_project",
+        expect.anything(),
+      );
+    });
+  });
+
   describe("insertAtCursor", () => {
     it("inserts text at cursor position", () => {
       useDocumentStore.getState().insertAtCursor(", Beautiful");

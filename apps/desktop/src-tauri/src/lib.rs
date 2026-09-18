@@ -10,6 +10,7 @@ mod history;
 mod language_packs;
 mod languagetool;
 mod latex;
+mod projects;
 mod skills;
 mod slash_commands;
 mod spellcheck;
@@ -336,6 +337,16 @@ fn set_native_window_theme(window: tauri::WebviewWindow, theme: String) -> Resul
     Ok(())
 }
 
+/// Moves a project folder somewhere else, to another drive if need be.
+#[tauri::command]
+async fn move_project(old_path: String, new_path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        projects::move_project_folder(Path::new(&old_path), Path::new(&new_path))
+    })
+    .await
+    .map_err(|e| format!("Move task panicked: {}", e))?
+}
+
 #[tauri::command]
 fn allow_project_directory(app: tauri::AppHandle, root_path: String) -> Result<(), String> {
     let fs_scope = app.fs_scope();
@@ -608,6 +619,7 @@ pub fn run() {
             set_native_window_theme,
             open_devtools,
             allow_project_directory,
+            move_project,
             list_default_projects,
             detect_editors,
             open_in_editor,

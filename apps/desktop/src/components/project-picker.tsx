@@ -252,6 +252,9 @@ export function ProjectPicker() {
     };
   }, [addRecentProject, recentProjects.length]);
 
+  const renameRecentProject = useProjectStore((s) => s.renameRecentProject);
+  const setLastProjectFolder = useProjectStore((s) => s.setLastProjectFolder);
+
   const handleOpenFolder = async () => {
     try {
       const selected = await open({
@@ -266,6 +269,32 @@ export function ProjectPicker() {
     } catch (err) {
       console.warn("Failed to open selected project folder:", err);
       toast.error("Failed to open project folder", {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  /** Moves a project's folder somewhere else, without opening it. */
+  const handleMoveProject = async (project: RecentProject) => {
+    const destination = await open({
+      directory: true,
+      multiple: false,
+      title: `Move "${project.name}" to…`,
+    });
+    if (typeof destination !== "string" || !destination) return;
+    const separator = project.path.includes("\\") ? "\\" : "/";
+    const folderName = project.path.split(/[\\/]/).filter(Boolean).pop() ?? "";
+    const target = `${destination.replace(/[\\/]+$/, "")}${separator}${folderName}`;
+    try {
+      await invoke("move_project", {
+        oldPath: project.path,
+        newPath: target,
+      });
+      renameRecentProject(project.path, target);
+      setLastProjectFolder(destination);
+      toast.success(`Moved to ${destination}`);
+    } catch (err) {
+      toast.error("Couldn't move the project", {
         description: err instanceof Error ? err.message : String(err),
       });
     }
@@ -699,6 +728,7 @@ export function ProjectPicker() {
                               setCustomType(projectTypes[project.path] ?? "");
                               setTypePrompt(project.path);
                             }}
+                            onMove={() => void handleMoveProject(project)}
                           />
                         ))}
                       </div>
@@ -1108,6 +1138,7 @@ function ProjectPreviewCard({
   onToggleFavorite,
   onSetType,
   onCustomType,
+  onMove,
 }: {
   project: RecentProject;
   isFavorite: boolean;
@@ -1117,6 +1148,7 @@ function ProjectPreviewCard({
   onToggleFavorite: () => void;
   onSetType: (type: string | null) => void;
   onCustomType: () => void;
+  onMove: () => void;
 }) {
   const isShared = useProjectStore((s) =>
     Object.values(s.sharedProjects).includes(project.path),
@@ -1253,6 +1285,8 @@ function ProjectPreviewCard({
               )}
             </ContextMenuSubContent>
           </ContextMenuSub>
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={onMove}>Move to…</ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onSelect={onRemove}>
             Remove from list

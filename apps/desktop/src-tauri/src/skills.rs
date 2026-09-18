@@ -959,7 +959,10 @@ async fn download_tarball_once(
         // when the user most needs to see that it is still moving.
         if last_emitted.elapsed() >= Duration::from_secs(SKILLS_PROGRESS_INTERVAL_SECS) {
             last_emitted = std::time::Instant::now();
-            emit_log(window, &download_progress_message(downloaded, total_size, started.elapsed()));
+            emit_log(
+                window,
+                &download_progress_message(downloaded, total_size, started.elapsed()),
+            );
         }
     }
 
@@ -1008,11 +1011,7 @@ fn format_duration(elapsed: Duration) -> String {
 
 /// "45.2 MB of 230.1 MB (19%) — 1.4 MB/s". Falls back gracefully when the
 /// server declines to send a Content-Length.
-fn download_progress_message(
-    downloaded: u64,
-    total: Option<u64>,
-    elapsed: Duration,
-) -> String {
+fn download_progress_message(downloaded: u64, total: Option<u64>, elapsed: Duration) -> String {
     let rate = {
         let seconds = elapsed.as_secs_f64();
         if seconds > 0.0 {
@@ -1935,7 +1934,9 @@ mod tests {
         assert!(is_wanted_archive_path(Path::new(
             "scientific-skills/astropy/SKILL.md"
         )));
-        assert!(!is_wanted_archive_path(Path::new("docs/images/astropy.png")));
+        assert!(!is_wanted_archive_path(Path::new(
+            "docs/images/astropy.png"
+        )));
         assert!(!is_wanted_archive_path(Path::new("README.md")));
         assert!(!is_wanted_archive_path(Path::new("tests/astropy/case.md")));
     }
@@ -2027,8 +2028,7 @@ mod tests {
 
     #[test]
     fn progress_message_copes_without_a_content_length() {
-        let message =
-            download_progress_message(10 * 1_048_576, None, Duration::from_secs(5));
+        let message = download_progress_message(10 * 1_048_576, None, Duration::from_secs(5));
         assert!(message.contains("10.0 MB"), "{message}");
         assert!(!message.contains("of"), "{message}");
     }

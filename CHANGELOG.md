@@ -29,6 +29,9 @@ tag.
   cursors shown. Changes are kept until the others open the project, so nobody
   starts from an old copy, and edits made offline merge in on reconnecting.
   Everything is encrypted on your computer before it's sent.
+- Move a project to another folder from inside the app. Right-click a project
+  on the projects screen, or its name in the sidebar, and choose "Move to…".
+  Another drive works too, and a shared project stays shared.
 - Highlights and notes. Select text to highlight it or add a note (⌘⇧H,
   ⌘⌥M). Hover a highlight to read the note, reply, resolve it or change its
   color. Resolved notes turn grey, and the notes bar lists every note in the

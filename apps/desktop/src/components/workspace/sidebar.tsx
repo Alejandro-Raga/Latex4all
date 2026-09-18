@@ -16,6 +16,7 @@ import {
   PlusIcon,
   Trash2Icon,
   PencilIcon,
+  Loader2Icon,
   UploadIcon,
   RefreshCwIcon,
   SunIcon,
@@ -84,6 +85,7 @@ import {
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { toast } from "sonner";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useUvSetupStore } from "@/stores/uv-setup-store";
 import { UvSetupDialog } from "@/components/uv-setup";
@@ -480,6 +482,7 @@ export function Sidebar({
   const deleteFolder = useDocumentStore((s) => s.deleteFolder);
   const renameFile = useDocumentStore((s) => s.renameFile);
   const renameProject = useDocumentStore((s) => s.renameProject);
+  const moveProject = useDocumentStore((s) => s.moveProject);
   const createNewFile = useDocumentStore((s) => s.createNewFile);
   const createFolder = useDocumentStore((s) => s.createFolder);
   const importFiles = useDocumentStore((s) => s.importFiles);
@@ -1003,6 +1006,7 @@ export function Sidebar({
     string | undefined
   >();
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [isMovingProject, setIsMovingProject] = useState(false);
   const [renameFileId, setRenameFileId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [projectRenameDialogOpen, setProjectRenameDialogOpen] = useState(false);
@@ -1142,6 +1146,28 @@ export function Sidebar({
     setProjectRenameValue(projectName);
     setProjectRenameError("");
     setProjectRenameDialogOpen(true);
+  };
+
+  /** Moves the whole project folder somewhere else, and reopens it there. */
+  const handleProjectMove = async () => {
+    if (!projectRoot || isMovingProject) return;
+    const destination = await openDialog({
+      directory: true,
+      multiple: false,
+      title: `Move "${projectName}" to…`,
+    });
+    if (typeof destination !== "string" || !destination) return;
+    setIsMovingProject(true);
+    try {
+      await moveProject(destination);
+      toast.success(`Moved to ${destination}`);
+    } catch (err) {
+      toast.error("Couldn't move the project", {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setIsMovingProject(false);
+    }
   };
 
   const handleProjectRename = async () => {
@@ -1308,26 +1334,51 @@ export function Sidebar({
                 <HomeIcon className="size-3.5" />
               </Button>
             </div>
-            <button
-              type="button"
-              className={cn(
-                "w-full min-w-0 rounded-md px-2 py-1 font-semibold text-sm transition-colors",
-                projectRoot
-                  ? "hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  : "cursor-default",
-              )}
-              onClick={openProjectRenameDialog}
-              disabled={!projectRoot}
-              title={projectRoot ? "Rename project folder" : undefined}
-              aria-label="Rename project folder"
-            >
-              <span className="flex min-w-0 items-center justify-center gap-1.5">
-                <span className="truncate">{projectName}</span>
-                {projectRoot && (
-                  <PencilIcon className="size-3 shrink-0 opacity-60" />
-                )}
-              </span>
-            </button>
+            <ContextMenu>
+              <ContextMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "w-full min-w-0 rounded-md px-2 py-1 font-semibold text-sm transition-colors",
+                    projectRoot
+                      ? "hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      : "cursor-default",
+                  )}
+                  onClick={openProjectRenameDialog}
+                  disabled={!projectRoot || isMovingProject}
+                  title={
+                    projectRoot
+                      ? "Rename project folder (right-click for more)"
+                      : undefined
+                  }
+                  aria-label="Rename project folder"
+                >
+                  <span className="flex min-w-0 items-center justify-center gap-1.5">
+                    <span className="truncate">{projectName}</span>
+                    {projectRoot &&
+                      (isMovingProject ? (
+                        <Loader2Icon className="size-3 shrink-0 animate-spin opacity-60" />
+                      ) : (
+                        <PencilIcon className="size-3 shrink-0 opacity-60" />
+                      ))}
+                  </span>
+                </button>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem
+                  onSelect={openProjectRenameDialog}
+                  disabled={!projectRoot}
+                >
+                  Rename…
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onSelect={() => void handleProjectMove()}
+                  disabled={!projectRoot || isMovingProject}
+                >
+                  Move to…
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
             <div className="flex items-center justify-end">
               <LayoutPaneSwitcher
                 controls={layoutControls}
