@@ -97,6 +97,8 @@ interface CollabState {
   displayName: string;
   /** Bumped whenever the shared files change shape, so editors rebind. */
   revision: number;
+  /** Bumped when anyone's color changes, so what they wrote is redrawn. */
+  peopleVersion: number;
   /** What a share or join in progress is doing. */
   progress: string | null;
   /** Problems with syncing, until they're resolved. */
@@ -172,6 +174,50 @@ export function getSharedText(relativePath: string): Y.Text | null {
 /** The shared document of the project at `root`, while it's open and synced. */
 export function getSharedDoc(root: string): Y.Doc | null {
   return active?.sync && active.root === root ? active.session.doc : null;
+}
+
+/**
+ * In a shared project's document: name → the color that person uses now.
+ * Notes and messages keep the color they were written in; they're drawn in
+ * this one instead, so changing your color changes it everywhere.
+ */
+function peopleMap(doc: Y.Doc) {
+  return doc.getMap<string>("people");
+}
+
+let introduceTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** A change to your own entry in the people map; not something to undo. */
+const INTRODUCING = Symbol("introducing");
+
+/** Records your name and color in the open shared project. */
+function introduce() {
+  if (!active?.sync) return;
+  const { displayName, color } = useCollabStore.getState();
+  // As notes and messages are signed; see currentAuthor.
+  const name = displayName.trim() || "Me";
+  const people = peopleMap(active.session.doc);
+  if (color && people.get(name) !== color) {
+    active.session.doc.transact(() => people.set(name, color), INTRODUCING);
+  }
+}
+
+/**
+ * The color to draw `name` in: theirs as it is now, or `fallback` (what was
+ * stored with what they wrote) if it isn't known.
+ */
+export function colorOf(name: string, fallback: string) {
+  const { displayName, color } = useCollabStore.getState();
+  if (color && name === (displayName.trim() || "Me")) return color;
+  return (active?.sync && peopleMap(active.session.doc).get(name)) || fallback;
+}
+
+/** `colorOf`, redrawing whenever someone's color changes. */
+export function useColorOf() {
+  useCollabStore((s) => s.peopleVersion);
+  useCollabStore((s) => s.color);
+  useCollabStore((s) => s.displayName);
+  return colorOf;
 }
 
 export function getCollabAwareness(): Awareness | null {
@@ -280,6 +326,18 @@ export const useCollabStore = create<CollabState>()(
     (set, get) => {
       function bumpRevision() {
         set((s) => ({ revision: s.revision + 1 }));
+      }
+
+      function trackPeople(target: Active) {
+        const people = peopleMap(target.session.doc);
+        const changed = () => {
+          if (active === target) {
+            set((s) => ({ peopleVersion: s.peopleVersion + 1 }));
+          }
+        };
+        people.observe(changed);
+        target.cleanup.push(() => people.unobserve(changed));
+        introduce();
       }
 
       function trackPresence(target: Active) {
@@ -458,6 +516,7 @@ export const useCollabStore = create<CollabState>()(
         for (const event of buffered.splice(0)) session.handle(event);
         buffered = null;
         trackPresence(target);
+        trackPeople(target);
         bumpRevision();
       }
 
@@ -495,12 +554,14 @@ export const useCollabStore = create<CollabState>()(
         displayName: "",
         color: "",
         revision: 0,
+        peopleVersion: 0,
         progress: null,
         warnings: [],
         usage: null,
 
         setColor: (color) => {
           set({ color });
+          introduce();
           const awareness = getCollabAwareness();
           const user = awareness?.getLocalState()?.user;
           if (awareness && user) {
@@ -514,6 +575,9 @@ export const useCollabStore = create<CollabState>()(
 
         setDisplayName: (name) => {
           set({ displayName: name });
+          // Once they've stopped typing it.
+          if (introduceTimer) clearTimeout(introduceTimer);
+          introduceTimer = setTimeout(introduce, 1500);
           const awareness = getCollabAwareness();
           const user = awareness?.getLocalState()?.user;
           if (awareness && user) {

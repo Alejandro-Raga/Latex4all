@@ -8,7 +8,7 @@ import type { ChatImage, ChatMessage } from "@/lib/collab/chat";
 import { cn } from "@/lib/utils";
 import { currentAuthor, useAnnotationsStore } from "@/stores/annotations-store";
 import { useChatStore } from "@/stores/chat-store";
-import { useCollabStore } from "@/stores/collab-store";
+import { useColorOf, useCollabStore } from "@/stores/collab-store";
 import { SidePanelHeader } from "./side-panel-header";
 
 /** Messages this close together from one person are shown as one group. */
@@ -35,6 +35,7 @@ function MessageItem({
   showAuthor: boolean;
   onOpenImage: (image: ChatImage) => void;
 }) {
+  const colorOf = useColorOf();
   return (
     <div
       className={cn(
@@ -48,7 +49,9 @@ function MessageItem({
           {!mine && (
             <span
               className="size-2 shrink-0 rounded-full"
-              style={{ backgroundColor: message.color }}
+              style={{
+                backgroundColor: colorOf(message.author, message.color),
+              }}
             />
           )}
           {!mine && <span className="font-medium">{message.author}</span>}
@@ -198,7 +201,6 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
           const showAuthor =
             newDay ||
             previous.author !== message.author ||
-            previous.color !== message.color ||
             message.at - previous.at > GROUP_MS;
           return (
             <div key={message.id}>

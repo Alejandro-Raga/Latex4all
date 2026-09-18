@@ -18,6 +18,7 @@ import {
 } from "@/lib/annotations/types";
 import type { AnnotationActions } from "@/lib/annotations/actions";
 import { cn } from "@/lib/utils";
+import { useColorOf } from "@/stores/collab-store";
 import { useViewportAnchoredPosition } from "./use-viewport-anchored-position";
 
 export const SWATCH_CLASSES: Record<
@@ -175,12 +176,15 @@ export function Comment({
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const colorOf = useColorOf();
   return (
     <div className="group/comment space-y-0.5">
       <div className="flex items-center gap-1.5 text-xs">
         <span
           className="size-2 shrink-0 rounded-full"
-          style={{ backgroundColor: comment.authorColor }}
+          style={{
+            backgroundColor: colorOf(comment.author, comment.authorColor),
+          }}
         />
         <span className="truncate font-medium">{comment.author}</span>
         <span className="shrink-0 text-muted-foreground">
@@ -423,6 +427,7 @@ export function AnnotationCard({
 }) {
   const { ref, coords } = useViewportAnchoredPosition(anchor);
   const [addingNote, setAddingNote] = useState(false);
+  const colorOf = useColorOf();
 
   useEffect(() => {
     const handleMouseDown = (e: MouseEvent) => {
@@ -469,7 +474,10 @@ export function AnnotationCard({
               <span
                 className="size-2 shrink-0 rounded-full"
                 style={{
-                  backgroundColor: annotation.suggestion.authorColor,
+                  backgroundColor: colorOf(
+                    annotation.suggestion.author,
+                    annotation.suggestion.authorColor,
+                  ),
                 }}
               />
             )}

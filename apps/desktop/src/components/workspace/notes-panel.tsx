@@ -12,6 +12,7 @@ import {
 import type { Annotation } from "@/lib/annotations/types";
 import { cn } from "@/lib/utils";
 import { currentAuthor, useAnnotationsStore } from "@/stores/annotations-store";
+import { useColorOf } from "@/stores/collab-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { SidePanelHeader } from "./side-panel-header";
 
@@ -43,6 +44,7 @@ function NoteItem({
   onOpen: () => void;
 }) {
   const source = useAnnotationsStore((s) => s.source);
+  const colorOf = useColorOf();
   const { annotation } = note;
   const { suggestion } = annotation;
   const settled = suggestion?.settled;
@@ -65,9 +67,9 @@ function NoteItem({
     : suggestion
       ? {
           name: suggestionTitle(suggestion, currentAuthor().name),
-          color: suggestion.authorColor,
+          color: colorOf(suggestion.author, suggestion.authorColor),
         }
-      : { name: first.author, color: first.authorColor };
+      : { name: first.author, color: colorOf(first.author, first.authorColor) };
 
   return (
     <div className="group relative">

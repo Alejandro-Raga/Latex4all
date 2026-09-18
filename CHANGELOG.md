@@ -45,7 +45,8 @@ tag.
   like a note. Accepted and rejected suggestions stay in the notes bar's
   Resolved tab, greyed out, with who settled them and when.
 - Pick your color for shared projects in the Shared button, next to your
-  name. It's used for your cursor, notes and chat, and kept from then on.
+  name. It's used for your cursor, notes and chat, and kept from then on;
+  changing it recolors what you wrote before too, for everyone.
 - Chat in shared projects, next to Notes: messages and images for everyone on
   the project. Messages are deleted after 30 days.
 - Warnings when a shared project can't sync: when it's nearly full or full,
