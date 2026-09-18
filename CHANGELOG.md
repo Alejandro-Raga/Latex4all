@@ -58,6 +58,11 @@ tag.
 - Claude's edits, and undoing them, no longer erase what you or a
   collaborator wrote in the meantime.
 - A note's icon stays at the end of its highlight while you type after it.
+- Cut (⌘X / Ctrl+X) works in text again. Capture and ask moved to ⌘⇧X /
+  Ctrl+Shift+X.
+- Undo and redo take back whole actions on highlights, notes and suggestions
+  too: undoing an accepted suggestion puts the old text and the suggestion
+  back. They also work right after acting from the notes bar.
 - Right-clicking a Spanish word finds its definition for plurals, verb forms
   and other inflections, not only the dictionary form. The Spanish language
   pack is also half the size to download.

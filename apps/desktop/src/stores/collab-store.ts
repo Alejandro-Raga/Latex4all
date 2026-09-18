@@ -45,6 +45,7 @@ import { useHistoryStore } from "@/stores/history-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useChatStore } from "@/stores/chat-store";
+import { fileUndoManager } from "@/lib/annotations/shared-annotations";
 import {
   moveAnnotationsIntoShared,
   moveAnnotationsOutOfShared,
@@ -180,7 +181,7 @@ export function getSharedUndoManager(
   if (!active || !shared) return null;
   let manager = active.undoManagers.get(shared.fileId);
   if (!manager) {
-    manager = new Y.UndoManager(shared.text);
+    manager = fileUndoManager(active.session.doc, shared.text, shared.fileId);
     active.undoManagers.set(shared.fileId, manager);
   }
   return manager;

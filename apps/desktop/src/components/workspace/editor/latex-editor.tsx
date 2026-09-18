@@ -7,6 +7,7 @@ import {
   lineNumbers,
   highlightActiveLine,
   highlightActiveLineGutter,
+  runScopeHandlers,
   scrollPastEnd,
   tooltips,
 } from "@codemirror/view";
@@ -16,6 +17,7 @@ import {
   defaultKeymap,
   history,
   historyKeymap,
+  isolateHistory,
   indentMore,
   indentLess,
   selectLineDown,
@@ -89,9 +91,14 @@ import { SelectionToolbar, type ToolbarAction } from "./selection-toolbar";
 import {
   annotationAt,
   annotationById,
+  annotationEdit,
   annotationsExtension,
   setAnnotations,
 } from "./annotations-extension";
+import {
+  type AnnotationEdit,
+  LocalAnnotations,
+} from "@/lib/annotations/local-annotations";
 import { type AnnotationActions, AnnotationCard } from "./annotation-card";
 import { currentAuthor, useAnnotationsStore } from "@/stores/annotations-store";
 import {
@@ -729,6 +736,20 @@ export function LatexEditor() {
     const currentContent = getActiveFileContent();
 
     const updateListener = EditorView.updateListener.of((update) => {
+      // An annotation edit, made or undone or redone here: put the
+      // annotations as it left them.
+      for (const tr of update.transactions) {
+        for (const effect of tr.effects) {
+          const source = useAnnotationsStore.getState().source;
+          if (effect.is(annotationEdit) && source instanceof LocalAnnotations) {
+            source.restore(
+              effect.value.path,
+              effect.value.after,
+              update.state.doc.toString(),
+            );
+          }
+        }
+      }
       if (isMergeActiveRef.current) {
         const chunks = getChunks(update.state);
         if (chunks) {
@@ -1517,6 +1538,47 @@ export function LatexEditor() {
   }, [setSelectionRange]);
 
   // ── Highlights and notes ──
+
+  // Undo and redo reach the editor even when focus is elsewhere, e.g. right
+  // after accepting a suggestion from the notes bar; a text box keeps its own.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const view = viewRef.current;
+      if (!view || view.hasFocus || e.defaultPrevented) return;
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      if (runScopeHandlers(view, e, "editor")) e.preventDefault();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // In a project that isn't shared, changes to the open file's annotations
+  // go through here, so undo takes them back along with the text.
+  useEffect(() => {
+    const path = activeFile?.relativePath;
+    if (!(annotationSource instanceof LocalAnnotations) || !path) return;
+    const editor = {
+      path,
+      apply: (edit: AnnotationEdit) => {
+        const view = viewRef.current;
+        if (!view) return false;
+        view.dispatch({
+          changes: edit.text,
+          effects: annotationEdit.of(edit),
+          annotations: isolateHistory.of("full"),
+        });
+        return true;
+      },
+    };
+    annotationSource.editor = editor;
+    return () => {
+      if (annotationSource.editor === editor) annotationSource.editor = null;
+    };
+  }, [annotationSource, activeFile?.relativePath]);
 
   const activePath = activeFile?.relativePath ?? null;
 

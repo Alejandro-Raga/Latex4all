@@ -10,6 +10,8 @@ import {
   EditorView,
   WidgetType,
 } from "@codemirror/view";
+import { invertedEffects } from "@codemirror/commands";
+import type { StoredAnnotation } from "@/lib/annotations/local-annotations";
 import type { Annotation, AnnotationSuggestion } from "@/lib/annotations/types";
 
 /**
@@ -20,6 +22,28 @@ import type { Annotation, AnnotationSuggestion } from "@/lib/annotations/types";
 
 /** Replaces the file's annotations (e.g. after someone else changed one). */
 export const setAnnotations = StateEffect.define<readonly Annotation[]>();
+
+/**
+ * A project that isn't shared: its annotations as an edit left them, kept in
+ * the editor's history so undo and redo take them back with the text.
+ */
+export const annotationEdit = StateEffect.define<{
+  path: string;
+  before: StoredAnnotation[];
+  after: StoredAnnotation[];
+}>();
+
+const annotationUndo = invertedEffects.of((tr) =>
+  tr.effects
+    .filter((e) => e.is(annotationEdit))
+    .map((e) =>
+      annotationEdit.of({
+        path: e.value.path,
+        before: e.value.after,
+        after: e.value.before,
+      }),
+    ),
+);
 
 interface AnnotationsValue {
   annotations: readonly Annotation[];
@@ -215,4 +239,8 @@ export const annotationsTheme = EditorView.baseTheme({
   ".cm-annotation-note:hover": { opacity: "0.8" },
 });
 
-export const annotationsExtension = [annotationsField, annotationsTheme];
+export const annotationsExtension = [
+  annotationsField,
+  annotationsTheme,
+  annotationUndo,
+];

@@ -28,8 +28,83 @@ export function annotationsMap(doc: Y.Doc) {
   return doc.getMap<Y.Map<unknown>>("annotations");
 }
 
-/** Changes to annotations made on this device. */
+/** Annotations brought in from elsewhere; not something to undo. */
 export const ANNOTATING = Symbol("annotating");
+
+const origins = new Map<string, { annotating: string }>();
+
+/**
+ * The origin of changes made on this device to one file's annotations, so
+ * that file's undo history takes them, with its typing.
+ */
+export function annotatingOrigin(fileId: string) {
+  let origin = origins.get(fileId);
+  if (!origin) {
+    origin = { annotating: fileId };
+    origins.set(fileId, origin);
+  }
+  return origin;
+}
+
+export function isAnnotating(origin: unknown) {
+  return (
+    typeof origin === "object" && origin !== null && "annotating" in origin
+  );
+}
+
+/**
+ * Points a file's annotations at text that undo or redo brought back. Undo
+ * puts back deleted text as new text; only this device knows the two are
+ * the same, so others would see those annotations vanish.
+ */
+function reanchor(doc: Y.Doc, text: Y.Text, fileId: string) {
+  const map = annotationsMap(doc);
+  const at = (json: unknown) => {
+    if (!json || typeof json !== "object") return null;
+    const absolute = Y.createAbsolutePositionFromRelativePosition(
+      Y.createRelativePositionFromJSON(json),
+      doc,
+    );
+    return absolute && absolute.type === text ? absolute.index : null;
+  };
+  doc.transact(() => {
+    map.forEach((entry) => {
+      if (entry.get("fileId") !== fileId) return;
+      const from = at(entry.get("from"));
+      const to = at(entry.get("to"));
+      if (from === null || to === null || from >= to) return;
+      const ends = anchors(text, from, to);
+      if (JSON.stringify(ends.from) !== JSON.stringify(entry.get("from"))) {
+        entry.set("from", ends.from);
+      }
+      if (JSON.stringify(ends.to) !== JSON.stringify(entry.get("to"))) {
+        entry.set("to", ends.to);
+      }
+    });
+  }, ANNOTATING);
+}
+
+/**
+ * Undo history for one file: its text and its annotations, so undo takes
+ * back a highlight, note or accepted suggestion as well as typing, in the
+ * order they happened. Only this file's, and only changes made here.
+ */
+export function fileUndoManager(doc: Y.Doc, text: Y.Text, fileId: string) {
+  const origin = annotatingOrigin(fileId);
+  const manager = new Y.UndoManager([text, annotationsMap(doc)], {
+    trackedOrigins: new Set([null, origin]),
+  });
+  // An annotation change is a step of its own, never merged with typing
+  // just before or after it.
+  const separate = (tr: Y.Transaction) => {
+    if (tr.origin === origin) manager.stopCapturing();
+  };
+  // For as long as the document: it's made once per file per session.
+  doc.on("beforeTransaction", separate);
+  doc.on("afterTransaction", separate);
+  manager.on("stack-item-popped", () => reanchor(doc, text, fileId));
+  return manager;
+}
 
 function readSuggestion(value: unknown): AnnotationSuggestion | undefined {
   if (!value || typeof value !== "object") return undefined;
@@ -142,7 +217,7 @@ export class SharedAnnotations implements AnnotationSource {
           note ? [comment(note.author, note.text)] : [],
         ),
       );
-    }, ANNOTATING);
+    }, annotatingOrigin(file.fileId));
     return id;
   }
 
@@ -250,7 +325,7 @@ export class SharedAnnotations implements AnnotationSource {
         authorColor: author.color,
         at: Date.now(),
       });
-    }, ANNOTATING);
+    }, annotatingOrigin(file.fileId));
     return id;
   }
 
@@ -291,11 +366,13 @@ export class SharedAnnotations implements AnnotationSource {
           ),
         ]);
       }
-    }, ANNOTATING);
+    }, this.originOf(entry));
   }
 
   remove(id: string) {
-    this.doc.transact(() => this.map.delete(id), ANNOTATING);
+    const entry = this.map.get(id);
+    if (entry)
+      this.doc.transact(() => this.map.delete(id), this.originOf(entry));
   }
 
   subscribe(listener: () => void) {
@@ -315,7 +392,11 @@ export class SharedAnnotations implements AnnotationSource {
 
   private edit(id: string, change: (entry: Y.Map<unknown>) => void) {
     const entry = this.map.get(id);
-    if (entry) this.doc.transact(() => change(entry), ANNOTATING);
+    if (entry) this.doc.transact(() => change(entry), this.originOf(entry));
+  }
+
+  private originOf(entry: Y.Map<unknown>) {
+    return annotatingOrigin(String(entry.get("fileId")));
   }
 
   private resolve(json: unknown, text: Y.Text): number | null {

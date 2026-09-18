@@ -688,7 +688,7 @@ export function PdfPreview() {
     }
   };
 
-  // Listen for global Capture & Ask shortcut (Cmd+X / Ctrl+X)
+  // Listen for global Capture & Ask shortcut (Cmd+Shift+X / Ctrl+Shift+X)
   useEffect(() => {
     const handleToggleCapture = () => {
       if (pdfData) setCaptureMode((prev) => !prev);
@@ -1082,14 +1082,14 @@ export function PdfPreview() {
                     : "bg-foreground text-background hover:bg-foreground/90"
                 }`}
                 onClick={() => setCaptureMode(!captureMode)}
-                title={`Capture & Ask (${navigator.userAgent.includes("Mac") ? "Cmd+X" : "Ctrl+X"})`}
+                title={`Capture & Ask (${navigator.userAgent.includes("Mac") ? "⌘⇧X" : "Ctrl+Shift+X"})`}
               >
                 <CrosshairIcon className="size-3.5 shrink-0" />
                 <span className="@[56rem]/pv:inline hidden">
                   Capture and ask
                 </span>
                 <kbd className="pointer-events-none ml-0.5 @[64rem]/pv:inline hidden rounded border border-background/30 bg-background/20 px-1 py-0.5 font-medium text-[10px] text-background leading-none">
-                  {navigator.userAgent.includes("Mac") ? "Cmd+X" : "Ctrl+X"}
+                  {navigator.userAgent.includes("Mac") ? "⌘⇧X" : "Ctrl+Shift+X"}
                 </kbd>
               </Button>
               <div className="mx-1 @[34rem]/pv:block hidden h-4 w-px bg-border" />

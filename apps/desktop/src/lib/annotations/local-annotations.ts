@@ -46,6 +46,28 @@ export interface ProjectText {
 
 const SAVE_DELAY_MS = 800;
 
+/**
+ * A change to a file's annotations, and to its text if it goes with it
+ * (accepting a suggestion), as one step.
+ */
+export interface AnnotationEdit {
+  path: string;
+  before: StoredAnnotation[];
+  after: StoredAnnotation[];
+  text?: { from: number; to: number; insert: string };
+}
+
+/** The editor showing a file: it makes that file's edits, so undo takes them back. */
+export interface AnnotationEditor {
+  path: string;
+  /** False if it can't right now; the edit is then made directly. */
+  apply(edit: AnnotationEdit): boolean;
+}
+
+function copy(items: StoredAnnotation[]): StoredAnnotation[] {
+  return structuredClone(items);
+}
+
 function parse(json: string | null): StoredAnnotation[] {
   if (!json) return [];
   try {
@@ -79,6 +101,8 @@ export class LocalAnnotations implements AnnotationSource {
   private listeners = new Set<() => void>();
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private unsubscribe: () => void;
+  /** Set while a file is open in the editor. */
+  editor: AnnotationEditor | null = null;
 
   private constructor(
     private items: StoredAnnotation[],
@@ -139,17 +163,18 @@ export class LocalAnnotations implements AnnotationSource {
     const content = this.text.contentOf(path);
     if (content === undefined || from >= to) return null;
     const id = newAnnotationId();
-    this.items.push({
-      id,
-      path,
-      from,
-      to,
-      quote: quoteOf(content, from, to),
-      color,
-      resolved: false,
-      comments: note ? [comment(note.author, note.text)] : [],
+    this.commit(path, (items) => {
+      items.push({
+        id,
+        path,
+        from,
+        to,
+        quote: quoteOf(content, from, to),
+        color,
+        resolved: false,
+        comments: note ? [comment(note.author, note.text)] : [],
+      });
     });
-    this.changed();
     return id;
   }
 
@@ -160,15 +185,26 @@ export class LocalAnnotations implements AnnotationSource {
     text: string,
     author: Author,
   ) {
-    const id = this.add(path, from, to, "none");
-    if (!id) return null;
-    this.update(id, (a) => {
-      a.suggestion = {
-        text,
-        author: author.name,
-        authorColor: author.color,
-        at: Date.now(),
-      };
+    const content = this.text.contentOf(path);
+    if (content === undefined || from >= to) return null;
+    const id = newAnnotationId();
+    this.commit(path, (items) => {
+      items.push({
+        id,
+        path,
+        from,
+        to,
+        quote: quoteOf(content, from, to),
+        color: "none",
+        resolved: false,
+        comments: [],
+        suggestion: {
+          text,
+          author: author.name,
+          authorColor: author.color,
+          at: Date.now(),
+        },
+      });
     });
     return id;
   }
@@ -178,35 +214,47 @@ export class LocalAnnotations implements AnnotationSource {
     const suggestion = item?.suggestion;
     if (!item || !suggestion) return;
     const content = this.text.contentOf(item.path);
-    if (
+    const replace =
       accept &&
       content !== undefined &&
       !this.lost.has(id) &&
-      item.from < item.to
-    ) {
-      const { from, to } = item;
-      const next = content.slice(0, from) + suggestion.text + content.slice(to);
-      this.text.write(item.path, next);
-      // A discussion stays on the text that replaced what it was about.
-      this.lastText.set(item.path, next);
-      item.from = from;
-      item.to = from + suggestion.text.length;
-    }
-    if (item.comments.length === 0) {
-      this.remove(id);
-      return;
-    }
-    this.update(id, (a) => {
-      delete a.suggestion;
-      a.resolved = true;
-      a.comments = [
-        ...a.comments,
-        comment(
-          author,
-          accept ? "Accepted the suggestion." : "Rejected the suggestion.",
-        ),
-      ];
-    });
+      item.from < item.to;
+    const { from, to } = item;
+    this.commit(
+      item.path,
+      (items) => {
+        const index = items.findIndex((a) => a.id === id);
+        const a = items[index];
+        // A discussion stays on the text that replaced what it was about.
+        if (replace) {
+          for (const other of items) {
+            if (other === a) continue;
+            const change = {
+              start: from,
+              deleteCount: to - from,
+              insert: suggestion.text,
+            };
+            other.from = mapPosition(other.from, change, 1);
+            other.to = mapPosition(other.to, change, -1);
+          }
+          a.to = from + suggestion.text.length;
+        }
+        if (a.comments.length === 0) {
+          items.splice(index, 1);
+          return;
+        }
+        delete a.suggestion;
+        a.resolved = true;
+        a.comments = [
+          ...a.comments,
+          comment(
+            author,
+            accept ? "Accepted the suggestion." : "Rejected the suggestion.",
+          ),
+        ];
+      },
+      replace ? { from, to, insert: suggestion.text } : undefined,
+    );
   }
 
   setColor(id: string, color: AnnotationColor) {
@@ -242,7 +290,26 @@ export class LocalAnnotations implements AnnotationSource {
   }
 
   remove(id: string) {
-    this.items = this.items.filter((a) => a.id !== id);
+    const item = this.items.find((a) => a.id === id);
+    if (!item) return;
+    this.commit(item.path, (items) => {
+      items.splice(
+        items.findIndex((a) => a.id === id),
+        1,
+      );
+    });
+  }
+
+  /**
+   * Puts a file's annotations back as an edit left them, when the editor
+   * makes, undoes or redoes it. `content` is the file's text by then.
+   */
+  restore(path: string, items: StoredAnnotation[], content: string) {
+    this.items = [
+      ...this.items.filter((a) => a.path !== path),
+      ...copy(items.filter((a) => a.path === path)),
+    ];
+    this.lastText.set(path, content);
     this.changed();
   }
 
@@ -275,8 +342,33 @@ export class LocalAnnotations implements AnnotationSource {
   private update(id: string, change: (a: StoredAnnotation) => void) {
     const item = this.items.find((a) => a.id === id);
     if (!item) return;
-    change(item);
-    this.changed();
+    this.commit(item.path, (items) => {
+      const copied = items.find((a) => a.id === id);
+      if (copied) change(copied);
+    });
+  }
+
+  /**
+   * Makes a change to one file's annotations (and text): through the editor
+   * when the file is open there, so undo takes it back, else directly.
+   */
+  private commit(
+    path: string,
+    change: (items: StoredAnnotation[]) => void,
+    text?: AnnotationEdit["text"],
+  ) {
+    const before = copy(this.items.filter((a) => a.path === path));
+    const after = copy(before);
+    change(after);
+    const edit = { path, before, after, text };
+    if (this.editor?.path === path && this.editor.apply(edit)) return;
+    let content = this.text.contentOf(path) ?? "";
+    if (text) {
+      content =
+        content.slice(0, text.from) + text.insert + content.slice(text.to);
+      this.text.write(path, content);
+    }
+    this.restore(path, after, content);
   }
 
   private changed() {

@@ -92,6 +92,76 @@ describe("annotations in a project that isn't shared", () => {
     return { files, text, file };
   }
 
+  it("undoes accepting a suggestion, text and all, in the editor", async () => {
+    const { EditorState } = await import("@codemirror/state");
+    const { EditorView } = await import("@codemirror/view");
+    const { history, undo, redo, isolateHistory } = await import(
+      "@codemirror/commands"
+    );
+    const { annotationEdit, annotationsExtension } = await import(
+      "@/components/workspace/editor/annotations-extension"
+    );
+    const p = project({ "main.tex": "We prove the theorem." });
+    const notes = await LocalAnnotations.load(p.file, p.text);
+    // Wired up the way the editor does it.
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: p.files["main.tex"],
+        extensions: [
+          history(),
+          annotationsExtension,
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              p.text.set("main.tex", update.state.doc.toString());
+            }
+            for (const tr of update.transactions) {
+              for (const e of tr.effects) {
+                if (e.is(annotationEdit)) {
+                  notes.restore(
+                    e.value.path,
+                    e.value.after,
+                    update.state.doc.toString(),
+                  );
+                }
+              }
+            }
+          }),
+        ],
+      }),
+    });
+    notes.editor = {
+      path: "main.tex",
+      apply: (edit) => {
+        view.dispatch({
+          changes: edit.text,
+          effects: annotationEdit.of(edit),
+          annotations: isolateHistory.of("full"),
+        });
+        return true;
+      },
+    };
+    const from = p.files["main.tex"].indexOf("prove");
+    const id = notes.suggest("main.tex", from, from + 5, "show", ana)!;
+    notes.settleSuggestion(id, true, ben);
+    expect(p.files["main.tex"]).toBe("We show the theorem.");
+    expect(notes.rangesFor("main.tex")).toEqual([]);
+
+    undo(view);
+    expect(p.files["main.tex"]).toBe("We prove the theorem.");
+    const [back] = notes.rangesFor("main.tex");
+    expect(back.suggestion?.text).toBe("show");
+    expect(p.files["main.tex"].slice(back.from, back.to)).toBe("prove");
+
+    redo(view);
+    expect(p.files["main.tex"]).toBe("We show the theorem.");
+    expect(notes.rangesFor("main.tex")).toEqual([]);
+    // One more undo, and another: the suggestion, then nothing.
+    undo(view);
+    undo(view);
+    expect(notes.rangesFor("main.tex")).toEqual([]);
+    view.destroy();
+  });
+
   it("accepts and rejects suggested edits, and keeps them across reopening", async () => {
     const p = project({ "main.tex": "We prove the theorem." });
     const notes = await LocalAnnotations.load(p.file, p.text);
@@ -269,6 +339,37 @@ describe("annotations in a shared project", () => {
       "Accepted the suggestion.",
     ]);
     expect(spans(p.textOf(p.a).toString(), onA)).toEqual(["suggestive"]);
+  });
+
+  it("undoes and redoes accepting a suggestion as one step", async () => {
+    const { fileUndoManager } = await import(
+      "@/lib/annotations/shared-annotations"
+    );
+    const p = pair("Results are significant.");
+    const onA = new SharedAnnotations(p.a);
+    const onB = new SharedAnnotations(p.b);
+    const [fileId] = [...filesMap(p.a).keys()];
+    // As the editor sets it up for this file.
+    const undo = fileUndoManager(p.a, p.textOf(p.a), fileId);
+    const from = "Results are ".length;
+    onB.suggest("main.tex", from, from + 11, "suggestive", ben);
+    const [suggestion] = onA.rangesFor("main.tex");
+    onA.settleSuggestion(suggestion.id, true, ana);
+    expect(p.textOf(p.b).toString()).toBe("Results are suggestive.");
+
+    undo.undo();
+    expect(p.textOf(p.b).toString()).toBe("Results are significant.");
+    const [back] = onB.rangesFor("main.tex");
+    expect(back.suggestion?.text).toBe("suggestive");
+    expect(spans(p.textOf(p.b).toString(), onB)).toEqual(["significant"]);
+
+    undo.redo();
+    expect(p.textOf(p.b).toString()).toBe("Results are suggestive.");
+    expect(onB.rangesFor("main.tex")).toEqual([]);
+    // Ben's suggestion was never A's to undo.
+    undo.undo();
+    undo.undo();
+    expect(onA.rangesFor("main.tex")).toHaveLength(1);
   });
 
   it("stays on its words while others edit around and inside it", () => {

@@ -34,11 +34,12 @@ export function useKeyboardShortcuts() {
         invoke("create_new_window").catch(console.error);
       }
 
-      // Cmd+X (macOS) / Ctrl+X (others): Capture & Ask
+      // Cmd+Shift+X (macOS) / Ctrl+Shift+X (others): Capture & Ask. Not
+      // plain Cmd+X, which is cut.
       if (
         (e.metaKey || e.ctrlKey) &&
         e.key.toLowerCase() === "x" &&
-        !e.shiftKey &&
+        e.shiftKey &&
         !e.altKey
       ) {
         e.preventDefault();
