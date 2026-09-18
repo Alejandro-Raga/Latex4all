@@ -14,7 +14,7 @@ import {
   type Annotation,
   type AnnotationColor,
   type AnnotationComment,
-  type AnnotationConflict,
+  type AnnotationSuggestion,
 } from "@/lib/annotations/types";
 import type { AnnotationActions } from "@/lib/annotations/actions";
 import { cn } from "@/lib/utils";
@@ -231,47 +231,152 @@ export function Comment({
 
 export type { AnnotationActions } from "@/lib/annotations/actions";
 
-/** Text two people changed at once: the version that didn't make it in. */
-function ConflictChoice({
-  conflict,
-  authorName,
+/** What a suggestion would do: the text struck out, and what replaces it. */
+export function SuggestionDiff({
+  quote,
+  text,
+  className,
+}: {
+  quote: string;
+  text: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "whitespace-pre-wrap break-words rounded bg-muted px-2 py-1.5 font-mono text-xs",
+        className,
+      )}
+    >
+      {quote && (
+        <del className="text-muted-foreground decoration-muted-foreground/60">
+          {quote}
+        </del>
+      )}
+      {quote && text && " "}
+      {text && (
+        <ins className="text-green-700 no-underline dark:text-green-400">
+          {text}
+        </ins>
+      )}
+    </div>
+  );
+}
+
+/** Who a suggestion is from, as a heading. */
+export function suggestionTitle(
+  suggestion: AnnotationSuggestion,
+  authorName: string,
+) {
+  if (suggestion.conflict) {
+    if (!suggestion.text) return "Deleted by someone else at the same time";
+    return suggestion.author === authorName
+      ? "Your version"
+      : `${suggestion.author || "Someone else"}'s version`;
+  }
+  return suggestion.author === authorName
+    ? "You suggested"
+    : `${suggestion.author} suggested`;
+}
+
+/** Accept and reject, worded for what's being settled. */
+export function SuggestionButtons({
+  suggestion,
   onSettle,
 }: {
-  conflict: AnnotationConflict;
-  authorName: string;
-  onSettle: (useOther: boolean) => void;
+  suggestion: AnnotationSuggestion;
+  onSettle: (accept: boolean) => void;
 }) {
-  const whose =
-    conflict.author === authorName
-      ? "Your version"
-      : conflict.author
-        ? `${conflict.author}'s version`
-        : "Someone else's version";
+  const accept = suggestion.conflict
+    ? suggestion.text
+      ? "Use this"
+      : "Delete it"
+    : "Accept";
   return (
-    <div className="space-y-2">
-      <div className="text-muted-foreground text-xs">
-        {conflict.text ? whose : "Someone else deleted this."}
-      </div>
-      {conflict.text && (
-        <div className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded bg-muted px-2 py-1.5 font-mono text-xs">
-          {conflict.text}
-        </div>
-      )}
-      <div className="flex gap-1.5">
-        <Button
-          size="sm"
-          className="h-7 px-2.5 text-xs"
-          onClick={() => onSettle(true)}
-        >
-          {conflict.text ? "Use this" : "Delete it"}
-        </Button>
+    <div className="flex gap-1.5">
+      <Button
+        size="sm"
+        className="h-6 gap-1 px-2 text-xs"
+        onClick={() => onSettle(true)}
+      >
+        <CheckIcon className="size-3" />
+        {accept}
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-6 gap-1 px-2 text-xs"
+        onClick={() => onSettle(false)}
+      >
+        <XIcon className="size-3" />
+        {suggestion.conflict ? "Keep current" : "Reject"}
+      </Button>
+    </div>
+  );
+}
+
+/** Writing a suggestion: the selected text, to edit into what it should be. */
+function SuggestionInput({
+  initial,
+  onSubmit,
+  onCancel,
+}: {
+  initial: string;
+  onSubmit: (text: string) => void;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState(initial);
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [text]);
+
+  const changed = text !== initial;
+  return (
+    <div className="space-y-1.5">
+      <textarea
+        ref={ref}
+        rows={1}
+        value={text}
+        placeholder="Delete it"
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            if (changed) onSubmit(text);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            onCancel();
+          }
+        }}
+        className="w-full resize-none rounded-md border border-input bg-transparent px-2 py-1.5 font-mono text-xs outline-none placeholder:text-muted-foreground focus:border-ring"
+      />
+      <div className="flex justify-end gap-1.5">
         <Button
           variant="ghost"
           size="sm"
-          className="h-7 px-2.5 text-xs"
-          onClick={() => onSettle(false)}
+          className="h-6 px-2 text-xs"
+          onClick={onCancel}
         >
-          Keep current
+          Cancel
+        </Button>
+        <Button
+          size="sm"
+          className="h-6 px-2 text-xs"
+          disabled={!changed}
+          onClick={() => onSubmit(text)}
+        >
+          Suggest
         </Button>
       </div>
     </div>
@@ -289,7 +394,10 @@ export function AnnotationCard({
   authorName,
   anchor,
   actions,
+  quote = "",
+  composing = "note",
   onCompose,
+  onSuggest,
   onDismiss,
   onPointerEnter,
   onPointerLeave,
@@ -299,8 +407,14 @@ export function AnnotationCard({
   authorName: string;
   anchor: { x: number; y: number };
   actions: AnnotationActions | null;
+  /** The annotated (or selected) text as it is now. */
+  quote?: string;
+  /** For `annotation === null`: writing a note, or suggesting an edit. */
+  composing?: "note" | "suggest";
   /** Writing a new note, for `annotation === null`. */
   onCompose?: (text: string) => void;
+  /** Suggesting `quote` be replaced with this. */
+  onSuggest?: (text: string) => void;
   onDismiss: () => void;
   onPointerEnter: () => void;
   onPointerLeave: () => void;
@@ -348,11 +462,57 @@ export function AnnotationCard({
         visibility: coords ? "visible" : "hidden",
       }}
     >
-      {annotation?.conflict && actions ? (
-        <ConflictChoice
-          conflict={annotation.conflict}
-          authorName={authorName}
-          onSettle={actions.settleConflict}
+      {annotation?.suggestion && actions ? (
+        <>
+          <div className="flex items-center gap-1.5 text-xs">
+            {annotation.suggestion.authorColor && (
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{
+                  backgroundColor: annotation.suggestion.authorColor,
+                }}
+              />
+            )}
+            <span className="truncate font-medium">
+              {suggestionTitle(annotation.suggestion, authorName)}
+            </span>
+            {annotation.suggestion.at > 0 && (
+              <span className="shrink-0 text-muted-foreground">
+                {formatDistanceToNowStrict(annotation.suggestion.at, {
+                  addSuffix: true,
+                })}
+              </span>
+            )}
+          </div>
+          <SuggestionDiff
+            quote={quote}
+            text={annotation.suggestion.text}
+            className="max-h-40 overflow-y-auto"
+          />
+          <SuggestionButtons
+            suggestion={annotation.suggestion}
+            onSettle={actions.settleSuggestion}
+          />
+          {comments.length > 0 && (
+            <div className="max-h-64 space-y-2.5 overflow-y-auto">
+              {comments.map((comment) => (
+                <Comment
+                  key={comment.id}
+                  comment={comment}
+                  mine={comment.author === authorName}
+                  onEdit={(text) => actions.editComment(comment.id, text)}
+                  onDelete={() => actions.deleteComment(comment.id)}
+                />
+              ))}
+            </div>
+          )}
+          <NoteInput placeholder="Reply…" onSubmit={actions.addComment} />
+        </>
+      ) : !annotation && composing === "suggest" ? (
+        <SuggestionInput
+          initial={quote}
+          onSubmit={(text) => onSuggest?.(text)}
+          onCancel={onDismiss}
         />
       ) : !annotation || !actions ? (
         <NoteInput

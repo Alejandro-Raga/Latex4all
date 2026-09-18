@@ -7,6 +7,7 @@ import {
   DownloadIcon,
   ExternalLinkIcon,
   Loader2Icon,
+  PencilLineIcon,
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -27,6 +28,8 @@ interface WordLookupPopoverProps {
   onReplace: (replacement: string) => void;
   /** Called to mark `term` as not-a-typo, going forward. */
   onIgnore: (word: string) => void;
+  /** Starts suggesting an edit to `term`, if the project takes suggestions. */
+  onSuggest?: () => void;
   onDismiss: () => void;
 }
 
@@ -67,6 +70,7 @@ export function WordLookupPopover({
   anchor,
   onReplace,
   onIgnore,
+  onSuggest,
   onDismiss,
 }: WordLookupPopoverProps) {
   const [result, setResult] = useState<DictionaryLookupResult | null>(null);
@@ -270,6 +274,17 @@ export function WordLookupPopover({
         <span className="min-w-0 flex-1 truncate font-medium text-sm">
           {term}
         </span>
+        {onSuggest && (
+          <button
+            type="button"
+            onClick={onSuggest}
+            title="Suggest edit (⌘⌥E)"
+            className="flex h-5 shrink-0 items-center gap-1 rounded px-1.5 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <PencilLineIcon className="size-3" />
+            Suggest edit
+          </button>
+        )}
         <button
           aria-label="Close"
           onClick={onDismiss}

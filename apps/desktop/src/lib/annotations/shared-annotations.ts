@@ -5,7 +5,7 @@ import {
   type Annotation,
   type AnnotationColor,
   type AnnotationComment,
-  type AnnotationConflict,
+  type AnnotationSuggestion,
   type AnnotationSource,
   type Author,
   isAnnotationColor,
@@ -15,7 +15,8 @@ import {
 /**
  * In a shared project's document:
  *
- *   annotations: annId → { fileId, from, to, color, resolved, comments }
+ *   annotations: annId → { fileId, from, to, color, resolved, comments,
+ *                          suggestion? }
  *
  * `from` and `to` are Yjs relative positions in the file's text, so they
  * follow everyone's edits. It's a top-level map rather than one inside each
@@ -30,32 +31,37 @@ export function annotationsMap(doc: Y.Doc) {
 /** Changes to annotations made on this device. */
 export const ANNOTATING = Symbol("annotating");
 
-function readConflict(value: unknown): AnnotationConflict | undefined {
+function readSuggestion(value: unknown): AnnotationSuggestion | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const { text, author, authorColor } = value as Record<string, unknown>;
-  return typeof text === "string"
-    ? {
-        text,
-        author: typeof author === "string" ? author : "",
-        authorColor: typeof authorColor === "string" ? authorColor : "",
-      }
-    : undefined;
+  const { text, author, authorColor, at, conflict } = value as Record<
+    string,
+    unknown
+  >;
+  if (typeof text !== "string") return undefined;
+  return {
+    text,
+    author: typeof author === "string" ? author : "",
+    authorColor: typeof authorColor === "string" ? authorColor : "",
+    at: typeof at === "number" ? at : 0,
+    ...(conflict === true ? { conflict: true } : {}),
+  };
 }
 
 /**
- * Marks `[from, to)` of a file's text as changed by two people at once, with
- * the version that didn't make it in. Call inside a transaction.
+ * Suggests replacing `[from, to)` of a file's text. Call inside a
+ * transaction.
  */
-export function addConflict(
+export function addSuggestion(
   doc: Y.Doc,
   fileId: string,
   text: Y.Text,
   from: number,
   to: number,
-  conflict: AnnotationConflict,
+  suggestion: AnnotationSuggestion,
+  comments: AnnotationComment[] = [],
 ) {
-  const entry = newEntry(fileId, text, from, to, "pink", false, []);
-  entry.set("conflict", { ...conflict });
+  const entry = newEntry(fileId, text, from, to, "none", false, comments);
+  entry.set("suggestion", { ...suggestion });
   const id = newAnnotationId();
   annotationsMap(doc).set(id, entry);
   return id;
@@ -107,7 +113,7 @@ export class SharedAnnotations implements AnnotationSource {
         color: isAnnotationColor(color) ? color : "yellow",
         resolved: entry.get("resolved") === true,
         comments: readComments(entry),
-        conflict: readConflict(entry.get("conflict")),
+        suggestion: readSuggestion(entry.get("suggestion")),
       });
     });
     return result;
@@ -149,14 +155,17 @@ export class SharedAnnotations implements AnnotationSource {
           continue;
         this.map.set(
           item.id,
-          newEntry(
-            file.fileId,
-            file.text,
-            item.from,
-            item.to,
-            item.color,
-            item.resolved,
-            item.comments,
+          withSuggestion(
+            newEntry(
+              file.fileId,
+              file.text,
+              item.from,
+              item.to,
+              item.color,
+              item.resolved,
+              item.comments,
+            ),
+            item.suggestion,
           ),
         );
       }
@@ -224,23 +233,64 @@ export class SharedAnnotations implements AnnotationSource {
     this.edit(id, (entry) => entry.set("resolved", resolved));
   }
 
-  settleConflict(id: string, useOther: boolean) {
+  suggest(
+    path: string,
+    from: number,
+    to: number,
+    text: string,
+    author: Author,
+  ) {
+    const file = this.textFor(path);
+    if (!file || from >= to) return null;
+    let id: string | null = null;
+    this.doc.transact(() => {
+      id = addSuggestion(this.doc, file.fileId, file.text, from, to, {
+        text,
+        author: author.name,
+        authorColor: author.color,
+        at: Date.now(),
+      });
+    }, ANNOTATING);
+    return id;
+  }
+
+  settleSuggestion(id: string, accept: boolean, author: Author) {
     const entry = this.map.get(id);
-    const conflict = readConflict(entry?.get("conflict"));
-    if (!entry || !conflict) return;
+    const suggestion = readSuggestion(entry?.get("suggestion"));
+    if (!entry || !suggestion) return;
     const file = [...layout(this.doc).values()].find(
       (f) => f.fileId === entry.get("fileId"),
     );
     this.doc.transact(() => {
-      if (useOther && file?.kind === "text") {
-        const from = this.resolve(entry.get("from"), file.text);
-        const to = this.resolve(entry.get("to"), file.text);
-        if (from !== null && to !== null && from < to) {
-          file.text.delete(from, to - from);
-          if (conflict.text) file.text.insert(from, conflict.text);
+      const text = file?.kind === "text" ? file.text : null;
+      const from = text && this.resolve(entry.get("from"), text);
+      const to = text && this.resolve(entry.get("to"), text);
+      const kept = readComments(entry).length > 0;
+      if (accept && text && from != null && to != null && from < to) {
+        text.delete(from, to - from);
+        if (suggestion.text) text.insert(from, suggestion.text);
+        // A discussion stays on the text that replaced what it was about.
+        if (kept && suggestion.text) {
+          const ends = anchors(text, from, from + suggestion.text.length);
+          entry.set("from", ends.from);
+          entry.set("to", ends.to);
         }
       }
-      this.map.delete(id);
+      if (!kept) {
+        this.map.delete(id);
+        return;
+      }
+      entry.delete("suggestion");
+      entry.set("resolved", true);
+      const comments = entry.get("comments");
+      if (comments instanceof Y.Array) {
+        comments.push([
+          comment(
+            author,
+            accept ? "Accepted the suggestion." : "Rejected the suggestion.",
+          ),
+        ]);
+      }
     }, ANNOTATING);
   }
 
@@ -288,6 +338,22 @@ function comment(author: Author, text: string): AnnotationComment {
   };
 }
 
+/**
+ * `[from, to)` as positions that follow edits. The start sticks to the first
+ * highlighted character and the end to the last, so typing just outside a
+ * highlight never joins it.
+ */
+function anchors(text: Y.Text, from: number, to: number) {
+  return {
+    from: Y.relativePositionToJSON(
+      Y.createRelativePositionFromTypeIndex(text, from, 0),
+    ),
+    to: Y.relativePositionToJSON(
+      Y.createRelativePositionFromTypeIndex(text, to, -1),
+    ),
+  };
+}
+
 function newEntry(
   fileId: string,
   text: Y.Text,
@@ -299,24 +365,21 @@ function newEntry(
 ) {
   const entry = new Y.Map<unknown>();
   entry.set("fileId", fileId);
-  // The start sticks to the first highlighted character and the end to
-  // the last, so typing just outside a highlight never joins it.
-  entry.set(
-    "from",
-    Y.relativePositionToJSON(
-      Y.createRelativePositionFromTypeIndex(text, from, 0),
-    ),
-  );
-  entry.set(
-    "to",
-    Y.relativePositionToJSON(
-      Y.createRelativePositionFromTypeIndex(text, to, -1),
-    ),
-  );
+  const ends = anchors(text, from, to);
+  entry.set("from", ends.from);
+  entry.set("to", ends.to);
   entry.set("color", color);
   entry.set("resolved", resolved);
   const list = new Y.Array<AnnotationComment>();
   list.push(comments);
   entry.set("comments", list);
+  return entry;
+}
+
+function withSuggestion(
+  entry: Y.Map<unknown>,
+  suggestion: AnnotationSuggestion | undefined,
+) {
+  if (suggestion) entry.set("suggestion", { ...suggestion });
   return entry;
 }

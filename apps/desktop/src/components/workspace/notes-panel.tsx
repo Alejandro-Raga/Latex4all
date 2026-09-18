@@ -12,6 +12,8 @@ import {
   Comment,
   NoteInput,
   SWATCH_CLASSES,
+  SuggestionDiff,
+  suggestionTitle,
 } from "@/components/workspace/editor/annotation-card";
 import type { Annotation } from "@/lib/annotations/types";
 import { cn } from "@/lib/utils";
@@ -25,6 +27,8 @@ interface Note {
 }
 
 function barClass(annotation: Annotation) {
+  if (annotation.suggestion?.conflict) return "bg-orange-500";
+  if (annotation.suggestion) return "bg-green-500";
   if (annotation.resolved) return "bg-slate-400/60";
   if (annotation.color === "none") return "bg-muted-foreground/30";
   return SWATCH_CLASSES[annotation.color];
@@ -44,9 +48,23 @@ function NoteItem({
 }) {
   const source = useAnnotationsStore((s) => s.source);
   const { annotation } = note;
+  const { suggestion } = annotation;
   const [first] = annotation.comments;
-  const replies = annotation.comments.length - 1;
-  const latest = annotation.comments[annotation.comments.length - 1];
+  // A suggestion's thread is all replies; a note's starts with the note.
+  const thread = suggestion
+    ? annotation.comments
+    : annotation.comments.slice(1);
+  const replies = thread.length;
+  const latestAt =
+    annotation.comments[annotation.comments.length - 1]?.at ??
+    suggestion?.at ??
+    0;
+  const who = suggestion
+    ? {
+        name: suggestionTitle(suggestion, currentAuthor().name),
+        color: suggestion.authorColor,
+      }
+    : { name: first.author, color: first.authorColor };
 
   return (
     <div className="group relative">
@@ -62,44 +80,65 @@ function NoteItem({
           )}
         />
         <span className="min-w-0 flex-1 space-y-1">
-          {note.quote && (
-            <span className="line-clamp-1 block text-muted-foreground text-xs italic">
+          {suggestion ? (
+            <>
               {showFile && (
-                <span className="not-italic">
-                  {note.path.split("/").pop()} ·{" "}
+                <span className="block text-muted-foreground text-xs">
+                  {note.path.split("/").pop()}
                 </span>
               )}
-              “{note.quote}”
-            </span>
+              <SuggestionDiff
+                quote={note.quote}
+                text={suggestion.text}
+                className={cn(!expanded && "line-clamp-3")}
+              />
+            </>
+          ) : (
+            <>
+              {note.quote && (
+                <span className="line-clamp-1 block text-muted-foreground text-xs italic">
+                  {showFile && (
+                    <span className="not-italic">
+                      {note.path.split("/").pop()} ·{" "}
+                    </span>
+                  )}
+                  “{note.quote}”
+                </span>
+              )}
+              <span
+                className={cn(
+                  "block whitespace-pre-wrap break-words text-sm",
+                  !expanded && "line-clamp-3",
+                )}
+              >
+                {first.text}
+              </span>
+            </>
           )}
-          <span
-            className={cn(
-              "block whitespace-pre-wrap break-words text-sm",
-              !expanded && "line-clamp-3",
-            )}
-          >
-            {first.text}
-          </span>
           <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
-            <span
-              className="size-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: first.authorColor }}
-            />
-            <span className="truncate">{first.author}</span>
+            {who.color && (
+              <span
+                className="size-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: who.color }}
+              />
+            )}
+            <span className="truncate">{who.name}</span>
             {replies > 0 && (
               <span className="shrink-0">
                 · {replies} {replies === 1 ? "reply" : "replies"}
               </span>
             )}
-            <span className="shrink-0">
-              · {formatDistanceToNowStrict(latest.at, { addSuffix: true })}
-            </span>
+            {latestAt > 0 && (
+              <span className="shrink-0">
+                · {formatDistanceToNowStrict(latestAt, { addSuffix: true })}
+              </span>
+            )}
           </span>
         </span>
       </button>
       {expanded && source && (
         <div className="space-y-2.5 px-2 pt-1 pb-2.5 pl-4">
-          {annotation.comments.slice(1).map((comment) => (
+          {thread.map((comment) => (
             <Comment
               key={comment.id}
               comment={comment}
@@ -120,7 +159,34 @@ function NoteItem({
       )}
       {source && (
         <div className="absolute top-1.5 right-1.5 flex gap-0.5 rounded-md bg-background/90 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-          {annotation.resolved ? (
+          {suggestion ? (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                title={suggestion.conflict ? "Use this" : "Accept"}
+                aria-label={suggestion.conflict ? "Use this" : "Accept"}
+                onClick={() =>
+                  source.settleSuggestion(annotation.id, true, currentAuthor())
+                }
+              >
+                <CheckIcon className="size-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                title={suggestion.conflict ? "Keep current" : "Reject"}
+                aria-label={suggestion.conflict ? "Keep current" : "Reject"}
+                onClick={() =>
+                  source.settleSuggestion(annotation.id, false, currentAuthor())
+                }
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </>
+          ) : annotation.resolved ? (
             <>
               <Button
                 variant="ghost"
@@ -161,7 +227,10 @@ function NoteItem({
   );
 }
 
-/** Every note in the project: resolve them, and jump to where they are. */
+/**
+ * Every note and suggested edit in the project: settle them, and jump to
+ * where they are.
+ */
 export function NotesPanel({ onClose }: { onClose: () => void }) {
   const source = useAnnotationsStore((s) => s.source);
   const version = useAnnotationsStore((s) => s.version);
@@ -172,7 +241,10 @@ export function NotesPanel({ onClose }: { onClose: () => void }) {
     if (!source) return [];
     return source
       .listAll()
-      .filter(({ annotation }) => annotation.comments.length > 0)
+      .filter(
+        ({ annotation }) =>
+          annotation.comments.length > 0 || annotation.suggestion,
+      )
       .map(({ path, annotation }) => {
         const content = files.find((f) => f.relativePath === path)?.content;
         const quote = (content?.slice(annotation.from, annotation.to) ?? "")

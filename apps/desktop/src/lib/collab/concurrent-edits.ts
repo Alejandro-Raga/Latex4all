@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { addConflict } from "@/lib/annotations/shared-annotations";
+import { addSuggestion } from "@/lib/annotations/shared-annotations";
 import type { Author } from "@/lib/annotations/types";
 import { mergeText } from "@/lib/text-merge";
 import { LOCAL, applyTextChange, filesMap, layout } from "./project-doc";
@@ -12,8 +12,9 @@ function textOf(doc: Y.Doc, fileId: string) {
 /**
  * After catching up on changes made elsewhere while this device made its
  * own: wherever both changed the same text, keep one version whole instead
- * of the two mixed letter by letter, and mark it with the other. Theirs is
- * kept, since others have already seen it; unless they only deleted it.
+ * of the two mixed letter by letter, and offer the other as a suggestion.
+ * Theirs is kept, since others have already seen it; unless they only
+ * deleted it.
  *
  * Returns where each conflict is, for pointing the user to them.
  */
@@ -36,10 +37,12 @@ export function settleConcurrentEdits(
       if (conflicts.length === 0) continue;
       applyTextChange(file.text, text);
       for (const conflict of conflicts) {
-        addConflict(doc, file.fileId, file.text, conflict.from, conflict.to, {
+        addSuggestion(doc, file.fileId, file.text, conflict.from, conflict.to, {
           text: conflict.other,
           author: conflict.otherIsOurs ? me.name : "",
           authorColor: conflict.otherIsOurs ? me.color : "",
+          at: Date.now(),
+          conflict: true,
         });
         found.push({ path: file.path, from: conflict.from });
       }

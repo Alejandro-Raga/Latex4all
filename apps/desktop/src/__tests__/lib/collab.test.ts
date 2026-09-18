@@ -651,7 +651,7 @@ describe("edits to the same text made out of sync", () => {
   function conflictsOn(device: Device) {
     return new SharedAnnotations(device.session!.doc)
       .rangesFor("main.tex")
-      .filter((x) => x.conflict);
+      .filter((x) => x.suggestion);
   }
 
   it("keeps one version whole and marks it with the other", async () => {
@@ -674,7 +674,7 @@ describe("edits to the same text made out of sync", () => {
       const [conflict] = conflictsOn(device);
       const text = device.workspace.snapshot()["main.tex"];
       expect(text.slice(conflict.from, conflict.to)).toBe("mediocre");
-      expect(conflict.conflict).toMatchObject({
+      expect(conflict.suggestion).toMatchObject({
         text: "excellent",
         author: "Ben",
       });
@@ -691,7 +691,10 @@ describe("edits to the same text made out of sync", () => {
     await settleAll(a, b);
 
     const [conflict] = conflictsOn(a);
-    new SharedAnnotations(a.session!.doc).settleConflict(conflict.id, true);
+    new SharedAnnotations(a.session!.doc).settleSuggestion(conflict.id, true, {
+      name: "Ana",
+      color: "#000",
+    });
     await settleAll(a, b);
     const expected = { "main.tex": "The results are excellent." };
     expect(a.workspace.snapshot()).toEqual(expected);
@@ -712,7 +715,7 @@ describe("edits to the same text made out of sync", () => {
       "Keep. Drop this, edited. Keep.",
     );
     const [conflict] = conflictsOn(a);
-    expect(conflict.conflict).toMatchObject({ text: "", author: "" });
+    expect(conflict.suggestion).toMatchObject({ text: "", author: "" });
   });
 
   it("marks nothing when the edits were to different parts", async () => {
@@ -745,7 +748,7 @@ describe("edits to the same text made out of sync", () => {
     expect(b.workspace.snapshot()["main.tex"]).toBe(
       "The results are mediocre.",
     );
-    expect(conflictsOn(b)[0]?.conflict?.text).toBe("excellent");
+    expect(conflictsOn(b)[0]?.suggestion?.text).toBe("excellent");
   });
 });
 

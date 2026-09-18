@@ -58,6 +58,8 @@ export function usePdfMarks({
       const client = getMupdfClient();
       const byPath = new Map<string, ReturnType<typeof source.listAll>>();
       for (const item of source.listAll()) {
+        // Suggested edits are about the source text; the notes bar has them.
+        if (item.annotation.suggestion) continue;
         const list = byPath.get(item.path) ?? [];
         list.push(item);
         byPath.set(item.path, list);

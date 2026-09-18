@@ -137,6 +137,7 @@ import {
   XIcon,
   Loader2Icon,
   MessageSquarePlusIcon,
+  PencilLineIcon,
 } from "lucide-react";
 import { ClaudeChatDrawer } from "@/components/claude-chat/claude-chat-drawer";
 import { ProposedChangesPanel } from "@/components/claude-chat/proposed-changes-panel";
@@ -197,6 +198,8 @@ export function LatexEditor() {
   const [annotationCard, setAnnotationCard] = useState<{
     id: string | null;
     range?: { from: number; to: number };
+    /** For a new one (`id: null`): a note, or a suggested edit. */
+    composing?: "note" | "suggest";
     anchor: { x: number; y: number };
   } | null>(null);
   const annotationCardRef = useRef(annotationCard);
@@ -225,7 +228,9 @@ export function LatexEditor() {
   const highlightSelectionRef = useRef<
     (from: number, to: number, color?: AnnotationColor) => void
   >(() => {});
-  const composeNoteRef = useRef<(from: number, to: number) => void>(() => {});
+  const composeNoteRef = useRef<
+    (from: number, to: number, composing?: "note" | "suggest") => void
+  >(() => {});
 
   const activeFile = files.find((f) => f.id === activeFileId);
   const isTextFile =
@@ -934,6 +939,15 @@ export function LatexEditor() {
           },
         },
         {
+          key: "Mod-Alt-e",
+          run: (view) => {
+            const { from, to } = view.state.selection.main;
+            if (from === to) return false;
+            composeNoteRef.current(from, to, "suggest");
+            return true;
+          },
+        },
+        {
           key: "Mod-/",
           run: toggleComment,
         },
@@ -1464,6 +1478,12 @@ export function LatexEditor() {
         icon: <MessageSquarePlusIcon className="size-4" />,
         hint: "⌘⌥M",
       },
+      {
+        id: "suggest-edit",
+        label: "Suggest edit",
+        icon: <PencilLineIcon className="size-4" />,
+        hint: "⌘⌥E",
+      },
     ],
     [],
   );
@@ -1474,9 +1494,15 @@ export function LatexEditor() {
         sendToolbarPromptWithSelectionContext(
           "Proofread and fix any errors in this text",
         );
-      } else if (actionId === "add-note") {
+      } else if (actionId === "add-note" || actionId === "suggest-edit") {
         const range = useDocumentStore.getState().selectionRange;
-        if (range) composeNoteRef.current(range.start, range.end);
+        if (range) {
+          composeNoteRef.current(
+            range.start,
+            range.end,
+            actionId === "add-note" ? "note" : "suggest",
+          );
+        }
         toolbarStickyRef.current = false;
         setSelectionCoords(null);
       }
@@ -1510,7 +1536,7 @@ export function LatexEditor() {
     else annotationSource.add(activePath, from, to, color);
   };
 
-  composeNoteRef.current = (from, to) => {
+  composeNoteRef.current = (from, to, composing = "note") => {
     const view = viewRef.current;
     if (!view || !annotationSource || !activePath) return;
     const settings = useSettingsStore.getState();
@@ -1519,6 +1545,7 @@ export function LatexEditor() {
     setAnnotationCard({
       id: null,
       range: { from, to },
+      composing,
       anchor: coords
         ? { x: coords.left, y: coords.bottom }
         : { x: window.innerWidth / 2, y: window.innerHeight / 3 },
@@ -1564,6 +1591,11 @@ export function LatexEditor() {
           .find((a) => a.id === annotationCard.id) ?? null)
       : null;
   const cardAnnotationGone = Boolean(annotationCard?.id) && !cardAnnotation;
+  const cardRange = cardAnnotation ?? annotationCard?.range;
+  const cardQuote =
+    cardRange && viewRef.current
+      ? viewRef.current.state.sliceDoc(cardRange.from, cardRange.to)
+      : "";
 
   // Someone else removed the highlight being looked at.
   useEffect(() => {
@@ -1828,6 +1860,21 @@ export function LatexEditor() {
                   authorName={currentAuthor().name}
                   anchor={annotationCard.anchor}
                   actions={cardActions}
+                  quote={cardQuote}
+                  composing={annotationCard.composing}
+                  onSuggest={(text) => {
+                    const range = annotationCard.range;
+                    if (annotationSource && activePath && range) {
+                      annotationSource.suggest(
+                        activePath,
+                        range.from,
+                        range.to,
+                        text,
+                        currentAuthor(),
+                      );
+                    }
+                    closeAnnotationCard();
+                  }}
                   onCompose={(text) => {
                     const range = annotationCard.range;
                     if (annotationSource && activePath && range) {
@@ -1858,6 +1905,15 @@ export function LatexEditor() {
                 anchor={wordLookup.anchor}
                 onReplace={handleReplaceWordLookup}
                 onIgnore={handleIgnoreWord}
+                onSuggest={
+                  annotationSource
+                    ? () => {
+                        const { from, to } = wordLookup;
+                        setWordLookup(null);
+                        composeNoteRef.current(from, to, "suggest");
+                      }
+                    : undefined
+                }
                 onDismiss={() => setWordLookup(null)}
               />
             )}

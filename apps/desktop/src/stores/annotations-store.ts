@@ -88,6 +88,8 @@ function projectText(): ProjectText {
   const files = () => useDocumentStore.getState().files;
   return {
     contentOf: (path) => files().find((f) => f.relativePath === path)?.content,
+    write: (path, content) =>
+      useDocumentStore.getState().updateFileContent(path, content),
     paths: () => files().map((f) => f.relativePath),
     subscribe: (listener) =>
       useDocumentStore.subscribe((state, prev) => {

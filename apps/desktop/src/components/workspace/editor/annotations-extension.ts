@@ -10,7 +10,7 @@ import {
   EditorView,
   WidgetType,
 } from "@codemirror/view";
-import type { Annotation } from "@/lib/annotations/types";
+import type { Annotation, AnnotationSuggestion } from "@/lib/annotations/types";
 
 /**
  * Highlights and notes, drawn quietly: a soft background for a highlight, and
@@ -56,6 +56,13 @@ class NoteGlyph extends WidgetType {
   }
 }
 
+function suggestionClass(suggestion: AnnotationSuggestion) {
+  if (suggestion.conflict) return "cm-annotation cm-annotation-conflict";
+  return suggestion.text
+    ? "cm-annotation cm-annotation-suggestion"
+    : "cm-annotation cm-annotation-suggestion cm-annotation-suggestion-delete";
+}
+
 function build(annotations: readonly Annotation[], length: number) {
   const ranges: Range<Decoration>[] = [];
   for (const a of annotations) {
@@ -63,8 +70,8 @@ function build(annotations: readonly Annotation[], length: number) {
     const to = Math.max(0, Math.min(a.to, length));
     if (from >= to) continue;
     // Resolved notes turn grey rather than vanishing, so they can be found.
-    const className = a.conflict
-      ? "cm-annotation cm-annotation-conflict"
+    const className = a.suggestion
+      ? suggestionClass(a.suggestion)
       : a.resolved
         ? "cm-annotation cm-annotation-resolved"
         : a.color === "none"
@@ -173,6 +180,24 @@ export const annotationsTheme = EditorView.baseTheme({
     backgroundColor: "rgba(249, 115, 22, 0.14)",
     textDecoration: "underline wavy rgba(251, 146, 60, 0.8)",
     textUnderlineOffset: "3px",
+  },
+  // A suggested edit: a dashed green underline, struck through if it's
+  // suggesting the text be deleted.
+  "&light .cm-annotation-suggestion": {
+    backgroundColor: "rgba(34, 197, 94, 0.1)",
+    textDecoration: "underline dashed rgba(22, 163, 74, 0.9)",
+    textUnderlineOffset: "3px",
+  },
+  "&dark .cm-annotation-suggestion": {
+    backgroundColor: "rgba(34, 197, 94, 0.1)",
+    textDecoration: "underline dashed rgba(74, 222, 128, 0.85)",
+    textUnderlineOffset: "3px",
+  },
+  "&light .cm-annotation-suggestion-delete": {
+    textDecoration: "line-through rgba(22, 163, 74, 0.9)",
+  },
+  "&dark .cm-annotation-suggestion-delete": {
+    textDecoration: "line-through rgba(74, 222, 128, 0.85)",
   },
   ".cm-annotation": { borderRadius: "2px" },
   ".cm-annotation-note": {

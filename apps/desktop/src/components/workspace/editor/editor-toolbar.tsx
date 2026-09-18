@@ -122,7 +122,8 @@ export function EditorToolbar({
         ?.listAll()
         .filter(
           ({ annotation }) =>
-            annotation.comments.length > 0 && !annotation.resolved,
+            annotation.suggestion ||
+            (annotation.comments.length > 0 && !annotation.resolved),
         ).length ?? 0,
     [annotationSource, annotationsVersion],
   );

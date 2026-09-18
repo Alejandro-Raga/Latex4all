@@ -36,15 +36,20 @@ export interface AnnotationComment {
 }
 
 /**
- * Text two people changed at once without seeing each other's change. One
- * version stays in the file; this is the other.
+ * A proposed replacement for the annotated text, to accept or reject. Also
+ * how text two people changed at once is shown: one version stays in the
+ * file, and the other is offered as a suggestion.
  */
-export interface AnnotationConflict {
-  /** "" if they deleted it. */
+export interface AnnotationSuggestion {
+  /** "" to delete the text. */
   text: string;
-  /** Whose version this is; "" if not known. */
+  /** Whose it is; "" if not known. */
   author: string;
   authorColor: string;
+  /** ms since epoch */
+  at: number;
+  /** From two people editing the same text at once, not proposed by hand. */
+  conflict?: boolean;
 }
 
 /** An annotation as it currently sits in its file. */
@@ -56,7 +61,7 @@ export interface Annotation {
   resolved: boolean;
   /** Empty for a plain highlight. */
   comments: AnnotationComment[];
-  conflict?: AnnotationConflict;
+  suggestion?: AnnotationSuggestion;
 }
 
 export interface Author {
@@ -85,8 +90,19 @@ export interface AnnotationSource {
   editComment(id: string, commentId: string, text: string): void;
   deleteComment(id: string, commentId: string): void;
   setResolved(id: string, resolved: boolean): void;
-  /** Settles a conflict: with the other version (`useOther`) or as it is. */
-  settleConflict?(id: string, useOther: boolean): void;
+  /** Proposes replacing `[from, to)` with `text`. */
+  suggest(
+    path: string,
+    from: number,
+    to: number,
+    text: string,
+    author: Author,
+  ): string | null;
+  /**
+   * Accepts (makes the change) or rejects a suggestion. One with a
+   * discussion stays as a resolved note, saying which it was.
+   */
+  settleSuggestion(id: string, accept: boolean, author: Author): void;
   remove(id: string): void;
   /** Called when annotations change (not when text moves them). */
   subscribe(listener: () => void): () => void;

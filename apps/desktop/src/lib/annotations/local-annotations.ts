@@ -10,6 +10,7 @@ import {
   type AnnotationColor,
   type AnnotationComment,
   type AnnotationSource,
+  type AnnotationSuggestion,
   type Author,
   isAnnotationColor,
   newAnnotationId,
@@ -25,6 +26,7 @@ export interface StoredAnnotation {
   color: AnnotationColor;
   resolved: boolean;
   comments: AnnotationComment[];
+  suggestion?: AnnotationSuggestion;
 }
 
 /** Reading and writing the JSON file. */
@@ -36,6 +38,8 @@ export interface AnnotationFile {
 /** The project's current text, file by file. */
 export interface ProjectText {
   contentOf(path: string): string | undefined;
+  /** Replaces a loaded file's text, as an edit in the editor would. */
+  write(path: string, content: string): void;
   paths(): string[];
   subscribe(listener: () => void): () => void;
 }
@@ -114,13 +118,14 @@ export class LocalAnnotations implements AnnotationSource {
   rangesFor(path: string): Annotation[] {
     return this.items
       .filter((a) => a.path === path && !this.lost.has(a.id) && a.from < a.to)
-      .map(({ id, from, to, color, resolved, comments }) => ({
+      .map(({ id, from, to, color, resolved, comments, suggestion }) => ({
         id,
         from,
         to,
         color,
         resolved,
         comments: [...comments],
+        ...(suggestion ? { suggestion: { ...suggestion } } : {}),
       }));
   }
 
@@ -146,6 +151,62 @@ export class LocalAnnotations implements AnnotationSource {
     });
     this.changed();
     return id;
+  }
+
+  suggest(
+    path: string,
+    from: number,
+    to: number,
+    text: string,
+    author: Author,
+  ) {
+    const id = this.add(path, from, to, "none");
+    if (!id) return null;
+    this.update(id, (a) => {
+      a.suggestion = {
+        text,
+        author: author.name,
+        authorColor: author.color,
+        at: Date.now(),
+      };
+    });
+    return id;
+  }
+
+  settleSuggestion(id: string, accept: boolean, author: Author) {
+    const item = this.items.find((a) => a.id === id);
+    const suggestion = item?.suggestion;
+    if (!item || !suggestion) return;
+    const content = this.text.contentOf(item.path);
+    if (
+      accept &&
+      content !== undefined &&
+      !this.lost.has(id) &&
+      item.from < item.to
+    ) {
+      const { from, to } = item;
+      const next = content.slice(0, from) + suggestion.text + content.slice(to);
+      this.text.write(item.path, next);
+      // A discussion stays on the text that replaced what it was about.
+      this.lastText.set(item.path, next);
+      item.from = from;
+      item.to = from + suggestion.text.length;
+    }
+    if (item.comments.length === 0) {
+      this.remove(id);
+      return;
+    }
+    this.update(id, (a) => {
+      delete a.suggestion;
+      a.resolved = true;
+      a.comments = [
+        ...a.comments,
+        comment(
+          author,
+          accept ? "Accepted the suggestion." : "Rejected the suggestion.",
+        ),
+      ];
+    });
   }
 
   setColor(id: string, color: AnnotationColor) {

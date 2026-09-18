@@ -66,6 +66,9 @@ describe("annotations in a project that isn't shared", () => {
     let listeners: Array<() => void> = [];
     const text: ProjectText & { set(path: string, content?: string): void } = {
       contentOf: (path) => files[path],
+      write(path, content) {
+        text.set(path, content);
+      },
       paths: () => Object.keys(files),
       subscribe: (listener) => {
         listeners.push(listener);
@@ -88,6 +91,24 @@ describe("annotations in a project that isn't shared", () => {
     };
     return { files, text, file };
   }
+
+  it("accepts and rejects suggested edits, and keeps them across reopening", async () => {
+    const p = project({ "main.tex": "We prove the theorem." });
+    const notes = await LocalAnnotations.load(p.file, p.text);
+    const from = p.files["main.tex"].indexOf("prove");
+    notes.suggest("main.tex", from, from + 5, "show", ana);
+    const rejected = notes.suggest("main.tex", 0, 2, "One", ana)!;
+    await notes.flush();
+
+    const reopened = await LocalAnnotations.load(p.file, p.text);
+    const [first] = reopened
+      .rangesFor("main.tex")
+      .filter((a) => a.suggestion?.text === "show");
+    reopened.settleSuggestion(first.id, true, ben);
+    reopened.settleSuggestion(rejected, false, ben);
+    expect(p.files["main.tex"]).toBe("We show the theorem.");
+    expect(reopened.rangesFor("main.tex")).toEqual([]);
+  });
 
   it("keeps highlights on their words as the text is edited, and across reopening", async () => {
     const p = project({ "main.tex": "We prove the theorem." });
@@ -199,6 +220,55 @@ describe("annotations in a shared project", () => {
     expect(onA.rangesFor("main.tex")[0].resolved).toBe(true);
     onA.remove(id);
     expect(onB.rangesFor("main.tex")).toEqual([]);
+  });
+
+  it("suggests an edit that anyone can accept, for everyone", () => {
+    const p = pair("Results are significant.");
+    const onA = new SharedAnnotations(p.a);
+    const onB = new SharedAnnotations(p.b);
+    const from = "Results are ".length;
+    onA.suggest("main.tex", from, from + 11, "suggestive", ana);
+
+    const [seen] = onB.rangesFor("main.tex");
+    expect(seen.suggestion).toMatchObject({
+      text: "suggestive",
+      author: "Ana",
+    });
+    expect(p.textOf(p.b).toString().slice(seen.from, seen.to)).toBe(
+      "significant",
+    );
+
+    onB.settleSuggestion(seen.id, true, ben);
+    expect(p.textOf(p.a).toString()).toBe("Results are suggestive.");
+    expect(onA.rangesFor("main.tex")).toEqual([]);
+  });
+
+  it("leaves the text alone when a suggestion is rejected", () => {
+    const p = pair("Results are significant.");
+    const onA = new SharedAnnotations(p.a);
+    const id = onA.suggest("main.tex", 0, 7, "", ana)!;
+    onA.settleSuggestion(id, false, ben);
+    expect(p.textOf(p.b).toString()).toBe("Results are significant.");
+    expect(onA.rangesFor("main.tex")).toEqual([]);
+  });
+
+  it("keeps a suggestion's discussion as a resolved note on the new text", () => {
+    const p = pair("Results are significant.");
+    const onA = new SharedAnnotations(p.a);
+    const onB = new SharedAnnotations(p.b);
+    const from = "Results are ".length;
+    const id = onA.suggest("main.tex", from, from + 11, "suggestive", ana)!;
+    onB.addComment(id, ben, "Agreed, softer.");
+    onB.settleSuggestion(id, true, ben);
+
+    const [note] = onA.rangesFor("main.tex");
+    expect(note.suggestion).toBeUndefined();
+    expect(note.resolved).toBe(true);
+    expect(note.comments.map((c) => c.text)).toEqual([
+      "Agreed, softer.",
+      "Accepted the suggestion.",
+    ]);
+    expect(spans(p.textOf(p.a).toString(), onA)).toEqual(["suggestive"]);
   });
 
   it("stays on its words while others edit around and inside it", () => {
@@ -387,6 +457,7 @@ describe("taking highlights off, and listing notes", () => {
     const files: Record<string, string> = { "a.tex": "alpha", "b.tex": "beta" };
     const text = {
       contentOf: (path: string) => files[path],
+      write: () => {},
       paths: () => Object.keys(files),
       subscribe: () => () => {},
     };
