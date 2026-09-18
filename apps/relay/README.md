@@ -17,6 +17,7 @@ It is open to anyone using the app, so everything is capped (`DEFAULT_LIMITS`):
 | Per file | 25 MB |
 | Whole relay | 5 GB; no new projects past 90% |
 | Inactive projects | deleted after 180 days unopened |
+| Chat | deleted after 30 days; 20 MB per project, oldest dropped first; 3 MB per message |
 | New projects | 20 per address per day |
 
 plus connections per project and per address, message size, and bandwidth per
@@ -28,6 +29,12 @@ project.
 node relay.mjs               # 127.0.0.1:8082, data in ./data; PORT, HOST, DATA_DIR override
 node --test                  # tests
 ```
+
+`MIN_PROTOCOL` (default 1) turns away apps older than that protocol with
+426, which the app shows as "update Latex4All". Apps only compress what they
+send once it's 2 or more, since older apps can't read compressed data. So:
+deploy the relay, ship the app, and once everyone has updated set
+`MIN_PROTOCOL=2` (in `compose.yml`'s `environment`) and redeploy.
 
 ## Deployment
 

@@ -129,3 +129,16 @@ export function listenForSyncEvents(handler: (event: SyncEvent) => void) {
     handler(e.payload),
   );
 }
+
+/** Sends a chat message (the sender's JSON) to everyone on the project. */
+export function sendChat(message: Uint8Array) {
+  return invoke<void>("collab_send_chat", { data: toBase64(message) });
+}
+
+/** The chat this device already has for a project, oldest first. */
+export function loadChat(projectRoot: string) {
+  return invoke<Array<{ seq: number; at: number; data: string }>>(
+    "collab_load_chat",
+    { projectRoot },
+  );
+}

@@ -11,15 +11,27 @@
 //   PUT  /p/<id>/blobs/<blobId>   store a binary file (images, PDFs)
 //   GET  /p/<id>/blobs/<blobId>
 //   GET  /health
-// WebSocket /p/<id>/sync          all need "Authorization: Bearer <token>"
-//   text   → {"type":"hello","after":n}   send me everything after seq n
+// WebSocket /p/<id>/sync          all need "Authorization: Bearer <token>", and
+//                                 "Latex4All-Protocol: <n>" (absent means 1):
+//                                 below `minProtocol` it's refused with 426
+//   text   → {"type":"hello","after":n,"chatAfter":m}
+//                                          send me everything after seq n, and
+//                                          chat after m (no chat if absent)
 //   text   → {"type":"gc","liveBlobs":[…]} blobs still in use
 //   binary → [1][update]                   store and pass on an update
 //   binary → [2][awareness]                pass on cursors; never stored
 //   binary → [3][u64 upTo][snapshot]       replace updates ≤ upTo with this
+//   binary → [4][message]                  store and pass on a chat message
 //   binary ← [1][u64 seq][update]  [2][awareness]  [3][u64 upTo][snapshot]
-//   text   ← {"type":"caught-up","seq","logEntries","logBytes"} {"type":"ack","seq"}
-//            {"type":"snapshot-ack","upTo","ok"} {"type":"error","code"}
+//            [4][u64 seq][u64 at][message]
+//   text   ← {"type":"caught-up","seq","logEntries","logBytes","minProtocol",
+//            "chatDays"} {"type":"ack","seq"} {"type":"snapshot-ack","upTo","ok"}
+//            {"type":"error","code"} {"type":"chat-ack","seq","at"}
+//            {"type":"chat-error","code"}
+//
+// Protocol 2 added the version header, chat, and apps compressing what they
+// encrypt. Apps only compress once `minProtocol` is 2, since older ones can't
+// read it; raise it (MIN_PROTOCOL) once everyone has updated.
 //
 // The relay is open to anyone, so storage, connections and bandwidth are all
 // capped (DEFAULT_LIMITS).
@@ -51,10 +63,21 @@ export const DEFAULT_LIMITS = {
   projectBytesPerSecond: 2 * MiB,
   projectBurstBytes: 64 * MiB,
   heartbeatMs: 30_000,
+  /** Apps older than this are refused, and told to update. */
+  minProtocol: 1,
+  /** Chat messages are deleted after this long. */
+  chatDays: 30,
+  /** A project's chat; the oldest messages go past this. */
+  maxChatBytes: 20 * MiB,
+  /** One message, image included. */
+  maxChatMessageBytes: 3 * MiB,
   sweepMs: 6 * 60 * 60 * 1000,
 };
 
-export const FRAME = { UPDATE: 1, AWARENESS: 2, SNAPSHOT: 3 };
+export const FRAME = { UPDATE: 1, AWARENESS: 2, SNAPSHOT: 3, CHAT: 4 };
+
+/** What this relay speaks. */
+export const PROTOCOL = 2;
 
 function send(res, status, body = "") {
   res.writeHead(status, {
@@ -73,6 +96,14 @@ function refuse(socket, status) {
 function bearer(req) {
   const header = req.headers.authorization ?? "";
   return header.startsWith("Bearer ") ? header.slice(7) : null;
+}
+
+function chatFrame({ seq, at, data }) {
+  const header = Buffer.alloc(17);
+  header[0] = FRAME.CHAT;
+  header.writeBigUInt64BE(BigInt(seq), 1);
+  header.writeBigUInt64BE(BigInt(at), 9);
+  return Buffer.concat([header, data]);
 }
 
 function frame(type, seq, data) {
@@ -287,6 +318,12 @@ export function createRelay({
       if (!upgraded) done(id);
     });
 
+    const protocol = Number(req.headers["latex4all-protocol"] ?? 1);
+    if (!(protocol >= config.minProtocol)) {
+      done(id);
+      return refuse(socket, 426);
+    }
+
     wss.handleUpgrade(req, socket, head, (ws) => {
       upgraded = true;
       connectionsByIp.set(ip, (connectionsByIp.get(ip) ?? 0) + 1);
@@ -326,12 +363,19 @@ export function createRelay({
             for (const entry of entries) {
               ws.send(frame(FRAME.UPDATE, entry.seq, entry.data));
             }
+            if (Number.isSafeInteger(message.chatAfter)) {
+              for (const chat of project.chatSince(message.chatAfter)) {
+                ws.send(chatFrame(chat));
+              }
+            }
             // The log since the last snapshot, so clients know when to compact.
             reply({
               type: "caught-up",
               seq: project.head,
               logEntries: project.log.length,
               logBytes: project.log.reduce((sum, e) => sum + e.data.length, 0),
+              minProtocol: config.minProtocol,
+              chatDays: config.chatDays,
             });
             ws.ready = true;
           } else if (
@@ -364,6 +408,20 @@ export function createRelay({
         } else if (type === FRAME.AWARENESS) {
           charge(id, ws, data.length);
           broadcast(data);
+        } else if (type === FRAME.CHAT && ws.ready) {
+          const message = data.subarray(1);
+          if (message.length > config.maxChatMessageBytes) {
+            reply({ type: "chat-error", code: "too-large" });
+            return;
+          }
+          charge(id, ws, data.length);
+          const stored = project.appendChat(Buffer.from(message));
+          if (!stored) {
+            reply({ type: "chat-error", code: "quota" });
+            return;
+          }
+          reply({ type: "chat-ack", ...stored });
+          broadcast(chatFrame({ ...stored, data: message }));
         } else if (type === FRAME.SNAPSHOT && data.length >= 9) {
           const upTo = Number(data.readBigUInt64BE(1));
           const ok = project.compact(upTo, Buffer.from(data.subarray(9)));
@@ -434,8 +492,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT ?? 8082);
   const host = process.env.HOST ?? "127.0.0.1";
   const dataDir = process.env.DATA_DIR ?? "./data";
+  const minProtocol = Number(process.env.MIN_PROTOCOL ?? 1);
   const server = createRelay({
     dataDir,
+    limits: { minProtocol },
     log: (line) => console.log(`[relay] ${line}`),
   });
   server.listen(port, host, () => {

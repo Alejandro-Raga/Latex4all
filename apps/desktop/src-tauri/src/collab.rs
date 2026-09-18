@@ -19,7 +19,13 @@
 //!   the webview's record of which files it has written to disk, all written
 //!   together so none can get ahead of the others;
 //! - `collab-outbox.bin` — local changes the relay hasn't confirmed yet,
-//!   which is what lets offline edits reach everyone later.
+//!   which is what lets offline edits reach everyone later;
+//! - `collab-chat.bin` — the project's chat as far as this device has it,
+//!   kept for as long as the relay keeps it.
+//!
+//! **Compression.** Encrypted data can't be compressed, so the app compresses
+//! before encrypting, where it helps. Older apps can't read that, so it only
+//! starts once the relay turns them away (its `minProtocol` is 2 or more).
 
 use base64::engine::general_purpose::{STANDARD as BASE64, URL_SAFE_NO_PAD};
 use base64::Engine;
@@ -29,16 +35,16 @@ use ring::rand::{SecureRandom, SystemRandom};
 use ring::{digest, hmac};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::{HashMap, VecDeque};
-use std::io::Write;
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, EventTarget, WebviewWindow};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
+use tokio_tungstenite::tungstenite::http::header::{HeaderName, HeaderValue, AUTHORIZATION};
 use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::{Bytes, Error as WsError, Message};
 use tokio_tungstenite::WebSocketStream;
@@ -50,6 +56,11 @@ pub const DEFAULT_RELAY: &str = "https://collab.alejandroraga.com";
 const MAX_UPDATE_BYTES: usize = 2 * 1024 * 1024;
 const MAX_FILE_BYTES: usize = 25 * 1024 * 1024 - 64;
 const MAX_MESSAGE_BYTES: usize = 32 * 1024 * 1024;
+const MAX_CHAT_BYTES: usize = 3 * 1024 * 1024 - 64;
+/// How long chat is kept. Keep in step with chatDays in apps/relay/relay.mjs.
+const CHAT_DAYS: u64 = 30;
+/// A compressed payload that would inflate past this is refused.
+const MAX_INFLATED_BYTES: u64 = 64 * 1024 * 1024;
 
 const KEEPALIVE: Duration = Duration::from_secs(20);
 const RETRY_DELAYS: [u64; 5] = [1, 2, 5, 10, 30];
@@ -57,10 +68,16 @@ const RETRY_DELAYS: [u64; 5] = [1, 2, 5, 10, 30];
 const FRAME_UPDATE: u8 = 1;
 const FRAME_AWARENESS: u8 = 2;
 const FRAME_SNAPSHOT: u8 = 3;
+const FRAME_CHAT: u8 = 4;
 
 const LINK_FILE: &str = "collab.json";
 const DOC_FILE: &str = "collab-doc.bin";
 const OUTBOX_FILE: &str = "collab-outbox.bin";
+const CHAT_FILE: &str = "collab-chat.bin";
+
+/// The relay protocol this app speaks; see the top of apps/relay/relay.mjs.
+const PROTOCOL: u32 = 2;
+const PROTOCOL_HEADER: &str = "latex4all-protocol";
 
 // ─── Links and keys ───
 
@@ -165,6 +182,49 @@ enum Kind {
     Awareness = 2,
     Snapshot = 3,
     Blob = 4,
+    Chat = 5,
+}
+
+fn deflate(data: &[u8]) -> Option<Vec<u8>> {
+    let mut encoder =
+        flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(data).ok()?;
+    encoder.finish().ok()
+}
+
+fn inflate(data: &[u8]) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    flate2::read::DeflateDecoder::new(data)
+        .take(MAX_INFLATED_BYTES + 1)
+        .read_to_end(&mut out)
+        .map_err(|_| "Received data that doesn't decompress".to_string())?;
+    if out.len() as u64 > MAX_INFLATED_BYTES {
+        return Err("Received data that's too large".into());
+    }
+    Ok(out)
+}
+
+/// Projects whose relay only lets in apps that can read compressed data.
+fn compressing() -> &'static Mutex<HashSet<String>> {
+    static PROJECTS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    PROJECTS.get_or_init(Default::default)
+}
+
+fn may_compress(project_id: &str) -> bool {
+    compressing()
+        .lock()
+        .map(|projects| projects.contains(project_id))
+        .unwrap_or(false)
+}
+
+fn set_may_compress(project_id: &str, allowed: bool) {
+    if let Ok(mut projects) = compressing().lock() {
+        if allowed {
+            projects.insert(project_id.to_string());
+        } else {
+            projects.remove(project_id);
+        }
+    }
 }
 
 struct Keys {
@@ -195,14 +255,30 @@ impl Keys {
         hex(digest::digest(&digest::SHA256, self.access_token.as_bytes()).as_ref())
     }
 
-    fn aad(&self, kind: Kind) -> Vec<u8> {
+    /// Whether it was compressed first is bound in too, so `open` can tell.
+    fn aad(&self, kind: Kind, packed: bool) -> Vec<u8> {
         let mut aad = self.project_id.as_bytes().to_vec();
-        aad.push(kind as u8);
+        aad.push(kind as u8 | if packed { 0x80 } else { 0 });
         aad
     }
 
-    /// `nonce ‖ ciphertext ‖ tag`.
     fn seal(&self, kind: Kind, plaintext: &[u8]) -> Result<Vec<u8>, String> {
+        self.seal_as(kind, plaintext, false)
+    }
+
+    /// Compressed first when `compress` allows it and it saves something.
+    fn seal_packed(&self, kind: Kind, plaintext: &[u8], compress: bool) -> Result<Vec<u8>, String> {
+        if compress {
+            if let Some(packed) = deflate(plaintext).filter(|p| p.len() < plaintext.len() * 9 / 10)
+            {
+                return self.seal_as(kind, &packed, true);
+            }
+        }
+        self.seal_as(kind, plaintext, false)
+    }
+
+    /// `nonce ‖ ciphertext ‖ tag`.
+    fn seal_as(&self, kind: Kind, plaintext: &[u8], packed: bool) -> Result<Vec<u8>, String> {
         let mut nonce = [0u8; NONCE_LEN];
         self.rng
             .fill(&mut nonce)
@@ -211,7 +287,7 @@ impl Keys {
         self.cipher
             .seal_in_place_append_tag(
                 Nonce::assume_unique_for_key(nonce),
-                Aad::from(self.aad(kind)),
+                Aad::from(self.aad(kind, packed)),
                 &mut sealed,
             )
             .map_err(|_| "Encryption failed")?;
@@ -220,7 +296,15 @@ impl Keys {
         Ok(out)
     }
 
+    /// Whichever way it was sealed.
     fn open(&self, kind: Kind, data: &[u8]) -> Result<Vec<u8>, String> {
+        match self.open_as(kind, data, false) {
+            Ok(plain) => Ok(plain),
+            Err(err) => inflate(&self.open_as(kind, data, true).map_err(|_| err)?),
+        }
+    }
+
+    fn open_as(&self, kind: Kind, data: &[u8], packed: bool) -> Result<Vec<u8>, String> {
         let corrupt = || "Received data that doesn't decrypt".to_string();
         if data.len() < NONCE_LEN {
             return Err(corrupt());
@@ -230,7 +314,7 @@ impl Keys {
         let mut sealed = sealed.to_vec();
         let plain = self
             .cipher
-            .open_in_place(nonce, Aad::from(self.aad(kind)), &mut sealed)
+            .open_in_place(nonce, Aad::from(self.aad(kind, packed)), &mut sealed)
             .map_err(|_| corrupt())?;
         Ok(plain.to_vec())
     }
@@ -317,6 +401,109 @@ impl Outbox {
     }
 }
 
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// One chat message: `[u64 seq][u64 at][u32 length][message]` on disk.
+#[derive(Clone, Debug, PartialEq)]
+struct ChatEntry {
+    seq: u64,
+    at: u64,
+    data: Vec<u8>,
+}
+
+fn read_chat(path: &Path) -> Vec<ChatEntry> {
+    let mut entries = Vec::new();
+    let Ok(buf) = std::fs::read(path) else {
+        return entries;
+    };
+    let mut offset = 0;
+    while offset + 20 <= buf.len() {
+        let seq = u64::from_be_bytes(buf[offset..offset + 8].try_into().unwrap_or_default());
+        let at = u64::from_be_bytes(buf[offset + 8..offset + 16].try_into().unwrap_or_default());
+        let len = u32::from_be_bytes(buf[offset + 16..offset + 20].try_into().unwrap_or_default())
+            as usize;
+        if offset + 20 + len > buf.len() {
+            break;
+        }
+        entries.push(ChatEntry {
+            seq,
+            at,
+            data: buf[offset + 20..offset + 20 + len].to_vec(),
+        });
+        offset += 20 + len;
+    }
+    entries
+}
+
+fn encode_chat(entry: &ChatEntry) -> Vec<u8> {
+    let mut record = entry.seq.to_be_bytes().to_vec();
+    record.extend_from_slice(&entry.at.to_be_bytes());
+    record.extend_from_slice(&(entry.data.len() as u32).to_be_bytes());
+    record.extend_from_slice(&entry.data);
+    record
+}
+
+fn chat_cutoff(now: u64) -> u64 {
+    now.saturating_sub(CHAT_DAYS * 24 * 60 * 60 * 1000)
+}
+
+/// This device's copy of the chat, so opening a project only fetches what's
+/// new. Messages go when the relay would have deleted them too.
+struct ChatLog {
+    path: Option<PathBuf>,
+    /// The last seq this device has.
+    after: u64,
+}
+
+impl ChatLog {
+    fn load(path: Option<PathBuf>, now: u64) -> Self {
+        let mut after = 0;
+        if let Some(path) = &path {
+            let entries = read_chat(path);
+            after = entries.last().map_or(0, |e| e.seq);
+            let cutoff = chat_cutoff(now);
+            if entries.iter().any(|e| e.at < cutoff) {
+                let kept: Vec<u8> = entries
+                    .iter()
+                    .filter(|e| e.at >= cutoff)
+                    .flat_map(encode_chat)
+                    .collect();
+                if let Err(err) = write_atomic(path, &kept) {
+                    eprintln!("[collab] Couldn't tidy the chat: {err}");
+                }
+            }
+        }
+        Self { path, after }
+    }
+
+    /// Keeps a message, unless it's one this device already has.
+    fn add(&mut self, entry: &ChatEntry) -> bool {
+        if entry.seq <= self.after {
+            return false;
+        }
+        self.after = entry.seq;
+        if let Some(path) = &self.path {
+            let appended = std::fs::create_dir_all(path.parent().unwrap_or(Path::new(".")))
+                .and_then(|_| {
+                    std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(path)
+                })
+                .and_then(|mut file| file.write_all(&encode_chat(entry)));
+            if let Err(err) = appended {
+                eprintln!("[collab] Couldn't save a chat message: {err}");
+            }
+        }
+        true
+    }
+}
+
 // ─── Connection ───
 
 /// What the webview hears about, all on the `collab://event` channel.
@@ -334,6 +521,8 @@ pub enum SyncEvent {
         log_entries: u64,
         log_bytes: u64,
         pending: usize,
+        /// How long the relay keeps chat; 0 if it has none.
+        chat_days: u64,
     },
     Update {
         seq: u64,
@@ -347,6 +536,13 @@ pub enum SyncEvent {
     Awareness {
         data: String,
     },
+    /// A chat message, anyone's, as its sender wrote it, once the relay has
+    /// it. `at` is the relay's time, in ms.
+    Chat {
+        seq: u64,
+        at: u64,
+        data: String,
+    },
     /// The relay stored a local change as `seq`.
     #[serde(rename_all = "camelCase")]
     Ack {
@@ -358,8 +554,9 @@ pub enum SyncEvent {
         up_to: u64,
         ok: bool,
     },
-    /// `gone` (the project no longer exists, or the link is wrong), `quota`,
-    /// `too-large` or `corrupt`.
+    /// `gone` (the project no longer exists, or the link is wrong),
+    /// `outdated` (the relay needs a newer app), `quota`, `too-large`,
+    /// `corrupt`, or `chat-quota` / `chat-too-large` for a chat message.
     Error {
         code: String,
     },
@@ -368,6 +565,7 @@ pub enum SyncEvent {
 enum Command {
     Publish(Vec<u8>),
     Awareness(Vec<u8>),
+    Chat(Vec<u8>),
     Compact {
         up_to: u64,
         snapshot: Vec<u8>,
@@ -397,6 +595,12 @@ struct RelayMessage {
     ok: bool,
     #[serde(default)]
     code: String,
+    #[serde(default)]
+    at: u64,
+    #[serde(default)]
+    min_protocol: u32,
+    #[serde(default)]
+    chat_days: u64,
 }
 
 /// Keeps one project connected until the command channel closes: reconnects
@@ -406,9 +610,13 @@ async fn run_connection(
     keys: Arc<Keys>,
     mut after: u64,
     mut outbox: Outbox,
+    mut chat: ChatLog,
     mut commands: mpsc::UnboundedReceiver<Command>,
     emit: impl Fn(SyncEvent),
 ) {
+    // Chat messages the relay hasn't confirmed, in the order sent. Only kept
+    // while the app is open.
+    let mut chat_pending = VecDeque::new();
     let mut attempt = 0;
     loop {
         emit(SyncEvent::Status {
@@ -418,6 +626,10 @@ async fn run_connection(
             if let Ok(value) = format!("Bearer {}", keys.access_token).parse() {
                 request.headers_mut().insert(AUTHORIZATION, value);
             }
+            request.headers_mut().insert(
+                HeaderName::from_static(PROTOCOL_HEADER),
+                HeaderValue::from(PROTOCOL),
+            );
             request
         });
         let config = WebSocketConfig::default()
@@ -432,7 +644,13 @@ async fn run_connection(
         match connected {
             Ok((ws, _)) => {
                 attempt = 0;
-                match session(ws, &keys, &mut after, &mut outbox, &mut commands, &emit).await {
+                let mut state = SessionState {
+                    after: &mut after,
+                    outbox: &mut outbox,
+                    chat: &mut chat,
+                    chat_pending: &mut chat_pending,
+                };
+                match session(ws, &keys, &mut state, &mut commands, &emit).await {
                     SessionEnd::Stopped => return,
                     SessionEnd::Dropped => {}
                 }
@@ -440,6 +658,12 @@ async fn run_connection(
             Err(WsError::Http(response)) if matches!(response.status().as_u16(), 401 | 404) => {
                 emit(SyncEvent::Error {
                     code: "gone".into(),
+                });
+                return;
+            }
+            Err(WsError::Http(response)) if response.status().as_u16() == 426 => {
+                emit(SyncEvent::Error {
+                    code: "outdated".into(),
                 });
                 return;
             }
@@ -457,6 +681,7 @@ async fn run_connection(
                 command = commands.recv() => match command {
                     None => return,
                     Some(Command::Publish(update)) => outbox.push(update),
+                    Some(Command::Chat(message)) => chat_pending.push_back(message),
                     Some(_) => {}
                 },
             }
@@ -464,28 +689,42 @@ async fn run_connection(
     }
 }
 
+/// What a connection carries from one session to the next.
+struct SessionState<'a> {
+    after: &'a mut u64,
+    outbox: &'a mut Outbox,
+    chat: &'a mut ChatLog,
+    chat_pending: &'a mut VecDeque<Vec<u8>>,
+}
+
 async fn session<S>(
     ws: WebSocketStream<S>,
     keys: &Keys,
-    after: &mut u64,
-    outbox: &mut Outbox,
+    state: &mut SessionState<'_>,
     commands: &mut mpsc::UnboundedReceiver<Command>,
     emit: &impl Fn(SyncEvent),
 ) -> SessionEnd
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    let SessionState {
+        after,
+        outbox,
+        chat,
+        chat_pending,
+    } = state;
     let (mut sink, mut stream) = ws.split();
 
     let sealed_frame = |kind: Kind, frame: u8, data: &[u8]| {
-        keys.seal(kind, data).map(|sealed| {
+        let compress = !matches!(kind, Kind::Awareness) && may_compress(&keys.project_id);
+        keys.seal_packed(kind, data, compress).map(|sealed| {
             let mut out = vec![frame];
             out.extend_from_slice(&sealed);
             Message::Binary(Bytes::from(out))
         })
     };
 
-    let hello = json!({ "type": "hello", "after": *after }).to_string();
+    let hello = json!({ "type": "hello", "after": **after, "chatAfter": chat.after }).to_string();
     if sink.send(Message::text(hello)).await.is_err() {
         return SessionEnd::Dropped;
     }
@@ -494,6 +733,14 @@ where
     // already has.
     for update in outbox.entries.iter() {
         let Ok(frame) = sealed_frame(Kind::Update, FRAME_UPDATE, update) else {
+            continue;
+        };
+        if sink.send(frame).await.is_err() {
+            return SessionEnd::Dropped;
+        }
+    }
+    for message in chat_pending.iter() {
+        let Ok(frame) = sealed_frame(Kind::Chat, FRAME_CHAT, message) else {
             continue;
         };
         if sink.send(frame).await.is_err() {
@@ -518,6 +765,14 @@ where
                         return SessionEnd::Dropped;
                     }
                 }
+                Some(Command::Chat(message)) => {
+                    let frame = sealed_frame(Kind::Chat, FRAME_CHAT, &message);
+                    chat_pending.push_back(message);
+                    let Ok(frame) = frame else { continue };
+                    if sink.send(frame).await.is_err() {
+                        return SessionEnd::Dropped;
+                    }
+                }
                 Some(Command::Awareness(data)) => {
                     if let Ok(frame) = sealed_frame(Kind::Awareness, FRAME_AWARENESS, &data) {
                         if sink.send(frame).await.is_err() {
@@ -526,7 +781,10 @@ where
                     }
                 }
                 Some(Command::Compact { up_to, snapshot, live_blobs }) => {
-                    let Ok(sealed) = keys.seal(Kind::Snapshot, &snapshot) else { continue };
+                    let compress = may_compress(&keys.project_id);
+                    let Ok(sealed) = keys.seal_packed(Kind::Snapshot, &snapshot, compress) else {
+                        continue;
+                    };
                     let mut frame = vec![FRAME_SNAPSHOT];
                     frame.extend_from_slice(&up_to.to_be_bytes());
                     frame.extend_from_slice(&sealed);
@@ -539,28 +797,46 @@ where
                 }
             },
             incoming = stream.next() => match incoming {
-                Some(Ok(Message::Binary(data))) => handle_frame(&data, keys, after, emit),
+                Some(Ok(Message::Binary(data))) => handle_frame(&data, keys, after, chat, emit),
                 Some(Ok(Message::Text(text))) => {
                     let Ok(message) = serde_json::from_str::<RelayMessage>(&text) else {
                         continue;
                     };
                     match message.kind.as_str() {
                         "caught-up" => {
-                            *after = (*after).max(message.seq);
+                            **after = (**after).max(message.seq);
+                            set_may_compress(&keys.project_id, message.min_protocol >= 2);
                             emit(SyncEvent::Status { state: "online" });
                             emit(SyncEvent::CaughtUp {
-                                seq: *after,
+                                seq: **after,
                                 log_entries: message.log_entries,
                                 log_bytes: message.log_bytes,
                                 pending: outbox.entries.len(),
+                                chat_days: message.chat_days,
                             });
+                        }
+                        "chat-ack" => {
+                            if let Some(data) = chat_pending.pop_front() {
+                                let entry = ChatEntry { seq: message.seq, at: message.at, data };
+                                if chat.add(&entry) {
+                                    emit(SyncEvent::Chat {
+                                        seq: entry.seq,
+                                        at: entry.at,
+                                        data: BASE64.encode(&entry.data),
+                                    });
+                                }
+                            }
+                        }
+                        "chat-error" => {
+                            chat_pending.pop_front();
+                            emit(SyncEvent::Error { code: format!("chat-{}", message.code) });
                         }
                         "ack" => {
                             outbox.confirm();
                             // Updates reach this socket in seq order, so
                             // everything before an ack has been delivered.
-                            *after = (*after).max(message.seq);
-                            emit(SyncEvent::Ack { seq: *after, pending: outbox.entries.len() });
+                            **after = (**after).max(message.seq);
+                            emit(SyncEvent::Ack { seq: **after, pending: outbox.entries.len() });
                         }
                         "error" => {
                             // The relay refused the oldest change for good;
@@ -589,7 +865,13 @@ where
     }
 }
 
-fn handle_frame(data: &[u8], keys: &Keys, after: &mut u64, emit: &impl Fn(SyncEvent)) {
+fn handle_frame(
+    data: &[u8],
+    keys: &Keys,
+    after: &mut u64,
+    chat: &mut ChatLog,
+    emit: &impl Fn(SyncEvent),
+) {
     let corrupt = || {
         emit(SyncEvent::Error {
             code: "corrupt".into(),
@@ -622,6 +904,25 @@ fn handle_frame(data: &[u8], keys: &Keys, after: &mut u64, emit: &impl Fn(SyncEv
                     data: BASE64.encode(plain),
                 }),
                 Err(_) => corrupt(),
+            }
+        }
+        FRAME_CHAT => {
+            let (Some(seq), Some(at)) = (seq_of(data), data.get(9..17)) else {
+                return;
+            };
+            let at = u64::from_be_bytes(at.try_into().unwrap_or_default());
+            let Some(sealed) = data.get(17..) else { return };
+            // Someone's message this device can't read is skipped, not fatal.
+            let Ok(plain) = keys.open(Kind::Chat, sealed) else {
+                return;
+            };
+            let entry = ChatEntry { seq, at, data: plain };
+            if chat.add(&entry) {
+                emit(SyncEvent::Chat {
+                    seq,
+                    at,
+                    data: BASE64.encode(&entry.data),
+                });
             }
         }
         FRAME_AWARENESS => {
@@ -671,7 +972,7 @@ async fn upload_blob(link: &Link, file: &Path) -> Result<(String, u64), String> 
     }
     let keys = Keys::derive(link);
     let id = keys.blob_id(&data);
-    let body = keys.seal(Kind::Blob, &data)?;
+    let body = keys.seal_packed(Kind::Blob, &data, may_compress(&keys.project_id))?;
     let response = reqwest::Client::new()
         .put(link.url(&format!("/blobs/{id}")))
         .bearer_auth(&keys.access_token)
@@ -822,7 +1123,7 @@ pub fn collab_write_link(project_root: String, link: String) -> Result<(), Strin
 #[tauri::command]
 pub fn collab_remove_link(project_root: String) -> Result<(), String> {
     let dir = state_dir(Path::new(&project_root));
-    for name in [LINK_FILE, DOC_FILE, OUTBOX_FILE] {
+    for name in [LINK_FILE, DOC_FILE, OUTBOX_FILE, CHAT_FILE] {
         match std::fs::remove_file(dir.join(name)) {
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
@@ -882,8 +1183,9 @@ pub fn collab_connect(
 ) -> Result<(), String> {
     let link = Link::parse(&link)?;
     let keys = Arc::new(Keys::derive(&link));
-    let outbox =
-        Outbox::load(project_root.map(|root| state_dir(Path::new(&root)).join(OUTBOX_FILE)));
+    let dir = project_root.map(|root| state_dir(Path::new(&root)));
+    let outbox = Outbox::load(dir.as_ref().map(|dir| dir.join(OUTBOX_FILE)));
+    let chat = ChatLog::load(dir.map(|dir| dir.join(CHAT_FILE)), now_ms());
     let (tx, rx) = mpsc::unbounded_channel();
     {
         let mut connections = state.connections.lock().map_err(|e| e.to_string())?;
@@ -895,6 +1197,7 @@ pub fn collab_connect(
         keys,
         after,
         outbox,
+        chat,
         rx,
         move |event| {
             let _ = target.emit_to(
@@ -926,6 +1229,43 @@ pub fn collab_publish(
     }
     state.send(&window, Command::Publish(update));
     Ok(())
+}
+
+/// Sends a chat message: the webview's JSON, image and all.
+#[tauri::command]
+pub fn collab_send_chat(
+    window: WebviewWindow,
+    state: tauri::State<'_, CollabState>,
+    data: String,
+) -> Result<(), String> {
+    let message = decode(&data)?;
+    if message.len() > MAX_CHAT_BYTES {
+        return Err("too-large".into());
+    }
+    state.send(&window, Command::Chat(message));
+    Ok(())
+}
+
+#[derive(Serialize)]
+pub struct ChatMessage {
+    seq: u64,
+    at: u64,
+    data: String,
+}
+
+/// The chat this device has for a project, oldest first.
+#[tauri::command]
+pub fn collab_load_chat(project_root: String) -> Vec<ChatMessage> {
+    let cutoff = chat_cutoff(now_ms());
+    read_chat(&state_dir(Path::new(&project_root)).join(CHAT_FILE))
+        .into_iter()
+        .filter(|e| e.at >= cutoff)
+        .map(|e| ChatMessage {
+            seq: e.seq,
+            at: e.at,
+            data: BASE64.encode(e.data),
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -1073,6 +1413,57 @@ mod tests {
     }
 
     #[test]
+    fn compresses_before_encrypting_when_allowed() {
+        let keys = Keys::derive(&Link::generate(DEFAULT_RELAY).unwrap());
+        let text = "\\section{Intro} Some prose. ".repeat(200).into_bytes();
+        let plain = keys.seal_packed(Kind::Update, &text, false).unwrap();
+        let packed = keys.seal_packed(Kind::Update, &text, true).unwrap();
+        assert!(packed.len() < plain.len() / 5);
+        // Either way it opens, as what it is and nothing else.
+        assert_eq!(keys.open(Kind::Update, &plain).unwrap(), text);
+        assert_eq!(keys.open(Kind::Update, &packed).unwrap(), text);
+        assert!(keys.open(Kind::Snapshot, &packed).is_err());
+
+        // What doesn't shrink is sent as it is.
+        let mut noise = vec![0u8; 4096];
+        SystemRandom::new().fill(&mut noise).unwrap();
+        let sealed = keys.seal_packed(Kind::Blob, &noise, true).unwrap();
+        assert!(keys.open_as(Kind::Blob, &sealed, false).is_ok());
+
+        // Something that would inflate to more than it may is refused.
+        let bomb = deflate(&vec![0u8; MAX_INFLATED_BYTES as usize + 1]).unwrap();
+        let sealed = keys.seal_as(Kind::Update, &bomb, true).unwrap();
+        assert!(keys.open(Kind::Update, &sealed).is_err());
+    }
+
+    #[test]
+    fn chat_log_keeps_new_messages_and_forgets_old_ones() {
+        let dir = temp_dir("chat");
+        let root = dir.to_string_lossy().into_owned();
+        let path = state_dir(&dir).join(CHAT_FILE);
+        let day = 24 * 60 * 60 * 1000;
+        let now = now_ms();
+        let mut log = ChatLog::load(Some(path.clone()), now);
+        assert_eq!(log.after, 0);
+        let old = ChatEntry { seq: 1, at: now - 40 * day, data: b"old".to_vec() };
+        let new = ChatEntry { seq: 2, at: now - day, data: b"new".to_vec() };
+        assert!(log.add(&old));
+        assert!(log.add(&new));
+        assert!(!log.add(&new), "already has it");
+        assert_eq!(read_chat(&path), vec![old, new.clone()]);
+
+        // Reopened: what the relay would have deleted is gone here too, and
+        // it asks only for what's after the last one.
+        let log = ChatLog::load(Some(path.clone()), now);
+        assert_eq!(log.after, 2);
+        assert_eq!(read_chat(&path), vec![new]);
+        assert_eq!(collab_load_chat(root.clone()).len(), 1);
+        collab_remove_link(root).unwrap();
+        assert!(!path.exists());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn derived_keys_are_independent() {
         let link = Link::generate(DEFAULT_RELAY).unwrap();
         let keys = Keys::derive(&link);
@@ -1182,6 +1573,7 @@ mod tests {
             Arc::new(Keys::derive(link)),
             after,
             outbox,
+            ChatLog::load(None, now_ms()),
             rx,
             move |event| {
                 let _ = events_tx.send(event);
@@ -1313,6 +1705,18 @@ mod tests {
             std::fs::read(dir_b.join("figures/figure.png")).unwrap(),
             figure
         );
+
+        // Chat: confirmed to the sender, passed on to whoever's online.
+        a.send(Command::Chat(b"{\"text\":\"hi\"}".to_vec())).unwrap();
+        let mine = wait_for(&mut a_events, |e| matches!(e, SyncEvent::Chat { .. })).await;
+        let theirs = wait_for(&mut b_events, |e| matches!(e, SyncEvent::Chat { .. })).await;
+        assert_eq!(mine, theirs);
+        let SyncEvent::Chat { seq, data, .. } = mine else { unreachable!() };
+        assert_eq!(BASE64.decode(data).unwrap(), b"{\"text\":\"hi\"}");
+        // Someone opening later gets it too.
+        let (_d, mut d_events) = start(&link, 0, Outbox::load(None));
+        let later = wait_for(&mut d_events, |e| matches!(e, SyncEvent::Chat { .. })).await;
+        assert!(matches!(later, SyncEvent::Chat { seq: s, .. } if s == seq));
 
         // The wrong key is turned away.
         let wrong = Link {

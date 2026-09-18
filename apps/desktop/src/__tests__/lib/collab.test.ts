@@ -65,6 +65,7 @@ class FakeRelay {
       logEntries: this.log.length,
       logBytes: this.log.reduce((n, e) => n + e.data.length, 0),
       pending: device.outbox.length,
+      chatDays: 30,
     });
     for (const update of device.outbox.splice(0)) this.store(device, update);
   }
@@ -612,6 +613,7 @@ describe("shared projects", () => {
       logEntries: 0,
       logBytes: 0,
       pending: 0,
+      chatDays: 30,
     });
     expect(session.status).toBe("synced");
     session.handle({ type: "error", code: "gone" });

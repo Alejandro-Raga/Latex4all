@@ -16,6 +16,8 @@ import { LatexEditor } from "./editor/latex-editor";
 import { PdfPreview } from "./preview/pdf-preview";
 import { QuickReferencePanel } from "./quick-reference-panel";
 import { NotesPanel } from "./notes-panel";
+import { ChatPanel } from "./chat-panel";
+import { useChatStore } from "@/stores/chat-store";
 import { useAnnotationsStore } from "@/stores/annotations-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { usePreviewStore } from "@/stores/preview-store";
@@ -47,6 +49,8 @@ export function WorkspaceLayout() {
   const [quickRefOpen, setQuickRefOpen] = useState(false);
   const notesOpen = useAnnotationsStore((s) => s.panelOpen);
   const setNotesOpen = useAnnotationsStore((s) => s.setPanelOpen);
+  const panelTab = useAnnotationsStore((s) => s.panelTab);
+  const chatDays = useChatStore((s) => s.days);
 
   const getCollapsedSidebarSize = useCallback(() => {
     const workspaceWidth =
@@ -262,7 +266,11 @@ export function WorkspaceLayout() {
 
         {notesOpen && (
           <Panel defaultSize={20} minSize={14} maxSize={40} className="min-w-0">
-            <NotesPanel onClose={() => setNotesOpen(false)} />
+            {panelTab === "chat" && chatDays > 0 ? (
+              <ChatPanel onClose={() => setNotesOpen(false)} />
+            ) : (
+              <NotesPanel onClose={() => setNotesOpen(false)} />
+            )}
           </Panel>
         )}
       </PanelGroup>

@@ -1,12 +1,6 @@
 import { useMemo, useState } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
-import {
-  CheckIcon,
-  MessageSquareIcon,
-  RotateCcwIcon,
-  Trash2Icon,
-  XIcon,
-} from "lucide-react";
+import { CheckIcon, RotateCcwIcon, Trash2Icon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Comment,
@@ -19,6 +13,7 @@ import type { Annotation } from "@/lib/annotations/types";
 import { cn } from "@/lib/utils";
 import { currentAuthor, useAnnotationsStore } from "@/stores/annotations-store";
 import { useDocumentStore } from "@/stores/document-store";
+import { SidePanelHeader } from "./side-panel-header";
 
 interface Note {
   path: string;
@@ -273,22 +268,7 @@ export function NotesPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-background">
-      <div className="flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] shrink-0 items-center gap-2 border-border border-b px-3 pt-[var(--titlebar-height)]">
-        <MessageSquareIcon className="size-3.5 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate font-medium text-sm">
-          Notes
-        </span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-6"
-          onClick={onClose}
-          title="Close"
-          aria-label="Close notes"
-        >
-          <XIcon className="size-3.5" />
-        </Button>
-      </div>
+      <SidePanelHeader onClose={onClose} />
 
       <div className="px-3 pt-2.5 pb-1">
         <div className="grid grid-cols-2 gap-1 rounded-md bg-muted p-0.5">

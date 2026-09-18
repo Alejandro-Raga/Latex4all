@@ -12,10 +12,13 @@ export type SyncEvent =
       logEntries: number;
       logBytes: number;
       pending: number;
+      /** How long the relay keeps chat; 0 if it has none. */
+      chatDays: number;
     }
   | { type: "update"; seq: number; data: string }
   | { type: "snapshot"; upTo: number; data: string }
   | { type: "awareness"; data: string }
+  | { type: "chat"; seq: number; at: number; data: string }
   | { type: "ack"; seq: number; pending: number }
   | { type: "snapshotAck"; upTo: number; ok: boolean }
   | { type: "error"; code: string };
@@ -34,8 +37,15 @@ export interface SessionTransport {
  * - `offline`: the relay can't be reached; editing is allowed and changes go
  *   out when it's back.
  * - `gone`: the project no longer exists on the relay.
+ * - `outdated`: the relay needs a newer app; editing is allowed, and changes
+ *   go out once the app is updated.
  */
-export type SessionStatus = "syncing" | "synced" | "offline" | "gone";
+export type SessionStatus =
+  | "syncing"
+  | "synced"
+  | "offline"
+  | "gone"
+  | "outdated";
 
 /** Past this, the relay's log is folded into one snapshot. */
 const COMPACT_AFTER_BYTES = 512 * 1024;
@@ -163,7 +173,9 @@ export class SharedSession {
         );
         break;
       case "error":
-        if (event.code === "gone") this.setStatus("gone");
+        if (event.code === "gone" || event.code === "outdated") {
+          this.setStatus(event.code);
+        }
         this.hooks.onError?.(event.code);
         break;
     }

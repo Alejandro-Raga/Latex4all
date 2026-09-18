@@ -31,16 +31,26 @@ interface AnnotationsState {
   source: AnnotationSource | null;
   /** Bumped whenever any of them change. */
   version: number;
-  /** Whether the notes bar is showing. */
+  /** The side panel: notes, or a shared project's chat. */
   panelOpen: boolean;
+  panelTab: "notes" | "chat";
   setPanelOpen: (open: boolean) => void;
+  /** Opens the side panel on `tab`, or closes it if it's already showing. */
+  togglePanel: (tab: "notes" | "chat") => void;
 }
 
 export const useAnnotationsStore = create<AnnotationsState>((set) => ({
   source: null,
   version: 0,
   panelOpen: false,
+  panelTab: "notes",
   setPanelOpen: (open) => set({ panelOpen: open }),
+  togglePanel: (tab) =>
+    set((s) =>
+      s.panelOpen && s.panelTab === tab
+        ? { panelOpen: false }
+        : { panelOpen: true, panelTab: tab },
+    ),
 }));
 
 let current: {

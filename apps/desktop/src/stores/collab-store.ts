@@ -22,6 +22,7 @@ import {
   defaultCollabName,
   disconnect,
   listenForSyncEvents,
+  loadChat,
   loadDoc,
   parseLink,
   publish,
@@ -36,6 +37,7 @@ import { useDocumentStore } from "@/stores/document-store";
 import { useHistoryStore } from "@/stores/history-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useChatStore } from "@/stores/chat-store";
 import {
   moveAnnotationsIntoShared,
   moveAnnotationsOutOfShared,
@@ -181,6 +183,12 @@ function describeError(code: string) {
       return "A file is too large to share (25 MB at most).";
     case "gone":
       return "This shared project no longer exists. Your files are still here.";
+    case "outdated":
+      return "This shared project needs a newer version of Latex4All. Update to keep syncing.";
+    case "chat-too-large":
+      return "That message is too large to send.";
+    case "chat-quota":
+      return "The chat can't take more messages right now.";
     default:
       return code;
   }
@@ -324,6 +332,8 @@ export const useCollabStore = create<CollabState>()(
               }
             },
             onError: (code) => {
+              if (code.startsWith("chat-"))
+                useChatStore.getState().markFailed();
               if (code !== "corrupt") reportError(describeError(code));
             },
           },
@@ -333,8 +343,25 @@ export const useCollabStore = create<CollabState>()(
         active = target;
         set({ status: "syncing", link: info.link, peers: [] });
 
+        const chat = useChatStore.getState();
+        chat.reset();
+        loadChat(root)
+          .then((list) => {
+            if (active === target) useChatStore.getState().loadHistory(list);
+          })
+          .catch((err) =>
+            log.warn("Couldn't read the chat", { error: String(err) }),
+          );
         target.cleanup.push(
           await listenForSyncEvents((event) => {
+            // Chat has nothing to do with the document; it's shown as it comes.
+            if (event.type === "chat") {
+              useChatStore.getState().receive(event);
+              return;
+            }
+            if (event.type === "caughtUp") {
+              useChatStore.getState().setDays(event.chatDays);
+            }
             if (buffered) buffered.push(event);
             else session.handle(event);
           }),
@@ -381,6 +408,7 @@ export const useCollabStore = create<CollabState>()(
           }),
         );
         await disconnect().catch(() => {});
+        useChatStore.getState().reset();
         set((s) => ({
           status: "none",
           link: null,

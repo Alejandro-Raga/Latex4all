@@ -4,10 +4,12 @@
 // snapshots of a project's documents, and its binary files ("blobs"). Each
 // project is a folder named by its id:
 //
-//   meta.json      { accessHash, created, lastAccess }
+//   meta.json      { accessHash, created, lastAccess, chatHead }
 //   log.bin        updates after the snapshot: [u64 seq][u32 length][bytes]…
 //   snapshot.bin   [u64 upTo][bytes] — the whole project as of update `upTo`
 //   blobs/<id>     one file each
+//   chat.bin       chat messages: [u64 seq][u64 at][u32 length][bytes]…, each
+//                  kept for `chatDays` and the oldest dropped past `maxChatBytes`
 //
 // A project's log and snapshot are held in memory while anyone has it open.
 
@@ -62,6 +64,64 @@ function readLog(file) {
   return entries;
 }
 
+const DAY = 24 * 60 * 60 * 1000;
+
+function readChat(file) {
+  const messages = [];
+  let buf;
+  try {
+    buf = fs.readFileSync(file);
+  } catch {
+    return messages;
+  }
+  let offset = 0;
+  while (offset + 20 <= buf.length) {
+    const seq = Number(buf.readBigUInt64BE(offset));
+    const at = Number(buf.readBigUInt64BE(offset + 8));
+    const length = buf.readUInt32BE(offset + 16);
+    if (offset + 20 + length > buf.length) break;
+    messages.push({
+      seq,
+      at,
+      data: buf.subarray(offset + 20, offset + 20 + length),
+    });
+    offset += 20 + length;
+  }
+  if (offset < buf.length) fs.truncateSync(file, offset);
+  return messages;
+}
+
+function encodeChat({ seq, at, data }) {
+  const header = Buffer.alloc(20);
+  header.writeBigUInt64BE(BigInt(seq));
+  header.writeBigUInt64BE(BigInt(at), 8);
+  header.writeUInt32BE(data.length, 16);
+  return Buffer.concat([header, data]);
+}
+
+function chatBytes(messages) {
+  return messages.reduce((sum, m) => sum + m.data.length + 20, 0);
+}
+
+/**
+ * Drops chat messages older than `cutoff` from a project's folder, without
+ * loading the rest of it. Returns the bytes freed.
+ */
+function expireChatFile(dir, meta, cutoff) {
+  const file = path.join(dir, "chat.bin");
+  const messages = readChat(file);
+  const kept = messages.filter((m) => m.at >= cutoff);
+  if (kept.length === messages.length) return 0;
+  // The seq only ever goes up, even once every message has expired.
+  const head = messages.at(-1)?.seq ?? 0;
+  if (head > (meta.chatHead ?? 0)) {
+    meta.chatHead = head;
+    writeAtomic(path.join(dir, "meta.json"), JSON.stringify(meta));
+  }
+  writeAtomic(file, Buffer.concat(kept.map(encodeChat)));
+  return chatBytes(messages) - chatBytes(kept);
+}
+
 function encodeEntry({ seq, data }) {
   const header = Buffer.alloc(12);
   header.writeBigUInt64BE(BigInt(seq));
@@ -88,6 +148,8 @@ class Project {
     const lastLogged = this.log.at(-1)?.seq ?? 0;
     this.head = Math.max(lastLogged, this.snapshot?.upTo ?? 0);
     this.bytes = storage.bytesOnDisk(dir);
+    this.chat = readChat(path.join(dir, "chat.bin"));
+    this.chatHead = Math.max(meta.chatHead ?? 0, this.chat.at(-1)?.seq ?? 0);
   }
 
   checkAccess(token) {
@@ -168,6 +230,59 @@ class Project {
     return true;
   }
 
+  /** Chat messages after `after`, once expired ones are gone. */
+  chatSince(after) {
+    this.expireChat();
+    return this.chat.filter((m) => m.seq > after);
+  }
+
+  /**
+   * Stores a chat message. Returns its seq and time, or null if it can't be
+   * kept. The oldest messages make way past the project's chat allowance.
+   */
+  appendChat(data) {
+    const { limits } = this.storage;
+    const growth = data.length + 20;
+    if (
+      growth > limits.maxChatBytes ||
+      this.storage.totalBytes + growth > limits.maxTotalBytes * 1.05
+    ) {
+      return null;
+    }
+    this.expireChat();
+    let dropped = 0;
+    while (chatBytes(this.chat) + growth > limits.maxChatBytes) {
+      this.chat.shift();
+      dropped++;
+    }
+    const message = { seq: this.chatHead + 1, at: this.storage.now(), data };
+    const file = path.join(this.dir, "chat.bin");
+    if (dropped > 0) {
+      const before = sizeOf(file);
+      writeAtomic(file, Buffer.concat(this.chat.map(encodeChat)));
+      this.grow(sizeOf(file) - before);
+    }
+    fs.appendFileSync(file, encodeChat(message));
+    this.chat.push(message);
+    this.chatHead = message.seq;
+    this.grow(growth);
+    return { seq: message.seq, at: message.at };
+  }
+
+  expireChat() {
+    const cutoff = this.storage.now() - this.storage.limits.chatDays * DAY;
+    if (!this.chat.length || this.chat[0].at >= cutoff) return;
+    this.meta.chatHead = this.chatHead;
+    writeAtomic(path.join(this.dir, "meta.json"), JSON.stringify(this.meta));
+    const before = chatBytes(this.chat);
+    this.chat = this.chat.filter((m) => m.at >= cutoff);
+    writeAtomic(
+      path.join(this.dir, "chat.bin"),
+      Buffer.concat(this.chat.map(encodeChat)),
+    );
+    this.grow(chatBytes(this.chat) - before);
+  }
+
   blobPath(blobId) {
     return path.join(this.dir, "blobs", blobId);
   }
@@ -243,6 +358,7 @@ export class Storage {
   bytesOnDisk(dir) {
     let total = sizeOf(path.join(dir, "log.bin"));
     total += sizeOf(path.join(dir, "snapshot.bin"));
+    total += sizeOf(path.join(dir, "chat.bin"));
     try {
       for (const name of fs.readdirSync(path.join(dir, "blobs"))) {
         total += sizeOf(path.join(dir, "blobs", name));
@@ -288,20 +404,26 @@ export class Storage {
     this.loaded.delete(id);
   }
 
-  /** Deletes projects nobody has opened for `inactiveDays`. */
+  /**
+   * Deletes projects nobody has opened for `inactiveDays`, and chat messages
+   * past `chatDays` in the rest.
+   */
   sweep(isInUse) {
-    const cutoff = this.now() - this.limits.inactiveDays * 24 * 60 * 60 * 1000;
+    const cutoff = this.now() - this.limits.inactiveDays * DAY;
+    const chatCutoff = this.now() - this.limits.chatDays * DAY;
     let removed = 0;
     for (const id of this.projectIds()) {
       if (isInUse(id)) continue;
       const dir = path.join(this.dir, id);
-      let lastAccess = 0;
+      let meta = {};
       try {
-        lastAccess = JSON.parse(
-          fs.readFileSync(path.join(dir, "meta.json"), "utf8"),
-        ).lastAccess;
+        meta = JSON.parse(fs.readFileSync(path.join(dir, "meta.json"), "utf8"));
       } catch {}
-      if (lastAccess > cutoff) continue;
+      const lastAccess = meta.lastAccess ?? 0;
+      if (lastAccess > cutoff) {
+        this.totalBytes -= expireChatFile(dir, meta, chatCutoff);
+        continue;
+      }
       this.totalBytes -= this.bytesOnDisk(dir);
       this.loaded.delete(id);
       fs.rmSync(dir, { recursive: true, force: true });

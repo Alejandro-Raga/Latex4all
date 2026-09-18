@@ -49,6 +49,14 @@ async function createProject(relay, token = hex(32)) {
 
 function decode(data) {
   const type = data[0];
+  if (type === FRAME.CHAT) {
+    return {
+      kind: "chat",
+      seq: Number(data.readBigUInt64BE(1)),
+      at: Number(data.readBigUInt64BE(9)),
+      bytes: [...data.subarray(17)],
+    };
+  }
   if (type === FRAME.AWARENESS) {
     return { kind: "awareness", bytes: [...data.subarray(1)] };
   }
@@ -60,9 +68,12 @@ function decode(data) {
 }
 
 /** A sync client that records everything it receives. */
-async function connect(relay, id, token) {
+async function connect(relay, id, token, protocol = 2) {
   const ws = new WebSocket(`${relay.ws}/p/${id}/sync`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Latex4All-Protocol": String(protocol),
+    },
   });
   const received = [];
   const waiters = [];
@@ -87,10 +98,17 @@ async function connect(relay, id, token) {
         await new Promise((resolve) => waiters.push(resolve));
       }
     },
-    hello(after = 0) {
+    hello(after = 0, chatAfter) {
       const caughtUp = client.next((m) => m.type === "caught-up");
-      ws.send(JSON.stringify({ type: "hello", after }));
+      ws.send(JSON.stringify({ type: "hello", after, chatAfter }));
       return caughtUp;
+    },
+    chat(bytes) {
+      const ack = client.next(
+        (m) => m.type === "chat-ack" || m.type === "chat-error",
+      );
+      ws.send(Buffer.concat([Buffer.from([FRAME.CHAT]), Buffer.from(bytes)]));
+      return ack;
     },
     update(bytes) {
       const ack = client.next((m) => m.type === "ack" || m.type === "error");
@@ -402,4 +420,93 @@ test("slows a project down once its bandwidth allowance is spent", async () => {
     await a.close();
     await b.close();
   }
+});
+
+test("refuses apps older than the minimum protocol, and says what it is", async () => {
+  const relay = await startRelay({ limits: { minProtocol: 2 } });
+  const { id, token } = await createProject(relay);
+  const url = `${relay.ws}/p/${id}/sync`;
+  // An app from before the header existed counts as protocol 1.
+  assert.equal(await attempt(url, { Authorization: `Bearer ${token}` }), 426);
+  assert.equal(
+    await attempt(url, {
+      Authorization: `Bearer ${token}`,
+      "Latex4All-Protocol": "1",
+    }),
+    426,
+  );
+  const client = await connect(relay, id, token, 2);
+  const caughtUp = await client.hello();
+  assert.equal(caughtUp.minProtocol, 2);
+  assert.equal(caughtUp.chatDays, 30);
+  await client.close();
+});
+
+test("keeps chat for whoever connects later, and passes it on live", async () => {
+  const relay = await startRelay();
+  const { id, token } = await createProject(relay);
+  const a = await connect(relay, id, token);
+  await a.hello(0, 0);
+  const b = await connect(relay, id, token);
+  await b.hello(0, 0);
+
+  const toB = b.next((m) => m.kind === "chat");
+  const ack = await a.chat([1, 2, 3]);
+  assert.equal(ack.type, "chat-ack");
+  assert.equal(ack.seq, 1);
+  assert.deepEqual(await toB, {
+    kind: "chat",
+    seq: 1,
+    at: relay.clock.now,
+    bytes: [1, 2, 3],
+  });
+  await a.chat([4]);
+
+  // Later: from where it left off; an app that doesn't ask gets none.
+  const c = await connect(relay, id, token);
+  await c.hello(0, 1);
+  assert.deepEqual(
+    c.received.filter((m) => m.kind === "chat").map((m) => m.bytes),
+    [[4]],
+  );
+  const old = await connect(relay, id, token);
+  await old.hello(0);
+  assert.equal(old.received.filter((m) => m.kind === "chat").length, 0);
+  for (const client of [a, b, c, old]) await client.close();
+});
+
+test("deletes chat after 30 days, and the oldest past the chat allowance", async () => {
+  const relay = await startRelay({
+    limits: { maxChatBytes: 100, maxChatMessageBytes: 60 },
+  });
+  const { id, token } = await createProject(relay);
+  const a = await connect(relay, id, token);
+  await a.hello(0, 0);
+  await a.chat(Buffer.alloc(30, 1));
+  await a.chat(Buffer.alloc(30, 2));
+  // Too big for what's left: the first message makes way.
+  await a.chat(Buffer.alloc(30, 3));
+  assert.equal((await a.chat(Buffer.alloc(61))).code, "too-large");
+  await a.close();
+
+  const b = await connect(relay, id, token);
+  await b.hello(0, 0);
+  assert.deepEqual(
+    b.received.filter((m) => m.kind === "chat").map((m) => m.seq),
+    [2, 3],
+  );
+  await b.close();
+  await settle();
+
+  // A month on, the sweep clears it even though nobody opened the project,
+  // and numbering carries on.
+  relay.clock.now += 31 * DAY;
+  relay.server.sweep();
+  const chat = path.join(relay.dataDir, id, "chat.bin");
+  assert.equal(fs.statSync(chat).size, 0);
+  const c = await connect(relay, id, token);
+  await c.hello(0, 0);
+  assert.equal(c.received.filter((m) => m.kind === "chat").length, 0);
+  assert.equal((await c.chat([9])).seq, 4);
+  await c.close();
 });

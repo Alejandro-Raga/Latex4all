@@ -23,10 +23,12 @@ import {
   HighlighterIcon,
   EyeOffIcon,
   MessageSquareIcon,
+  MessagesSquareIcon,
 } from "lucide-react";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { CollabButton } from "@/components/collab/collab-button";
 import { useAnnotationsStore } from "@/stores/annotations-store";
+import { useChatStore } from "@/stores/chat-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import vscodeIcon from "@/assets/vscode.svg";
@@ -113,7 +115,11 @@ export function EditorToolbar({
   const vimMode = useSettingsStore((s) => s.vimMode);
   const showAnnotations = useSettingsStore((s) => s.showAnnotations);
   const notesOpen = useAnnotationsStore((s) => s.panelOpen);
-  const setNotesOpen = useAnnotationsStore((s) => s.setPanelOpen);
+  const panelTab = useAnnotationsStore((s) => s.panelTab);
+  const togglePanel = useAnnotationsStore((s) => s.togglePanel);
+  const chatDays = useChatStore((s) => s.days);
+  const unreadChat = useChatStore((s) => s.unread);
+  const showingChat = notesOpen && panelTab === "chat" && chatDays > 0;
   const annotationSource = useAnnotationsStore((s) => s.source);
   const annotationsVersion = useAnnotationsStore((s) => s.version);
   const openNotes = useMemo(
@@ -583,16 +589,33 @@ export function EditorToolbar({
         )}
       </TooltipIconButton>
       <Button
-        variant={notesOpen ? "secondary" : "ghost"}
+        variant={notesOpen && !showingChat ? "secondary" : "ghost"}
         size="sm"
         className="h-6 shrink-0 gap-1 px-1.5 text-xs"
-        onClick={() => setNotesOpen(!notesOpen)}
+        onClick={() => togglePanel("notes")}
         title="Notes"
         aria-label="Notes"
       >
         <MessageSquareIcon className="size-3.5" />
         {openNotes > 0 && <span>{openNotes}</span>}
       </Button>
+      {chatDays > 0 && (
+        <Button
+          variant={showingChat ? "secondary" : "ghost"}
+          size="sm"
+          className="relative h-6 shrink-0 gap-1 px-1.5 text-xs"
+          onClick={() => togglePanel("chat")}
+          title="Chat"
+          aria-label="Chat"
+        >
+          <MessagesSquareIcon className="size-3.5" />
+          {unreadChat > 0 && !showingChat && (
+            <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">
+              {unreadChat}
+            </span>
+          )}
+        </Button>
+      )}
       <CollabButton />
       {editors.length === 1 && (
         <TooltipIconButton

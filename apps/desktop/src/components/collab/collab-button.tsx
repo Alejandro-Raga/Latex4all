@@ -42,6 +42,10 @@ const STATUS = {
     dot: "bg-muted-foreground",
   },
   gone: { label: "No longer shared", dot: "bg-red-500" },
+  outdated: {
+    label: "Update Latex4All to keep syncing — your changes are kept",
+    dot: "bg-red-500",
+  },
 } as const;
 
 export function CollabButton() {

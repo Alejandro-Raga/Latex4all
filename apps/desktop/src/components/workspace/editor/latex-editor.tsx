@@ -1794,13 +1794,17 @@ export function LatexEditor() {
               className={reviewingSnapshot ? "hidden" : "absolute inset-0"}
             />
             {!reviewingSnapshot &&
-              (collabStatus === "syncing" || collabStatus === "offline") && (
+              (collabStatus === "syncing" ||
+                collabStatus === "offline" ||
+                collabStatus === "outdated") && (
                 <div className="pointer-events-none absolute top-2 right-4 z-10 flex items-center gap-1.5 rounded-md border border-border bg-background/95 px-2 py-1 text-muted-foreground text-xs shadow-sm">
                   {collabStatus === "syncing" ? (
                     <>
                       <Loader2Icon className="size-3 animate-spin" />
                       Updating…
                     </>
+                  ) : collabStatus === "outdated" ? (
+                    "Update Latex4All to sync — your changes are kept"
                   ) : (
                     "Offline — your changes will sync when you reconnect"
                   )}
