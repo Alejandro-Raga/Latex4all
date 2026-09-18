@@ -991,10 +991,15 @@ pub async fn collab_download_blob(
     download_blob(&link, &blob_id, &file).await
 }
 
-/// Creates the folder a joined project goes in, next to the user's others.
+/// Creates the folder a joined project goes in, inside a folder the user chose.
 #[tauri::command]
 pub fn collab_create_folder(dest_parent: String, name: String) -> Result<String, String> {
-    let path = unique_destination(Path::new(&dest_parent), &name);
+    let parent = Path::new(&dest_parent);
+    // A relative path would land wherever the app happens to be running from.
+    if dest_parent.trim().is_empty() || !parent.is_absolute() {
+        return Err("Choose a folder to save the shared project in.".into());
+    }
+    let path = unique_destination(parent, &name);
     std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().into_owned())
 }
@@ -1127,6 +1132,19 @@ mod tests {
         collab_remove_link(root.clone()).unwrap();
         assert!(collab_read_link(root.clone()).is_none());
         assert!(collab_load_doc(root).is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn joined_projects_need_a_real_folder_to_go_in() {
+        // A relative path would put it wherever the app was started from.
+        assert!(collab_create_folder("".into(), "Thesis".into()).is_err());
+        assert!(collab_create_folder("Documents/Latex4All".into(), "Thesis".into()).is_err());
+        let dir = temp_dir("folder");
+        let created =
+            collab_create_folder(dir.to_string_lossy().into_owned(), "Thesis".into()).unwrap();
+        assert_eq!(created, dir.join("Thesis").to_string_lossy());
+        assert!(Path::new(&created).is_dir());
         std::fs::remove_dir_all(dir).unwrap();
     }
 

@@ -48,6 +48,11 @@ const JOIN_TIMEOUT_MS = 20_000;
 /** Autosave runs 2 s after changes; snapshot history once it has. */
 const HISTORY_DELAY_MS = 3000;
 
+/** Where projects are kept unless the user picks somewhere else. */
+export async function defaultProjectFolder() {
+  return join(await homeDir(), "Documents", "Latex4All");
+}
+
 const PEER_COLORS = [
   "#e11d48",
   "#2563eb",
@@ -84,7 +89,8 @@ interface CollabState {
 
   setDisplayName: (name: string) => void;
   share: () => Promise<void>;
-  join: (link: string) => Promise<void>;
+  /** `destParent` is the folder to save it in; defaults to the usual one. */
+  join: (link: string, destParent?: string) => Promise<void>;
   stopSyncing: () => Promise<void>;
 }
 
@@ -390,7 +396,7 @@ export const useCollabStore = create<CollabState>()(
           }
         },
 
-        join: async (text) => {
+        join: async (text, destParent) => {
           if (get().progress) return;
           const info = await parseLink(text);
           const projects = useProjectStore.getState();
@@ -447,11 +453,7 @@ export const useCollabStore = create<CollabState>()(
               await connect(info.link, 0, null);
               await caughtUp;
               const name = metaMap(session.doc).get("name") || "Shared project";
-              const parent = await join(
-                await homeDir(),
-                "Documents",
-                "Latex4All",
-              );
+              const parent = destParent ?? (await defaultProjectFolder());
               path = await createProjectFolder(parent, name);
               await writeLink(path, info.link);
               await saveDoc(

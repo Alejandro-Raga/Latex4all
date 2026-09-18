@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Loader2Icon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FolderOpenIcon, Loader2Icon } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,7 +10,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useCollabStore } from "@/stores/collab-store";
+import { defaultProjectFolder, useCollabStore } from "@/stores/collab-store";
+import { useProjectStore } from "@/stores/project-store";
 
 export function JoinDialog({
   open,
@@ -22,12 +24,35 @@ export function JoinDialog({
   const setDisplayName = useCollabStore((s) => s.setDisplayName);
   const join = useCollabStore((s) => s.join);
   const progress = useCollabStore((s) => s.progress);
+  const lastProjectFolder = useProjectStore((s) => s.lastProjectFolder);
+  const setLastProjectFolder = useProjectStore((s) => s.setLastProjectFolder);
   const [link, setLink] = useState("");
+  const [folder, setFolder] = useState<string | null>(lastProjectFolder);
   const joining = progress !== null;
+
+  // Where projects are usually kept, unless somewhere else was picked before.
+  useEffect(() => {
+    if (folder) return;
+    defaultProjectFolder()
+      .then(setFolder)
+      .catch(() => {});
+  }, [folder]);
+
+  const chooseFolder = async () => {
+    const selected = await openDialog({
+      directory: true,
+      multiple: false,
+      title: "Choose where to save the shared project",
+    });
+    if (typeof selected === "string" && selected) {
+      setFolder(selected);
+      setLastProjectFolder(selected);
+    }
+  };
 
   const handleJoin = async () => {
     try {
-      await join(link);
+      await join(link, folder ?? undefined);
       setLink("");
       onOpenChange(false);
     } catch (err) {
@@ -62,6 +87,25 @@ export function JoinDialog({
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="Your name"
           />
+          <div className="flex items-center gap-2">
+            <span
+              className="min-w-0 flex-1 truncate text-muted-foreground text-xs"
+              title={folder ?? undefined}
+            >
+              {folder ? `Saves in ${folder}` : "Choose where to save it"}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 shrink-0 gap-1.5 px-2 text-xs"
+              onClick={chooseFolder}
+              disabled={joining}
+            >
+              <FolderOpenIcon className="size-3.5" />
+              Change
+            </Button>
+          </div>
           <Button
             type="submit"
             className="w-full"

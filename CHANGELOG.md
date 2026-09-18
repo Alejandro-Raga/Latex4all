@@ -24,11 +24,11 @@ tag.
 ### Added
 
 - Shared projects. Click Share in the editor to get an invite link, and
-  anyone who opens it with Join works on the same project: text, figures and
-  files stay in sync, with everyone's cursors shown. Changes are kept until
-  the others open the project, so nobody starts from an old copy, and edits
-  made offline merge in on reconnecting. Everything is encrypted on your
-  computer before it's sent.
+  anyone who opens it with Join — picking where to save their copy — works on
+  the same project: text, figures and files stay in sync, with everyone's
+  cursors shown. Changes are kept until the others open the project, so nobody
+  starts from an old copy, and edits made offline merge in on reconnecting.
+  Everything is encrypted on your computer before it's sent.
 - Highlights and notes. Select text to highlight it or add a note (⌘⇧H,
   ⌘⌥M). Hover a highlight to read the note, reply, resolve it or change its
   color. Resolved notes turn grey, and the notes bar lists every note in the
