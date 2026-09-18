@@ -110,14 +110,17 @@ export const annotationsField = StateField.define<AnnotationsValue>({
     }
     if (!tr.docChanged) return value;
     // Until the next refresh from the source, follow the edits here, with
-    // the same edges: typing just outside a highlight doesn't join it.
+    // the same edges: typing just outside a highlight doesn't join it. Drawn
+    // again from those edges, rather than moving the decorations along, or a
+    // note's glyph would be pushed ahead of whatever is typed right after it.
+    const annotations = value.annotations.map((a) => ({
+      ...a,
+      from: tr.changes.mapPos(a.from, 1),
+      to: tr.changes.mapPos(a.to, -1),
+    }));
     return {
-      annotations: value.annotations.map((a) => ({
-        ...a,
-        from: tr.changes.mapPos(a.from, 1),
-        to: tr.changes.mapPos(a.to, -1),
-      })),
-      decorations: value.decorations.map(tr.changes),
+      annotations,
+      decorations: build(annotations, tr.state.doc.length),
     };
   },
   provide: (field) => EditorView.decorations.from(field, (v) => v.decorations),

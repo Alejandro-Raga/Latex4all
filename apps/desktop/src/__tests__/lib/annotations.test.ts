@@ -341,6 +341,46 @@ describe("annotations in a shared project", () => {
 });
 
 describe("drawing annotations in the editor", () => {
+  it("keeps a note's glyph at the end of its highlight while typing after it", async () => {
+    const { EditorState } = await import("@codemirror/state");
+    const { EditorView } = await import("@codemirror/view");
+    const { annotationsExtension, annotationsField, setAnnotations } =
+      await import("@/components/workspace/editor/annotations-extension");
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: "Alpha beta gamma",
+        extensions: [annotationsExtension],
+      }),
+    });
+    view.dispatch({
+      effects: setAnnotations.of([
+        {
+          id: "n1",
+          from: 6,
+          to: 10,
+          color: "yellow",
+          resolved: false,
+          comments: [
+            { id: "c1", author: "Ana", authorColor: "#000", text: "?", at: 0 },
+          ],
+        },
+      ]),
+    });
+    // Typed right after "beta", then more.
+    view.dispatch({ changes: { from: 10, insert: "s" } });
+    view.dispatch({ changes: { from: 11, insert: "!!" } });
+    expect(view.state.doc.toString()).toBe("Alpha betas!! gamma");
+    const glyphs: number[] = [];
+    view.state
+      .field(annotationsField)
+      .decorations.between(0, view.state.doc.length, (from, _to, deco) => {
+        if (deco.spec.widget) glyphs.push(from);
+      });
+    // Still right after "beta", not pushed along by the typing.
+    expect(glyphs).toEqual([10]);
+    view.destroy();
+  });
+
   it("marks highlighted text, shows a glyph for notes, and follows typing", async () => {
     const { EditorState } = await import("@codemirror/state");
     const { EditorView } = await import("@codemirror/view");
