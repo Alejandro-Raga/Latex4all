@@ -65,7 +65,8 @@ export async function defaultProjectFolder() {
   return join(await homeDir(), "Documents", "Latex4All");
 }
 
-const PEER_COLORS = [
+/** The colors people can pick for themselves in a shared project. */
+export const PEER_COLORS = [
   "#e11d48",
   "#2563eb",
   "#16a34a",
@@ -104,6 +105,10 @@ interface CollabState {
   usage: Usage | null;
 
   setDisplayName: (name: string) => void;
+  /** Your color in shared projects: cursor, notes and chat. Kept across
+   *  sessions; one of PEER_COLORS, picked at random until you choose. */
+  color: string;
+  setColor: (color: string) => void;
   share: () => Promise<void>;
   /** `destParent` is the folder to save it in; defaults to the usual one. */
   join: (link: string, destParent?: string) => Promise<void>;
@@ -279,7 +284,7 @@ export const useCollabStore = create<CollabState>()(
 
       function trackPresence(target: Active) {
         const { awareness, doc } = target.session;
-        const color = peerColor(doc.clientID);
+        const color = get().color || peerColor(doc.clientID);
         awareness.setLocalState({
           user: {
             name: get().displayName.trim() || "Anonymous",
@@ -373,7 +378,7 @@ export const useCollabStore = create<CollabState>()(
               const { doc } = target.session;
               const found = settleConcurrentEdits(doc, base, mine, theirs, {
                 name: get().displayName.trim() || "Anonymous",
-                color: peerColor(doc.clientID),
+                color: get().color || peerColor(doc.clientID),
               });
               if (found.length > 0 && active === target) {
                 showConflicts(found);
@@ -488,10 +493,24 @@ export const useCollabStore = create<CollabState>()(
         link: null,
         peers: [],
         displayName: "",
+        color: "",
         revision: 0,
         progress: null,
         warnings: [],
         usage: null,
+
+        setColor: (color) => {
+          set({ color });
+          const awareness = getCollabAwareness();
+          const user = awareness?.getLocalState()?.user;
+          if (awareness && user) {
+            awareness.setLocalStateField("user", {
+              ...user,
+              color,
+              colorLight: `${color}33`,
+            });
+          }
+        },
 
         setDisplayName: (name) => {
           set({ displayName: name });
@@ -625,8 +644,16 @@ export const useCollabStore = create<CollabState>()(
     },
     {
       name: "latex4all-collab",
-      partialize: (state) => ({ displayName: state.displayName }),
+      partialize: (state) => ({
+        displayName: state.displayName,
+        color: state.color,
+      }),
       onRehydrateStorage: () => (state) => {
+        if (state && !PEER_COLORS.includes(state.color)) {
+          const color =
+            PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)];
+          useCollabStore.setState({ color });
+        }
         if (state && !state.displayName) {
           defaultCollabName()
             .then((name) => {

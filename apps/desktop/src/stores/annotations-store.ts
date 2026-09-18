@@ -108,9 +108,11 @@ function projectText(): ProjectText {
   };
 }
 
-/** Who new notes are from: your name, in the color your cursor has. */
+/** Who new notes are from: your name, in your color. */
 export function currentAuthor(): Author {
-  const name = useCollabStore.getState().displayName.trim() || "Me";
+  const { displayName, color } = useCollabStore.getState();
+  const name = displayName.trim() || "Me";
+  if (color) return { name, color };
   const shared = getCollabAwareness()?.getLocalState()?.user?.color;
   let hash = 0;
   for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;

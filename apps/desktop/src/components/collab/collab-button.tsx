@@ -16,7 +16,11 @@ import {
 } from "@/components/ui/popover";
 import { megabytes } from "@/lib/collab/sync-warnings";
 import { cn } from "@/lib/utils";
-import { type CollabPeer, useCollabStore } from "@/stores/collab-store";
+import {
+  type CollabPeer,
+  PEER_COLORS,
+  useCollabStore,
+} from "@/stores/collab-store";
 
 function initials(name: string) {
   return (
@@ -41,6 +45,40 @@ function PeerAvatar({ peer }: { peer: Pick<CollabPeer, "name" | "color"> }) {
   );
 }
 
+/** Your name and color, as others see them. */
+function YouRow() {
+  const displayName = useCollabStore((s) => s.displayName);
+  const setDisplayName = useCollabStore((s) => s.setDisplayName);
+  const color = useCollabStore((s) => s.color);
+  const setColor = useCollabStore((s) => s.setColor);
+  return (
+    <div className="space-y-2">
+      <Input
+        value={displayName}
+        onChange={(e) => setDisplayName(e.target.value)}
+        placeholder="Your name"
+        className="h-8 text-sm"
+      />
+      <div className="flex items-center justify-between gap-1">
+        {PEER_COLORS.map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-label={`Use ${option}`}
+            onClick={() => setColor(option)}
+            className={cn(
+              "size-5 rounded-full transition-transform hover:scale-110",
+              option === color &&
+                "ring-2 ring-foreground/40 ring-offset-2 ring-offset-background",
+            )}
+            style={{ backgroundColor: option }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const STATUS = {
   syncing: { label: "Updating…", dot: "animate-pulse bg-amber-500" },
   synced: { label: "Up to date", dot: "bg-green-500" },
@@ -60,8 +98,6 @@ export function CollabButton() {
   const link = useCollabStore((s) => s.link);
   const peers = useCollabStore((s) => s.peers);
   const progress = useCollabStore((s) => s.progress);
-  const displayName = useCollabStore((s) => s.displayName);
-  const setDisplayName = useCollabStore((s) => s.setDisplayName);
   const share = useCollabStore((s) => s.share);
   const stopSyncing = useCollabStore((s) => s.stopSyncing);
   const warnings = useCollabStore((s) => s.warnings);
@@ -119,12 +155,7 @@ export function CollabButton() {
       <PopoverContent align="end" className="w-72 space-y-3 p-3">
         {!shared ? (
           <>
-            <Input
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Your name"
-              className="h-8 text-sm"
-            />
+            <YouRow />
             <Button
               className="w-full"
               size="sm"
@@ -220,6 +251,7 @@ export function CollabButton() {
                 ))}
               </div>
             )}
+            <YouRow />
             <Button
               variant="outline"
               size="sm"
