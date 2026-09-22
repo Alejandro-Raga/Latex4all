@@ -50,6 +50,10 @@ tag.
   name on each of your computers and they share one color.
 - Chat in shared projects, next to Notes: messages and images for everyone on
   the project. Messages are deleted after 30 days.
+- Add a paper's PDF to the project from quick reference. Right-click it —
+  a Zotero item or a PDF in another project — and choose "Add PDF to
+  references" to keep a copy, or "Add PDF to chat" to hand it to Claude to
+  work from.
 - Warnings when a shared project can't sync: when it's nearly full or full,
   when a file is too large to share or couldn't be sent or received, or when
   Latex4All needs updating. They show on the Shared button, along with how
@@ -79,6 +83,8 @@ tag.
 
 ### Changed
 
+- A project type you typed yourself is offered in the Type menu on every other
+  project, alongside the built-in ones.
 - Exporting a PDF opens the save dialog in the project's own folder.
 
 ## [1.1.3] - 2026-09-11

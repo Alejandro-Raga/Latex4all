@@ -5,6 +5,7 @@ import {
   exists,
   mkdir,
   readFile,
+  writeFile,
   copyFile,
   remove,
   rename,
@@ -276,6 +277,28 @@ export async function copyFileToProject(
     }
   }
   await copyFile(sourcePath, fullPath);
+  return uniqueName;
+}
+
+/** Same as `copyFileToProject`, for bytes that are already in memory. */
+export async function writeBytesToProject(
+  rootPath: string,
+  targetName: string,
+  data: Uint8Array,
+): Promise<string> {
+  const uniqueName = await getUniqueTargetName(rootPath, targetName);
+  const fullPath = await join(rootPath, uniqueName);
+  const lastSlash = Math.max(
+    fullPath.lastIndexOf("/"),
+    fullPath.lastIndexOf("\\"),
+  );
+  if (lastSlash > 0) {
+    const parentDir = fullPath.substring(0, lastSlash);
+    if (!(await exists(parentDir))) {
+      await mkdir(parentDir, { recursive: true });
+    }
+  }
+  await writeFile(fullPath, data);
   return uniqueName;
 }
 

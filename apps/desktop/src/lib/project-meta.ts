@@ -40,6 +40,34 @@ export const PROJECT_TYPE_SUGGESTIONS = [
   "Letter",
 ] as const;
 
+/**
+ * The type menu: the suggestions, then every other type already in use.
+ *
+ * A type typed in once should be one click away on the next project, so custom
+ * types join the list rather than living only on the project they were made
+ * for. Matching is case-insensitive so "Grant proposal" does not come back a
+ * second time as "grant proposal".
+ */
+export function typeMenuOptions(
+  typesInUse: Iterable<string | null | undefined>,
+): string[] {
+  const seen = new Set<string>(
+    PROJECT_TYPE_SUGGESTIONS.map((s) => s.toLowerCase()),
+  );
+  const custom: string[] = [];
+  for (const raw of typesInUse) {
+    if (!raw) continue;
+    const type = normalizeType(raw);
+    if (type.length === 0) continue;
+    const key = type.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    custom.push(type);
+  }
+  custom.sort((a, b) => a.localeCompare(b));
+  return [...PROJECT_TYPE_SUGGESTIONS, ...custom];
+}
+
 /** Shown where a project has no type, and sorted last. */
 export const UNTYPED_LABEL = "No type";
 

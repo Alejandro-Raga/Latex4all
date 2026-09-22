@@ -15,7 +15,7 @@ import { readFile, readTextFile, stat } from "@tauri-apps/plugin-fs";
 import { groupProjects, type ProjectSort } from "@/lib/project-grouping";
 import { syncProjectTypes } from "@/lib/project-type-sync";
 import {
-  PROJECT_TYPE_SUGGESTIONS,
+  typeMenuOptions,
   normalizeType,
   readProjectType,
   writeProjectType,
@@ -400,6 +400,12 @@ export function ProjectPicker() {
     );
   }, [normalizedSearch, recentProjects]);
 
+  // Types the user has already made, offered alongside the built-in ones.
+  const typeOptions = useMemo(
+    () => typeMenuOptions(Object.values(projectTypes)),
+    [projectTypes],
+  );
+
   const projectGroups = useMemo(
     () =>
       groupProjects({
@@ -716,6 +722,7 @@ export function ProjectPicker() {
                             project={project}
                             isFavorite={favorites.includes(project.path)}
                             type={projectTypes[project.path] ?? null}
+                            typeOptions={typeOptions}
                             onOpen={() => handleOpenRecent(project.path)}
                             onRemove={() => setRemoveProjectTarget(project)}
                             onToggleFavorite={() =>
@@ -1133,6 +1140,7 @@ function ProjectPreviewCard({
   project,
   isFavorite,
   type,
+  typeOptions,
   onOpen,
   onRemove,
   onToggleFavorite,
@@ -1143,6 +1151,7 @@ function ProjectPreviewCard({
   project: RecentProject;
   isFavorite: boolean;
   type: string | null;
+  typeOptions: string[];
   onOpen: () => void;
   onRemove: () => void;
   onToggleFavorite: () => void;
@@ -1263,7 +1272,7 @@ function ProjectPreviewCard({
           <ContextMenuSub>
             <ContextMenuSubTrigger>Type</ContextMenuSubTrigger>
             <ContextMenuSubContent>
-              {PROJECT_TYPE_SUGGESTIONS.map((suggestion) => (
+              {typeOptions.map((suggestion) => (
                 <ContextMenuItem
                   key={suggestion}
                   onSelect={() => onSetType(suggestion)}

@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -25,6 +26,8 @@ import {
   MinusIcon,
   PlusIcon,
   BookOpenIcon,
+  MessageSquarePlusIcon,
+  PaperclipIcon,
   SearchIcon,
   XIcon,
   type LucideIcon,
@@ -72,8 +75,14 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  addReferencePdfToChat,
+  importReferencePdf,
+  type ReferencePdfSource,
+} from "@/lib/reference-import";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
 
@@ -755,6 +764,60 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   );
 }
 
+/**
+ * The two places a paper you are reading can go: the project's reference files,
+ * or the chat, so Claude can use it while editing. Shared by Zotero items and
+ * by PDFs sitting in another project's folder.
+ */
+function ReferencePdfActions({ source }: { source: ReferencePdfSource }) {
+  // A Zotero PDF has to be downloaded first, which is slow enough to need
+  // saying so — the menu has already closed by then.
+  const run = (
+    action: (source: ReferencePdfSource) => Promise<string>,
+    loading: string,
+    success: (path: string) => string,
+  ) => {
+    toast.promise(action(source), {
+      loading,
+      success,
+      error: (err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        log.warn("Reference PDF action failed", { error: message });
+        return `Couldn't add this PDF. ${message}`;
+      },
+    });
+  };
+
+  return (
+    <>
+      <ContextMenuItem
+        onClick={() =>
+          run(
+            importReferencePdf,
+            "Adding to references…",
+            (path) => `Added ${path}`,
+          )
+        }
+      >
+        <PaperclipIcon className="size-3.5" />
+        Add PDF to references
+      </ContextMenuItem>
+      <ContextMenuItem
+        onClick={() =>
+          run(
+            addReferencePdfToChat,
+            "Adding to chat…",
+            (path) => `Attached ${path} to chat`,
+          )
+        }
+      >
+        <MessageSquarePlusIcon className="size-3.5" />
+        Add PDF to chat
+      </ContextMenuItem>
+    </>
+  );
+}
+
 /** A single expand/collapse row shared by "My Library" and each collection node. */
 function ZoteroTreeRow({
   icon: Icon,
@@ -866,6 +929,10 @@ function ZoteroItemRow({
         </button>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-56">
+        <ReferencePdfActions
+          source={{ kind: "zotero", itemKey: item.key, title: item.title }}
+        />
+        <ContextMenuSeparator />
         {bibFiles.length === 0 ? (
           <ContextMenuItem
             disabled={adding}
@@ -1111,9 +1178,8 @@ function TreeView({
 
         const Icon = fileIcon(child.kind);
         const isSelected = selectedPath === child.relativePath;
-        return (
+        const row = (
           <button
-            key={child.relativePath}
             type="button"
             onClick={() => onSelectFile(child)}
             className={cn(
@@ -1125,6 +1191,25 @@ function TreeView({
             <Icon className="size-3.5 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1 truncate">{child.name}</span>
           </button>
+        );
+
+        if (child.kind !== "pdf" || !child.absolutePath) {
+          return <Fragment key={child.relativePath}>{row}</Fragment>;
+        }
+
+        return (
+          <ContextMenu key={child.relativePath}>
+            <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+            <ContextMenuContent className="w-56">
+              <ReferencePdfActions
+                source={{
+                  kind: "file",
+                  absolutePath: child.absolutePath,
+                  fileName: child.name,
+                }}
+              />
+            </ContextMenuContent>
+          </ContextMenu>
         );
       })}
     </>
