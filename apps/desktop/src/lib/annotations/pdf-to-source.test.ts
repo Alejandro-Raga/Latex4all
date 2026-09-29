@@ -16,9 +16,7 @@ const at = (r: { from: number; to: number } | null) =>
 describe("findPdfTextInSource", () => {
   it("skips commands, braces and comments when reading the source", () => {
     const words = sourceWords(String.raw`\emph{Hi} % gone
-there`).map(
-      (t) => t.word,
-    );
+there`).map((t) => t.word);
     expect(words).toEqual(["hi", "there"]);
   });
 
