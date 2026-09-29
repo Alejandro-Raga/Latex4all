@@ -18,9 +18,9 @@ test("the PDF's text layer has its words and can be selected", async ({
   expect(lines.length).toBeGreaterThan(5);
   expect(lines.every((y) => y > 0)).toBe(true);
 
-  // Drag from the title's first letter to the subtitle's last, aiming at the
-  // letters themselves (SVG reports where each is drawn), so it holds for
-  // any font — they differ between macOS and the Linux CI machines.
+  // A real drag across the title selects it: the text layer takes the mouse.
+  // Aim at the letters themselves (SVG reports where each is drawn), so it
+  // holds for any font — they differ between macOS and the Linux CI machines.
   const letter = (text: string, which: "first" | "last") =>
     page.evaluate(
       ([t, w]) => {
@@ -39,11 +39,34 @@ test("the PDF's text layer has its words and can be selected", async ({
       [text, which],
     );
   const a = await letter("Scientific Report Title", "first");
-  const b = await letter("Subtitle or Project Name", "last");
+  const b = await letter("Scientific Report Title", "last");
   await page.mouse.move(a.x - 1, a.y);
   await page.mouse.down();
   await page.mouse.move(b.x + 1, b.y, { steps: 12 });
   await page.mouse.up();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).lastSelection))
+    .toBe("Scientific Report Title");
+
+  // Across two lines, the text keeps them apart. Set the selection directly,
+  // so how far a drag reaches with a given font doesn't matter.
+  await page.evaluate(() => {
+    const find = (t: string) =>
+      [...document.querySelectorAll(".mupdf-text-layer text")].find((x) =>
+        x.textContent?.startsWith(t),
+      ) as SVGTextElement;
+    const from = find("Scientific Report Title").firstChild as Text;
+    const to = find("Subtitle or Project Name").firstChild as Text;
+    const range = document.createRange();
+    range.setStart(from, 0);
+    range.setEnd(to, to.length);
+    const sel = window.getSelection() as Selection;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    from.parentElement?.dispatchEvent(
+      new MouseEvent("mouseup", { bubbles: true }),
+    );
+  });
   await expect
     .poll(() => page.evaluate(() => (window as any).lastSelection))
     .toBe("Scientific Report Title\nSubtitle or Project Name");
