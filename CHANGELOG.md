@@ -34,8 +34,9 @@ tag.
   templates. Literature notes from Zotero plugins are recognised as papers:
   their Cite button adds the paper to the bibliography and inserts the
   citation, and a citation under the cursor leads to its note.
-- Copy text from PDFs. Selected text copies with ⌘C or the new Copy button,
-  as readable text: lines joined, paragraphs kept, hyphenated words rejoined.
+- Copy text from PDFs. Text in PDFs can be selected again (it had stopped
+  working in every viewer), and copies with ⌘C or the new Copy button as
+  readable text: lines joined, paragraphs kept, hyphenated words rejoined.
 - More ways to show PDFs: besides light and dark, a softer off-white, sepia,
   dim (dark grey with off-white text) and a warm dark. Pick one from the
   button at the bottom left of any PDF, which no longer sits under the chat

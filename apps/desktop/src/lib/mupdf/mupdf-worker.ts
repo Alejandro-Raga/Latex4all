@@ -1,4 +1,5 @@
 import type { PDFDocument } from "mupdf";
+import { toTextLayer } from "./structured-text";
 import type { PdfMark } from "@/lib/annotations/pdf-placement";
 import { addHighlightAnnotations, readPageChars } from "./pdf-annotations";
 
@@ -118,61 +119,7 @@ methods.getPageText = (docId: number, pageIndex: number): unknown => {
   const stext = page.toStructuredText("preserve-whitespace");
   const raw = JSON.parse(stext.asJSON());
 
-  // Transform mupdf's nested spans format to our flat line format
-  const blocks = (raw.blocks || []).map((block: any) => {
-    if (block.type !== "text") return block;
-    return {
-      type: "text",
-      bbox: block.bbox,
-      lines: (block.lines || []).map((line: any) => {
-        let text = "";
-        let font = {
-          name: "",
-          family: "",
-          size: 12,
-          weight: "normal",
-          style: "normal",
-        };
-        let baselineY = 0;
-
-        const spans = line.spans || [];
-        if (spans.length > 0) {
-          text = spans
-            .map((span: any) =>
-              (span.chars || []).map((ch: any) => ch.c).join(""),
-            )
-            .join("");
-
-          const firstSpan = spans[0];
-          font = {
-            name: firstSpan.font?.name || "",
-            family: firstSpan.font?.family || "",
-            size: firstSpan.size || 12,
-            weight: firstSpan.font?.weight || "normal",
-            style: firstSpan.font?.style || "normal",
-          };
-
-          // Use first char origin as baseline
-          if (firstSpan.chars?.[0]?.origin) {
-            baselineY = firstSpan.chars[0].origin.y;
-          } else {
-            baselineY = (line.bbox?.y || 0) + (line.bbox?.h || 0);
-          }
-        }
-
-        return {
-          bbox: line.bbox || { x: 0, y: 0, w: 0, h: 0 },
-          wmode: line.wmode || 0,
-          x: line.bbox?.x || 0,
-          y: baselineY,
-          text,
-          font,
-        };
-      }),
-    };
-  });
-
-  return { blocks };
+  return toTextLayer(raw);
 };
 
 /** Every character with its box, for placing highlights over the page. */
