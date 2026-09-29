@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAnnotationsStore } from "@/stores/annotations-store";
 import { useChatStore } from "@/stores/chat-store";
-import { DockHeaderBar } from "./dock/dock-section";
+import { DockHeaderBar, DockWideButton } from "./dock/dock-section";
 
 /**
  * The top of the side panel: its title, or a switch between notes and chat
@@ -55,6 +55,7 @@ export function SidePanelHeader({ onClose }: { onClose: () => void }) {
           </span>
         </>
       )}
+      <DockWideButton />
       <Button
         variant="ghost"
         size="icon"

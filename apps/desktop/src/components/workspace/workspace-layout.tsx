@@ -16,9 +16,13 @@ import { LatexEditor } from "./editor/latex-editor";
 import { PdfPreview } from "./preview/pdf-preview";
 import { PaperReader } from "./preview/paper-reader";
 import { useReadingStore } from "@/stores/reading-store";
-import { DockRail, RightDock } from "./dock/right-dock";
+import { DockRail, RightDock, WideDockPanel } from "./dock/right-dock";
 import { SettingsWindow } from "@/components/settings/settings-view";
-import { useDockStore, useOpenDockPanels } from "@/stores/dock-store";
+import {
+  useDockedPanels,
+  useDockStore,
+  useOpenDockPanels,
+} from "@/stores/dock-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { usePreviewStore } from "@/stores/preview-store";
 
@@ -47,7 +51,9 @@ export function WorkspaceLayout() {
   );
   const [codeVisible, setCodeVisible] = useState(true);
   const dockPanels = useOpenDockPanels();
+  const dockedPanels = useDockedPanels();
   const reading = useReadingStore((s) => s.paper !== null);
+  const widened = useDockStore((s) => s.wide !== null);
   const setDockOpen = useDockStore((s) => s.setOpen);
 
   const getCollapsedSidebarSize = useCallback(() => {
@@ -248,18 +254,18 @@ export function WorkspaceLayout() {
           >
             {/* The compiled preview stays mounted while a paper is read in its
                 place, so coming back keeps its page and zoom. */}
-            <div className={reading ? "hidden" : "h-full"}>
+            <div className={reading || widened ? "hidden" : "h-full"}>
               <PdfPreview />
             </div>
-            {reading && <PaperReader />}
+            {reading ? <PaperReader /> : widened && <WideDockPanel />}
           </Panel>
         )}
 
-        {dockPanels.length > 0 && (
+        {dockedPanels.length > 0 && (
           <PanelResizeHandle className="w-px bg-border transition-colors hover:bg-ring" />
         )}
 
-        {dockPanels.length > 0 && (
+        {dockedPanels.length > 0 && (
           <Panel defaultSize={26} minSize={16} maxSize={45} className="min-w-0">
             <RightDock />
           </Panel>

@@ -17,6 +17,7 @@ import { useChatStore } from "@/stores/chat-store";
 import {
   DOCK_PANELS,
   type DockPanel,
+  useDockedPanels,
   useDockStore,
   useOpenDockPanels,
 } from "@/stores/dock-store";
@@ -62,7 +63,8 @@ function DockPanelContent({ panel }: { panel: DockPanel }) {
  * foldable to its header, and closable, so the editor keeps its width.
  */
 export function RightDock() {
-  const panels = useOpenDockPanels();
+  const panels = useDockedPanels();
+  const setWide = useDockStore((s) => s.setWide);
   const collapsed = useDockStore((s) => s.collapsed);
   const setCollapsed = useDockStore((s) => s.setCollapsed);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -126,6 +128,8 @@ export function RightDock() {
                     collapsed: collapsed[panel],
                     toggleCollapsed: () =>
                       setCollapsed(panel, !collapsed[panel]),
+                    wide: false,
+                    toggleWide: () => setWide(panel),
                   }}
                 >
                   <DockPanelContent panel={panel} />
@@ -135,6 +139,28 @@ export function RightDock() {
           );
         })}
       </PanelGroup>
+    </div>
+  );
+}
+
+/** A dock panel widened into the big pane beside the editor. */
+export function WideDockPanel() {
+  const wide = useDockStore((s) => s.wide);
+  const setWide = useDockStore((s) => s.setWide);
+  if (!wide) return null;
+  return (
+    <div className="h-full min-w-0 bg-background">
+      <DockSectionProvider
+        value={{
+          first: true,
+          collapsed: false,
+          toggleCollapsed: () => {},
+          wide: true,
+          toggleWide: () => setWide(null),
+        }}
+      >
+        <DockPanelContent panel={wide} />
+      </DockSectionProvider>
     </div>
   );
 }

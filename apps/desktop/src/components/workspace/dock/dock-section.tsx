@@ -1,5 +1,10 @@
 import { createContext, type ReactNode, useContext } from "react";
-import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  Maximize2Icon,
+  Minimize2Icon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DockSection {
@@ -7,11 +12,17 @@ interface DockSection {
   first: boolean;
   collapsed: boolean;
   toggleCollapsed: () => void;
+  /** Shown widened in the big pane rather than in the dock column. */
+  wide: boolean;
+  toggleWide: () => void;
 }
 
 const DockSectionContext = createContext<DockSection | null>(null);
 
 export const DockSectionProvider = DockSectionContext.Provider;
+
+/** Where the panel is shown: in the dock, widened, or elsewhere (null). */
+export const useDockSection = () => useContext(DockSectionContext);
 
 /**
  * The header row of a panel. In the dock it gets a fold arrow and, below the
@@ -36,7 +47,7 @@ export function DockHeaderBar({
         className,
       )}
     >
-      {section && (
+      {section && !section.wide && (
         <button
           type="button"
           onClick={section.toggleCollapsed}
@@ -54,5 +65,24 @@ export function DockHeaderBar({
       )}
       {children}
     </div>
+  );
+}
+
+/** Widens a dock panel into the big pane, or puts it back. */
+export function DockWideButton() {
+  const section = useContext(DockSectionContext);
+  if (!section) return null;
+  const Icon = section.wide ? Minimize2Icon : Maximize2Icon;
+  const label = section.wide ? "Back to the side" : "Widen";
+  return (
+    <button
+      type="button"
+      onClick={section.toggleWide}
+      className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      title={label}
+      aria-label={label}
+    >
+      <Icon className="size-3.5" />
+    </button>
   );
 }

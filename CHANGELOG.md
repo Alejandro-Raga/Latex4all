@@ -38,14 +38,22 @@ Test-channel builds use the `## [Unreleased]
   notes bar as a record of who decided what.
 - Your Obsidian vault beside your writing. Open Vault from the icons on the
   right to search, read and edit your notes, create new ones from your own
-  templates, and see what each note links to and what links back, on a small
-  map of connected notes. It works however you keep your vault: a folder on
+  templates, and see what each note links to and what links back. It works
+  however you keep your vault: a folder on
   this computer (Obsidian Sync, iCloud, Dropbox, Syncthing, Git…), found on
   its own when Obsidian knows it, or a WebDAV server (Remotely Save,
   Nextcloud, Seafile…), read and saved there directly so it's up to date
   without opening Obsidian. Literature notes from Zotero plugins are
   recognised as papers: Cite adds the paper to the bibliography and inserts
   the citation, and a citation under the cursor leads to its note.
+- A living map of your notes, like Obsidian's graph: notes push apart and
+  links pull, so the network settles into shape and wiggles when you drag a
+  note. Scroll or pinch to zoom, drag to pan, hover a note to light up its
+  links, click to open it, and type to highlight matching notes. Show a
+  note's direct links, two steps out, or the whole vault; names fade in as
+  you zoom so a busy network stays readable.
+- Widen any side panel: the Reference, Vault and Notes panels each have a
+  button that moves them into the big pane beside the editor, and back.
 - Settings from anywhere: press ⌘, or click the gear at the bottom of the
   sidebar. New sections bring together what was scattered: Editor, PDF, Zotero
   and Vault.

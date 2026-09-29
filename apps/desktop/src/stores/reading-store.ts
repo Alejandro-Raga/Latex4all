@@ -22,6 +22,10 @@ export const useReadingStore = create<{
   paper: null,
   read: (paper) => {
     usePreviewStore.getState().setVisible(true);
+    // A panel widened into the same pane goes back to the dock.
+    import("./dock-store").then(({ useDockStore }) =>
+      useDockStore.getState().setWide(null),
+    );
     set({ paper });
   },
   close: () => set({ paper: null }),

@@ -87,7 +87,7 @@ import {
 } from "@/lib/reference-import";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
-import { DockHeaderBar } from "./dock/dock-section";
+import { DockHeaderBar, DockWideButton } from "./dock/dock-section";
 
 const log = createLogger("quick-reference");
 
@@ -566,6 +566,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
         <span className="min-w-0 flex-1 truncate font-medium text-sm">
           {refProjectName ?? "Quick reference"}
         </span>
+        <DockWideButton />
         <Button
           variant="ghost"
           size="icon"

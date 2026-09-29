@@ -59,8 +59,17 @@ import { useDocumentStore } from "@/stores/document-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { MarkdownNoteEditor } from "./markdown-note-editor";
+import {
+  type GraphLinkInput,
+  type GraphNodeInput,
+  VaultGraph,
+} from "./vault-graph";
 import { useSettingsWindow } from "@/stores/settings-window-store";
-import { DockHeaderBar } from "./dock/dock-section";
+import {
+  DockHeaderBar,
+  DockWideButton,
+  useDockSection,
+} from "./dock/dock-section";
 
 const REFRESH_MS = 30_000;
 
@@ -225,6 +234,7 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
             />
           </Button>
         )}
+        <DockWideButton />
         <Button
           variant="ghost"
           size="icon"
@@ -984,6 +994,38 @@ function CiteButton({ note }: { note: VaultNote }) {
   );
 }
 
+type GraphScope = 1 | 2 | "all";
+
+/** Nodes and links for the map: the note's neighbourhood, or the whole vault. */
+function graphFor(index: VaultIndex, name: string, scope: GraphScope) {
+  const ring = new Map<string, number>();
+  let members: VaultNote[];
+  if (scope === "all") {
+    members = index.list;
+    const centre = findNote(index, name);
+    for (const n of members) ring.set(n.name, n.name === centre?.name ? 0 : 1);
+  } else {
+    const hood = neighbourhood(index, name, scope);
+    members = hood.nodes.map((n) => n.note);
+    for (const n of hood.nodes) ring.set(n.note.name, n.ring);
+  }
+  const names = new Set(members.map((n) => n.name));
+  const nodes: GraphNodeInput[] = members.map((n) => ({
+    id: n.name,
+    label: n.kind === "paper" ? n.name : n.title,
+    color: noteColor(n),
+    centre: ring.get(n.name) === 0,
+    ring: ring.get(n.name) ?? 1,
+  }));
+  const links: GraphLinkInput[] = [];
+  for (const n of members) {
+    for (const target of n.outgoing) {
+      if (names.has(target)) links.push({ source: n.name, target });
+    }
+  }
+  return { nodes, links };
+}
+
 function Connections({
   index,
   note,
@@ -993,38 +1035,81 @@ function Connections({
   note: VaultNote;
   onOpen: (name: string) => void;
 }) {
-  const [depth, setDepth] = useState(1);
+  const [scope, setScope] = useState<GraphScope>(1);
+  const [query, setQuery] = useState("");
+  const wide = useDockSection()?.wide ?? false;
   const both = note.outgoing.filter((n) => note.incoming.includes(n));
   const linksTo = note.outgoing.filter((n) => !both.includes(n));
   const linkedFrom = note.incoming.filter((n) => !both.includes(n));
-  if (note.outgoing.length + note.incoming.length === 0) {
+  const graph = useMemo(
+    () => graphFor(index, note.name, scope),
+    [index, note.name, scope],
+  );
+  const highlight = useMemo(() => {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return null;
+    return new Set(
+      graph.nodes
+        .filter((n) => words.every((w) => n.label.toLowerCase().includes(w)))
+        .map((n) => n.id),
+    );
+  }, [graph, query]);
+  if (note.outgoing.length + note.incoming.length === 0 && scope !== "all") {
     return (
-      <p className="px-3 pt-2 pb-3 text-muted-foreground text-xs">
+      <div className="flex items-center justify-between px-3 pt-2 pb-3 text-muted-foreground text-xs">
         No links yet.
-      </p>
+        <button
+          type="button"
+          onClick={() => setScope("all")}
+          className="rounded px-1.5 py-0.5 hover:text-foreground"
+        >
+          Whole vault
+        </button>
+      </div>
     );
   }
 
   return (
     <div className="px-3 pt-2 pb-3">
-      <LocalGraph index={index} note={note} depth={depth} onOpen={onOpen} />
-      <div className="mb-1 flex justify-end gap-0.5">
-        {[1, 2].map((d) => (
+      <div className="mb-1.5 flex items-center gap-1">
+        {(
+          [
+            [1, "Direct"],
+            [2, "2 steps"],
+            ["all", "Whole vault"],
+          ] as const
+        ).map(([value, label]) => (
           <button
-            key={d}
+            key={value}
             type="button"
-            onClick={() => setDepth(d)}
+            onClick={() => setScope(value)}
             className={cn(
               "rounded px-1.5 py-0.5 text-[11px] transition-colors",
-              depth === d
+              scope === value
                 ? "bg-muted font-medium"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {d === 1 ? "Direct" : "2 steps"}
+            {label}
           </button>
         ))}
+        {(scope !== 1 || wide) && (
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Highlight…"
+            aria-label="Highlight notes in the map"
+            className="ml-auto h-6 w-32 text-xs"
+          />
+        )}
       </div>
+      <VaultGraph
+        nodes={graph.nodes}
+        links={graph.links}
+        height={wide ? 460 : scope === 1 ? 200 : 280}
+        highlight={highlight}
+        onOpen={onOpen}
+      />
       <LinkGroup title="Both ways" names={both} index={index} onOpen={onOpen} />
       <LinkGroup
         title="Links to"
@@ -1077,135 +1162,6 @@ function LinkGroup({
         );
       })}
     </div>
-  );
-}
-
-/** The note in the middle, linked notes around it; arrows point along links. */
-function LocalGraph({
-  index,
-  note,
-  depth,
-  onOpen,
-}: {
-  index: VaultIndex;
-  note: VaultNote;
-  depth: number;
-  onOpen: (name: string) => void;
-}) {
-  const { nodes, edges } = useMemo(
-    () => neighbourhood(index, note.name, depth),
-    [index, note.name, depth],
-  );
-  const W = 300;
-  const H = depth === 1 ? 170 : 230;
-  const positions = useMemo(() => {
-    const pos = new Map<string, { x: number; y: number }>();
-    const rings = new Map<number, typeof nodes>();
-    for (const n of nodes) rings.set(n.ring, [...(rings.get(n.ring) ?? []), n]);
-    for (const [ring, members] of rings) {
-      members.sort(
-        (a, b) =>
-          a.note.group.localeCompare(b.note.group) ||
-          a.note.name.localeCompare(b.note.name),
-      );
-      members.forEach((m, i) => {
-        if (ring === 0) {
-          pos.set(m.note.name, { x: W / 2, y: H / 2 });
-          return;
-        }
-        const angle =
-          (i / members.length) * Math.PI * 2 - Math.PI / 2 + ring * 0.4;
-        const r = ring === 1 ? (depth === 1 ? 62 : 55) : 100;
-        pos.set(m.note.name, {
-          x: W / 2 + Math.cos(angle) * r * 1.6,
-          y: H / 2 + Math.sin(angle) * r * (depth === 1 ? 1.15 : 1),
-        });
-      });
-    }
-    return pos;
-  }, [nodes, H, depth]);
-
-  const label = (text: string) =>
-    text.length > 18 ? `${text.slice(0, 17)}…` : text;
-
-  return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      className="w-full text-foreground"
-      role="img"
-      aria-label={`Notes linked with ${note.name}`}
-    >
-      <defs>
-        <marker
-          id="vault-arrow"
-          viewBox="0 0 6 6"
-          refX="11"
-          refY="3"
-          markerWidth="6"
-          markerHeight="6"
-          orient="auto"
-        >
-          <path d="M0,0 L6,3 L0,6 z" className="fill-muted-foreground/60" />
-        </marker>
-      </defs>
-      {edges.map(({ from, to }) => {
-        const a = positions.get(from);
-        const b = positions.get(to);
-        if (!a || !b) return null;
-        const touchesCentre = from === note.name || to === note.name;
-        return (
-          <line
-            key={`${from}->${to}`}
-            x1={a.x}
-            y1={a.y}
-            x2={b.x}
-            y2={b.y}
-            className={cn(
-              "stroke-muted-foreground",
-              touchesCentre ? "opacity-60" : "opacity-25",
-            )}
-            strokeWidth={1}
-            markerEnd="url(#vault-arrow)"
-          />
-        );
-      })}
-      {nodes.map(({ note: n, ring }) => {
-        const p = positions.get(n.name);
-        if (!p) return null;
-        const centre = ring === 0;
-        return (
-          <g
-            key={n.name}
-            role="button"
-            tabIndex={0}
-            className={cn(!centre && "cursor-pointer")}
-            onClick={() => !centre && onOpen(n.name)}
-            onKeyDown={(e) => e.key === "Enter" && !centre && onOpen(n.name)}
-          >
-            <title>{n.title}</title>
-            <circle
-              cx={p.x}
-              cy={p.y}
-              r={centre ? 7 : ring === 1 ? 5 : 3.5}
-              fill={noteColor(n)}
-              className={cn(ring === 2 && "opacity-60")}
-            />
-            <text
-              x={p.x}
-              y={p.y + (centre ? 17 : 13)}
-              textAnchor="middle"
-              className={cn(
-                "fill-current text-[9px]",
-                centre ? "font-medium" : "opacity-80",
-                ring === 2 && "opacity-50",
-              )}
-            >
-              {label(n.name)}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
   );
 }
 

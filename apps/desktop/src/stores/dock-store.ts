@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useAnnotationsStore } from "./annotations-store";
+import { usePreviewStore } from "./preview-store";
+import { useReadingStore } from "./reading-store";
 
 /** Panels that live in the right-hand dock, top to bottom. */
 export const DOCK_PANELS = ["reference", "vault", "notes"] as const;
@@ -11,6 +13,9 @@ interface DockState {
   open: Record<Exclude<DockPanel, "notes">, boolean>;
   /** Folded down to their header. */
   collapsed: Record<DockPanel, boolean>;
+  /** The panel widened into the big pane beside the editor, if any. */
+  wide: DockPanel | null;
+  setWide: (panel: DockPanel | null) => void;
   setOpen: (panel: DockPanel, open: boolean) => void;
   toggle: (panel: DockPanel) => void;
   setCollapsed: (panel: DockPanel, collapsed: boolean) => void;
@@ -25,7 +30,18 @@ export const useDockStore = create<DockState>()(
     (set, get) => ({
       open: { reference: false, vault: false },
       collapsed: { reference: false, vault: false, notes: false },
+      wide: null,
+      setWide: (panel) => {
+        if (panel) {
+          // It takes the PDF pane: make sure that pane is showing, and that
+          // a paper being read there makes way.
+          usePreviewStore.getState().setVisible(true);
+          useReadingStore.getState().close();
+        }
+        set({ wide: panel });
+      },
       setOpen: (panel, open) => {
+        if (!open && get().wide === panel) set({ wide: null });
         if (panel === "notes") {
           useAnnotationsStore.getState().setPanelOpen(open);
         } else {
@@ -50,9 +66,16 @@ export function isDockPanelOpen(panel: DockPanel): boolean {
     : useDockStore.getState().open[panel];
 }
 
-/** The dock panels currently open, in dock order. */
+/** The dock panels currently open, in dock order (including a widened one). */
 export function useOpenDockPanels(): DockPanel[] {
   const open = useDockStore((s) => s.open);
   const notes = useAnnotationsStore((s) => s.panelOpen);
   return DOCK_PANELS.filter((p) => (p === "notes" ? notes : open[p]));
+}
+
+/** The open panels that sit in the dock column, leaving out a widened one. */
+export function useDockedPanels(): DockPanel[] {
+  const open = useOpenDockPanels();
+  const wide = useDockStore((s) => s.wide);
+  return open.filter((p) => p !== wide);
 }
