@@ -32,7 +32,9 @@ test("the PDF's text layer has its words and can be selected", async ({
   const b = await box("Subtitle or Project Name");
   await page.mouse.move(a.x + 3, a.y + a.h / 2);
   await page.mouse.down();
-  await page.mouse.move(b.x + b.w - 2, b.y + b.h / 2, { steps: 12 });
+  // Past the end of the line, so the whole line is taken whatever the font
+  // metrics (they differ between macOS and the Linux CI machines).
+  await page.mouse.move(b.x + b.w + 30, b.y + b.h / 2, { steps: 12 });
   await page.mouse.up();
   await expect
     .poll(() => page.evaluate(() => (window as any).lastSelection))
