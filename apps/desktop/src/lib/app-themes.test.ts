@@ -52,6 +52,52 @@ describe("app themes", () => {
     }
     expect(css).toContain(".custom");
     expect(css).toContain("--primary-foreground: var(--t-on-accent)");
-    expect(css).not.toContain(".light {");
+    expect(css).not.toContain(".light { --t-bg");
+  });
+
+  it("gives every theme its editor colors, and stripes where it has them", () => {
+    const css = themeStyles();
+    for (const t of APP_THEMES) {
+      expect(css).toContain(`.${t.id} {`);
+      expect(css).toContain(`--syn-command: ${t.palette.command};`);
+    }
+    expect(css).toContain("html.spectrum body::before");
+    expect(css).toMatch(
+      /\.custom \{[^}]*--syn-env: oklch\(from var\(--t-accent\)/,
+    );
+  });
+
+  it("keeps text and syntax colors readable on each background", () => {
+    const contrast = (a: string, b: string) => {
+      const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (hi + 0.05) / (lo + 0.05);
+    };
+    for (const t of APP_THEMES) {
+      const { bg, fg } = t.colors;
+      expect(contrast(fg, bg), `${t.id} text`).toBeGreaterThan(7);
+      for (const k of [
+        "command",
+        "env",
+        "string",
+        "math",
+        "number",
+        "heading",
+      ] as const) {
+        expect(contrast(t.palette[k], bg), `${t.id} ${k}`).toBeGreaterThan(3.2);
+      }
+      expect(
+        contrast(t.palette.comment, bg),
+        `${t.id} comment`,
+      ).toBeGreaterThan(2.2);
+    }
+  });
+
+  it("gives colorful and retro themes more than one hue", () => {
+    for (const t of APP_THEMES.filter((t) => t.group !== "Classic")) {
+      const hues = new Set(
+        Object.values(t.palette).map((c) => c.toLowerCase()),
+      );
+      expect(hues.size, t.id).toBeGreaterThanOrEqual(6);
+    }
   });
 });

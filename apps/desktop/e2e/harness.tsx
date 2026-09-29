@@ -4,6 +4,14 @@
  */
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
+import { EditorState } from "@codemirror/state";
+import {
+  EditorView,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  lineNumbers,
+} from "@codemirror/view";
+import { latex } from "codemirror-lang-latex";
 import { ThemeProvider } from "next-themes";
 import "../src/styles/globals.css";
 import { ThemeBridge } from "@/components/theme-bridge";
@@ -17,6 +25,7 @@ import {
 } from "@/components/workspace/dock/right-dock";
 import { PdfViewer } from "@/components/workspace/preview/pdf-viewer";
 import { VaultGraph } from "@/components/workspace/vault-graph";
+import { themedEditor } from "@/components/workspace/editor/editor-theme";
 import { THEME_IDS } from "@/lib/app-themes";
 import { useDockStore } from "@/stores/dock-store";
 import { useDocumentStore } from "@/stores/document-store";
@@ -111,12 +120,54 @@ if (scenario === "graph") {
   );
 }
 
+const SAMPLE = String.raw`\documentclass{article}
+\begin{document}
+\section{Introduction}
+% A comment about the draft
+Firms \emph{underinvest} in research \cite{nelson1959}, see
+\ref{eq:1} and $x^2 + \alpha_1 = 42$.
+\begin{equation}\label{eq:1}
+  f(x) = \frac{1}{2} \sum_{i=0}^{n} x_i
+\end{equation}
+\verb|code| and 3.5 cm.
+\end{document}
+`;
+
+function mountEditor(el: HTMLDivElement | null) {
+  if (!el || el.childElementCount) return;
+  new EditorView({
+    parent: el,
+    state: EditorState.create({
+      doc: SAMPLE,
+      extensions: [
+        lineNumbers(),
+        highlightActiveLine(),
+        highlightActiveLineGutter(),
+        latex({ enableLinting: false, enableAutocomplete: false }),
+        themedEditor(document.documentElement.classList.contains("theme-dark")),
+      ],
+    }),
+  });
+}
+
 if (scenario === "theme") {
   const theme = params.get("theme") ?? "light";
   root.render(
     <ThemeProvider attribute="class" themes={THEME_IDS} forcedTheme={theme}>
       <ThemeBridge />
-      <div className="h-full bg-background p-4 text-foreground">themed</div>
+      <div className="flex h-full bg-background text-foreground">
+        <div className="w-40 border-r bg-sidebar p-3 text-sm">
+          <div className="rounded-md bg-sidebar-accent px-2 py-1">themed</div>
+          <div className="px-2 py-1 text-muted-foreground">main.tex</div>
+          <button
+            type="button"
+            className="mt-2 rounded-md bg-primary px-2 py-1 text-primary-foreground"
+          >
+            Compile
+          </button>
+        </div>
+        <div className="min-w-0 flex-1" ref={mountEditor} />
+      </div>
     </ThemeProvider>,
   );
 }

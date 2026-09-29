@@ -75,12 +75,15 @@ tag.
   and notes with the text they're on. It updates itself as you write; what
   you add to the note yourself is kept. Its links open Latex4All straight to
   the project, and each note's place (main.tex:42) to that line.
-- Color themes for the whole app: the classics (Light, Paper, Sky, Dark,
-  Dim, Nord), colorful ones (Solarized light and dark, Rosé, Mint,
-  Dracula) and retro ones (Seventies, Gruvbox, Synthwave, green Phosphor and
-  Amber CRT), or follow the system. Or make your own: pick a background,
-  sidebar, text and accent color, starting from any theme, and the rest of
-  the interface follows. Choose from the palette at the bottom of the
+- Color themes for the whole app, editor included: the classics (Light,
+  Paper, Sky, Dark, Dim, Nord), colorful ones (Solarized light and dark,
+  Rosé, Mint, Dracula) and retro ones — Seventies, Park (national park
+  posters), Beige (the rainbow of early home computers), Spectrum, Arcade,
+  Gruvbox, Synthwave, green Phosphor and Amber CRT — or follow the system.
+  Each colors LaTeX its own way, and some carry a thin band of stripes along
+  the top. Or make your own: pick a background, sidebar, text and accent
+  color, starting from any theme, and the rest of the interface and the
+  editor's colors follow. Choose from the palette at the bottom of the
   sidebar, or in Settings under Appearance.
 - Check citations (in the Vault menu): what you cite that isn't in your
   bibliography, with a button to add it from Zotero (and to update your

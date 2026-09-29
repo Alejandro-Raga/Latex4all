@@ -23,9 +23,12 @@ const GROUPS: AppTheme["group"][] = ["Classic", "Colorful", "Retro"];
 /** A little picture of a theme: its sidebar, page, text and accent. */
 function Swatch({
   colors,
+  accents,
   className,
 }: {
   colors: ThemeColors;
+  /** A theme's other colors, drawn after its accent. */
+  accents?: string[];
   className?: string;
 }) {
   return (
@@ -46,14 +49,22 @@ function Swatch({
           className="h-[2px] w-full rounded-full"
           style={{ backgroundColor: colors.fg }}
         />
-        <span
-          className="h-[2px] w-2/3 rounded-full"
-          style={{ backgroundColor: colors.accent }}
-        />
+        <span className="flex h-[2px] w-2/3 gap-[2px]">
+          {[colors.accent, ...(accents ?? [])].map((c, i) => (
+            <span
+              key={i}
+              className="h-full flex-1 rounded-full"
+              style={{ backgroundColor: c }}
+            />
+          ))}
+        </span>
       </span>
     </span>
   );
 }
+
+const swatchAccents = (t: AppTheme) =>
+  t.stripes ?? [t.palette.accent2, t.palette.env];
 
 /** A small button opening the list of color themes. */
 export function ThemeMenuButton() {
@@ -98,7 +109,11 @@ export function ThemeMenuButton() {
             </DropdownMenuLabel>
             {APP_THEMES.filter((t) => t.group === group).map((t) => (
               <DropdownMenuItem key={t.id} onSelect={() => setTheme(t.id)}>
-                <Swatch colors={t.colors} className="h-4 w-6" />
+                <Swatch
+                  colors={t.colors}
+                  accents={swatchAccents(t)}
+                  className="h-4 w-6"
+                />
                 <span className="flex-1">{t.label}</span>
                 {theme === t.id && <CheckIcon className="size-3.5" />}
               </DropdownMenuItem>
@@ -227,7 +242,11 @@ export function ThemeGrid() {
                   className={option(theme === t.id)}
                   aria-pressed={theme === t.id}
                 >
-                  <Swatch colors={t.colors} className="h-10 w-full" />
+                  <Swatch
+                    colors={t.colors}
+                    accents={swatchAccents(t)}
+                    className="h-10 w-full"
+                  />
                   <span className="truncate">{t.label}</span>
                 </button>
               ))}
