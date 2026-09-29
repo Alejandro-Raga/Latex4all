@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { isPdfTheme, type PdfTheme } from "@/lib/pdf-themes";
+import { DEFAULT_CUSTOM_COLORS, type ThemeColors } from "@/lib/app-themes";
 
 type CompilerBackend = "tectonic" | "texlive";
 
@@ -59,6 +60,9 @@ interface SettingsState {
   addIgnoredWord: (word: string) => void;
   removeIgnoredWord: (word: string) => void;
   /** Kept independent per viewer — changing the look of one shouldn't affect the others. */
+  /** Colors of the custom app theme. */
+  customTheme: ThemeColors;
+  setCustomTheme: (colors: ThemeColors) => void;
   pdfThemeMain: PdfTheme;
   setPdfThemeMain: (theme: PdfTheme) => void;
   pdfThemeReference: PdfTheme;
@@ -108,6 +112,8 @@ export const useSettingsStore = create<SettingsState>()(
             (w) => w !== word.toLowerCase(),
           ),
         })),
+      customTheme: DEFAULT_CUSTOM_COLORS,
+      setCustomTheme: (colors) => set({ customTheme: colors }),
       pdfThemeMain: "light",
       setPdfThemeMain: (theme) => set({ pdfThemeMain: theme }),
       pdfThemeReference: "light",

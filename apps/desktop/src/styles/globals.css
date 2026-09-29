@@ -1,7 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *, .dim *, .nord *));
+/* .theme-dark is set on <html> for every dark theme (see ThemeBridge). */
+@custom-variant dark (&:is(.dark *, .theme-dark *));
 
 @theme inline {
   --color-background: var(--background);

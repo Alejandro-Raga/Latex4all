@@ -386,7 +386,7 @@ export function SettingsView({
       label: "Appearance",
       meta:
         APP_THEMES.find((t) => t.id === theme)?.label ??
-        (theme === "system" ? "System" : "Light"),
+        (theme === "custom" ? "Custom" : "System"),
       icon: PaletteIcon,
       body: <ThemeGrid />,
       flush: true,

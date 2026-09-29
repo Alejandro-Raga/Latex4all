@@ -11,6 +11,8 @@ interface DockSection {
   /** The topmost section, which sits under the window's title bar. */
   first: boolean;
   collapsed: boolean;
+  /** Folding needs another section to take the room; a lone one can't. */
+  canCollapse: boolean;
   toggleCollapsed: () => void;
   /** Shown widened in the big pane rather than in the dock column. */
   wide: boolean;
@@ -47,7 +49,7 @@ export function DockHeaderBar({
         className,
       )}
     >
-      {section && !section.wide && (
+      {section?.canCollapse && (
         <button
           type="button"
           onClick={section.toggleCollapsed}

@@ -54,9 +54,13 @@ Test-channel builds use the `## [Unreleased]
   you zoom so a busy network stays readable.
 - Widen any side panel: the Reference, Vault and Notes panels each have a
   button that moves them into the big pane beside the editor, and back.
-- Six color themes for the whole app — Light, Paper, Sky, Dark, Dim and
-  Nord — or follow the system. Pick one from the palette at the bottom of
-  the sidebar, or in Settings under Appearance.
+- Color themes for the whole app: the classics (Light, Paper, Sky, Dark,
+  Dim, Nord), colorful ones (Solarized light and dark, Rosé, Mint,
+  Dracula) and retro ones (Seventies, Gruvbox, Synthwave, green Phosphor and
+  Amber CRT), or follow the system. Or make your own: pick a background,
+  sidebar, text and accent color, starting from any theme, and the rest of
+  the interface follows. Choose from the palette at the bottom of the
+  sidebar, or in Settings under Appearance.
 - Settings from anywhere: press ⌘, or click the gear at the bottom of the
   sidebar. New sections bring together what was scattered: Editor, PDF, Zotero
   and Vault.

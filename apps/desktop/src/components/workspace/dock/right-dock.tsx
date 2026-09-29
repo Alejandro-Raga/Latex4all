@@ -82,13 +82,23 @@ export function RightDock() {
     return () => observer.disconnect();
   }, []);
 
+  // A section folds into its neighbours, so a lone one never stays folded.
+  const canCollapse = panels.length > 1;
+  const isFolded = (panel: DockPanel) => canCollapse && collapsed[panel];
+
   // Keep the panels folded or open as the store says (it outlives them).
   useEffect(() => {
     for (const panel of panels) {
       const handle = handles.current[panel];
       if (!handle) continue;
-      if (collapsed[panel] && !handle.isCollapsed()) handle.collapse();
-      if (!collapsed[panel] && handle.isCollapsed()) handle.expand();
+      const fold = panels.length > 1 && collapsed[panel];
+      try {
+        if (fold && !handle.isCollapsed()) handle.collapse();
+        if (!fold && handle.isCollapsed()) handle.expand();
+      } catch {
+        // The group is mid-update (a section just opened or closed); the
+        // next render applies it.
+      }
     }
   }, [panels, collapsed]);
 
@@ -114,7 +124,7 @@ export function RightDock() {
                 ref={(handle) => {
                   handles.current[panel] = handle ?? undefined;
                 }}
-                collapsible
+                collapsible={canCollapse}
                 collapsedSize={pct(header)}
                 minSize={pct(header + MIN_BODY_PX)}
                 defaultSize={100 / panels.length}
@@ -125,7 +135,8 @@ export function RightDock() {
                 <DockSectionProvider
                   value={{
                     first: i === 0,
-                    collapsed: collapsed[panel],
+                    collapsed: isFolded(panel),
+                    canCollapse,
                     toggleCollapsed: () =>
                       setCollapsed(panel, !collapsed[panel]),
                     wide: false,
@@ -154,6 +165,7 @@ export function WideDockPanel() {
         value={{
           first: true,
           collapsed: false,
+          canCollapse: false,
           toggleCollapsed: () => {},
           wide: true,
           toggleWide: () => setWide(null),

@@ -1,5 +1,7 @@
 import { ThemeProvider, useTheme } from "next-themes";
 import { isDarkTheme, THEME_IDS } from "@/lib/app-themes";
+import { ThemeBridge } from "@/components/theme-bridge";
+import { useSettingsStore } from "@/stores/settings-store";
 import { ErrorBoundary } from "react-error-boundary";
 import { Toaster } from "@/components/ui/sonner";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
@@ -36,6 +38,8 @@ interface ClaudeSessionInfo {
 
 function NativeWindowThemeBridge() {
   const { resolvedTheme, theme } = useTheme();
+  // A custom theme turns light or dark with its background color.
+  const customBg = useSettingsStore((s) => s.customTheme.bg);
 
   useEffect(() => {
     const syncNativeTheme = () => {
@@ -72,7 +76,7 @@ function NativeWindowThemeBridge() {
       observer.disconnect();
       systemThemeQuery.removeEventListener("change", syncNativeTheme);
     };
-  }, [resolvedTheme, theme]);
+  }, [resolvedTheme, theme, customBg]);
 
   return null;
 }
@@ -234,6 +238,7 @@ export function App({ onReady }: { onReady?: () => void }) {
         themes={THEME_IDS}
       >
         <TooltipProvider>
+          <ThemeBridge />
           <NativeWindowThemeBridge />
           {/* Global macOS titlebar drag region — sits above all content */}
           <div
