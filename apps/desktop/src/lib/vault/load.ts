@@ -42,6 +42,10 @@ export interface LoadedVault {
   attachments: Map<string, string>;
   /** A version per note path (server ETag), to catch saves that would clash. */
   versions: Map<string, string | null>;
+  /** Notes in Obsidian's templates folder, usable for new notes. */
+  templates: string[];
+  /** Folder Obsidian puts new notes in, if it's set to a fixed one. */
+  newNoteFolder: string | null;
 }
 
 export class NoteExistsError extends Error {
@@ -77,14 +81,32 @@ function folderName(path: string) {
   return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }
 
+const trimSlashes = (path: string) => path.replace(/^\/+|\/+$/g, "");
+
 /** The templates folder set in Obsidian's Templates plugin, or `Templates`. */
 function templatesFrom(json: string | null): string {
   if (!json) return DEFAULT_TEMPLATES;
   try {
     const { folder } = JSON.parse(json) as { folder?: string };
-    return folder?.replace(/^\/+|\/+$/g, "") || DEFAULT_TEMPLATES;
+    return trimSlashes(folder ?? "") || DEFAULT_TEMPLATES;
   } catch {
     return DEFAULT_TEMPLATES;
+  }
+}
+
+/** Where Obsidian's "Default location for new notes" points, when it's a folder. */
+function newNoteFolderFrom(json: string | null): string | null {
+  if (!json) return null;
+  try {
+    const app = JSON.parse(json) as {
+      newFileLocation?: string;
+      newFileFolderPath?: string;
+    };
+    return app.newFileLocation === "folder"
+      ? trimSlashes(app.newFileFolderPath ?? "")
+      : null;
+  } catch {
+    return null;
   }
 }
 
@@ -101,22 +123,29 @@ export class LocalVaultSource implements VaultSource {
     return join(this.root, ...path.split("/"));
   }
 
+  private async obsidianSetting(file: string): Promise<string | null> {
+    const path = await this.abs(`.obsidian/${file}`);
+    return (await exists(path)) ? readTextFile(path) : null;
+  }
+
   async load(): Promise<LoadedVault> {
     const notes: ParsedNote[] = [];
     const attachments = new Map<string, string>();
-    const settings = await this.abs(".obsidian/templates.json");
-    const templates = templatesFrom(
-      (await exists(settings)) ? await readTextFile(settings) : null,
+    const templates: string[] = [];
+    const templatesFolder = templatesFrom(
+      await this.obsidianSetting("templates.json"),
     );
     const walk = async (dir: string, rel: string) => {
       for (const entry of await readDir(dir)) {
         if (entry.name.startsWith(".")) continue;
         const path = await join(dir, entry.name);
         const relPath = rel ? `${rel}/${entry.name}` : entry.name;
-        if (entry.isDirectory && relPath === templates) continue;
+        const isNote = entry.isFile && entry.name.toLowerCase().endsWith(".md");
         if (entry.isDirectory) {
           await walk(path, relPath);
-        } else if (entry.isFile && entry.name.toLowerCase().endsWith(".md")) {
+        } else if (isNote && relPath.startsWith(`${templatesFolder}/`)) {
+          templates.push(relPath);
+        } else if (isNote) {
           notes.push(parseNote(relPath, await readTextFile(path)));
         } else if (entry.isFile) {
           const key = entry.name.toLowerCase();
@@ -125,7 +154,13 @@ export class LocalVaultSource implements VaultSource {
       }
     };
     await walk(this.root, "");
-    return { notes, attachments, versions: new Map() };
+    return {
+      notes,
+      attachments,
+      versions: new Map(),
+      templates: templates.sort(),
+      newNoteFolder: newNoteFolderFrom(await this.obsidianSetting("app.json")),
+    };
   }
 
   async readAttachment(path: string) {
@@ -167,17 +202,24 @@ export class ServerVaultSource implements VaultSource {
     this.label = decodeURIComponent(folderName(new URL(status.url).pathname));
   }
 
+  /** One of Obsidian's settings files, when it's synced to the server. */
+  private async obsidianSetting(file: string): Promise<string | null> {
+    try {
+      return (await this.dav.readText(`.obsidian/${file}`)).text;
+    } catch {
+      return null;
+    }
+  }
+
   async load(): Promise<LoadedVault> {
     const files: { path: string; etag: string | null }[] = [];
     const attachments = new Map<string, string>();
-    let templates = DEFAULT_TEMPLATES;
-    try {
-      templates = templatesFrom(
-        (await this.dav.readText(".obsidian/templates.json")).text,
-      );
-    } catch {
-      // Not synced to the server; use the default.
-    }
+    const templates: string[] = [];
+    const [templatesJson, appJson] = await Promise.all([
+      this.obsidianSetting("templates.json"),
+      this.obsidianSetting("app.json"),
+    ]);
+    const templatesFolder = templatesFrom(templatesJson);
 
     let folders = [""];
     while (folders.length) {
@@ -187,7 +229,12 @@ export class ServerVaultSource implements VaultSource {
         const name = folderName(entry.path);
         if (name.startsWith(".")) continue;
         if (entry.isFolder) {
-          if (entry.path !== templates) folders.push(entry.path);
+          folders.push(entry.path);
+        } else if (
+          name.toLowerCase().endsWith(".md") &&
+          entry.path.startsWith(`${templatesFolder}/`)
+        ) {
+          templates.push(entry.path);
         } else if (name.toLowerCase().endsWith(".md")) {
           files.push(entry);
         } else if (!attachments.has(name.toLowerCase())) {
@@ -216,7 +263,13 @@ export class ServerVaultSource implements VaultSource {
       }
     };
     await Promise.all(Array.from({ length: PARALLEL }, worker));
-    return { notes, attachments, versions };
+    return {
+      notes,
+      attachments,
+      versions,
+      templates: templates.sort(),
+      newNoteFolder: newNoteFolderFrom(appJson),
+    };
   }
 
   readAttachment(path: string) {

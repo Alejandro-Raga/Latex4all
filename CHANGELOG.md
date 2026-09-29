@@ -24,14 +24,16 @@ tag.
 ### Added
 
 - Your Obsidian vault next to your writing. Turn on Vault in the layout menu
-  to search, read and edit your notes without leaving the editor, start new
-  ones, see what each links to and what links back, and follow the links on a
-  small map of connected notes. The vault Obsidian last had open is found on
-  its own; or connect the vault's folder on a WebDAV server (Seafile,
-  Nextcloud…) and read and save notes there directly, always up to date with
-  your other devices, with no need to open Obsidian. A paper's note has a Cite
-  button that adds it to the bibliography and inserts the citation, and when
-  the cursor is on a citation, the paper's note is a click away.
+  to search, read and edit your notes without leaving the editor, see what
+  each links to and what links back, and follow the links on a small map of
+  connected notes. It works with however you keep your vault: a folder on this
+  computer (Obsidian Sync, iCloud, Dropbox, Syncthing, Git…), found on its own
+  when Obsidian knows it, or a WebDAV server (Remotely Save, Nextcloud,
+  Seafile…), read and saved there directly so it's current without opening
+  Obsidian. New notes go where Obsidian puts them and can start from your own
+  templates. Literature notes from Zotero plugins are recognised as papers:
+  their Cite button adds the paper to the bibliography and inserts the
+  citation, and a citation under the cursor leads to its note.
 - Copy text from PDFs. Selected text copies with ⌘C or the new Copy button,
   as readable text: lines joined, paragraphs kept, hyphenated words rejoined.
 - More ways to show PDFs: besides light and dark, a softer off-white, sepia,

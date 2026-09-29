@@ -1,14 +1,19 @@
 import { listField, noteName, type ParsedNote, textField } from "./parse";
 
-export type NoteKind = "paper" | "idea" | "topic" | "note";
+/** Papers (literature notes) are told apart; everything else is a note. */
+export type NoteKind = "paper" | "note";
 
 export interface VaultNote extends ParsedNote {
   kind: NoteKind;
-  /** Title to show: the paper's title, or the note name. */
+  /** Section it's listed under: "Papers", or its top-level folder ("" at the root). */
+  group: string;
+  /** Title to show: a paper's title, or the note name. */
   title: string;
-  /** Zotero item key, for notes made from Zotero by the sync. */
+  /** Zotero item key, when the note says which item it's about. */
   zoteroKey: string | null;
   citekey: string | null;
+  authors: string[];
+  year: string | null;
   /** Names of notes this one links to (resolved, no duplicates, not itself). */
   outgoing: string[];
   /** Names of notes that link here. */
@@ -24,20 +29,89 @@ export interface VaultIndex {
   list: VaultNote[];
 }
 
-function kindOf(note: ParsedNote): NoteKind {
-  const tags = listField(note.frontmatter, "tags").map((t) =>
+export const PAPERS_GROUP = "Papers";
+
+// Fields the common Obsidian ↔ Zotero setups (Zotero Integration, ZotLit,
+// Citations, custom syncs) use for the citation key and the Zotero item.
+const CITEKEY_FIELDS = [
+  "citekey",
+  "citeKey",
+  "citationKey",
+  "citation-key",
+  "citation_key",
+  "bibtex-key",
+];
+const ZOTERO_FIELDS = [
+  "zotero_key",
+  "zoteroKey",
+  "zotero-key",
+  "zotero",
+  "itemKey",
+];
+const PAPER_TAGS = new Set([
+  "paper",
+  "papers",
+  "article",
+  "literature",
+  "literature-note",
+  "literaturenote",
+  "reference",
+  "source",
+]);
+const ZOTERO_ITEM_KEY = /^[A-Z0-9]{8}$/;
+const ZOTERO_SELECT_LINK =
+  /zotero:\/\/select\/(?:library|groups\/\d+)\/items\/([A-Z0-9]{8})\b/;
+
+function firstText(note: ParsedNote, fields: string[]): string | null {
+  for (const field of fields) {
+    const value = textField(note.frontmatter, field);
+    if (value?.trim()) return value.trim();
+  }
+  return null;
+}
+
+function zoteroKeyOf(note: ParsedNote): string | null {
+  const field = firstText(note, ZOTERO_FIELDS);
+  if (field && ZOTERO_ITEM_KEY.test(field)) return field;
+  const link =
+    field?.match(ZOTERO_SELECT_LINK) ?? note.body.match(ZOTERO_SELECT_LINK);
+  return link?.[1] ?? null;
+}
+
+function citekeyOf(note: ParsedNote): string | null {
+  return (
+    firstText(note, CITEKEY_FIELDS) ??
+    // Zotero Integration's default: literature notes named @citekey.
+    (note.name.startsWith("@") ? note.name.slice(1) : null)
+  );
+}
+
+function describe(note: ParsedNote) {
+  const fm = note.frontmatter;
+  const tags = listField(fm, "tags").map((t) =>
     t.toLowerCase().replace(/^#/, ""),
   );
-  const folder = note.folder.toLowerCase();
-  if (
-    note.frontmatter.zotero_key ||
-    tags.includes("paper") ||
-    folder === "papers"
-  )
-    return "paper";
-  if (tags.includes("idea") || folder === "ideas") return "idea";
-  if (tags.includes("topic") || folder === "topics") return "topic";
-  return "note";
+  const zoteroKey = zoteroKeyOf(note);
+  const citekey = citekeyOf(note);
+  const kind: NoteKind =
+    zoteroKey || citekey || tags.some((t) => PAPER_TAGS.has(t))
+      ? "paper"
+      : "note";
+  const authors = [...listField(fm, "authors"), ...listField(fm, "author")];
+  const year =
+    textField(fm, "year") ??
+    textField(fm, "date")?.match(/\b\d{4}\b/)?.[0] ??
+    null;
+  const name = note.name.replace(/^@/, "");
+  return {
+    kind,
+    group: kind === "paper" ? PAPERS_GROUP : note.folder,
+    title: (kind === "paper" ? textField(fm, "title") : null) ?? name,
+    zoteroKey,
+    citekey,
+    authors,
+    year,
+  };
 }
 
 export function buildVaultIndex(parsed: ParsedNote[]): VaultIndex {
@@ -47,14 +121,9 @@ export function buildVaultIndex(parsed: ParsedNote[]): VaultIndex {
   for (const note of sorted) {
     const key = note.name.toLowerCase();
     if (notes.has(key)) continue;
-    const fm = note.frontmatter;
-    const kind = kindOf(note);
     notes.set(key, {
       ...note,
-      kind,
-      title: (kind === "paper" ? textField(fm, "title") : null) ?? note.name,
-      zoteroKey: textField(fm, "zotero_key"),
-      citekey: textField(fm, "citekey"),
+      ...describe(note),
       outgoing: [],
       incoming: [],
       unresolved: [],
@@ -75,14 +144,15 @@ export function buildVaultIndex(parsed: ParsedNote[]): VaultIndex {
       notes.get(name.toLowerCase())?.incoming.push(note.name);
   }
 
-  const order: Record<NoteKind, number> = {
-    paper: 0,
-    idea: 1,
-    topic: 2,
-    note: 3,
-  };
+  // Papers first, then folders alphabetically, notes at the root last.
+  const rank = (n: VaultNote) =>
+    n.group === PAPERS_GROUP
+      ? "0"
+      : n.group
+        ? `1${n.group.toLowerCase()}`
+        : "2";
   const list = [...notes.values()].sort(
-    (a, b) => order[a.kind] - order[b.kind] || a.name.localeCompare(b.name),
+    (a, b) => rank(a).localeCompare(rank(b)) || a.name.localeCompare(b.name),
   );
   return { notes, list };
 }
@@ -134,10 +204,8 @@ export function searchNotes(index: VaultIndex, query: string): VaultNote[] {
   if (words.length === 0) return index.list;
   const scored: { note: VaultNote; score: number }[] = [];
   for (const note of index.list) {
-    const head = `${note.name} ${note.title} ${note.citekey ?? ""} ${listField(
-      note.frontmatter,
-      "authors",
-    ).join(" ")}`.toLowerCase();
+    const head =
+      `${note.name} ${note.title} ${note.citekey ?? ""} ${note.authors.join(" ")}`.toLowerCase();
     const body = note.body.toLowerCase();
     let score = 0;
     for (const w of words) {

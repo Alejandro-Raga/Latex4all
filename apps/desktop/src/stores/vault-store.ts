@@ -7,6 +7,7 @@ import {
   type VaultSource,
 } from "@/lib/vault/load";
 import { parseNote } from "@/lib/vault/parse";
+import { fillTemplate } from "@/lib/vault/template";
 import { buildVaultIndex, type VaultIndex } from "@/lib/vault/vault-index";
 import {
   webdavConnect,
@@ -30,6 +31,9 @@ interface VaultState {
   mode: "local" | "server";
   /** Folder of the Obsidian vault on this computer, for local mode. */
   vaultPath: string | null;
+  /** Folder and template last used for a new note ("" / null: none). */
+  lastNoteFolder: string | null;
+  lastTemplate: string | null;
 
   // Transient
   source: VaultSource | null;
@@ -40,6 +44,10 @@ interface VaultState {
   attachments: Map<string, string>;
   /** Server version of each note as last read, for safe saving. */
   versions: Map<string, string | null>;
+  /** Template notes in the vault's templates folder. */
+  templates: string[];
+  /** Obsidian's folder for new notes, when it has one set. */
+  newNoteFolder: string | null;
   loading: boolean;
   /** A reload was asked for by hand and is running. */
   syncing: boolean;
@@ -66,8 +74,12 @@ interface VaultState {
    * WebdavConflictError if it changed on the server since it was read.
    */
   saveNote: (path: string, text: string, force?: boolean) => Promise<void>;
-  /** Creates a note in `folder` and returns its name. */
-  createNote: (folder: string, title: string, text: string) => Promise<string>;
+  /** Creates a note in `folder`, from `template` if given, and returns its name. */
+  createNote: (
+    folder: string,
+    title: string,
+    template: string | null,
+  ) => Promise<string>;
   open: (name: string) => void;
   back: () => void;
   showList: () => void;
@@ -78,11 +90,15 @@ export const useVaultStore = create<VaultState>()(
     (set, get) => ({
       mode: "local",
       vaultPath: null,
+      lastNoteFolder: null,
+      lastTemplate: null,
       source: null,
       server: null,
       index: null,
       attachments: new Map(),
       versions: new Map(),
+      templates: [],
+      newNoteFolder: null,
       loading: false,
       syncing: false,
       error: null,
@@ -164,9 +180,15 @@ export const useVaultStore = create<VaultState>()(
         reading = true;
         set({ loading: !get().index, syncing: byHand, error: null });
         try {
-          const { notes, attachments, versions } = await source.load();
+          const loaded = await source.load();
           if (get().source === source) {
-            set({ index: buildVaultIndex(notes), attachments, versions });
+            set({
+              index: buildVaultIndex(loaded.notes),
+              attachments: loaded.attachments,
+              versions: loaded.versions,
+              templates: loaded.templates,
+              newNoteFolder: loaded.newNoteFolder,
+            });
           }
         } catch (err) {
           set({
@@ -192,11 +214,15 @@ export const useVaultStore = create<VaultState>()(
         get().reload();
       },
 
-      createNote: async (folder, title, text) => {
+      createNote: async (folder, title, template) => {
         const { source } = get();
         if (!source) throw new Error("No vault is open.");
         const name = title.replace(/[\\/:*?"<>|#^[\]]/g, "").trim();
         if (!name) throw new Error("Give the note a title.");
+        const text = template
+          ? fillTemplate((await source.readNote(template)).text, name)
+          : "";
+        set({ lastNoteFolder: folder, lastTemplate: template ?? "" });
         const path = folder ? `${folder}/${name}.md` : `${name}.md`;
         await source.createNote(path, text);
         set({ index: withNote(get().index, path, text) });
@@ -225,7 +251,12 @@ export const useVaultStore = create<VaultState>()(
     }),
     {
       name: "latex4all-vault",
-      partialize: (state) => ({ mode: state.mode, vaultPath: state.vaultPath }),
+      partialize: (state) => ({
+        mode: state.mode,
+        vaultPath: state.vaultPath,
+        lastNoteFolder: state.lastNoteFolder,
+        lastTemplate: state.lastTemplate,
+      }),
     },
   ),
 );

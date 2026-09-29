@@ -185,3 +185,54 @@ describe("vaultMarkdown", () => {
     expect(noteFromHref("https://x")).toBeNull();
   });
 });
+
+describe("fillTemplate", () => {
+  it("fills Obsidian's title, date and time placeholders", async () => {
+    const { fillTemplate } = await import("./template");
+    const now = new Date(2026, 8, 29, 9, 5, 7);
+    expect(
+      fillTemplate(
+        "# {{title}}\ncreated: {{date}} {{time}}\n{{date:DD/MM/YYYY}} {{ Title }}",
+        "Idea one",
+        now,
+      ),
+    ).toBe("# Idea one\ncreated: 2026-09-29 09:05\n29/09/2026 Idea one");
+  });
+});
+
+describe("paper detection across Zotero setups", () => {
+  it("recognises citekey fields, @citekey names and zotero:// links", () => {
+    const index = buildVaultIndex([
+      parseNote("Lit/@smith2020.md", "---\ntitle: A study\n---\nbody"),
+      parseNote(
+        "Refs/Jones.md",
+        "---\ncitationKey: jones2019\nauthor: Ann Jones\ndate: 2019-04-01\n---\n",
+      ),
+      parseNote(
+        "Refs/Lee.md",
+        "[Open](zotero://select/library/items/ABCD1234)",
+      ),
+      parseNote("Ideas/Thought.md", "just a note"),
+    ]);
+    const get = (n: string) => index.notes.get(n.toLowerCase());
+    expect(get("@smith2020")).toMatchObject({
+      kind: "paper",
+      citekey: "smith2020",
+      title: "A study",
+    });
+    expect(get("Jones")).toMatchObject({
+      kind: "paper",
+      citekey: "jones2019",
+      authors: ["Ann Jones"],
+      year: "2019",
+    });
+    expect(get("Lee")).toMatchObject({ kind: "paper", zoteroKey: "ABCD1234" });
+    expect(get("Thought")).toMatchObject({ kind: "note", group: "Ideas" });
+    expect(index.list.map((n) => n.group)).toEqual([
+      "Papers",
+      "Papers",
+      "Papers",
+      "Ideas",
+    ]);
+  });
+});

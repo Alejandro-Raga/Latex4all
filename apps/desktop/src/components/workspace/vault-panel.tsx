@@ -32,6 +32,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -43,12 +44,10 @@ import {
   type KnownVault,
   LocalVaultSource,
 } from "@/lib/vault/load";
-import { listField } from "@/lib/vault/parse";
 import { WebdavConflictError } from "@/lib/vault/webdav";
 import { EMBED_SRC, noteFromHref, vaultMarkdown } from "@/lib/vault/render";
 import {
   findNote,
-  type NoteKind,
   neighbourhood,
   searchNotes,
   type VaultIndex,
@@ -62,26 +61,34 @@ import { MarkdownNoteEditor } from "./markdown-note-editor";
 
 const REFRESH_MS = 30_000;
 
-const KIND_LABEL: Record<NoteKind, string> = {
-  paper: "Papers",
-  idea: "Ideas",
-  topic: "Topics",
-  note: "Notes",
-};
+const PAPER_COLOR = "#3b82f6";
+const ROOT_COLOR = "#94a3b8";
+const FOLDER_COLORS = [
+  "#f59e0b",
+  "#10b981",
+  "#8b5cf6",
+  "#ec4899",
+  "#14b8a6",
+  "#f97316",
+  "#84cc16",
+  "#06b6d4",
+];
 
-/** Dot and graph colours per kind of note. */
-const KIND_COLOR: Record<NoteKind, string> = {
-  paper: "#3b82f6",
-  idea: "#f59e0b",
-  topic: "#10b981",
-  note: "#94a3b8",
-};
+const groupLabel = (group: string) => group || "Notes";
+
+/** A note's colour in lists and the map: papers blue, others by their folder. */
+function noteColor(note: VaultNote): string {
+  if (note.kind === "paper") return PAPER_COLOR;
+  if (!note.group) return ROOT_COLOR;
+  let hash = 0;
+  for (const ch of note.group) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return FOLDER_COLORS[hash % FOLDER_COLORS.length];
+}
 
 function noteSubtitle(note: VaultNote): string {
   if (note.kind === "paper") {
-    const [author] = listField(note.frontmatter, "authors");
-    const year = note.frontmatter.year;
-    return [author?.split(" ").pop(), year].filter(Boolean).join(" · ");
+    const author = note.authors[0]?.split(",")[0].split(" ").pop();
+    return [author, note.year].filter(Boolean).join(" · ");
   }
   const links = note.outgoing.length + note.incoming.length;
   return links ? `${links} link${links === 1 ? "" : "s"}` : "";
@@ -111,16 +118,15 @@ function noteForCitekey(
   const year = lower.match(/(1[5-9]|20)\d\d/)?.[0];
   if (!year) return undefined;
   return papers.find((n) => {
-    const [author] = listField(n.frontmatter, "authors");
+    const [author] = n.authors;
     const last = author
-      ?.split(" ")
+      ?.split(",")[0]
+      .split(" ")
       .pop()
       ?.normalize("NFKD")
       .replace(/[^A-Za-z]/g, "")
       .toLowerCase();
-    return (
-      last && String(n.frontmatter.year) === year && lower.startsWith(last)
-    );
+    return last && n.year === year && lower.startsWith(last);
   });
 }
 
@@ -231,24 +237,13 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
       <CursorCitation onOpen={open} />
 
       {!source ? (
-        <div className="space-y-3 p-4 text-center text-muted-foreground text-xs">
-          <p>
-            {searched ? "No Obsidian vault found." : "Looking for your vault…"}
+        searched ? (
+          <VaultSetup onConnectServer={() => setServerDialog(true)} />
+        ) : (
+          <p className="p-4 text-muted-foreground text-xs">
+            Looking for your vault…
           </p>
-          {searched && (
-            <div className="flex flex-col items-center gap-2">
-              <ChooseFolderButton />
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setServerDialog(true)}
-              >
-                <ServerIcon className="size-3.5" />
-                Connect to a server…
-              </Button>
-            </div>
-          )}
-        </div>
+        )
       ) : loading && !index ? (
         <div className="flex items-center gap-2 p-4 text-muted-foreground text-xs">
           <Loader2Icon className="size-3.5 animate-spin" />
@@ -271,20 +266,43 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ChooseFolderButton() {
+/** First run with no vault found: where does it live? */
+function VaultSetup({ onConnectServer }: { onConnectServer: () => void }) {
   const useLocalFolder = useVaultStore((s) => s.useLocalFolder);
+  const option =
+    "flex w-full items-start gap-2.5 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted/60";
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={async () => {
-        const selected = await openDialog({ directory: true, multiple: false });
-        if (typeof selected === "string") useLocalFolder(selected);
-      }}
-    >
-      <FolderOpenIcon className="size-3.5" />
-      Choose vault folder…
-    </Button>
+    <div className="space-y-2 p-3">
+      <p className="px-0.5 pb-1 font-medium text-sm">Where is your vault?</p>
+      <button
+        type="button"
+        className={option}
+        onClick={async () => {
+          const selected = await openDialog({
+            directory: true,
+            multiple: false,
+          });
+          if (typeof selected === "string") useLocalFolder(selected);
+        }}
+      >
+        <FolderOpenIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0">
+          <span className="block text-sm">A folder on this computer</span>
+          <span className="block text-muted-foreground text-xs">
+            Obsidian Sync, iCloud, Dropbox, OneDrive, Syncthing, Git…
+          </span>
+        </span>
+      </button>
+      <button type="button" className={option} onClick={onConnectServer}>
+        <ServerIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0">
+          <span className="block text-sm">A WebDAV server</span>
+          <span className="block text-muted-foreground text-xs">
+            Remotely Save, Nextcloud, Seafile, a NAS…
+          </span>
+        </span>
+      </button>
+    </div>
   );
 }
 
@@ -430,6 +448,9 @@ function ServerDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Vault on a server</DialogTitle>
+          <DialogDescription>
+            The WebDAV address of the folder with the vault's notes.
+          </DialogDescription>
         </DialogHeader>
         <form
           className="space-y-2.5"
@@ -441,7 +462,7 @@ function ServerDialog({
           <Input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://cloud.example.com/seafdav/Vault/Vault"
+            placeholder="https://example.com/dav/MyVault"
             aria-label="WebDAV address of the vault folder"
             autoFocus
           />
@@ -518,11 +539,11 @@ function NoteList({
   const [creating, setCreating] = useState(false);
   const results = useMemo(() => searchNotes(index, query), [index, query]);
   const groups = useMemo(() => {
-    if (query.trim()) return [{ kind: null, notes: results }];
-    const byKind = new Map<NoteKind, VaultNote[]>();
+    if (query.trim()) return [{ group: null, notes: results }];
+    const byGroup = new Map<string, VaultNote[]>();
     for (const n of results)
-      byKind.set(n.kind, [...(byKind.get(n.kind) ?? []), n]);
-    return [...byKind].map(([kind, notes]) => ({ kind, notes }));
+      byGroup.set(n.group, [...(byGroup.get(n.group) ?? []), n]);
+    return [...byGroup].map(([group, notes]) => ({ group, notes }));
   }, [results, query]);
 
   return (
@@ -567,11 +588,11 @@ function NoteList({
             {query ? "No matching notes" : "No notes in this vault"}
           </p>
         )}
-        {groups.map(({ kind, notes }) => (
-          <div key={kind ?? "results"} className="mb-2">
-            {kind && (
+        {groups.map(({ group, notes }) => (
+          <div key={group ?? "\0results"} className="mb-2">
+            {group !== null && (
               <p className="px-2 pt-1.5 pb-0.5 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
-                {KIND_LABEL[kind]}
+                {groupLabel(group)}
                 <span className="ml-1 normal-case">{notes.length}</span>
               </p>
             )}
@@ -584,7 +605,7 @@ function NoteList({
               >
                 <span
                   className="mt-1.5 size-1.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: KIND_COLOR[n.kind] }}
+                  style={{ backgroundColor: noteColor(n) }}
                 />
                 <span className="min-w-0 flex-1">
                   <span className="line-clamp-2 block text-sm">{n.title}</span>
@@ -606,14 +627,17 @@ function NoteList({
 /** A note just created from the list, to open straight into editing. */
 let editOnOpen: string | null = null;
 
-/** Folders a new note can go in: the vault's, with Ideas first. */
-function noteFolders(index: VaultIndex): string[] {
-  const folders = new Set(index.list.map((n) => n.folder));
-  folders.add("Ideas");
-  return [...folders].sort((a, b) =>
-    a === "Ideas" ? -1 : b === "Ideas" ? 1 : a.localeCompare(b),
+/** Every folder holding notes, plus Obsidian's folder for new notes. */
+function noteFolders(index: VaultIndex, extra: (string | null)[]): string[] {
+  const folders = new Set(
+    index.list.map((n) => n.path.split("/").slice(0, -1).join("/")),
   );
+  for (const f of extra) if (f !== null) folders.add(f);
+  return [...folders].sort((a, b) => a.localeCompare(b));
 }
+
+const templateName = (path: string) =>
+  (path.split("/").pop() ?? path).replace(/\.md$/i, "");
 
 function NewNoteForm({
   index,
@@ -623,26 +647,33 @@ function NewNoteForm({
   onDone: (name: string | null) => void;
 }) {
   const createNote = useVaultStore((s) => s.createNote);
-  const folders = useMemo(() => noteFolders(index), [index]);
+  const templates = useVaultStore((s) => s.templates);
+  const newNoteFolder = useVaultStore((s) => s.newNoteFolder);
+  const lastNoteFolder = useVaultStore((s) => s.lastNoteFolder);
+  const lastTemplate = useVaultStore((s) => s.lastTemplate);
+  const folders = useMemo(
+    () => noteFolders(index, [newNoteFolder, lastNoteFolder]),
+    [index, newNoteFolder, lastNoteFolder],
+  );
   const [title, setTitle] = useState("");
-  const [folder, setFolder] = useState(folders[0] ?? "");
+  const [folder, setFolder] = useState(lastNoteFolder ?? newNoteFolder ?? "");
+  const [template, setTemplate] = useState(
+    lastTemplate && templates.includes(lastTemplate) ? lastTemplate : "",
+  );
   const [busy, setBusy] = useState(false);
 
   const create = async () => {
     setBusy(true);
-    const today = new Date().toISOString().slice(0, 10);
-    const tag =
-      folder === "Ideas" ? "idea" : folder === "Topics" ? "topic" : null;
-    const text = tag
-      ? `---\ntags:\n- ${tag}\ncreated: '${today}'\n---\n\n`
-      : "";
     try {
-      onDone(await createNote(folder, title, text));
+      onDone(await createNote(folder, title, template || null));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
       setBusy(false);
     }
   };
+
+  const selectClass =
+    "h-7 min-w-0 flex-1 rounded-md border border-input bg-background px-1.5 text-xs";
 
   return (
     <form
@@ -666,7 +697,8 @@ function NewNoteForm({
           value={folder}
           onChange={(e) => setFolder(e.target.value)}
           aria-label="Folder"
-          className="h-7 min-w-0 flex-1 rounded-md border border-input bg-background px-1.5 text-xs"
+          title="Folder"
+          className={selectClass}
         >
           {folders.map((f) => (
             <option key={f} value={f}>
@@ -674,15 +706,31 @@ function NewNoteForm({
             </option>
           ))}
         </select>
-        <Button
-          type="submit"
-          size="sm"
-          className="h-7 px-2.5 text-xs"
-          disabled={busy || !title.trim()}
-        >
-          Create
-        </Button>
+        {templates.length > 0 && (
+          <select
+            value={template}
+            onChange={(e) => setTemplate(e.target.value)}
+            aria-label="Template"
+            title="Template"
+            className={selectClass}
+          >
+            <option value="">No template</option>
+            {templates.map((t) => (
+              <option key={t} value={t}>
+                {templateName(t)}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
+      <Button
+        type="submit"
+        size="sm"
+        className="h-7 w-full text-xs"
+        disabled={busy || !title.trim()}
+      >
+        Create
+      </Button>
     </form>
   );
 }
@@ -743,9 +791,9 @@ function NoteView({
         <div className="flex flex-wrap items-center gap-1.5">
           <span
             className="rounded px-1.5 py-0.5 text-[11px] text-white"
-            style={{ backgroundColor: KIND_COLOR[note.kind] }}
+            style={{ backgroundColor: noteColor(note) }}
           >
-            {KIND_LABEL[note.kind].slice(0, -1)}
+            {note.kind === "paper" ? "Paper" : groupLabel(note.group)}
           </span>
           {noteSubtitle(note) && (
             <span className="text-muted-foreground text-xs">
@@ -1001,7 +1049,7 @@ function LinkGroup({
           >
             <span
               className="size-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: n ? KIND_COLOR[n.kind] : undefined }}
+              style={{ backgroundColor: n ? noteColor(n) : undefined }}
             />
             <span className="truncate">{n?.title ?? name}</span>
           </button>
@@ -1036,7 +1084,7 @@ function LocalGraph({
     for (const [ring, members] of rings) {
       members.sort(
         (a, b) =>
-          a.note.kind.localeCompare(b.note.kind) ||
+          a.note.group.localeCompare(b.note.group) ||
           a.note.name.localeCompare(b.note.name),
       );
       members.forEach((m, i) => {
@@ -1118,7 +1166,7 @@ function LocalGraph({
               cx={p.x}
               cy={p.y}
               r={centre ? 7 : ring === 1 ? 5 : 3.5}
-              fill={KIND_COLOR[n.kind]}
+              fill={noteColor(n)}
               className={cn(ring === 2 && "opacity-60")}
             />
             <text
