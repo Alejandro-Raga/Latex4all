@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { join } from "@tauri-apps/api/path";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { readFile } from "@tauri-apps/plugin-fs";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import {
   ArrowLeftIcon,
@@ -13,8 +11,13 @@ import {
   FolderOpenIcon,
   Loader2Icon,
   NotebookTextIcon,
+  PencilIcon,
+  PlusIcon,
   QuoteIcon,
+  RefreshCwIcon,
   SearchIcon,
+  ServerIcon,
+  UnplugIcon,
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -26,10 +29,22 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { citeKeyAtCursor } from "@/lib/vault/cite-at-cursor";
-import { findObsidianVaults, type KnownVault } from "@/lib/vault/load";
+import {
+  findObsidianVaults,
+  type KnownVault,
+  LocalVaultSource,
+} from "@/lib/vault/load";
 import { listField } from "@/lib/vault/parse";
+import { WebdavConflictError } from "@/lib/vault/webdav";
 import { EMBED_SRC, noteFromHref, vaultMarkdown } from "@/lib/vault/render";
 import {
   findNote,
@@ -43,6 +58,7 @@ import { cn } from "@/lib/utils";
 import { useDocumentStore } from "@/stores/document-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
+import { MarkdownNoteEditor } from "./markdown-note-editor";
 
 const REFRESH_MS = 30_000;
 
@@ -60,9 +76,6 @@ const KIND_COLOR: Record<NoteKind, string> = {
   topic: "#10b981",
   note: "#94a3b8",
 };
-
-const vaultName = (path: string) =>
-  path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
 function noteSubtitle(note: VaultNote): string {
   if (note.kind === "paper") {
@@ -141,22 +154,24 @@ function useCiteKeyAtCursor(): string | null {
 }
 
 export function VaultPanel({ onClose }: { onClose: () => void }) {
-  const vaultPath = useVaultStore((s) => s.vaultPath);
+  const source = useVaultStore((s) => s.source);
   const index = useVaultStore((s) => s.index);
   const loading = useVaultStore((s) => s.loading);
+  const syncing = useVaultStore((s) => s.syncing);
   const error = useVaultStore((s) => s.error);
   const current = useVaultStore((s) => s.current);
   const history = useVaultStore((s) => s.history);
   const { ensureVault, reload, open, back, showList } =
     useVaultStore.getState();
   const [searched, setSearched] = useState(false);
+  const [serverDialog, setServerDialog] = useState(false);
 
   useEffect(() => {
     ensureVault().finally(() => setSearched(true));
-    // Notes change while you work (Obsidian, the Zotero sync); keep up.
+    // Notes change while you work (other devices, the Zotero sync); keep up.
     const onFocus = () => reload();
     window.addEventListener("focus", onFocus);
-    const timer = window.setInterval(reload, REFRESH_MS);
+    const timer = window.setInterval(() => reload(), REFRESH_MS);
     return () => {
       window.removeEventListener("focus", onFocus);
       window.clearInterval(timer);
@@ -183,8 +198,24 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
           <NotebookTextIcon className="size-3.5 shrink-0 text-muted-foreground" />
         )}
         <VaultMenu
-          label={note ? note.name : vaultPath ? vaultName(vaultPath) : "Vault"}
+          label={note ? note.name : (source?.label ?? "Vault")}
+          onConnectServer={() => setServerDialog(true)}
         />
+        {source && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            onClick={() => reload(true)}
+            disabled={syncing}
+            title={source.kind === "server" ? "Sync with the server" : "Reload"}
+            aria-label="Sync vault"
+          >
+            <RefreshCwIcon
+              className={cn("size-3.5", syncing && "animate-spin")}
+            />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"
@@ -199,12 +230,24 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
 
       <CursorCitation onOpen={open} />
 
-      {!vaultPath ? (
+      {!source ? (
         <div className="space-y-3 p-4 text-center text-muted-foreground text-xs">
           <p>
             {searched ? "No Obsidian vault found." : "Looking for your vault…"}
           </p>
-          {searched && <ChooseFolderButton />}
+          {searched && (
+            <div className="flex flex-col items-center gap-2">
+              <ChooseFolderButton />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setServerDialog(true)}
+              >
+                <ServerIcon className="size-3.5" />
+                Connect to a server…
+              </Button>
+            </div>
+          )}
         </div>
       ) : loading && !index ? (
         <div className="flex items-center gap-2 p-4 text-muted-foreground text-xs">
@@ -214,7 +257,7 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
       ) : error && !index ? (
         <p className="p-4 text-destructive text-xs">{error}</p>
       ) : index && note ? (
-        <NoteView index={index} note={note} onOpen={open} />
+        <NoteView key={note.path} index={index} note={note} onOpen={open} />
       ) : index && current ? (
         <p className="p-4 text-muted-foreground text-xs">
           “{current}” isn't in the vault yet.
@@ -222,19 +265,21 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
       ) : index ? (
         <NoteList index={index} onOpen={open} />
       ) : null}
+
+      <ServerDialog open={serverDialog} onOpenChange={setServerDialog} />
     </div>
   );
 }
 
 function ChooseFolderButton() {
-  const setVaultPath = useVaultStore((s) => s.setVaultPath);
+  const useLocalFolder = useVaultStore((s) => s.useLocalFolder);
   return (
     <Button
       variant="outline"
       size="sm"
       onClick={async () => {
         const selected = await openDialog({ directory: true, multiple: false });
-        if (typeof selected === "string") setVaultPath(selected);
+        if (typeof selected === "string") useLocalFolder(selected);
       }}
     >
       <FolderOpenIcon className="size-3.5" />
@@ -243,10 +288,20 @@ function ChooseFolderButton() {
   );
 }
 
-function VaultMenu({ label }: { label: string }) {
-  const vaultPath = useVaultStore((s) => s.vaultPath);
-  const setVaultPath = useVaultStore((s) => s.setVaultPath);
+function VaultMenu({
+  label,
+  onConnectServer,
+}: {
+  label: string;
+  onConnectServer: () => void;
+}) {
+  const source = useVaultStore((s) => s.source);
+  const server = useVaultStore((s) => s.server);
+  const useLocalFolder = useVaultStore((s) => s.useLocalFolder);
+  const disconnectServer = useVaultStore((s) => s.disconnectServer);
+  const useServer = useVaultStore((s) => s.useServer);
   const [vaults, setVaults] = useState<KnownVault[]>([]);
+  const localRoot = source instanceof LocalVaultSource ? source.root : null;
 
   return (
     <DropdownMenu
@@ -259,37 +314,76 @@ function VaultMenu({ label }: { label: string }) {
           type="button"
           className="flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left font-medium text-sm hover:bg-muted"
         >
+          {source?.kind === "server" && (
+            <ServerIcon className="size-3 shrink-0 text-muted-foreground" />
+          )}
           <span className="truncate">{label}</span>
           <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56">
-        {vaults.map((v) => (
-          <DropdownMenuItem key={v.path} onSelect={() => setVaultPath(v.path)}>
+      <DropdownMenuContent align="start" className="w-60">
+        {server && (
+          <DropdownMenuItem onSelect={() => useServer()}>
             <CheckIcon
-              className={cn("size-3.5", v.path !== vaultPath && "invisible")}
+              className={cn(
+                "size-3.5",
+                source?.kind !== "server" && "invisible",
+              )}
+            />
+            <ServerIcon className="size-3.5" />
+            <span className="truncate">
+              {decodeURIComponent(
+                new URL(server.url).pathname.split("/").filter(Boolean).pop() ??
+                  server.url,
+              )}
+            </span>
+          </DropdownMenuItem>
+        )}
+        {vaults.map((v) => (
+          <DropdownMenuItem
+            key={v.path}
+            onSelect={() => useLocalFolder(v.path)}
+          >
+            <CheckIcon
+              className={cn("size-3.5", v.path !== localRoot && "invisible")}
             />
             <span className="truncate">{v.name}</span>
+            <span className="ml-auto text-muted-foreground text-xs">
+              this Mac
+            </span>
           </DropdownMenuItem>
         ))}
-        {vaults.length > 0 && <DropdownMenuSeparator />}
+        <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={async () => {
             const selected = await openDialog({
               directory: true,
               multiple: false,
             });
-            if (typeof selected === "string") setVaultPath(selected);
+            if (typeof selected === "string") useLocalFolder(selected);
           }}
         >
           <FolderOpenIcon className="size-3.5" />
           Other folder…
         </DropdownMenuItem>
-        {vaultPath && (
+        {server ? (
+          <DropdownMenuItem onSelect={() => disconnectServer()}>
+            <UnplugIcon className="size-3.5" />
+            Disconnect server
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onSelect={onConnectServer}>
+            <ServerIcon className="size-3.5" />
+            Connect to a server…
+          </DropdownMenuItem>
+        )}
+        {source && (
           <DropdownMenuItem
             onSelect={() =>
               shellOpen(
-                `obsidian://open?path=${encodeURIComponent(vaultPath)}`,
+                localRoot
+                  ? `obsidian://open?path=${encodeURIComponent(localRoot)}`
+                  : `obsidian://open?vault=${encodeURIComponent(source.label)}`,
               ).catch(() => toast.error("Couldn't open Obsidian."))
             }
           >
@@ -299,6 +393,93 @@ function VaultMenu({ label }: { label: string }) {
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** Address and login of a WebDAV folder holding the vault. */
+function ServerDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const connectServer = useVaultStore((s) => s.connectServer);
+  const [url, setUrl] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const connect = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await connectServer(url, username, password);
+      setPassword("");
+      onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Vault on a server</DialogTitle>
+        </DialogHeader>
+        <form
+          className="space-y-2.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            connect();
+          }}
+        >
+          <Input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://cloud.example.com/seafdav/Vault/Vault"
+            aria-label="WebDAV address of the vault folder"
+            autoFocus
+          />
+          <Input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Username"
+            aria-label="Username"
+            autoComplete="username"
+          />
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            aria-label="Password"
+            autoComplete="current-password"
+          />
+          {error && <p className="text-destructive text-xs">{error}</p>}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={busy || !url.trim() || !username.trim() || !password}
+            >
+              {busy && <Loader2Icon className="size-3.5 animate-spin" />}
+              Connect
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -334,6 +515,7 @@ function NoteList({
   onOpen: (name: string) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
   const results = useMemo(() => searchNotes(index, query), [index, query]);
   const groups = useMemo(() => {
     if (query.trim()) return [{ kind: null, notes: results }];
@@ -345,8 +527,8 @@ function NoteList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="px-2.5 pt-2.5 pb-1.5">
-        <div className="relative">
+      <div className="flex items-center gap-1 px-2.5 pt-2.5 pb-1.5">
+        <div className="relative min-w-0 flex-1">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
@@ -356,7 +538,29 @@ function NoteList({
             className="h-7 pl-7 text-xs"
           />
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          onClick={() => setCreating((c) => !c)}
+          title="New note"
+          aria-label="New note"
+        >
+          <PlusIcon className="size-3.5" />
+        </Button>
       </div>
+      {creating && (
+        <NewNoteForm
+          index={index}
+          onDone={(name) => {
+            setCreating(false);
+            if (name) {
+              editOnOpen = name;
+              onOpen(name);
+            }
+          }}
+        />
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
         {results.length === 0 && (
           <p className="px-3 py-6 text-center text-muted-foreground text-xs">
@@ -399,6 +603,90 @@ function NoteList({
   );
 }
 
+/** A note just created from the list, to open straight into editing. */
+let editOnOpen: string | null = null;
+
+/** Folders a new note can go in: the vault's, with Ideas first. */
+function noteFolders(index: VaultIndex): string[] {
+  const folders = new Set(index.list.map((n) => n.folder));
+  folders.add("Ideas");
+  return [...folders].sort((a, b) =>
+    a === "Ideas" ? -1 : b === "Ideas" ? 1 : a.localeCompare(b),
+  );
+}
+
+function NewNoteForm({
+  index,
+  onDone,
+}: {
+  index: VaultIndex;
+  onDone: (name: string | null) => void;
+}) {
+  const createNote = useVaultStore((s) => s.createNote);
+  const folders = useMemo(() => noteFolders(index), [index]);
+  const [title, setTitle] = useState("");
+  const [folder, setFolder] = useState(folders[0] ?? "");
+  const [busy, setBusy] = useState(false);
+
+  const create = async () => {
+    setBusy(true);
+    const today = new Date().toISOString().slice(0, 10);
+    const tag =
+      folder === "Ideas" ? "idea" : folder === "Topics" ? "topic" : null;
+    const text = tag
+      ? `---\ntags:\n- ${tag}\ncreated: '${today}'\n---\n\n`
+      : "";
+    try {
+      onDone(await createNote(folder, title, text));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      className="mx-2.5 mb-1.5 space-y-1.5 rounded-md border border-border p-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        create();
+      }}
+    >
+      <Input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => e.key === "Escape" && onDone(null)}
+        placeholder="Title"
+        aria-label="Title of the new note"
+        className="h-7 text-xs"
+        autoFocus
+      />
+      <div className="flex items-center gap-1.5">
+        <select
+          value={folder}
+          onChange={(e) => setFolder(e.target.value)}
+          aria-label="Folder"
+          className="h-7 min-w-0 flex-1 rounded-md border border-input bg-background px-1.5 text-xs"
+        >
+          {folders.map((f) => (
+            <option key={f} value={f}>
+              {f || "Vault root"}
+            </option>
+          ))}
+        </select>
+        <Button
+          type="submit"
+          size="sm"
+          className="h-7 px-2.5 text-xs"
+          disabled={busy || !title.trim()}
+        >
+          Create
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function NoteView({
   index,
   note,
@@ -413,6 +701,39 @@ function NoteView({
     // Paper notes open with their title, already shown above.
     return note.kind === "paper" ? md.replace(/^# .*\n+/, "") : md;
   }, [note.body, note.kind]);
+  const [editing, setEditing] = useState<string | null>(null);
+
+  const startEditing = async () => {
+    const source = useVaultStore.getState().source;
+    if (!source) return;
+    try {
+      const { text, version } = await source.readNote(note.path);
+      useVaultStore.setState((s) => ({
+        versions: new Map(s.versions).set(note.path, version),
+      }));
+      setEditing(text);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  useEffect(() => {
+    if (editOnOpen === note.name) {
+      editOnOpen = null;
+      startEditing();
+    }
+  });
+
+  if (editing !== null) {
+    return (
+      <NoteEditor
+        note={note}
+        initial={editing}
+        onDone={() => setEditing(null)}
+      />
+    );
+  }
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="space-y-1 px-3 pt-3">
@@ -432,6 +753,16 @@ function NoteView({
             </span>
           )}
           <span className="flex-1" />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-2 text-xs"
+            onClick={startEditing}
+            title="Edit this note"
+          >
+            <PencilIcon className="size-3" />
+            Edit
+          </Button>
           {note.kind === "paper" && <CiteButton note={note} />}
         </div>
       </div>
@@ -441,6 +772,101 @@ function NoteView({
       <div className="border-border border-t px-3 py-3">
         <NoteMarkdown markdown={markdown} onOpen={onOpen} />
       </div>
+    </div>
+  );
+}
+
+function NoteEditor({
+  note,
+  initial,
+  onDone,
+}: {
+  note: VaultNote;
+  initial: string;
+  onDone: () => void;
+}) {
+  const saveNote = useVaultStore((s) => s.saveNote);
+  const [text, setText] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const [conflict, setConflict] = useState(false);
+  const generated = initial.includes("%% begin zotero %%");
+
+  const save = async (force = false) => {
+    if (saving) return;
+    if (text === initial && !force) {
+      onDone();
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveNote(note.path, text, force);
+      onDone();
+    } catch (err) {
+      if (err instanceof WebdavConflictError) setConflict(true);
+      else toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancel = () => {
+    if (text === initial || window.confirm("Discard your changes?")) onDone();
+  };
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 items-center gap-1.5 border-border border-b px-3 py-1.5">
+        <span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
+          {generated ? "The Zotero part is rewritten by the sync" : "Editing"}
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-xs"
+          onClick={cancel}
+        >
+          Cancel
+        </Button>
+        <Button
+          size="sm"
+          className="h-6 px-2 text-xs"
+          onClick={() => save()}
+          disabled={saving}
+          title="Save (⌘S)"
+        >
+          {saving && <Loader2Icon className="size-3 animate-spin" />}
+          Save
+        </Button>
+      </div>
+      {conflict && (
+        <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-border border-b bg-amber-500/10 px-3 py-1.5 text-xs">
+          <span className="min-w-0 flex-1">
+            Changed elsewhere since you opened it.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() => save(true)}
+          >
+            Keep mine
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={onDone}
+          >
+            Use theirs
+          </Button>
+        </div>
+      )}
+      <MarkdownNoteEditor
+        initial={initial}
+        onChange={setText}
+        onSave={() => save()}
+        onCancel={cancel}
+      />
     </div>
   );
 }
@@ -715,30 +1141,30 @@ function LocalGraph({
 }
 
 function VaultImage({ name }: { name: string }) {
-  const vaultPath = useVaultStore((s) => s.vaultPath);
+  const source = useVaultStore((s) => s.source);
   const relPath = useVaultStore((s) => s.attachments.get(name.toLowerCase()));
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!vaultPath || !relPath) return;
+    if (!source || !relPath) return;
     let objectUrl: string | null = null;
     let cancelled = false;
     (async () => {
-      const bytes = await readFile(
-        await join(vaultPath, ...relPath.split("/")),
-      );
+      const bytes = await source.readAttachment(relPath);
       if (cancelled) return;
       const type = name.toLowerCase().endsWith(".svg")
         ? "image/svg+xml"
         : undefined;
-      objectUrl = URL.createObjectURL(new Blob([bytes], { type }));
+      objectUrl = URL.createObjectURL(
+        new Blob([bytes as Uint8Array<ArrayBuffer>], { type }),
+      );
       setUrl(objectUrl);
     })().catch(() => setUrl(null));
     return () => {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [vaultPath, relPath, name]);
+  }, [source, relPath, name]);
 
   if (!url) return null;
   return <img src={url} alt={name} className="my-1 max-w-full rounded" />;

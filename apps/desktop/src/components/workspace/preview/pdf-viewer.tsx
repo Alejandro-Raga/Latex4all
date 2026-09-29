@@ -8,7 +8,7 @@ import {
   useLayoutEffect,
   useState,
 } from "react";
-import { LoaderIcon, MoonIcon, SunIcon } from "lucide-react";
+import { CheckIcon, LoaderIcon, MoonIcon, SunIcon } from "lucide-react";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { ask } from "@tauri-apps/plugin-dialog";
 import {
@@ -21,6 +21,14 @@ import { createLogger } from "@/lib/debug/logger";
 import { APP_VISIBILITY_RESTORED } from "@/lib/debug/log-store";
 import type { PageSize } from "@/lib/mupdf/types";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { PDF_THEMES, type PdfTheme, pdfTheme } from "@/lib/pdf-themes";
+import { pdfSelectionText } from "@/lib/mupdf/selection-text";
 
 const log = createLogger("pdf-viewer");
 
@@ -224,10 +232,10 @@ interface PdfViewerProps {
   onNotesChange?: (marks: PdfMark[]) => void;
   /** The pointer is over a highlight or note (null: over none). */
   onNoteHover?: (id: string | null, clientX: number, clientY: number) => void;
-  /** Controlled — each call site owns (and can persist) its own dark-mode state,
-   * so toggling it in one viewer never affects another. */
-  darkMode: boolean;
-  onToggleDarkMode: () => void;
+  /** Controlled — each call site owns (and can persist) its own look, so
+   * changing it in one viewer never affects another. */
+  theme: PdfTheme;
+  onThemeChange: (theme: PdfTheme) => void;
   onError?: (error: string) => void;
   onLoadSuccess?: (numPages: number) => void;
   onScaleChange?: (scale: number) => void;
@@ -252,8 +260,8 @@ export function PdfViewer({
   notesProjectRoot,
   onNotesChange,
   onNoteHover,
-  darkMode,
-  onToggleDarkMode,
+  theme,
+  onThemeChange,
   onError,
   onLoadSuccess,
   onScaleChange,
@@ -273,6 +281,7 @@ export function PdfViewer({
 
   const [pageSizes, setPageSizes] = useState<PageSize[]>([]);
   const [visiblePages, setVisiblePages] = useState<Set<number>>(new Set());
+  const look = pdfTheme(theme);
   const [loading, setLoading] = useState(true);
   const docIdRef = useRef(0);
   /** docIdRef as state, so placing highlights follows a newly opened PDF. */
@@ -756,7 +765,9 @@ export function PdfViewer({
         selectionTimer = null;
 
         const sel = window.getSelection();
-        const text = sel?.toString().trim();
+        const text =
+          (containerRef.current && pdfSelectionText(containerRef.current)) ||
+          sel?.toString().trim();
         if (!text || text.length < 2) {
           cb(null);
           return;
@@ -1267,7 +1278,14 @@ export function PdfViewer({
         style={{
           cursor: captureMode ? "crosshair" : undefined,
           touchAction: captureMode ? "none" : "pan-x pan-y",
-          filter: darkMode ? "invert(1) hue-rotate(180deg)" : undefined,
+          filter: look.filter,
+        }}
+        onCopy={(e) => {
+          // Copy what's selected as readable text, not run-together lines.
+          const text = pdfSelectionText(e.currentTarget);
+          if (!text) return;
+          e.clipboardData.setData("text/plain", text);
+          e.preventDefault();
         }}
         onMouseDownCapture={() => containerRef.current?.focus()}
         onMouseDown={handleCaptureMouseDown}
@@ -1296,7 +1314,7 @@ export function PdfViewer({
               isVisible={visiblePages.has(i + 1)}
               annotations={annotationsByPage.get(i)}
               notes={marksByPage.get(i)}
-              invertNotes={darkMode}
+              overlayFilter={look.overlayFilter}
             />
           ))}
         </div>
@@ -1307,20 +1325,38 @@ export function PdfViewer({
           />
         )}
       </div>
-      <Button
-        variant="secondary"
-        size="icon"
-        className="absolute right-3 bottom-3 z-10 size-8 rounded-full shadow-md"
-        onClick={onToggleDarkMode}
-        title={darkMode ? "Switch to light PDF" : "Switch to dark PDF"}
-        aria-label="Toggle PDF dark mode"
-      >
-        {darkMode ? (
-          <SunIcon className="size-4" />
-        ) : (
-          <MoonIcon className="size-4" />
-        )}
-      </Button>
+      {/* Bottom left: the bottom right corner is the chat button's. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="secondary"
+            size="icon"
+            className="absolute bottom-3 left-3 z-10 size-8 rounded-full shadow-md"
+            title="Page colors"
+            aria-label="Page colors"
+          >
+            {look.dark ? (
+              <MoonIcon className="size-4" />
+            ) : (
+              <SunIcon className="size-4" />
+            )}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top" align="start" className="w-40">
+          {PDF_THEMES.map((t) => (
+            <DropdownMenuItem key={t.id} onSelect={() => onThemeChange(t.id)}>
+              <span
+                className="flex size-5 shrink-0 items-center justify-center rounded border border-border font-serif text-[10px]"
+                style={{ backgroundColor: t.paper, color: t.ink }}
+              >
+                Aa
+              </span>
+              <span className="flex-1">{t.label}</span>
+              {t.id === look.id && <CheckIcon className="size-3.5" />}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

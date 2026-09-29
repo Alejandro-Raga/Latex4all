@@ -2207,8 +2207,8 @@ function InlinePdfContent({
   const [error, setError] = useState<string | null>(null);
   const [fitted, setFitted] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const pdfDarkMode = useSettingsStore((s) => s.pdfDarkModeInline);
-  const setPdfDarkMode = useSettingsStore((s) => s.setPdfDarkModeInline);
+  const pdfTheme = useSettingsStore((s) => s.pdfThemeInline);
+  const setPdfTheme = useSettingsStore((s) => s.setPdfThemeInline);
 
   useEffect(() => {
     let cancelled = false;
@@ -2252,8 +2252,8 @@ function InlinePdfContent({
           scale={imageScale}
           onScaleChange={onImageScaleChange}
           onFirstPageSize={handleFirstPageSize}
-          darkMode={pdfDarkMode}
-          onToggleDarkMode={() => setPdfDarkMode(!pdfDarkMode)}
+          theme={pdfTheme}
+          onThemeChange={setPdfTheme}
         />
       </div>
     );

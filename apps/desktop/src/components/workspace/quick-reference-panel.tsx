@@ -1227,8 +1227,8 @@ function FilePreview({
   preview: Preview | null;
 }) {
   const [scale, setScale] = useState(1);
-  const pdfDarkMode = useSettingsStore((s) => s.pdfDarkModeReference);
-  const setPdfDarkMode = useSettingsStore((s) => s.setPdfDarkModeReference);
+  const pdfTheme = useSettingsStore((s) => s.pdfThemeReference);
+  const setPdfTheme = useSettingsStore((s) => s.setPdfThemeReference);
 
   useEffect(() => {
     if (selectedFile) {
@@ -1369,8 +1369,8 @@ function FilePreview({
         rootFileId={selectedFile.id}
         onScaleChange={handleScaleChange}
         annotations={preview.annotations}
-        darkMode={pdfDarkMode}
-        onToggleDarkMode={() => setPdfDarkMode(!pdfDarkMode)}
+        theme={pdfTheme}
+        onThemeChange={setPdfTheme}
       />
     </div>
   );

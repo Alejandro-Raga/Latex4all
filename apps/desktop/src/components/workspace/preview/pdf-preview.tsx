@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   FileTextIcon,
+  CopyIcon,
   SpellCheckIcon,
   AlertCircleIcon,
   LoaderIcon,
@@ -103,8 +104,8 @@ const ZOOM_OPTIONS = [
 export function PdfPreview() {
   const compilerBackend = useSettingsStore((s) => s.compilerBackend);
   const setCompilerBackend = useSettingsStore((s) => s.setCompilerBackend);
-  const pdfDarkMode = useSettingsStore((s) => s.pdfDarkModeMain);
-  const setPdfDarkMode = useSettingsStore((s) => s.setPdfDarkModeMain);
+  const pdfTheme = useSettingsStore((s) => s.pdfThemeMain);
+  const setPdfTheme = useSettingsStore((s) => s.setPdfThemeMain);
   const pdfRevision = useDocumentStore((s) => s.pdfRevision);
   const compileError = useDocumentStore((s) => s.compileError);
   const isCompiling = useDocumentStore((s) => s.isCompiling);
@@ -392,6 +393,12 @@ export function PdfPreview() {
   const pdfToolbarActions: ToolbarAction[] = useMemo(
     () => [
       {
+        id: "copy",
+        label: "Copy",
+        icon: <CopyIcon className="size-4" />,
+        hint: "⌘C",
+      },
+      {
         id: "proofread",
         label: "Proofread",
         icon: <SpellCheckIcon className="size-4" />,
@@ -413,7 +420,12 @@ export function PdfPreview() {
       const sel = pdfSelection;
       setPdfSelection(null);
       window.getSelection()?.removeAllRanges();
-      if (actionId === "proofread") {
+      if (actionId === "copy") {
+        navigator.clipboard
+          .writeText(sel.text)
+          .then(() => toast.success("Copied"))
+          .catch(() => toast.error("Couldn't copy"));
+      } else if (actionId === "proofread") {
         useClaudeChatStore
           .getState()
           .sendPrompt("Proofread and fix any errors in this text", {
@@ -838,8 +850,8 @@ export function PdfPreview() {
                   scale={scale}
                   rootFileId={rootId}
                   isActive={isActive}
-                  darkMode={pdfDarkMode}
-                  onToggleDarkMode={() => setPdfDarkMode(!pdfDarkMode)}
+                  theme={pdfTheme}
+                  onThemeChange={setPdfTheme}
                   onError={isActive ? setPdfError : undefined}
                   onLoadSuccess={isActive ? handleLoadSuccess : undefined}
                   onScaleChange={isActive ? handleScaleChange : undefined}

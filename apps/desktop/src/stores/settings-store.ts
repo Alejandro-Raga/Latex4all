@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { isPdfTheme, type PdfTheme } from "@/lib/pdf-themes";
 
 type CompilerBackend = "tectonic" | "texlive";
 
@@ -57,13 +58,13 @@ interface SettingsState {
   ignoredWords: string[];
   addIgnoredWord: (word: string) => void;
   removeIgnoredWord: (word: string) => void;
-  /** Kept independent per viewer — toggling dark mode in one shouldn't affect the others. */
-  pdfDarkModeMain: boolean;
-  setPdfDarkModeMain: (enabled: boolean) => void;
-  pdfDarkModeReference: boolean;
-  setPdfDarkModeReference: (enabled: boolean) => void;
-  pdfDarkModeInline: boolean;
-  setPdfDarkModeInline: (enabled: boolean) => void;
+  /** Kept independent per viewer — changing the look of one shouldn't affect the others. */
+  pdfThemeMain: PdfTheme;
+  setPdfThemeMain: (theme: PdfTheme) => void;
+  pdfThemeReference: PdfTheme;
+  setPdfThemeReference: (theme: PdfTheme) => void;
+  pdfThemeInline: PdfTheme;
+  setPdfThemeInline: (theme: PdfTheme) => void;
   /** null until the first-run picker has been answered. */
   updateChannel: UpdateChannel | null;
   setUpdateChannel: (channel: UpdateChannel) => void;
@@ -107,13 +108,12 @@ export const useSettingsStore = create<SettingsState>()(
             (w) => w !== word.toLowerCase(),
           ),
         })),
-      pdfDarkModeMain: false,
-      setPdfDarkModeMain: (enabled) => set({ pdfDarkModeMain: enabled }),
-      pdfDarkModeReference: false,
-      setPdfDarkModeReference: (enabled) =>
-        set({ pdfDarkModeReference: enabled }),
-      pdfDarkModeInline: false,
-      setPdfDarkModeInline: (enabled) => set({ pdfDarkModeInline: enabled }),
+      pdfThemeMain: "light",
+      setPdfThemeMain: (theme) => set({ pdfThemeMain: theme }),
+      pdfThemeReference: "light",
+      setPdfThemeReference: (theme) => set({ pdfThemeReference: theme }),
+      pdfThemeInline: "light",
+      setPdfThemeInline: (theme) => set({ pdfThemeInline: theme }),
       updateChannel: null,
       setUpdateChannel: (channel) => set({ updateChannel: channel }),
       autoCheckForUpdates: true,
@@ -125,10 +125,21 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: "latex4all-settings",
       merge: (persisted, current) => {
-        const merged = { ...current, ...(persisted as object) };
+        const saved = (persisted ?? {}) as Record<string, unknown>;
+        const merged = { ...current, ...saved };
+        // Before themes there was only a dark-mode switch per viewer.
+        const theme = (key: string, legacy: string): PdfTheme =>
+          isPdfTheme(saved[key])
+            ? saved[key]
+            : saved[legacy]
+              ? "dark"
+              : "light";
         return {
           ...merged,
           checkLanguage: supportedCheckLanguage(merged.checkLanguage),
+          pdfThemeMain: theme("pdfThemeMain", "pdfDarkModeMain"),
+          pdfThemeReference: theme("pdfThemeReference", "pdfDarkModeReference"),
+          pdfThemeInline: theme("pdfThemeInline", "pdfDarkModeInline"),
         };
       },
     },

@@ -17,6 +17,7 @@ mod spellcheck;
 mod synctex;
 mod updater;
 mod uv;
+mod vault_webdav;
 mod wordnet;
 mod zotero;
 
@@ -673,6 +674,10 @@ pub fn run() {
             zotero::zotero_complete_oauth,
             zotero::zotero_cancel_oauth,
             zotero::zotero_download_attachment,
+            vault_webdav::vault_webdav_connect,
+            vault_webdav::vault_webdav_status,
+            vault_webdav::vault_webdav_disconnect,
+            vault_webdav::vault_webdav_request,
             collab::collab_create,
             collab::collab_parse_link,
             collab::collab_read_link,

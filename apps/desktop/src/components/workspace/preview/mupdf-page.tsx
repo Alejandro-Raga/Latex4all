@@ -19,8 +19,8 @@ interface MupdfPageProps {
   annotations?: PdfAnnotationRect[];
   /** The project's highlights and notes on this page. */
   notes?: PdfMark[];
-  /** Keep their true colors while the PDF is shown inverted (dark mode). */
-  invertNotes?: boolean;
+  /** Filter that keeps the notes' true colors under a dark PDF theme. */
+  overlayFilter?: string;
 }
 
 /** Check if a canvas appears blank (GPU context was silently invalidated).
@@ -49,7 +49,7 @@ export const MupdfPage = memo(function MupdfPage({
   isVisible,
   annotations,
   notes,
-  invertNotes,
+  overlayFilter,
 }: MupdfPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [textData, setTextData] = useState<StructuredTextData | null>(null);
@@ -185,6 +185,7 @@ export const MupdfPage = memo(function MupdfPage({
               block.lines.map((line, li) => (
                 <text
                   key={`${bi}-${li}`}
+                  data-block={`${pageIndex}:${bi}`}
                   x={line.bbox.x}
                   y={line.y}
                   fontSize={line.font.size}
@@ -279,9 +280,7 @@ export const MupdfPage = memo(function MupdfPage({
       {notes && notes.length > 0 && (
         <div
           className="pdf-notes-layer"
-          style={
-            invertNotes ? { filter: "invert(1) hue-rotate(180deg)" } : undefined
-          }
+          style={overlayFilter ? { filter: overlayFilter } : undefined}
         >
           {notes.map((mark) =>
             mark.rects.map((rect, i) => (
