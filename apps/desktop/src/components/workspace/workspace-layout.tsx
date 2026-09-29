@@ -16,6 +16,7 @@ import { LatexEditor } from "./editor/latex-editor";
 import { PdfPreview } from "./preview/pdf-preview";
 import { QuickReferencePanel } from "./quick-reference-panel";
 import { NotesPanel } from "./notes-panel";
+import { VaultPanel } from "./vault-panel";
 import { ChatPanel } from "./chat-panel";
 import { useChatStore } from "@/stores/chat-store";
 import { useAnnotationsStore } from "@/stores/annotations-store";
@@ -47,6 +48,7 @@ export function WorkspaceLayout() {
   );
   const [codeVisible, setCodeVisible] = useState(true);
   const [quickRefOpen, setQuickRefOpen] = useState(false);
+  const [vaultOpen, setVaultOpen] = useState(false);
   const notesOpen = useAnnotationsStore((s) => s.panelOpen);
   const setNotesOpen = useAnnotationsStore((s) => s.setPanelOpen);
   const panelTab = useAnnotationsStore((s) => s.panelTab);
@@ -216,10 +218,12 @@ export function WorkspaceLayout() {
               pdfVisible: previewVisible,
               sidebarVisible: !sidebarCollapsed,
               referenceVisible: quickRefOpen,
+              vaultVisible: vaultOpen,
               setCodeVisible: setCodePaneVisible,
               setPdfVisible: setPdfPaneVisible,
               setSidebarVisible: (visible) => setSidebarPaneCollapsed(!visible),
               setReferenceVisible: setQuickRefOpen,
+              setVaultVisible: setVaultOpen,
             }}
           />
         </Panel>
@@ -257,6 +261,16 @@ export function WorkspaceLayout() {
         {quickRefOpen && (
           <Panel defaultSize={24} minSize={16} maxSize={45} className="min-w-0">
             <QuickReferencePanel onClose={() => setQuickRefOpen(false)} />
+          </Panel>
+        )}
+
+        {vaultOpen && (
+          <PanelResizeHandle className="w-px bg-border transition-colors hover:bg-ring" />
+        )}
+
+        {vaultOpen && (
+          <Panel defaultSize={22} minSize={15} maxSize={40} className="min-w-0">
+            <VaultPanel onClose={() => setVaultOpen(false)} />
           </Panel>
         )}
 

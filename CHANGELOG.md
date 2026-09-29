@@ -23,6 +23,13 @@ tag.
 
 ### Added
 
+- Your Obsidian vault next to your writing. Turn on Vault in the layout menu
+  to search and read your notes without leaving the editor, see what each one
+  links to and what links back, and follow the links on a small map of
+  connected notes. The vault Obsidian last had open is found on its own. A
+  paper's note has a Cite button that adds it to the bibliography and inserts
+  the citation, and when the cursor is on a citation, the paper's note is a
+  click away.
 - Shared projects. Click Share in the editor to get an invite link, and
   anyone who opens it with Join — picking where to save their copy — works on
   the same project: text, figures and files stay in sync, with everyone's

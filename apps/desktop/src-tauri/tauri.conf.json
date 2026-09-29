@@ -64,7 +64,7 @@
       "requireLiteralLeadingDot": false
     },
     "shell": {
-      "open": "((mailto:\\w+)|(tel:\\w+)|(https?://\\w+)|(dict://)).+"
+      "open": "((mailto:\\w+)|(tel:\\w+)|(https?://\\w+)|(dict://)|(zotero://)|(obsidian://)).+"
     },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNCNkY2Mzg2REQ4MDQyMjcKUldRblFvRGRobU52TzZWQSs3L09HNXoyUFUyOFVKaVpWRUx6WGNqeEF2ME1RZG9YWW0wK1hRTVAK",

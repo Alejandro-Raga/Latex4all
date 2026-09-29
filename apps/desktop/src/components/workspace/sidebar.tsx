@@ -35,6 +35,7 @@ import {
   FlaskConicalIcon,
   TerminalIcon,
   LibraryIcon,
+  NotebookTextIcon,
   type LucideIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
@@ -403,6 +404,12 @@ function LayoutPaneSwitcher({
             checked={controls.referenceVisible}
             onCheckedChange={controls.setReferenceVisible}
           />
+          <LayoutToggleRow
+            icon={NotebookTextIcon}
+            label="Vault"
+            checked={controls.vaultVisible}
+            onCheckedChange={controls.setVaultVisible}
+          />
         </div>
       </PopoverContent>
     </Popover>
@@ -463,10 +470,12 @@ interface LayoutControls {
   pdfVisible: boolean;
   sidebarVisible: boolean;
   referenceVisible: boolean;
+  vaultVisible: boolean;
   setCodeVisible: (visible: boolean) => void;
   setPdfVisible: (visible: boolean) => void;
   setSidebarVisible: (visible: boolean) => void;
   setReferenceVisible: (visible: boolean) => void;
+  setVaultVisible: (visible: boolean) => void;
 }
 
 export function Sidebar({
