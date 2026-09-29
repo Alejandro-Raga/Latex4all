@@ -73,7 +73,8 @@ tag.
   one you choose): the papers it cites, linked to their notes so your work
   sits in the graph beside the literature, its outline, and your highlights
   and notes with the text they're on. It updates itself as you write; what
-  you add to the note yourself is kept.
+  you add to the note yourself is kept. Its links open Latex4All straight to
+  the project, and each note's place (main.tex:42) to that line.
 - Color themes for the whole app: the classics (Light, Paper, Sky, Dark,
   Dim, Nord), colorful ones (Solarized light and dark, Rosé, Mint,
   Dracula) and retro ones (Seventies, Gruvbox, Synthwave, green Phosphor and

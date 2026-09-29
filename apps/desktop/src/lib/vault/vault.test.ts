@@ -236,3 +236,30 @@ describe("paper detection across Zotero setups", () => {
     ]);
   });
 });
+
+describe("latex4all:// links", () => {
+  it("round-trips a project, file and line", async () => {
+    const { latex4allLink, parseLatex4AllLink, offsetOfLine } = await import(
+      "../deep-link"
+    );
+    const url = latex4allLink({
+      project: "/Users/me/My Paper",
+      file: "chapters/intro.tex",
+      line: 42,
+    });
+    expect(url).toBe(
+      "latex4all://open?project=%2FUsers%2Fme%2FMy+Paper&file=chapters%2Fintro.tex&line=42",
+    );
+    expect(parseLatex4AllLink(url)).toEqual({
+      project: "/Users/me/My Paper",
+      file: "chapters/intro.tex",
+      line: 42,
+    });
+    expect(parseLatex4AllLink("latex4all://open/?project=%2Fp")).toEqual({
+      project: "/p",
+    });
+    expect(parseLatex4AllLink("https://example.com")).toBeNull();
+    expect(offsetOfLine("a\nbb\nccc", 3)).toBe(5);
+    expect(offsetOfLine("a\nbb", 9)).toBe(4);
+  });
+});

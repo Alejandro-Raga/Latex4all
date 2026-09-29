@@ -5,6 +5,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { ErrorBoundary } from "react-error-boundary";
 import { Toaster } from "@/components/ui/sonner";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { useDeepLinks } from "@/hooks/use-deep-links";
 
 import { useDocumentStore } from "@/stores/document-store";
 import { followOpenProject } from "@/stores/collab-store";
@@ -195,6 +196,7 @@ export function App({ onReady }: { onReady?: () => void }) {
 
   // Register global keyboard shortcuts (Cmd+S, Cmd+N) at the app level
   useKeyboardShortcuts();
+  useDeepLinks();
 
   // Shared projects connect as they open.
   useEffect(() => followOpenProject(), []);

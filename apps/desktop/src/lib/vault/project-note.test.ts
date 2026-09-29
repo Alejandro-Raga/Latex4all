@@ -98,8 +98,11 @@ describe("project notes", () => {
   it("quotes open highlights with their place and notes, not suggestions", () => {
     const body = projectNoteBody(input);
     expect(body).toContain(
-      "> Firms underinvest in basic research\n> — main.tex:4 #hl/yellow",
+      "> Firms underinvest in basic research\n> — [main.tex:4](latex4all://open?project=%2FUsers%2Fme%2FLatex4All%2FScience+Policy+Paper&file=main.tex&line=4) #hl/yellow",
     );
+    expect(
+      body.startsWith("[Open in Latex4All](latex4all://open?project="),
+    ).toBe(true);
     expect(body).toContain(
       "**Alejandro** (2026-09-27): Needs a stronger source.",
     );
@@ -112,7 +115,8 @@ describe("project notes", () => {
     expect(created).toContain(
       "type: article\nproject: /Users/me/Latex4All/Science Policy Paper\nlatex4all_updated: 2026-09-29\ntags:\n- project",
     );
-    expect(created).toContain(`${BEGIN}\n## Cites`);
+    expect(created).toContain(`${BEGIN}\n[Open in Latex4All](`);
+    expect(created).toContain("## Cites");
     expect(created).toContain(`${END}\n\n## My notes`);
 
     const edited = (created as string)

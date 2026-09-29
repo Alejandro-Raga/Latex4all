@@ -148,6 +148,7 @@
         { "path": "$TEMP/**" }
       ]
     },
+    "deep-link:default",
     "shell:default",
     "shell:allow-open",
     "shell:allow-spawn",

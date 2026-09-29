@@ -1,4 +1,5 @@
 import type { Annotation } from "@/lib/annotations/types";
+import { latex4allLink } from "@/lib/deep-link";
 import { noteForCitekey } from "./cite-link";
 import type { VaultIndex } from "./vault-index";
 
@@ -98,7 +99,10 @@ function quote(text: string): string {
 
 /** The generated part of the note (between the markers). */
 export function projectNoteBody(input: ProjectNoteInput): string {
-  const out: string[] = [];
+  const out: string[] = [
+    `[Open in Latex4All](${latex4allLink({ project: input.root })})`,
+    "",
+  ];
 
   const keys = citedKeys(input.texFiles);
   if (keys.length > 0) {
@@ -139,7 +143,9 @@ export function projectNoteBody(input: ProjectNoteInput): string {
     );
     for (const { path, annotation: a } of open) {
       const text = contents.get(path);
-      const where = text ? `${path}:${lineAt(text, a.from)}` : path;
+      const line = text ? lineAt(text, a.from) : undefined;
+      const place = line ? `${path}:${line}` : path;
+      const where = `[${place}](${latex4allLink({ project: input.root, file: path, line })})`;
       const tag = a.color && a.color !== "none" ? ` #hl/${a.color}` : "";
       const excerpt = text ? quote(text.slice(a.from, a.to)) : "";
       if (excerpt) out.push(`> ${excerpt}`, `> — ${where}${tag}`);
@@ -160,7 +166,7 @@ export function projectNoteBody(input: ProjectNoteInput): string {
     }
   }
 
-  if (out.length === 0) out.push("*Nothing cited or noted yet.*", "");
+  if (out.length === 2) out.push("*Nothing cited or noted yet.*", "");
   return `${out.join("\n").trim()}\n`;
 }
 
