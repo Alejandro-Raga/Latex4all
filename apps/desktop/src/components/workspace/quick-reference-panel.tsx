@@ -1357,6 +1357,10 @@ function FilePreview({
                     : selectedFile.label,
                 data: preview.data,
                 annotations: preview.annotations,
+                filePath:
+                  selectedFile.source === "fs"
+                    ? selectedFile.absolutePath
+                    : undefined,
                 zotero:
                   selectedFile.source === "zotero" && preview.attachmentKey
                     ? {

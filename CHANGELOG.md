@@ -118,6 +118,9 @@ tag.
   of each opening a column of its own, so the editor and PDF keep their width.
   Fold any of them to its header, resize the split, or open and close them
   from the icons along the right edge.
+- Each project remembers its workspace: the papers open in the PDF pane and
+  the side panels you had open come back when you reopen it, and one
+  project's tabs no longer follow you into another.
 - If a panel runs into a problem, only that panel stops, with a button to
   reload it and one to copy the details for a bug report; the rest of the
   window keeps working.

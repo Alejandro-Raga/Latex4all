@@ -6,7 +6,7 @@ import {
   renameCiteKey,
 } from "./citations";
 
-const BIB = String.raw`@article{nelson_simple_1959,
+const BIB = `@article{nelson_simple_1959,
   title = {The Simple Economics of Basic Scientific Research},
   year = {1959}
 }

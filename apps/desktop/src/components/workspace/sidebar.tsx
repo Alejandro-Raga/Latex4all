@@ -2100,6 +2100,7 @@ function FileTreeNode({
                     id: file.absolutePath,
                     label: file.name,
                     data: new Uint8Array(data),
+                    filePath: file.absolutePath,
                   });
                 } catch (err) {
                   toast.error(`Couldn't open ${file.name}: ${String(err)}`);

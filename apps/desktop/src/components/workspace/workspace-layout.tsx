@@ -18,6 +18,7 @@ import { DockRail, RightDock } from "./dock/right-dock";
 import { SettingsWindow } from "@/components/settings/settings-view";
 import { ProjectNoteSync } from "./project-note-sync";
 import { CitationCheckDialog } from "./citation-check";
+import { WorkspaceMemory } from "./workspace-memory";
 import {
   useDockedPanels,
   useDockStore,
@@ -275,6 +276,7 @@ export function WorkspaceLayout() {
       <SettingsWindow />
       <ProjectNoteSync />
       <CitationCheckDialog />
+      <WorkspaceMemory />
     </div>
   );
 }
