@@ -30,8 +30,10 @@ Test-channel builds use the `## [Unreleased]
 - Highlights and notes. Select text to highlight it or add a note (⌘⇧H,
   ⌘⌥M); hover a highlight to read the note, reply, resolve it or change its
   color. The notes bar lists every note in the project and jumps to it.
-  Highlights and notes also show on the compiled PDF, and exporting the PDF
-  can include them as annotations any PDF reader shows.
+  Highlights and notes also show on the compiled PDF, and you can make them
+  there too: select text in the PDF and pick a color or "Add note", and it
+  lands on the LaTeX it came from. Exporting the PDF can include them as
+  annotations any PDF reader shows.
 - Suggested edits. Select text and choose "Suggest edit" (⌘⌥E) to propose
   what it should say. Anyone can accept or reject it, from the text or the
   notes bar, and reply to it like a note; settled suggestions stay in the

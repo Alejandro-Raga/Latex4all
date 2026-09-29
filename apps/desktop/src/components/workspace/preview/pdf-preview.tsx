@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   FileTextIcon,
   CopyIcon,
+  MessageSquarePlusIcon,
   SpellCheckIcon,
   AlertCircleIcon,
   LoaderIcon,
@@ -67,7 +68,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { AnnotationCard } from "@/components/workspace/editor/annotation-card";
+import {
+  AnnotationCard,
+  NoteInput,
+} from "@/components/workspace/editor/annotation-card";
+import { findPdfTextInSource } from "@/lib/annotations/pdf-to-source";
+import {
+  type AnnotationColor,
+  DEFAULT_ANNOTATION_COLOR,
+} from "@/lib/annotations/types";
 import { annotationActions } from "@/lib/annotations/actions";
 import { HoverIntent } from "@/lib/annotations/hover-intent";
 import type { PdfMark } from "@/lib/annotations/pdf-placement";
@@ -319,6 +328,73 @@ export function PdfPreview() {
     };
   }, [pdfSelection, projectRoot]);
 
+  /**
+   * Where the selected PDF text is in the LaTeX source: the file SyncTeX
+   * points at, then the words matched within it near that line.
+   */
+  const selectionInSource = useCallback(async () => {
+    if (!pdfSelection || !projectRoot) return null;
+    const where =
+      resolvedSource ??
+      (await synctexEdit(
+        projectRoot,
+        pdfSelection.pageNumber,
+        pdfSelection.pdfX,
+        pdfSelection.pdfY,
+      ).catch(() => null));
+    const normalize = (p: string) => p.replace(/\\/g, "/").replace(/^\.\//, "");
+    const candidates = where
+      ? files.filter((f) => normalize(f.relativePath) === normalize(where.file))
+      : files.filter((f) => f.type === "tex");
+    for (const file of candidates) {
+      const range = findPdfTextInSource(
+        file.content ?? "",
+        pdfSelection.text,
+        where?.line,
+      );
+      if (range) return { path: file.relativePath, ...range };
+    }
+    toast.error("Couldn't find that text in the source.");
+    return null;
+  }, [pdfSelection, projectRoot, resolvedSource, files]);
+
+  const highlightPdfSelection = useCallback(
+    async (color: AnnotationColor) => {
+      const source = useAnnotationsStore.getState().source;
+      const range = await selectionInSource();
+      if (!source || !range) return;
+      const settings = useSettingsStore.getState();
+      if (!settings.showAnnotations) settings.setShowAnnotations(true);
+      const existing = source
+        .rangesFor(range.path)
+        .find((a) => a.from === range.from && a.to === range.to);
+      if (existing) source.setColor(existing.id, color);
+      else source.add(range.path, range.from, range.to, color);
+      setPdfSelection(null);
+      window.getSelection()?.removeAllRanges();
+    },
+    [selectionInSource],
+  );
+
+  const [pdfNote, setPdfNote] = useState<{
+    path: string;
+    from: number;
+    to: number;
+    anchor: { x: number; y: number };
+  } | null>(null);
+
+  const composePdfNote = useCallback(async () => {
+    if (!pdfSelection) return;
+    const anchor = {
+      x: pdfSelection.position.left,
+      y: pdfSelection.position.top,
+    };
+    const range = await selectionInSource();
+    if (!range) return;
+    setPdfSelection(null);
+    setPdfNote({ ...range, anchor });
+  }, [pdfSelection, selectionInSource]);
+
   const pdfContextLabel = resolvedSource
     ? `~@${resolvedSource.file}:${resolvedSource.line}`
     : pdfSelection
@@ -399,6 +475,11 @@ export function PdfPreview() {
         hint: "⌘C",
       },
       {
+        id: "note",
+        label: "Add note",
+        icon: <MessageSquarePlusIcon className="size-4" />,
+      },
+      {
         id: "proofread",
         label: "Proofread",
         icon: <SpellCheckIcon className="size-4" />,
@@ -416,6 +497,10 @@ export function PdfPreview() {
   const handlePdfToolbarAction = useCallback(
     (actionId: string) => {
       if (!pdfSelection) return;
+      if (actionId === "note") {
+        composePdfNote();
+        return;
+      }
       const label = pdfContextLabel;
       const sel = pdfSelection;
       setPdfSelection(null);
@@ -443,6 +528,7 @@ export function PdfPreview() {
       resolvedSource,
       navigateToSource,
       buildPdfContext,
+      composePdfNote,
     ],
   );
 
@@ -1143,7 +1229,43 @@ export function PdfPreview() {
           onSendPrompt={handlePdfToolbarSendPrompt}
           onAction={handlePdfToolbarAction}
           onDismiss={handlePdfToolbarDismiss}
+          onHighlight={highlightPdfSelection}
         />
+      )}
+      {/* A note on text chosen in the PDF, attached to its LaTeX source. */}
+      {pdfNote && (
+        <div
+          className="fixed z-50 w-72 rounded-lg border border-border bg-background p-2.5 shadow-xl"
+          style={{
+            left: Math.min(pdfNote.anchor.x, window.innerWidth - 300),
+            top: Math.min(pdfNote.anchor.y + 8, window.innerHeight - 180),
+          }}
+          onKeyDown={(e) => e.key === "Escape" && setPdfNote(null)}
+        >
+          <NoteInput
+            placeholder="Add a note…"
+            autoFocus
+            submitLabel="Add note"
+            onSubmit={(text) => {
+              const source = useAnnotationsStore.getState().source;
+              if (source && text.trim()) {
+                const settings = useSettingsStore.getState();
+                if (!settings.showAnnotations)
+                  settings.setShowAnnotations(true);
+                source.add(
+                  pdfNote.path,
+                  pdfNote.from,
+                  pdfNote.to,
+                  DEFAULT_ANNOTATION_COLOR,
+                  { author: currentAuthor(), text: text.trim() },
+                );
+              }
+              setPdfNote(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            onCancel={() => setPdfNote(null)}
+          />
+        </div>
       )}
       {/* Capture mode floating banner */}
       {captureMode && (
