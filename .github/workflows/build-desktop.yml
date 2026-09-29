@@ -108,6 +108,14 @@ jobs:
 
       # The WordNet database backing the dictionary/thesaurus is ~27 MB and
       # isn't committed; tauri.conf.json bundles it as a resource.
+      # Princeton's server is slow and sometimes times out; keep a copy so
+      # most builds don't need it at all.
+      - name: Restore WordNet database
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/src-tauri/resources/wordnet
+          key: wordnet-3.1-${{ hashFiles('scripts/fetch-wordnet.mjs') }}
+
       - name: Fetch WordNet database
         run: node scripts/fetch-wordnet.mjs
 
@@ -285,6 +293,14 @@ jobs:
 
       # The WordNet database backing the dictionary/thesaurus is ~27 MB and
       # isn't committed; tauri.conf.json bundles it as a resource.
+      # Princeton's server is slow and sometimes times out; keep a copy so
+      # most builds don't need it at all.
+      - name: Restore WordNet database
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/src-tauri/resources/wordnet
+          key: wordnet-3.1-${{ hashFiles('scripts/fetch-wordnet.mjs') }}
+
       - name: Fetch WordNet database
         run: node scripts/fetch-wordnet.mjs
 
@@ -519,6 +535,14 @@ jobs:
 
       # The WordNet database backing the dictionary/thesaurus is ~27 MB and
       # isn't committed; tauri.conf.json bundles it as a resource.
+      # Princeton's server is slow and sometimes times out; keep a copy so
+      # most builds don't need it at all.
+      - name: Restore WordNet database
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/src-tauri/resources/wordnet
+          key: wordnet-3.1-${{ hashFiles('scripts/fetch-wordnet.mjs') }}
+
       - name: Fetch WordNet database
         run: node scripts/fetch-wordnet.mjs
 
@@ -663,6 +687,14 @@ jobs:
 
       # The WordNet database backing the dictionary/thesaurus is ~27 MB and
       # isn't committed; tauri.conf.json bundles it as a resource.
+      # Princeton's server is slow and sometimes times out; keep a copy so
+      # most builds don't need it at all.
+      - name: Restore WordNet database
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/src-tauri/resources/wordnet
+          key: wordnet-3.1-${{ hashFiles('scripts/fetch-wordnet.mjs') }}
+
       - name: Fetch WordNet database
         run: node scripts/fetch-wordnet.mjs
 
@@ -724,8 +756,12 @@ jobs:
     # also fires when the workflow is cancelled — and a cancelled run published
     # a draft holding only the platforms that had finished, with a manifest to
     # match. A half-built release is worse than none.
+    # A failed build publishes nothing: a manifest missing a platform makes
+    # that platform's update check fail, where no new manifest leaves the
+    # previous build on offer.
     if: >-
       !cancelled()
+      && !contains(needs.*.result, 'failure')
       && (
         startsWith(github.ref, 'refs/tags/v')
         || inputs.release_tag != ''

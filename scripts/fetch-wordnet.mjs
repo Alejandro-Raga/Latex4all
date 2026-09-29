@@ -54,15 +54,46 @@ if (!force && FILES.every((f) => existsSync(join(DEST, f)))) {
   process.exit(0);
 }
 
-console.log(`==> Downloading WordNet 3.1 from ${ARCHIVE_URL}`);
-const response = await fetch(ARCHIVE_URL);
-if (!response.ok) {
-  console.error(
-    `Download failed: HTTP ${response.status} ${response.statusText}`,
-  );
-  process.exit(1);
+// Princeton's server can take over 10 s to accept a connection, longer than
+// Node's fetch() will wait, so download with curl (present on every build
+// machine, Windows included) and give it a minute to connect, with retries.
+function download() {
+  const dir = mkdtempSync(join(tmpdir(), "wordnet-download-"));
+  const file = join(dir, "wn31.tar.gz");
+  try {
+    execFileSync(
+      "curl",
+      [
+        "--fail",
+        "--location",
+        "--silent",
+        "--show-error",
+        "--connect-timeout",
+        "60",
+        "--max-time",
+        "300",
+        "--retry",
+        "4",
+        "--retry-delay",
+        "10",
+        "--retry-all-errors",
+        "--output",
+        file,
+        ARCHIVE_URL,
+      ],
+      { stdio: ["ignore", "inherit", "inherit"] },
+    );
+    return readFileSync(file);
+  } catch {
+    console.error(`Download failed: ${ARCHIVE_URL}`);
+    process.exit(1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 }
-const archive = Buffer.from(await response.arrayBuffer());
+
+console.log(`==> Downloading WordNet 3.1 from ${ARCHIVE_URL}`);
+const archive = download();
 
 const digest = createHash("sha256").update(archive).digest("hex");
 if (digest !== ARCHIVE_SHA256) {
