@@ -42,13 +42,9 @@ import {
   PlusIcon,
   SettingsIcon,
   GithubIcon,
-  MonitorIcon,
-  MoonIcon,
-  SunIcon,
   UsersIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useTheme } from "next-themes";
 import { useProjectStore } from "@/stores/project-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
@@ -80,6 +76,7 @@ import {
 import { JoinDialog } from "@/components/collab/join-dialog";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
+import { ThemeMenuButton } from "@/components/theme-picker";
 
 const log = createLogger("project-picker");
 
@@ -137,7 +134,6 @@ export function ProjectPicker() {
     useState<RecentProject | null>(null);
   const defaultProjectsDiscoveredRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const { theme = "system", setTheme } = useTheme();
   const searchShortcutLabel = "⌘ K";
 
   const recentProjects = useProjectStore((s) => s.recentProjects);
@@ -479,31 +475,7 @@ export function ProjectPicker() {
                     <GithubIcon className="size-3.5" />
                   </a>
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-6"
-                  onClick={() => {
-                    if (theme === "system") setTheme("light");
-                    else if (theme === "light") setTheme("dark");
-                    else setTheme("system");
-                  }}
-                  title={
-                    theme === "system"
-                      ? "System theme"
-                      : theme === "light"
-                        ? "Light mode"
-                        : "Dark mode"
-                  }
-                >
-                  {theme === "system" ? (
-                    <MonitorIcon className="size-3.5" />
-                  ) : theme === "light" ? (
-                    <SunIcon className="size-3.5" />
-                  ) : (
-                    <MoonIcon className="size-3.5" />
-                  )}
-                </Button>
+                <ThemeMenuButton />
               </div>
             </>
           )}

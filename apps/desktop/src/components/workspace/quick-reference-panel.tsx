@@ -1345,7 +1345,7 @@ function FilePreview({
             size="sm"
             className="mr-1 h-6 gap-1 px-2 text-xs"
             onClick={() =>
-              useReadingStore.getState().read({
+              useReadingStore.getState().open({
                 id: selectedFile.id,
                 label:
                   selectedFile.source === "fs"
@@ -1356,10 +1356,10 @@ function FilePreview({
                 annotations: preview.annotations,
               })
             }
-            title="Read it in the PDF pane, at full size"
+            title="Opens it in a tab of the big PDF pane, beside your editor"
           >
             <Maximize2Icon className="size-3" />
-            Read here
+            Open in PDF pane
           </Button>
           <Button
             variant="ghost"

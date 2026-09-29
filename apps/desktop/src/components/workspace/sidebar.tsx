@@ -19,9 +19,6 @@ import {
   Loader2Icon,
   UploadIcon,
   RefreshCwIcon,
-  SunIcon,
-  MoonIcon,
-  MonitorIcon,
   ListIcon,
   HashIcon,
   GithubIcon,
@@ -35,6 +32,7 @@ import {
   FlaskConicalIcon,
   TerminalIcon,
   LibraryIcon,
+  Maximize2Icon,
   SettingsIcon,
   NotebookTextIcon,
   type LucideIcon,
@@ -52,12 +50,13 @@ import {
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { useTheme } from "next-themes";
 import { useDocumentStore, type ProjectFile } from "@/stores/document-store";
 import { useHistoryStore } from "@/stores/history-store";
 import { cn } from "@/lib/utils";
 import { ZoteroPanel, ZoteroHeader } from "@/components/workspace/zotero-panel";
 import { useSettingsWindow } from "@/stores/settings-window-store";
+import { useReadingStore } from "@/stores/reading-store";
+import { readFile } from "@tauri-apps/plugin-fs";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -93,6 +92,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useUvSetupStore } from "@/stores/uv-setup-store";
 import { UvSetupDialog } from "@/components/uv-setup";
 import { createLogger } from "@/lib/debug/logger";
+import { ThemeMenuButton } from "@/components/theme-picker";
 
 const log = createLogger("sidebar");
 const FILES_AUTO_REFRESH_INTERVAL_MS = 12_000;
@@ -513,7 +513,6 @@ export function Sidebar({
   const folders = useDocumentStore((s) => s.folders);
   const [isRefreshingFiles, setIsRefreshingFiles] = useState(false);
   const refreshFilesInFlightRef = useRef<Promise<void> | null>(null);
-  const { theme, setTheme } = useTheme();
   const projectName = useMemo(() => {
     const normalized = projectRoot?.replace(/[\\/]+$/, "");
     return normalized?.split(/[/\\]/).pop() || "Desktop";
@@ -1611,31 +1610,7 @@ export function Sidebar({
                   <GithubIcon className="size-3.5" />
                 </a>
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-6"
-                onClick={() => {
-                  if (theme === "system") setTheme("light");
-                  else if (theme === "light") setTheme("dark");
-                  else setTheme("system");
-                }}
-                title={
-                  theme === "system"
-                    ? "System theme"
-                    : theme === "light"
-                      ? "Light mode"
-                      : "Dark mode"
-                }
-              >
-                {theme === "system" ? (
-                  <MonitorIcon className="size-3.5" />
-                ) : theme === "light" ? (
-                  <SunIcon className="size-3.5" />
-                ) : (
-                  <MoonIcon className="size-3.5" />
-                )}
-              </Button>
+              <ThemeMenuButton />
             </div>
           </div>
 
@@ -2116,6 +2091,25 @@ function FileTreeNode({
           </button>
         </ContextMenuTrigger>
         <ContextMenuContent>
+          {file.name.toLowerCase().endsWith(".pdf") && !batchOperation && (
+            <ContextMenuItem
+              onClick={async () => {
+                try {
+                  const data = await readFile(file.absolutePath);
+                  useReadingStore.getState().open({
+                    id: file.absolutePath,
+                    label: file.name,
+                    data: new Uint8Array(data),
+                  });
+                } catch (err) {
+                  toast.error(`Couldn't open ${file.name}: ${String(err)}`);
+                }
+              }}
+            >
+              <Maximize2Icon className="mr-2 size-4" />
+              Open in PDF pane
+            </ContextMenuItem>
+          )}
           <ContextMenuItem
             onClick={() => onRename(file.id, file.name)}
             disabled={batchOperation}

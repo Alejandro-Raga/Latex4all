@@ -1,4 +1,5 @@
 import { ThemeProvider, useTheme } from "next-themes";
+import { isDarkTheme, THEME_IDS } from "@/lib/app-themes";
 import { ErrorBoundary } from "react-error-boundary";
 import { Toaster } from "@/components/ui/sonner";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
@@ -38,9 +39,7 @@ function NativeWindowThemeBridge() {
 
   useEffect(() => {
     const syncNativeTheme = () => {
-      const isDark =
-        document.documentElement.classList.contains("dark") ||
-        resolvedTheme === "dark";
+      const isDark = isDarkTheme(resolvedTheme);
       const nativeTheme = isDark ? "dark" : "light";
 
       document.documentElement.style.colorScheme = nativeTheme;
@@ -228,7 +227,12 @@ export function App({ onReady }: { onReady?: () => void }) {
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        themes={THEME_IDS}
+      >
         <TooltipProvider>
           <NativeWindowThemeBridge />
           {/* Global macOS titlebar drag region — sits above all content */}

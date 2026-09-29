@@ -28,6 +28,7 @@ import { syntaxHighlighting, syntaxTreeAvailable } from "@codemirror/language";
 import { oneDark, oneDarkHighlightStyle } from "@codemirror/theme-one-dark";
 import { defaultHighlightStyle } from "@codemirror/language";
 import { useTheme } from "next-themes";
+import { isDarkTheme } from "@/lib/app-themes";
 import {
   search,
   highlightSelectionMatches,
@@ -1060,7 +1061,7 @@ export function LatexEditor() {
             ]
           : []),
         themeCompartmentRef.current.of(
-          resolvedTheme === "dark"
+          isDarkTheme(resolvedTheme)
             ? [oneDark, syntaxHighlighting(oneDarkHighlightStyle)]
             : [syntaxHighlighting(defaultHighlightStyle)],
         ),
@@ -1278,10 +1279,9 @@ export function LatexEditor() {
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
-    const extensions =
-      resolvedTheme === "dark"
-        ? [oneDark, syntaxHighlighting(oneDarkHighlightStyle)]
-        : [syntaxHighlighting(defaultHighlightStyle)];
+    const extensions = isDarkTheme(resolvedTheme)
+      ? [oneDark, syntaxHighlighting(oneDarkHighlightStyle)]
+      : [syntaxHighlighting(defaultHighlightStyle)];
     view.dispatch({
       effects: themeCompartmentRef.current.reconfigure(extensions),
     });

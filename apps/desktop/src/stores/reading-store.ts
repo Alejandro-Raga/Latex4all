@@ -3,30 +3,53 @@ import type { PdfAnnotationRect } from "@/components/workspace/preview/pdf-viewe
 import { usePreviewStore } from "./preview-store";
 
 export interface ReadingPaper {
-  /** Stable id of the file or Zotero item, for keeping its zoom. */
+  /** Stable id of the file or Zotero item: one tab per paper. */
   id: string;
   label: string;
   data: Uint8Array;
   annotations?: PdfAnnotationRect[];
 }
 
+/** The PDF pane's tabs: the compiled preview, papers, a widened side panel. */
+export type PaneTab = "preview" | "wide" | string;
+
+interface ReadingState {
+  papers: ReadingPaper[];
+  active: PaneTab;
+  /** Opens a paper in its own tab (or brings its tab forward). */
+  open: (paper: ReadingPaper) => void;
+  close: (id: string) => void;
+  activate: (tab: PaneTab) => void;
+}
+
 /**
- * A paper opened in the big PDF pane in place of the compiled document, so it
- * can be read at full size beside the editor.
+ * Papers opened in the big PDF pane beside the editor, each in a tab next to
+ * the compiled document, so several can be read at full size.
  */
-export const useReadingStore = create<{
-  paper: ReadingPaper | null;
-  read: (paper: ReadingPaper) => void;
-  close: () => void;
-}>((set) => ({
-  paper: null,
-  read: (paper) => {
+export const useReadingStore = create<ReadingState>((set, get) => ({
+  papers: [],
+  active: "preview",
+  open: (paper) => {
     usePreviewStore.getState().setVisible(true);
-    // A panel widened into the same pane goes back to the dock.
-    import("./dock-store").then(({ useDockStore }) =>
-      useDockStore.getState().setWide(null),
-    );
-    set({ paper });
+    const papers = get().papers;
+    const at = papers.findIndex((p) => p.id === paper.id);
+    set({
+      papers:
+        at === -1
+          ? [...papers, paper]
+          : papers.map((p, i) => (i === at ? paper : p)),
+      active: paper.id,
+    });
   },
-  close: () => set({ paper: null }),
+  close: (id) => {
+    const { papers, active } = get();
+    const at = papers.findIndex((p) => p.id === id);
+    if (at === -1) return;
+    const rest = papers.filter((p) => p.id !== id);
+    // Closing the tab in front shows its neighbour, as browsers do.
+    const next =
+      active !== id ? active : (rest[at]?.id ?? rest[at - 1]?.id ?? "preview");
+    set({ papers: rest, active: next });
+  },
+  activate: (tab) => set({ active: tab }),
 }));

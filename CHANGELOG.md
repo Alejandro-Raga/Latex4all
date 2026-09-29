@@ -54,6 +54,9 @@ Test-channel builds use the `## [Unreleased]
   you zoom so a busy network stays readable.
 - Widen any side panel: the Reference, Vault and Notes panels each have a
   button that moves them into the big pane beside the editor, and back.
+- Six color themes for the whole app — Light, Paper, Sky, Dark, Dim and
+  Nord — or follow the system. Pick one from the palette at the bottom of
+  the sidebar, or in Settings under Appearance.
 - Settings from anywhere: press ⌘, or click the gear at the bottom of the
   sidebar. New sections bring together what was scattered: Editor, PDF, Zotero
   and Vault.
@@ -65,15 +68,18 @@ Test-channel builds use the `## [Unreleased]
 - Move a project to another folder or drive from inside the app: right-click
   it on the projects screen, or its name in the sidebar, and choose "Move
   to…". A shared project stays shared.
-- Read a paper at full size: "Read here" in the Reference panel opens it in
-  the PDF pane beside your editor, highlights included, and "My document"
-  takes you back to your own PDF where you left it.
+- Tabs in the PDF pane, to read several papers at full size beside your
+  editor. "Open in PDF pane" in the Reference panel, or on a PDF in the file
+  list, opens it in a tab next to your compiled document; a widened side
+  panel gets a tab too. Each tab keeps its page and zoom.
 - Add a paper to the project from quick reference: right-click a Zotero item,
   or a PDF in another project, and choose "Add PDF to references" to keep a
   copy, or "Add PDF to chat" to give it to Claude.
 
 ### Changed
 
+- The editor, the PDF pane and the side column are set apart by a clear
+  gutter, so documents side by side no longer run together.
 - Reference, Vault and Notes share one column on the right, stacked, instead
   of each opening a column of its own, so the editor and PDF keep their width.
   Fold any of them to its header, resize the split, or open and close them

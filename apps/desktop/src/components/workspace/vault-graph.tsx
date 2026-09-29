@@ -17,6 +17,7 @@ import {
   type SimulationNodeDatum,
 } from "d3-force";
 import { ScanIcon } from "lucide-react";
+import { APP_THEMES } from "@/lib/app-themes";
 import {
   fitTransform,
   labelAlpha,
@@ -60,7 +61,8 @@ const DRAG_THRESHOLD = 3;
 const CROWDED = 20;
 
 function palette() {
-  const dark = document.documentElement.classList.contains("dark");
+  const root = document.documentElement.classList;
+  const dark = APP_THEMES.some((t) => t.dark && root.contains(t.id));
   return dark
     ? { link: "148,163,184", text: "226,232,240" }
     : { link: "100,116,139", text: "30,41,59" };

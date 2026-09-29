@@ -32,16 +32,18 @@ export const useDockStore = create<DockState>()(
       collapsed: { reference: false, vault: false, notes: false },
       wide: null,
       setWide: (panel) => {
+        const reading = useReadingStore.getState();
         if (panel) {
-          // It takes the PDF pane: make sure that pane is showing, and that
-          // a paper being read there makes way.
+          // It opens as a tab in the PDF pane, brought to the front.
           usePreviewStore.getState().setVisible(true);
-          useReadingStore.getState().close();
+          reading.activate("wide");
+        } else if (reading.active === "wide") {
+          reading.activate("preview");
         }
         set({ wide: panel });
       },
       setOpen: (panel, open) => {
-        if (!open && get().wide === panel) set({ wide: null });
+        if (!open && get().wide === panel) get().setWide(null);
         if (panel === "notes") {
           useAnnotationsStore.getState().setPanelOpen(open);
         } else {

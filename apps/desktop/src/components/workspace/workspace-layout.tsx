@@ -13,10 +13,8 @@ import {
 } from "react-resizable-panels";
 import { Sidebar } from "./sidebar";
 import { LatexEditor } from "./editor/latex-editor";
-import { PdfPreview } from "./preview/pdf-preview";
-import { PaperReader } from "./preview/paper-reader";
-import { useReadingStore } from "@/stores/reading-store";
-import { DockRail, RightDock, WideDockPanel } from "./dock/right-dock";
+import { PdfPane } from "./preview/pdf-pane";
+import { DockRail, RightDock } from "./dock/right-dock";
 import { SettingsWindow } from "@/components/settings/settings-view";
 import {
   useDockedPanels,
@@ -36,6 +34,17 @@ function easeInOutSmooth(progress: number) {
   return progress * progress * (3 - 2 * progress);
 }
 
+/**
+ * The gap between the editor, the PDF pane and the side column: a visible
+ * gutter, so two documents side by side never read as one page, and an easy
+ * target to drag.
+ */
+function PaneDivider() {
+  return (
+    <PanelResizeHandle className="w-2 shrink-0 border-border border-x bg-muted transition-colors hover:bg-ring/30 data-[resize-handle-state=drag]:bg-ring/40" />
+  );
+}
+
 export function WorkspaceLayout() {
   const initialized = useDocumentStore((s) => s.initialized);
   const previewVisible = usePreviewStore((s) => s.visible);
@@ -52,8 +61,6 @@ export function WorkspaceLayout() {
   const [codeVisible, setCodeVisible] = useState(true);
   const dockPanels = useOpenDockPanels();
   const dockedPanels = useDockedPanels();
-  const reading = useReadingStore((s) => s.paper !== null);
-  const widened = useDockStore((s) => s.wide !== null);
   const setDockOpen = useDockStore((s) => s.setOpen);
 
   const getCollapsedSidebarSize = useCallback(() => {
@@ -242,9 +249,7 @@ export function WorkspaceLayout() {
           </Panel>
         )}
 
-        {codeVisible && previewVisible && (
-          <PanelResizeHandle className="w-px bg-border transition-colors hover:bg-ring" />
-        )}
+        {codeVisible && previewVisible && <PaneDivider />}
 
         {previewVisible && (
           <Panel
@@ -252,18 +257,11 @@ export function WorkspaceLayout() {
             minSize={25}
             className="min-w-0"
           >
-            {/* The compiled preview stays mounted while a paper is read in its
-                place, so coming back keeps its page and zoom. */}
-            <div className={reading || widened ? "hidden" : "h-full"}>
-              <PdfPreview />
-            </div>
-            {reading ? <PaperReader /> : widened && <WideDockPanel />}
+            <PdfPane />
           </Panel>
         )}
 
-        {dockedPanels.length > 0 && (
-          <PanelResizeHandle className="w-px bg-border transition-colors hover:bg-ring" />
-        )}
+        {dockedPanels.length > 0 && <PaneDivider />}
 
         {dockedPanels.length > 0 && (
           <Panel defaultSize={26} minSize={16} maxSize={45} className="min-w-0">

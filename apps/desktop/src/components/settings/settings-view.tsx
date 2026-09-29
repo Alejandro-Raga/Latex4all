@@ -10,11 +10,15 @@ import {
   KeyRoundIcon,
   LanguagesIcon,
   NotebookTextIcon,
+  PaletteIcon,
   PenLineIcon,
   ServerIcon,
   UnplugIcon,
 } from "lucide-react";
+import { useTheme } from "next-themes";
 import { ClaudeSetup } from "@/components/claude-setup";
+import { ThemeGrid } from "@/components/theme-picker";
+import { APP_THEMES } from "@/lib/app-themes";
 import { LanguagePacksSettings } from "@/components/settings/language-packs";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -345,6 +349,7 @@ export function SettingsView({
   const isClaudeReady = useClaudeSetupStore((s) => s.status === "ready");
   const updateChannel = useSettingsStore((s) => s.updateChannel);
   const vim = useSettingsStore((s) => s.vimMode);
+  const { theme = "system" } = useTheme();
   const pdfTheme = useSettingsStore((s) => s.pdfThemeMain);
   const zoteroUser = useZoteroStore((s) =>
     s.isAuthenticated ? s.username : null,
@@ -374,6 +379,16 @@ export function SettingsView({
       meta: isClaudeReady ? "Ready" : "Setup",
       icon: KeyRoundIcon,
       body: <ClaudeSetup variant="embedded" />,
+      flush: true,
+    },
+    {
+      id: "appearance",
+      label: "Appearance",
+      meta:
+        APP_THEMES.find((t) => t.id === theme)?.label ??
+        (theme === "system" ? "System" : "Light"),
+      icon: PaletteIcon,
+      body: <ThemeGrid />,
       flush: true,
     },
     {
