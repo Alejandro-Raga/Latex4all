@@ -24,9 +24,7 @@ import {
   selectLineUp,
   toggleComment,
 } from "@codemirror/commands";
-import { syntaxHighlighting, syntaxTreeAvailable } from "@codemirror/language";
-import { oneDark, oneDarkHighlightStyle } from "@codemirror/theme-one-dark";
-import { defaultHighlightStyle } from "@codemirror/language";
+import { syntaxTreeAvailable } from "@codemirror/language";
 import { useTheme } from "next-themes";
 import { isDarkTheme } from "@/lib/app-themes";
 import {
@@ -88,6 +86,7 @@ import {
 import { useSettingsStore } from "@/stores/settings-store";
 import { useLanguagePacksStore } from "@/stores/language-packs-store";
 import { EditorToolbar } from "./editor-toolbar";
+import { themedEditor } from "./editor-theme";
 import { SelectionToolbar, type ToolbarAction } from "./selection-toolbar";
 import {
   annotationAt,
@@ -1061,9 +1060,7 @@ export function LatexEditor() {
             ]
           : []),
         themeCompartmentRef.current.of(
-          isDarkTheme(resolvedTheme)
-            ? [oneDark, syntaxHighlighting(oneDarkHighlightStyle)]
-            : [syntaxHighlighting(defaultHighlightStyle)],
+          themedEditor(isDarkTheme(resolvedTheme)),
         ),
         search(),
         highlightSelectionMatches(),
@@ -1279,11 +1276,10 @@ export function LatexEditor() {
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
-    const extensions = isDarkTheme(resolvedTheme)
-      ? [oneDark, syntaxHighlighting(oneDarkHighlightStyle)]
-      : [syntaxHighlighting(defaultHighlightStyle)];
     view.dispatch({
-      effects: themeCompartmentRef.current.reconfigure(extensions),
+      effects: themeCompartmentRef.current.reconfigure(
+        themedEditor(isDarkTheme(resolvedTheme)),
+      ),
     });
   }, [resolvedTheme]);
 

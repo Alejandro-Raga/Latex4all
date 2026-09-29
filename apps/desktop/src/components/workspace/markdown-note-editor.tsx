@@ -1,12 +1,9 @@
 import { useEffect, useRef } from "react";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
-import {
-  defaultHighlightStyle,
-  syntaxHighlighting,
-} from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, placeholder } from "@codemirror/view";
+import { themedHighlighting } from "./editor/editor-theme";
 
 /**
  * A plain Markdown editor for a vault note: wraps lines, saves with ⌘S and
@@ -37,7 +34,7 @@ export function MarkdownNoteEditor({
         extensions: [
           history(),
           markdown(),
-          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+          themedHighlighting,
           EditorView.lineWrapping,
           placeholder("Write…"),
           keymap.of([

@@ -385,3 +385,24 @@
 .pdf-note-glyph-resolved {
   opacity: 0.3;
 }
+
+/* Editor syntax colors (see editor-theme.ts). Themes may override these. */
+:root {
+  --syn-command: #0550ae;
+  --syn-env: #8250df;
+  --syn-string: #0a7a6a;
+  --syn-math: #116329;
+  --syn-number: #953800;
+  --syn-comment: color-mix(in oklab, var(--foreground) 48%, var(--background));
+  --syn-heading: #b3261e;
+  --syn-bracket: color-mix(in oklab, var(--foreground) 60%, var(--background));
+}
+
+.theme-dark {
+  --syn-command: #79c0ff;
+  --syn-env: #d2a8ff;
+  --syn-string: #a5d6ff;
+  --syn-math: #7ee787;
+  --syn-number: #f2cc60;
+  --syn-heading: #ffa657;
+}
