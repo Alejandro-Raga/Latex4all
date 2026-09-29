@@ -57,7 +57,8 @@ tag.
   Nextcloud, Seafile…), read and saved there directly so it's up to date
   without opening Obsidian. Literature notes from Zotero plugins are
   recognised as papers: Cite adds the paper to the bibliography and inserts
-  the citation, and a citation under the cursor leads to its note.
+  the citation, and a citation under the cursor leads to its note. On an idea
+  note, "Cite its papers" cites every paper it links to at once.
 - A living map of your notes, like Obsidian's graph: notes push apart and
   links pull, so the network settles into shape and wiggles when you drag a
   note. Scroll or pinch to zoom, drag to pan, hover a note to light up its

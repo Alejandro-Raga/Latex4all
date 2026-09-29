@@ -783,6 +783,15 @@ function NoteView({
     return note.kind === "paper" ? md.replace(/^# .*\n+/, "") : md;
   }, [note.body, note.kind]);
   const [editing, setEditing] = useState<string | null>(null);
+  const projectOpen = useDocumentStore((s) => Boolean(s.projectRoot));
+  // The papers an idea draws on: the ones it links to.
+  const linkedPapers = useMemo(
+    () =>
+      note.outgoing
+        .map((n) => findNote(index, n))
+        .filter((n): n is VaultNote => n?.kind === "paper"),
+    [note.outgoing, index],
+  );
 
   const startEditing = async () => {
     const source = useVaultStore.getState().source;
@@ -844,7 +853,17 @@ function NoteView({
             <PencilIcon className="size-3" />
             Edit
           </Button>
-          {note.kind === "paper" && <CiteButton note={note} />}
+          {note.kind === "paper" ? (
+            <CiteButton papers={[note]} />
+          ) : (
+            linkedPapers.length > 0 &&
+            projectOpen && (
+              <CiteButton
+                papers={linkedPapers}
+                label={`Cite its ${linkedPapers.length === 1 ? "paper" : `${linkedPapers.length} papers`}`}
+              />
+            )
+          )}
         </div>
       </div>
 
@@ -965,7 +984,17 @@ function NoteEditor({
 }
 
 /** Adds the paper to the project's bibliography if needed, then cites it. */
-function CiteButton({ note }: { note: VaultNote }) {
+/**
+ * Inserts \cite{} for `papers` at the cursor, adding each to the project's
+ * bibliography from Zotero first where it can.
+ */
+function CiteButton({
+  papers,
+  label = "Cite",
+}: {
+  papers: VaultNote[];
+  label?: string;
+}) {
   const zoteroConnected = useZoteroStore((s) => s.isAuthenticated);
   const addItemToBib = useZoteroStore((s) => s.addItemToBib);
   const projectRoot = useDocumentStore((s) => s.projectRoot);
@@ -973,20 +1002,27 @@ function CiteButton({ note }: { note: VaultNote }) {
   const [busy, setBusy] = useState(false);
 
   const cite = async () => {
-    let key = note.citekey ?? note.name;
-    if (note.zoteroKey && zoteroConnected && projectRoot) {
-      setBusy(true);
-      const result = await addItemToBib(note.zoteroKey, null);
-      setBusy(false);
-      if (result.status === "error") {
-        toast.error(result.message);
-        return;
+    setBusy(true);
+    const keys: string[] = [];
+    let added = 0;
+    for (const paper of papers) {
+      let key = paper.citekey ?? paper.name.replace(/^@/, "");
+      if (paper.zoteroKey && zoteroConnected && projectRoot) {
+        const result = await addItemToBib(paper.zoteroKey, null);
+        if (result.status === "error") {
+          toast.error(`${paper.name}: ${result.message}`);
+        } else {
+          key = result.citekey;
+          if (result.status === "added") added++;
+        }
       }
-      key = result.citekey;
-      if (result.status === "added")
-        toast.success(`Added to ${result.fileName}`);
+      if (!keys.includes(key)) keys.push(key);
     }
-    insertAtCursor(`\\cite{${key}}`);
+    setBusy(false);
+    if (added > 0) {
+      toast.success(`Added ${added} to the bibliography`);
+    }
+    if (keys.length) insertAtCursor(`\\cite{${keys.join(", ")}}`);
   };
 
   return (
@@ -994,7 +1030,7 @@ function CiteButton({ note }: { note: VaultNote }) {
       variant="outline"
       size="sm"
       className="h-6 gap-1 px-2 text-xs"
-      disabled={busy}
+      disabled={busy || papers.length === 0}
       onClick={cite}
       title="Insert \cite{} at the cursor"
     >
@@ -1003,7 +1039,7 @@ function CiteButton({ note }: { note: VaultNote }) {
       ) : (
         <QuoteIcon className="size-3" />
       )}
-      Cite
+      {label}
     </Button>
   );
 }
