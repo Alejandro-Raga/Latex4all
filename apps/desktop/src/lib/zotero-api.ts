@@ -521,6 +521,102 @@ export interface ZoteroAnnotation {
   type: "highlight" | "underline";
 }
 
+/** Zotero's own highlight colors, which its apps show as named swatches. */
+export const ZOTERO_HIGHLIGHT_COLORS = {
+  yellow: "#ffd400",
+  red: "#ff6666",
+  green: "#5fb236",
+  blue: "#2ea8e5",
+  purple: "#a28ae5",
+  magenta: "#e56eee",
+  orange: "#f19837",
+  gray: "#aaaaaa",
+} as const;
+
+export interface NewZoteroHighlight {
+  pageIndex: number;
+  pageLabel?: string;
+  /** PDF coordinates, origin bottom-left: [x1, y1, x2, y2] per line. */
+  rects: [number, number, number, number][];
+  text: string;
+  comment?: string;
+  color: string;
+}
+
+export class ZoteroWriteDeniedError extends Error {
+  constructor() {
+    super(
+      "Zotero didn't allow saving. Reconnect Zotero in Settings → Zotero so Latex4All may write to your library (or use an API key with write access).",
+    );
+  }
+}
+
+/** Zotero's reading order for annotations: page, offset, distance from the top. */
+export function annotationSortIndex(pageIndex: number, top: number): string {
+  const pad = (n: number, w: number) =>
+    String(Math.max(0, Math.round(n)))
+      .padStart(w, "0")
+      .slice(-w);
+  return `${pad(pageIndex, 5)}|${pad(0, 6)}|${pad(top, 5)}`;
+}
+
+/**
+ * Saves a highlight on a PDF attachment in the Zotero library, where the
+ * Zotero apps (and anything syncing from Zotero) see it like one made there.
+ * Returns the new annotation's key.
+ */
+export async function createZoteroHighlight(
+  apiKey: string,
+  userID: string,
+  attachmentKey: string,
+  highlight: NewZoteroHighlight,
+  pageHeight: number,
+): Promise<string> {
+  const top = Math.max(...highlight.rects.map((r) => r[3]));
+  const body = [
+    {
+      itemType: "annotation",
+      parentItem: attachmentKey,
+      annotationType: "highlight",
+      annotationText: highlight.text,
+      annotationComment: highlight.comment ?? "",
+      annotationColor: highlight.color,
+      annotationPageLabel:
+        highlight.pageLabel ?? String(highlight.pageIndex + 1),
+      annotationSortIndex: annotationSortIndex(
+        highlight.pageIndex,
+        pageHeight - top,
+      ),
+      annotationPosition: JSON.stringify({
+        pageIndex: highlight.pageIndex,
+        rects: highlight.rects,
+      }),
+      tags: [],
+    },
+  ];
+  const response = await fetch(`${ZOTERO_BASE}/users/${userID}/items`, {
+    method: "POST",
+    headers: {
+      "Zotero-API-Key": apiKey,
+      "Zotero-API-Version": "3",
+      "Content-Type": "application/json",
+      "Zotero-Write-Token": crypto.randomUUID().replace(/-/g, ""),
+    },
+    body: JSON.stringify(body),
+  });
+  if (response.status === 403) throw new ZoteroWriteDeniedError();
+  if (!response.ok) throw new Error(`Zotero API error: ${response.status}`);
+  const result = (await response.json()) as {
+    successful?: Record<string, { key: string }>;
+    failed?: Record<string, { message?: string }>;
+  };
+  const saved = result.successful?.["0"];
+  if (!saved) {
+    throw new Error(result.failed?.["0"]?.message ?? "Zotero didn't save it.");
+  }
+  return saved.key;
+}
+
 /** Highlight/underline annotations on a PDF attachment (a "child of a child" —
  * they're nested under the attachment, not the parent bibliographic item). */
 export async function fetchAnnotations(

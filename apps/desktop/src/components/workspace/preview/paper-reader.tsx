@@ -1,9 +1,83 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { BookOpenIcon, MinusIcon, PlusIcon } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  BookOpenIcon,
+  CopyIcon,
+  MessageSquarePlusIcon,
+  MinusIcon,
+  PlusIcon,
+} from "lucide-react";
+import { toast } from "sonner";
+import { NoteInput } from "@/components/workspace/editor/annotation-card";
+import {
+  SelectionToolbar,
+  type ToolbarAction,
+} from "@/components/workspace/editor/selection-toolbar";
 import { Button } from "@/components/ui/button";
-import type { ReadingPaper } from "@/stores/reading-store";
+import type { AnnotationColor } from "@/lib/annotations/types";
+import {
+  createZoteroHighlight,
+  ZOTERO_HIGHLIGHT_COLORS,
+} from "@/lib/zotero-api";
+import { useClaudeChatStore } from "@/stores/claude-chat-store";
+import { type ReadingPaper, useReadingStore } from "@/stores/reading-store";
 import { useSettingsStore } from "@/stores/settings-store";
-import { PdfViewer } from "./pdf-viewer";
+import { useZoteroStore } from "@/stores/zotero-store";
+import { type PdfTextSelection, PdfViewer } from "./pdf-viewer";
+
+/** The app's highlight swatches, in Zotero's own colors. */
+const ZOTERO_COLOR: Record<AnnotationColor, string> = {
+  yellow: ZOTERO_HIGHLIGHT_COLORS.yellow,
+  green: ZOTERO_HIGHLIGHT_COLORS.green,
+  blue: ZOTERO_HIGHLIGHT_COLORS.blue,
+  pink: ZOTERO_HIGHLIGHT_COLORS.red,
+  purple: ZOTERO_HIGHLIGHT_COLORS.purple,
+  none: ZOTERO_HIGHLIGHT_COLORS.yellow,
+};
+
+/**
+ * Saves a highlight (and optional comment) on a Zotero paper to the Zotero
+ * library, and shows it on the page straight away.
+ */
+async function saveHighlight(
+  paper: ReadingPaper,
+  selection: PdfTextSelection,
+  color: AnnotationColor,
+  comment?: string,
+) {
+  const { apiKey, userID } = useZoteroStore.getState();
+  if (!paper.zotero || !apiKey || !userID) return;
+  if (selection.rects.length === 0) {
+    toast.error("Couldn't tell where that text is on the page.");
+    return;
+  }
+  const hex = ZOTERO_COLOR[color];
+  try {
+    await createZoteroHighlight(
+      apiKey,
+      userID,
+      paper.zotero.attachmentKey,
+      {
+        pageIndex: selection.pageNumber - 1,
+        rects: selection.rects,
+        text: selection.text,
+        comment,
+        color: hex,
+      },
+      selection.pageHeight,
+    );
+    useReadingStore.getState().addAnnotation(paper.id, {
+      pageIndex: selection.pageNumber - 1,
+      rects: selection.rects,
+      color: hex,
+      type: "highlight",
+    });
+    toast.success(
+      comment ? "Note saved to Zotero" : "Highlight saved to Zotero",
+    );
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err));
+  }
+}
 
 /** Zoom per paper for this session, so coming back to one keeps its size. */
 const zoomByPaper = new Map<string, number>();
@@ -45,6 +119,36 @@ export function PaperReader({
   }, [visible, fitIfNew]);
 
   const count = paper.annotations?.length ?? 0;
+  const zoteroConnected = useZoteroStore((s) => s.isAuthenticated);
+  const canHighlight = Boolean(paper.zotero && zoteroConnected);
+  const [selection, setSelection] = useState<PdfTextSelection | null>(null);
+  const [noteFor, setNoteFor] = useState<PdfTextSelection | null>(null);
+
+  const actions = useMemo<ToolbarAction[]>(
+    () => [
+      {
+        id: "copy",
+        label: "Copy",
+        icon: <CopyIcon className="size-4" />,
+        hint: "⌘C",
+      },
+      ...(canHighlight
+        ? [
+            {
+              id: "note",
+              label: "Add note",
+              icon: <MessageSquarePlusIcon className="size-4" />,
+            },
+          ]
+        : []),
+    ],
+    [canHighlight],
+  );
+
+  const dismiss = () => {
+    setSelection(null);
+    window.getSelection()?.removeAllRanges();
+  };
 
   return (
     <div ref={wrapperRef} className="flex h-full min-w-0 flex-col bg-muted/50">
@@ -84,7 +188,66 @@ export function PaperReader({
           <PlusIcon className="size-3.5" />
         </Button>
       </div>
+      {visible && selection && (
+        <SelectionToolbar
+          anchor={{ x: selection.position.left, y: selection.position.top }}
+          contextLabel={paper.label}
+          actions={actions}
+          onDismiss={dismiss}
+          onSendPrompt={(prompt) => {
+            useClaudeChatStore.getState().sendPrompt(prompt, {
+              label: paper.label,
+              filePath: paper.label,
+              selectedText: `[From “${paper.label}”, page ${selection.pageNumber}]\n${selection.text}`,
+            });
+            dismiss();
+          }}
+          onAction={(id) => {
+            if (id === "copy") {
+              navigator.clipboard
+                .writeText(selection.text)
+                .then(() => toast.success("Copied"))
+                .catch(() => toast.error("Couldn't copy"));
+              dismiss();
+            } else if (id === "note") {
+              setNoteFor(selection);
+              setSelection(null);
+            }
+          }}
+          onHighlight={
+            canHighlight
+              ? (color) => {
+                  saveHighlight(paper, selection, color);
+                  dismiss();
+                }
+              : undefined
+          }
+        />
+      )}
+      {noteFor && (
+        <div
+          className="fixed z-50 w-72 rounded-lg border border-border bg-background p-2.5 shadow-xl"
+          style={{
+            left: Math.min(noteFor.position.left, window.innerWidth - 300),
+            top: Math.min(noteFor.position.top + 8, window.innerHeight - 180),
+          }}
+          onKeyDown={(e) => e.key === "Escape" && setNoteFor(null)}
+        >
+          <NoteInput
+            placeholder="Your note, saved in Zotero…"
+            autoFocus
+            submitLabel="Save"
+            onSubmit={(text) => {
+              saveHighlight(paper, noteFor, "yellow", text.trim());
+              setNoteFor(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            onCancel={() => setNoteFor(null)}
+          />
+        </div>
+      )}
       <PdfViewer
+        onTextSelect={setSelection}
         data={paper.data}
         scale={scale}
         rootFileId={paper.id}

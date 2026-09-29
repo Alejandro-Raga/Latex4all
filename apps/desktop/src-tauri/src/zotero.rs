@@ -336,7 +336,7 @@ pub async fn zotero_start_oauth(
 
     // Build authorize URL
     let authorize_url = format!(
-        "{}?oauth_token={}&name=Latex4All&library_access=1&notes_access=0&write_access=0&all_groups=read",
+        "{}?oauth_token={}&name=Latex4All&library_access=1&notes_access=0&write_access=1&all_groups=read",
         AUTHORIZE_URL, token
     );
 

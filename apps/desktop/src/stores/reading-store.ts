@@ -8,6 +8,8 @@ export interface ReadingPaper {
   label: string;
   data: Uint8Array;
   annotations?: PdfAnnotationRect[];
+  /** For a Zotero PDF: where highlights made on it are saved. */
+  zotero?: { itemKey: string; attachmentKey: string };
 }
 
 /** The PDF pane's tabs: the compiled preview, papers, a widened side panel. */
@@ -20,6 +22,8 @@ interface ReadingState {
   open: (paper: ReadingPaper) => void;
   close: (id: string) => void;
   activate: (tab: PaneTab) => void;
+  /** Shows a highlight just made on an open paper. */
+  addAnnotation: (id: string, annotation: PdfAnnotationRect) => void;
 }
 
 /**
@@ -52,4 +56,12 @@ export const useReadingStore = create<ReadingState>((set, get) => ({
     set({ papers: rest, active: next });
   },
   activate: (tab) => set({ active: tab }),
+  addAnnotation: (id, annotation) =>
+    set((s) => ({
+      papers: s.papers.map((p) =>
+        p.id === id
+          ? { ...p, annotations: [...(p.annotations ?? []), annotation] }
+          : p,
+      ),
+    })),
 }));

@@ -68,6 +68,8 @@ if (scenario === "pdf") {
               onThemeChange={() => {}}
               onTextSelect={(s) => {
                 (window as any).lastSelection = s?.text ?? null;
+                (window as any).lastRects = s?.rects ?? null;
+                (window as any).lastPageHeight = s?.pageHeight ?? null;
               }}
             />
           </div>

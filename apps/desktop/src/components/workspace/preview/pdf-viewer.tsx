@@ -199,6 +199,13 @@ export interface PdfTextSelection {
   position: { top: number; left: number };
   pdfX: number;
   pdfY: number;
+  /**
+   * The selected lines on that page, in PDF coordinates with the origin at
+   * the bottom left ([x1, y1, x2, y2]) — the form Zotero stores highlights in.
+   */
+  rects: [number, number, number, number][];
+  /** Height of that page in PDF points. */
+  pageHeight: number;
 }
 
 export interface CaptureResult {
@@ -789,11 +796,24 @@ export function PdfViewer({
 
         let pdfX = 0;
         let pdfY = 0;
+        let pageHeight = 0;
+        const rects: [number, number, number, number][] = [];
         if (pageEl) {
           const pageRect = pageEl.getBoundingClientRect();
           const currentScale = scaleRef.current;
           pdfX = (rect.left - pageRect.left) / currentScale;
           pdfY = (rect.top - pageRect.top) / currentScale;
+          pageHeight = pageRect.height / currentScale;
+          for (const r of Array.from(range.getClientRects())) {
+            // Only this page's lines, and not the zero-width line ends.
+            if (r.width < 1 || r.height < 1) continue;
+            if (r.bottom < pageRect.top || r.top > pageRect.bottom) continue;
+            const x1 = (r.left - pageRect.left) / currentScale;
+            const x2 = (r.right - pageRect.left) / currentScale;
+            const top = (r.top - pageRect.top) / currentScale;
+            const bottom = (r.bottom - pageRect.top) / currentScale;
+            rects.push([x1, pageHeight - bottom, x2, pageHeight - top]);
+          }
         }
 
         cb({
@@ -802,6 +822,8 @@ export function PdfViewer({
           position: { top: rect.bottom, left: rect.left },
           pdfX,
           pdfY,
+          rects,
+          pageHeight,
         });
       }, 300);
     };

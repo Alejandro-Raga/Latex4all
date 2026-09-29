@@ -185,6 +185,8 @@ type Preview =
       data: Uint8Array;
       annotations?: PdfAnnotationRect[];
       annotationsError?: string;
+      /** The Zotero attachment it came from, where new highlights go. */
+      attachmentKey?: string;
     }
   | { kind: "image"; dataUrl: string }
   | { kind: "unsupported" }
@@ -456,6 +458,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
           data,
           annotations: annotationsResult.annotations,
           annotationsError: annotationsResult.error,
+          attachmentKey: attachment.key,
         };
       }
 
@@ -1354,6 +1357,13 @@ function FilePreview({
                     : selectedFile.label,
                 data: preview.data,
                 annotations: preview.annotations,
+                zotero:
+                  selectedFile.source === "zotero" && preview.attachmentKey
+                    ? {
+                        itemKey: selectedFile.itemKey,
+                        attachmentKey: preview.attachmentKey,
+                      }
+                    : undefined,
               })
             }
             title="Opens it in a tab of the big PDF pane, beside your editor"

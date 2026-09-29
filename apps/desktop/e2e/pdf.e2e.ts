@@ -37,4 +37,20 @@ test("the PDF's text layer has its words and can be selected", async ({
   await expect
     .poll(() => page.evaluate(() => (window as any).lastSelection))
     .toBe("Scientific Report Title\nSubtitle or Project Name");
+
+  // Where it is on the page, in PDF points from the bottom left, as Zotero
+  // stores highlights: two lines, inside a US-letter page, title above.
+  const { rects, height } = await page.evaluate(() => ({
+    rects: (window as any).lastRects as number[][],
+    height: (window as any).lastPageHeight as number,
+  }));
+  expect(height).toBeCloseTo(792, 0);
+  expect(rects.length).toBeGreaterThanOrEqual(2);
+  for (const [x1, y1, x2, y2] of rects) {
+    expect(x1).toBeGreaterThanOrEqual(0);
+    expect(x2).toBeLessThanOrEqual(612);
+    expect(y1).toBeLessThan(y2);
+    expect(y2).toBeLessThanOrEqual(792);
+  }
+  expect(rects[0][1]).toBeGreaterThan(rects[rects.length - 1][1]);
 });

@@ -94,6 +94,12 @@ tag.
   editor. "Open in PDF pane" in the Reference panel, or on a PDF in the file
   list, opens it in a tab next to your compiled document; a widened side
   panel gets a tab too. Each tab keeps its page and zoom.
+- Highlight papers as you read them in the PDF pane, and they're saved in
+  Zotero: pick a color, or add a note, and it appears in your Zotero library
+  like a highlight made there — on your other devices, and in anything
+  that syncs from Zotero. You can also copy a passage or ask Claude about
+  it. (If Zotero was already connected, reconnect it once so Latex4All may
+  save to your library.)
 - Add a paper to the project from quick reference: right-click a Zotero item,
   or a PDF in another project, and choose "Add PDF to references" to keep a
   copy, or "Add PDF to chat" to give it to Claude.
