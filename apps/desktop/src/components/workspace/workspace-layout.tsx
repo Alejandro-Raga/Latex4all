@@ -14,6 +14,8 @@ import {
 import { Sidebar } from "./sidebar";
 import { LatexEditor } from "./editor/latex-editor";
 import { PdfPreview } from "./preview/pdf-preview";
+import { PaperReader } from "./preview/paper-reader";
+import { useReadingStore } from "@/stores/reading-store";
 import { DockRail, RightDock } from "./dock/right-dock";
 import { SettingsWindow } from "@/components/settings/settings-view";
 import { useDockStore, useOpenDockPanels } from "@/stores/dock-store";
@@ -45,6 +47,7 @@ export function WorkspaceLayout() {
   );
   const [codeVisible, setCodeVisible] = useState(true);
   const dockPanels = useOpenDockPanels();
+  const reading = useReadingStore((s) => s.paper !== null);
   const setDockOpen = useDockStore((s) => s.setOpen);
 
   const getCollapsedSidebarSize = useCallback(() => {
@@ -243,7 +246,12 @@ export function WorkspaceLayout() {
             minSize={25}
             className="min-w-0"
           >
-            <PdfPreview />
+            {/* The compiled preview stays mounted while a paper is read in its
+                place, so coming back keeps its page and zoom. */}
+            <div className={reading ? "hidden" : "h-full"}>
+              <PdfPreview />
+            </div>
+            {reading && <PaperReader />}
           </Panel>
         )}
 

@@ -57,6 +57,9 @@ Test-channel builds use the `## [Unreleased]
 - Move a project to another folder or drive from inside the app: right-click
   it on the projects screen, or its name in the sidebar, and choose "Move
   to…". A shared project stays shared.
+- Read a paper at full size: "Read here" in the Reference panel opens it in
+  the PDF pane beside your editor, highlights included, and "My document"
+  takes you back to your own PDF where you left it.
 - Add a paper to the project from quick reference: right-click a Zotero item,
   or a PDF in another project, and choose "Add PDF to references" to keep a
   copy, or "Add PDF to chat" to give it to Claude.

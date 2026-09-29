@@ -23,6 +23,7 @@ import {
   ImageIcon,
   LibraryIcon,
   Loader2Icon,
+  Maximize2Icon,
   MinusIcon,
   PlusIcon,
   BookOpenIcon,
@@ -37,6 +38,7 @@ import { useProjectStore } from "@/stores/project-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { DEFAULT_BIB_FILE_NAME, useZoteroStore } from "@/stores/zotero-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useReadingStore } from "@/stores/reading-store";
 import {
   buildCollectionTree,
   type ZoteroCollectionNode,
@@ -1337,6 +1339,27 @@ function FilePreview({
           </span>
         )}
         <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="mr-1 h-6 gap-1 px-2 text-xs"
+            onClick={() =>
+              useReadingStore.getState().read({
+                id: selectedFile.id,
+                label:
+                  selectedFile.source === "fs"
+                    ? (selectedFile.label.split(/[\\/]/).pop() ??
+                      selectedFile.label)
+                    : selectedFile.label,
+                data: preview.data,
+                annotations: preview.annotations,
+              })
+            }
+            title="Read it in the PDF pane, at full size"
+          >
+            <Maximize2Icon className="size-3" />
+            Read here
+          </Button>
           <Button
             variant="ghost"
             size="icon"
