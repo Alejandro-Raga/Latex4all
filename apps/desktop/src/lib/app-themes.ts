@@ -12,6 +12,8 @@ export interface ThemeColors {
   fg: string;
   /** Buttons, selection, links. */
   accent: string;
+  /** Pane headers, tabs and the ribbon; blended from the others if unset. */
+  frame?: string;
 }
 
 /**
@@ -53,7 +55,13 @@ type Def = [
   id: string,
   label: string,
   group: AppTheme["group"],
-  colors: [bg: string, surface: string, fg: string, accent: string],
+  colors: [
+    bg: string,
+    surface: string,
+    fg: string,
+    accent: string,
+    frame?: string,
+  ],
   palette: [
     accent2: string,
     command: string,
@@ -92,9 +100,9 @@ const DEFS: Def[] = [
     ["#7c4dff", "#c2185b", "#7c4dff", "#0e8a7a", "#c85a12", "#b8336a", "#b3959d", "#9c2a5c"]],
   ["mint", "Mint", "Colorful", ["#f1fbf5", "#d9f1e3", "#1f3b2c", "#0f9d6a"],
     ["#f0604d", "#0b7d55", "#2563a8", "#b45309", "#d9485f", "#7c3aed", "#86a393", "#0b6e4f"]],
-  ["solarized-dark", "Solarized Dark", "Colorful", ["#002b36", "#073642", "#b8c4c4", "#2aa198"],
+  ["solarized-dark", "Solarized Dark", "Colorful", ["#002b36", "#073642", "#b8c4c4", "#2aa198", "#00212b"],
     ["#d33682", "#268bd2", "#859900", "#2aa198", "#d33682", "#cb4b16", "#5d7a82", "#b58900"]],
-  ["dracula", "Dracula", "Colorful", ["#282a36", "#21222c", "#f8f8f2", "#bd93f9"],
+  ["dracula", "Dracula", "Colorful", ["#282a36", "#21222c", "#f8f8f2", "#bd93f9", "#191a21"],
     ["#ff79c6", "#ff79c6", "#8be9fd", "#f1fa8c", "#50fa7b", "#bd93f9", "#6272a4", "#ffb86c"]],
 
   // Retro: the colors of old machines, logos and posters, used sparingly.
@@ -107,30 +115,30 @@ const DEFS: Def[] = [
   ["beige", "Beige", "Retro", ["#f4efe2", "#e7dfca", "#2d2a26", "#009ddc"],
     ["#f5821f", "#0a82b8", "#963d97", "#3f8f2a", "#e03a3e", "#b85f10", "#a39c8a", "#963d97"],
     { stripes: ["#61bb46", "#fdb827", "#f5821f", "#e03a3e", "#963d97", "#009ddc"] }],
-  ["spectrum", "Spectrum", "Retro", ["#141414", "#0c0c0c", "#e6e6e6", "#00aeef"],
+  ["spectrum", "Spectrum", "Retro", ["#171717", "#0f0f0f", "#e6e6e6", "#00aeef", "#000000"],
     ["#f7d117", "#00aeef", "#4cb748", "#f7d117", "#ff5ad0", "#ff6b5e", "#7a7a7a", "#ed1c24"],
     { stripes: ["#ed1c24", "#f7d117", "#4cb748", "#00aeef"] }],
-  ["arcade", "Arcade", "Retro", ["#1b1613", "#261d17", "#efe6d8", "#e4202e"],
+  ["arcade", "Arcade", "Retro", ["#1b1613", "#261d17", "#efe6d8", "#e4202e", "#120e0c"],
     ["#e08a3c", "#ff5a4e", "#f0a24a", "#e8c872", "#9cc3d5", "#f07b3f", "#8a7a6a", "#ff7a6e"],
     { stripes: ["#e4202e", "#e08a3c", "#8a5a36"] }],
-  ["gruvbox", "Gruvbox", "Retro", ["#282828", "#1d2021", "#ebdbb2", "#fe8019"],
+  ["gruvbox", "Gruvbox", "Retro", ["#282828", "#32302f", "#ebdbb2", "#fe8019", "#1d2021"],
     ["#b8bb26", "#fb4934", "#fabd2f", "#b8bb26", "#83a598", "#d3869b", "#928374", "#8ec07c"]],
-  ["synthwave", "Synthwave", "Retro", ["#262335", "#1e1a2b", "#f5e9ff", "#ff7edb"],
+  ["synthwave", "Synthwave", "Retro", ["#262335", "#1e1a2b", "#f5e9ff", "#ff7edb", "#171520"],
     ["#36f9f6", "#fede5d", "#36f9f6", "#ff8b39", "#72f1b8", "#f97e72", "#848bbd", "#ff7edb"],
     { stripes: ["#fede5d", "#ff8b39", "#ff7edb", "#36f9f6"] }],
-  ["phosphor", "Phosphor", "Retro", ["#07130a", "#0b1c0f", "#9dffa3", "#39ff14"],
+  ["phosphor", "Phosphor", "Retro", ["#07130a", "#0b1c0f", "#9dffa3", "#39ff14", "#030a05"],
     ["#c8ff5a", "#39ff14", "#c8ff5a", "#6fe8d8", "#e9ff8a", "#ffd166", "#3f7a47", "#d6ffd9"]],
-  ["amber", "Amber CRT", "Retro", ["#140d02", "#1e1406", "#ffb000", "#ffcc4d"],
+  ["amber", "Amber CRT", "Retro", ["#140d02", "#1e1406", "#ffb000", "#ffcc4d", "#0c0701"],
     ["#ff6a3d", "#ffd873", "#ff8c42", "#ffe8b0", "#ff6a3d", "#fff27a", "#8a5d14", "#ffe066"]],
 ];
 
 export const APP_THEMES: AppTheme[] = DEFS.map(
-  ([id, label, group, [bg, surface, fg, accent], p, extra]) => ({
+  ([id, label, group, [bg, surface, fg, accent, frame], p, extra]) => ({
     id,
     label,
     group,
     dark: isDarkColor(bg),
-    colors: { bg, surface, fg, accent },
+    colors: { bg, surface, fg, accent, ...(frame ? { frame } : {}) },
     palette: {
       accent2: p[0],
       command: p[1],
@@ -197,6 +205,7 @@ export function themeVariables(c: ThemeColors): Record<string, string> {
     "--t-fg": c.fg,
     "--t-accent": c.accent,
     "--t-on-accent": readableOn(c.accent),
+    ...(c.frame ? { "--t-frame": c.frame } : {}),
   };
 }
 
@@ -265,6 +274,10 @@ ${stripes}
   --syn-heading: ${turn(110)};
 }
 .${CUSTOM_THEME}.theme-dark { --syn-l: 0.8; }
+:is(${classes}).theme-dark {
+  --frame: var(--t-frame, color-mix(in oklab, color-mix(in oklab, var(--t-surface) 70%, black) 86%, var(--t-accent)));
+  --divider: ${mix("--frame", 82, "--t-fg")};
+}
 ${classes} {
   --background: var(--t-bg);
   --foreground: var(--t-fg);
@@ -289,6 +302,8 @@ ${classes} {
   --chart-3: var(--syn-env);
   --chart-4: var(--syn-string);
   --chart-5: var(--syn-math);
+  --frame: var(--t-frame, ${mix("--t-surface", 76, "--t-accent")});
+  --divider: ${mix("--frame", 78, "--t-fg")};
   --sidebar: var(--t-surface);
   --sidebar-foreground: var(--t-fg);
   --sidebar-primary: var(--t-accent);

@@ -30,12 +30,6 @@ import { THEME_IDS } from "@/lib/app-themes";
 import { useDockStore } from "@/stores/dock-store";
 import { useDocumentStore } from "@/stores/document-store";
 
-(window as any).__TAURI_INTERNALS__ = {
-  invoke: async () => {
-    throw new Error("no native side in tests");
-  },
-  transformCallback: () => 0,
-};
 const params = new URLSearchParams(location.search);
 const scenario = params.get("scenario");
 const root = createRoot(document.getElementById("root") as HTMLElement);
@@ -199,5 +193,47 @@ if (scenario === "palette") {
     <ThemeProvider attribute="class" themes={THEME_IDS}>
       <CommandPalette />
     </ThemeProvider>,
+  );
+}
+
+if (scenario === "workspace") {
+  const theme = params.get("theme") ?? "light";
+  const tex = (name: string, content: string) => ({
+    id: name,
+    relativePath: name,
+    name: name.split("/").pop(),
+    type: name.endsWith(".bib")
+      ? "bib"
+      : name.endsWith(".png")
+        ? "image"
+        : "tex",
+    content,
+  });
+  useDocumentStore.setState({
+    projectRoot: "/p/Science Policy Paper",
+    initialized: true,
+    activeFileId: "main.tex",
+    files: [
+      tex("main.tex", SAMPLE),
+      tex("chapters/intro.tex", "\\section{Intro}"),
+      tex("chapters/methods.tex", "\\section{Methods}"),
+      tex("refs.bib", "@article{a, title={A}}"),
+      tex("figures/plot.png", ""),
+    ],
+  } as never);
+  useDockStore.setState({
+    collapsed: { reference: false, vault: false, notes: false },
+  });
+  useDockStore.getState().setOpen("notes", true);
+  import("@/components/workspace/workspace-layout").then(
+    ({ WorkspaceLayout }) =>
+      root.render(
+        <ThemeProvider attribute="class" themes={THEME_IDS} forcedTheme={theme}>
+          <ThemeBridge />
+          <div className="h-full" style={chrome}>
+            <WorkspaceLayout />
+          </div>
+        </ThemeProvider>,
+      ),
   );
 }

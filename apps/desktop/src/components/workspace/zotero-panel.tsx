@@ -166,15 +166,17 @@ export function ZoteroHeader() {
   const loadCollections = useZoteroStore((s) => s.loadCollections);
 
   return (
-    <div className="relative flex w-full items-center justify-center px-3">
+    <div className="relative flex w-full items-center px-3">
       <div className="flex items-center gap-2">
         <span
           className={cn(
             "size-1.5 rounded-full",
-            isAuthenticated ? "bg-foreground" : "bg-muted-foreground/30",
+            isAuthenticated ? "bg-[var(--syn-math)]" : "bg-muted-foreground/30",
           )}
         />
-        <span className="font-medium text-xs">Zotero</span>
+        <span className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider">
+          Zotero
+        </span>
       </div>
       {isAuthenticated && (
         <div className="absolute right-3 flex items-center gap-1">

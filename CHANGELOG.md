@@ -81,7 +81,9 @@ tag.
   posters), Beige (the rainbow of early home computers), Spectrum, Arcade,
   Gruvbox, Synthwave, green Phosphor and Amber CRT — or follow the system.
   Each colors LaTeX its own way, and some carry a thin band of stripes along
-  the top. Or make your own: pick a background, sidebar, text and accent
+  the top. As in Obsidian, the window is set out in regions of its own
+  color: the bars and tabs framing your documents, the sidebars, and the
+  page itself, with files and folders colored by kind. Or make your own: pick a background, sidebar, text and accent
   color, starting from any theme, and the rest of the interface and the
   editor's colors follow. Choose from the palette at the bottom of the
   sidebar, or in Settings under Appearance.

@@ -46,8 +46,8 @@ function Tab({
         "group flex h-8 min-w-0 max-w-56 items-center gap-1.5 rounded-t-md border border-b-0 pr-1 pl-2.5 text-xs transition-colors",
         fixed ? "shrink-0" : "min-w-16 shrink",
         active
-          ? "border-border bg-background text-foreground"
-          : "border-transparent text-muted-foreground hover:bg-background/60 hover:text-foreground",
+          ? "-mb-px border-divider border-t-2 border-t-primary bg-background pb-px text-foreground"
+          : "border-transparent text-muted-foreground hover:bg-background/50 hover:text-foreground",
       )}
     >
       <button
@@ -98,7 +98,7 @@ export function PdfPane() {
         <div
           role="tablist"
           aria-label="Documents in this pane"
-          className="flex h-[calc(var(--titlebar-height)+34px)] shrink-0 items-end gap-0.5 overflow-x-auto border-border border-b bg-muted/60 px-2 pt-[var(--titlebar-height)]"
+          className="pane-header flex h-[calc(var(--titlebar-height)+34px)] shrink-0 items-end gap-0.5 overflow-x-auto border-b px-2 pt-[var(--titlebar-height)]"
         >
           <Tab
             fixed

@@ -106,7 +106,7 @@ export function RightDock() {
   const pct = (px: number) => Math.min(95, (px / height) * 100);
 
   return (
-    <div ref={containerRef} className="h-full min-w-0 bg-background">
+    <div ref={containerRef} className="h-full min-w-0 bg-sidebar">
       <PanelGroup
         direction="vertical"
         autoSaveId={`dock:${panels.join("+")}`}
@@ -163,7 +163,7 @@ export function WideDockPanel() {
   const setWide = useDockStore((s) => s.setWide);
   if (!wide) return null;
   return (
-    <div className="h-full min-w-0 bg-background">
+    <div className="h-full min-w-0 bg-sidebar">
       <DockSectionProvider
         value={{
           first: true,
@@ -191,7 +191,7 @@ export function DockRail() {
   return (
     <nav
       aria-label="Side panels"
-      className="flex w-10 shrink-0 flex-col items-center gap-1 border-border border-l bg-background pt-[calc(var(--titlebar-height)+6px)]"
+      className="pane-header flex w-10 shrink-0 flex-col items-center gap-1 border-l pt-[calc(var(--titlebar-height)+6px)]"
     >
       {DOCK_PANELS.map((panel) => {
         const { label, icon: Icon } = DOCK_INFO[panel];

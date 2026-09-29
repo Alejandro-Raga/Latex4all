@@ -45,7 +45,7 @@ function easeInOutSmooth(progress: number) {
  */
 function PaneDivider() {
   return (
-    <PanelResizeHandle className="w-2 shrink-0 border-border border-x bg-muted transition-colors hover:bg-ring/30 data-[resize-handle-state=drag]:bg-ring/40" />
+    <PanelResizeHandle className="w-1.5 shrink-0 border-divider border-x bg-frame transition-colors hover:bg-ring/40 data-[resize-handle-state=drag]:bg-ring/50" />
   );
 }
 
@@ -242,7 +242,7 @@ export function WorkspaceLayout() {
           />
         </Panel>
 
-        <PanelResizeHandle className="w-px bg-border transition-colors hover:bg-ring" />
+        <PaneDivider />
 
         {codeVisible && (
           <Panel

@@ -258,13 +258,22 @@ function buildFileTree(files: ProjectFile[], folders: string[]): TreeNode[] {
 // ─── File Icon ───
 
 function getFileIcon(file: ProjectFile) {
-  if (file.type === "image") return <ImageIcon className="size-4 shrink-0" />;
+  // Colored by kind, from the theme's syntax colors.
+  if (file.type === "image")
+    return <ImageIcon className="size-4 shrink-0 text-[var(--syn-math)]" />;
   if (file.type === "pdf")
-    return <FileSpreadsheetIcon className="size-4 shrink-0" />;
+    return (
+      <FileSpreadsheetIcon className="size-4 shrink-0 text-[var(--syn-number)]" />
+    );
   if (file.type === "style")
-    return <FileCodeIcon className="size-4 shrink-0" />;
-  if (file.type === "other") return <FileIcon className="size-4 shrink-0" />;
-  return <FileTextIcon className="size-4 shrink-0" />;
+    return <FileCodeIcon className="size-4 shrink-0 text-[var(--syn-env)]" />;
+  if (file.type === "bib")
+    return (
+      <FileTextIcon className="size-4 shrink-0 text-[var(--syn-string)]" />
+    );
+  if (file.type === "other")
+    return <FileIcon className="size-4 shrink-0 text-muted-foreground" />;
+  return <FileTextIcon className="size-4 shrink-0 text-[var(--syn-command)]" />;
 }
 
 // ─── App Version (resolved once from Tauri) ───
@@ -1239,8 +1248,8 @@ export function Sidebar({
   const collapsedRail = (
     <div className="flex h-full w-full min-w-0 flex-col items-center bg-sidebar text-sidebar-foreground">
       {/* Reserved, content-free lane for the macOS traffic lights */}
-      <div className="h-[var(--titlebar-height)] w-full shrink-0" />
-      <div className="flex h-[var(--workspace-topbar-height)] w-full shrink-0 items-center justify-center border-sidebar-border border-b">
+      <div className="h-[var(--titlebar-height)] w-full shrink-0 bg-frame" />
+      <div className="pane-header flex h-[var(--workspace-topbar-height)] w-full shrink-0 items-center justify-center border-b">
         <LayoutPaneSwitcher
           controls={layoutControls}
           collapsed={collapsed}
@@ -1330,8 +1339,8 @@ export function Sidebar({
       >
         <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
           {/* Reserved, content-free lane for the macOS traffic lights */}
-          <div className="h-[var(--titlebar-height)] w-full shrink-0" />
-          <div className="grid h-[var(--workspace-topbar-height)] shrink-0 grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-2 border-sidebar-border border-b px-3">
+          <div className="h-[var(--titlebar-height)] w-full shrink-0 bg-frame" />
+          <div className="pane-header grid h-[var(--workspace-topbar-height)] shrink-0 grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-2 border-b px-3">
             <div className="flex items-center justify-start">
               <Button
                 variant="ghost"
@@ -1411,8 +1420,10 @@ export function Sidebar({
               >
                 <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-sidebar-border border-b px-3">
                   <div className="flex min-w-0 items-center gap-2">
-                    <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                    <span className="truncate font-medium text-xs">Files</span>
+                    <FolderIcon className="size-3.5 shrink-0 text-[var(--t-accent2)]" />
+                    <span className="truncate font-semibold text-[11px] text-muted-foreground uppercase tracking-wider">
+                      Files
+                    </span>
                   </div>
                   <div className="flex shrink-0 items-center gap-0.5">
                     <Button
@@ -1540,9 +1551,11 @@ export function Sidebar({
             {/* Outline */}
             <Panel defaultSize={20} minSize={10}>
               <div className="flex h-full flex-col">
-                <div className="flex h-8 shrink-0 items-center justify-center gap-2 px-3">
-                  <ListIcon className="size-3.5 text-muted-foreground" />
-                  <span className="font-medium text-xs">Outline</span>
+                <div className="flex h-8 shrink-0 items-center gap-2 px-3">
+                  <ListIcon className="size-3.5 text-[var(--syn-heading)]" />
+                  <span className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider">
+                    Outline
+                  </span>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto p-1">
                   {toc.length > 0 ? (
@@ -1555,7 +1568,7 @@ export function Sidebar({
                         }}
                         onClick={() => handleTocClick(item.line)}
                       >
-                        <HashIcon className="size-3 shrink-0 text-muted-foreground" />
+                        <HashIcon className="size-3 shrink-0 text-[var(--syn-heading)] opacity-80" />
                         <span className="truncate">{item.title}</span>
                       </button>
                     ))
@@ -1982,7 +1995,7 @@ function FileTreeNode({
                 ) : (
                   <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
                 )}
-                <FolderIcon className="size-4 shrink-0" />
+                <FolderIcon className="size-4 shrink-0 text-[var(--t-accent2)]" />
                 <span className="truncate">{node.name}</span>
               </button>
             </ContextMenuTrigger>
@@ -2066,7 +2079,7 @@ function FileTreeNode({
             className={cn(
               "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
               (file.id === activeFileId || isSelected) &&
-                "bg-sidebar-accent text-sidebar-accent-foreground",
+                "bg-sidebar-accent text-sidebar-accent-foreground shadow-[inset_2px_0_0_var(--primary)]",
               file.id !== activeFileId &&
                 !isSelected &&
                 "hover:bg-sidebar-accent/50",
@@ -2204,9 +2217,11 @@ function EnvironmentSection({
   return (
     <>
       <div className="border-sidebar-border border-t">
-        <div className="flex h-8 shrink-0 items-center justify-center gap-2 px-3">
-          <AppWindowIcon className="size-3.5 text-muted-foreground" />
-          <span className="font-medium text-xs">Environment</span>
+        <div className="flex h-8 shrink-0 items-center gap-2 px-3">
+          <AppWindowIcon className="size-3.5 text-[var(--syn-env)]" />
+          <span className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider">
+            Environment
+          </span>
         </div>
         <div className="space-y-0.5 px-1 pb-1.5">
           {/* Python / uv row */}

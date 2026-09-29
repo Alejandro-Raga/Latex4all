@@ -152,7 +152,7 @@ export function PaperReader({
 
   return (
     <div ref={wrapperRef} className="flex h-full min-w-0 flex-col bg-muted/50">
-      <div className="flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] shrink-0 items-center gap-1.5 border-border border-b bg-background px-3 pt-[var(--titlebar-height)]">
+      <div className="pane-header flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] shrink-0 items-center gap-1.5 border-b px-3 pt-[var(--titlebar-height)]">
         <BookOpenIcon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate font-medium text-sm">
           {paper.label}

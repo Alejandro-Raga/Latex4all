@@ -42,10 +42,10 @@ export function DockHeaderBar({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center gap-1.5 border-border border-b px-2",
+        "pane-header flex shrink-0 items-center gap-1.5 border-b px-2",
         underTitleBar
           ? "h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] pt-[var(--titlebar-height)]"
-          : "h-[var(--workspace-topbar-height)] bg-muted/30",
+          : "h-[var(--workspace-topbar-height)]",
         className,
       )}
     >
