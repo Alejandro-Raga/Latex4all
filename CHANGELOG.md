@@ -66,6 +66,12 @@ tag.
   you zoom so a busy network stays readable.
 - Widen any side panel: the Reference, Vault and Notes panels each have a
   button that moves them into the big pane beside the editor, and back.
+- Your projects in your vault. Turn on "Keep this project's note here" in the
+  Vault menu and the project gets a note in a folder of its own (My work, or
+  one you choose): the papers it cites, linked to their notes so your work
+  sits in the graph beside the literature, its outline, and your highlights
+  and notes with the text they're on. It updates itself as you write; what
+  you add to the note yourself is kept.
 - Color themes for the whole app: the classics (Light, Paper, Sky, Dark,
   Dim, Nord), colorful ones (Solarized light and dark, Rosé, Mint,
   Dracula) and retro ones (Seventies, Gruvbox, Synthwave, green Phosphor and

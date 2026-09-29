@@ -30,6 +30,7 @@ import { PDF_THEMES, type PdfTheme } from "@/lib/pdf-themes";
 import { findObsidianVaults, type KnownVault } from "@/lib/vault/load";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 import { useLanguagePacksStore } from "@/stores/language-packs-store";
+import { useDocumentStore } from "@/stores/document-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import {
   type SettingsSection,
@@ -249,6 +250,13 @@ function VaultSettings() {
   const useLocalFolder = useVaultStore((s) => s.useLocalFolder);
   const useServer = useVaultStore((s) => s.useServer);
   const disconnectServer = useVaultStore((s) => s.disconnectServer);
+  const projectsFolder = useVaultStore((s) => s.projectsFolder);
+  const setProjectsFolder = useVaultStore((s) => s.setProjectsFolder);
+  const linkProject = useVaultStore((s) => s.linkProject);
+  const projectRoot = useDocumentStore((s) => s.projectRoot);
+  const projectLinked = useVaultStore((s) =>
+    projectRoot ? Boolean(s.linkedProjects[projectRoot]) : false,
+  );
   const [vaults, setVaults] = useState<KnownVault[]>([]);
   const [serverDialog, setServerDialog] = useState(false);
 
@@ -329,6 +337,29 @@ function VaultSettings() {
           </Button>
         )}
       </SettingRow>
+      <SettingRow
+        label="Project notes folder"
+        detail="Where linked projects keep their note in the vault"
+      >
+        <Input
+          value={projectsFolder}
+          onChange={(e) => setProjectsFolder(e.target.value)}
+          className="h-7 w-44 text-xs"
+          aria-label="Project notes folder"
+        />
+      </SettingRow>
+      {projectRoot && (
+        <SettingRow
+          label="Keep this project's note in the vault"
+          detail="Its citations, outline, highlights and notes"
+        >
+          <Toggle
+            checked={projectLinked}
+            onChange={(on) => linkProject(projectRoot, on)}
+            label="Keep this project's note in the vault"
+          />
+        </SettingRow>
+      )}
       <ServerDialog open={serverDialog} onOpenChange={setServerDialog} />
     </div>
   );

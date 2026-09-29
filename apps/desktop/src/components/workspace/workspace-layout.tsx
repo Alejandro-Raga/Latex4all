@@ -16,6 +16,7 @@ import { LatexEditor } from "./editor/latex-editor";
 import { PdfPane } from "./preview/pdf-pane";
 import { DockRail, RightDock } from "./dock/right-dock";
 import { SettingsWindow } from "@/components/settings/settings-view";
+import { ProjectNoteSync } from "./project-note-sync";
 import {
   useDockedPanels,
   useDockStore,
@@ -271,6 +272,7 @@ export function WorkspaceLayout() {
       </PanelGroup>
       <DockRail />
       <SettingsWindow />
+      <ProjectNoteSync />
     </div>
   );
 }

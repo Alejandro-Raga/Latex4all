@@ -45,6 +45,10 @@ interface VaultState {
   mode: "local" | "server";
   /** Folder of the Obsidian vault on this computer, for local mode. */
   vaultPath: string | null;
+  /** Projects that keep a note in the vault, by project folder. */
+  linkedProjects: Record<string, true>;
+  /** Vault folder for those notes. */
+  projectsFolder: string;
   /** Folder and template last used for a new note ("" / null: none). */
   lastNoteFolder: string | null;
   lastTemplate: string | null;
@@ -76,6 +80,8 @@ interface VaultState {
   /** Picks the source to read from; uses Obsidian's last vault when none is set. */
   ensureVault: () => Promise<void>;
   useLocalFolder: (path: string) => void;
+  linkProject: (root: string, linked: boolean) => void;
+  setProjectsFolder: (folder: string) => void;
   /** Switches back to the connected server. */
   useServer: () => void;
   connectServer: (
@@ -90,6 +96,8 @@ interface VaultState {
    * WebdavConflictError if it changed on the server since it was read.
    */
   saveNote: (path: string, text: string, force?: boolean) => Promise<void>;
+  /** Shows a note written elsewhere (e.g. a project note) without a reread. */
+  noteWritten: (path: string, text: string) => void;
   /** Creates a note in `folder`, from `template` if given, and returns its name. */
   createNote: (
     folder: string,
@@ -108,6 +116,8 @@ export const useVaultStore = create<VaultState>()(
       vaultPath: null,
       lastNoteFolder: null,
       lastTemplate: null,
+      linkedProjects: {},
+      projectsFolder: "My work",
       source: null,
       server: null,
       index: null,
@@ -158,6 +168,17 @@ export const useVaultStore = create<VaultState>()(
         });
         get().reload();
       },
+
+      linkProject: (root, linked) =>
+        set((s) => {
+          const next = { ...s.linkedProjects };
+          if (linked) next[root] = true;
+          else delete next[root];
+          return { linkedProjects: next };
+        }),
+
+      setProjectsFolder: (folder) =>
+        set({ projectsFolder: folder.replace(/^\/+|\/+$/g, "") }),
 
       useServer: () => {
         const { server, source } = get();
@@ -231,6 +252,11 @@ export const useVaultStore = create<VaultState>()(
         get().reload();
       },
 
+      noteWritten: (path, text) => {
+        set({ index: withNote(get().index, path, text) });
+        get().reload();
+      },
+
       createNote: async (folder, title, template) => {
         const { source } = get();
         if (!source) throw new Error("No vault is open.");
@@ -276,6 +302,8 @@ export const useVaultStore = create<VaultState>()(
         vaultPath: state.vaultPath,
         lastNoteFolder: state.lastNoteFolder,
         lastTemplate: state.lastTemplate,
+        linkedProjects: state.linkedProjects,
+        projectsFolder: state.projectsFolder,
       }),
     },
   ),

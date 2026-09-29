@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { citeKeyAtCursor } from "@/lib/vault/cite-at-cursor";
+import { noteForCitekey } from "@/lib/vault/cite-link";
 import {
   findObsidianVaults,
   type KnownVault,
@@ -59,6 +60,7 @@ import { useDocumentStore } from "@/stores/document-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { MarkdownNoteEditor } from "./markdown-note-editor";
+import { syncProjectNote } from "./project-note-sync";
 import {
   type GraphLinkInput,
   type GraphNodeInput,
@@ -104,42 +106,6 @@ function noteSubtitle(note: VaultNote): string {
   }
   const links = note.outgoing.length + note.incoming.length;
   return links ? `${links} link${links === 1 ? "" : "s"}` : "";
-}
-
-/**
- * The paper note for a citation key, via the Zotero item behind the
- * project's .bib entries, or failing that by name (`Nelson1959`) or by
- * author and year (`nelson_simple_1959`).
- */
-function noteForCitekey(
-  index: VaultIndex,
-  key: string,
-  itemKeyByCitekey: Map<string, string>,
-): VaultNote | undefined {
-  const itemKey = itemKeyByCitekey.get(key);
-  const papers = index.list.filter((n) => n.kind === "paper");
-  if (itemKey) {
-    const byItem = papers.find((n) => n.zoteroKey === itemKey);
-    if (byItem) return byItem;
-  }
-  const lower = key.toLowerCase();
-  const byName = papers.find(
-    (n) => n.name.toLowerCase() === lower || n.citekey?.toLowerCase() === lower,
-  );
-  if (byName) return byName;
-  const year = lower.match(/(1[5-9]|20)\d\d/)?.[0];
-  if (!year) return undefined;
-  return papers.find((n) => {
-    const [author] = n.authors;
-    const last = author
-      ?.split(",")[0]
-      .split(" ")
-      .pop()
-      ?.normalize("NFKD")
-      .replace(/[^A-Za-z]/g, "")
-      .toLowerCase();
-    return last && n.year === year && lower.startsWith(last);
-  });
 }
 
 /** Zotero item keys by the citation keys this project's .bib files use. */
@@ -331,6 +297,22 @@ function VaultMenu({
   const useLocalFolder = useVaultStore((s) => s.useLocalFolder);
   const disconnectServer = useVaultStore((s) => s.disconnectServer);
   const useServer = useVaultStore((s) => s.useServer);
+  const projectRoot = useDocumentStore((s) => s.projectRoot);
+  const linkProject = useVaultStore((s) => s.linkProject);
+  const projectLinked = useVaultStore((s) =>
+    projectRoot ? Boolean(s.linkedProjects[projectRoot]) : false,
+  );
+  const updateProjectNote = () =>
+    syncProjectNote()
+      .then((name) => {
+        if (name) {
+          toast.success(`Updated “${name}” in the vault`);
+          useVaultStore.getState().open(name);
+        }
+      })
+      .catch((err) =>
+        toast.error(err instanceof Error ? err.message : String(err)),
+      );
   const [vaults, setVaults] = useState<KnownVault[]>([]);
   const localRoot = source instanceof LocalVaultSource ? source.root : null;
 
@@ -407,6 +389,30 @@ function VaultMenu({
             <ServerIcon className="size-3.5" />
             Connect to a server…
           </DropdownMenuItem>
+        )}
+        {projectRoot && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault();
+                linkProject(projectRoot, !projectLinked);
+                if (!projectLinked) updateProjectNote();
+              }}
+            >
+              <CheckIcon
+                className={cn("size-3.5", !projectLinked && "invisible")}
+              />
+              Keep this project's note here
+            </DropdownMenuItem>
+            {projectLinked && (
+              <DropdownMenuItem onSelect={updateProjectNote}>
+                <RefreshCwIcon className="size-3.5" />
+                Update project note now
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+          </>
         )}
         <DropdownMenuItem
           onSelect={() => useSettingsWindow.getState().show("vault")}
