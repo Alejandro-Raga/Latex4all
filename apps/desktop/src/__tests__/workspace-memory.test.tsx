@@ -26,14 +26,12 @@ it("keeps each project's tabs and panels, and restores them on return", async ()
 
   // Work in A: a PDF tab and the Vault.
   await act(async () => {
-    useReadingStore
-      .getState()
-      .open({
-        id: "/p/A/fig.pdf",
-        label: "fig.pdf",
-        data: new Uint8Array(),
-        filePath: "/p/A/fig.pdf",
-      });
+    useReadingStore.getState().open({
+      id: "/p/A/fig.pdf",
+      label: "fig.pdf",
+      data: new Uint8Array(),
+      filePath: "/p/A/fig.pdf",
+    });
     useDockStore.getState().setOpen("vault", true);
   });
   await wait(700);

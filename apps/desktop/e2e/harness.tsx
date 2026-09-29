@@ -8,6 +8,10 @@ import { ThemeProvider } from "next-themes";
 import "../src/styles/globals.css";
 import { ThemeBridge } from "@/components/theme-bridge";
 import {
+  CommandPalette,
+  useCommandPalette,
+} from "@/components/workspace/command-palette";
+import {
   RightDock,
   WideDockPanel,
 } from "@/components/workspace/dock/right-dock";
@@ -15,6 +19,7 @@ import { PdfViewer } from "@/components/workspace/preview/pdf-viewer";
 import { VaultGraph } from "@/components/workspace/vault-graph";
 import { THEME_IDS } from "@/lib/app-themes";
 import { useDockStore } from "@/stores/dock-store";
+import { useDocumentStore } from "@/stores/document-store";
 
 (window as any).__TAURI_INTERNALS__ = {
   invoke: async () => {
@@ -112,6 +117,36 @@ if (scenario === "theme") {
     <ThemeProvider attribute="class" themes={THEME_IDS} forcedTheme={theme}>
       <ThemeBridge />
       <div className="h-full bg-background p-4 text-foreground">themed</div>
+    </ThemeProvider>,
+  );
+}
+
+if (scenario === "palette") {
+  (window as any).dock = useDockStore;
+  useDockStore.setState({ open: { reference: false, vault: false } });
+  useDocumentStore.setState({
+    projectRoot: "/p/demo",
+    files: [
+      {
+        id: "main.tex",
+        relativePath: "main.tex",
+        name: "main.tex",
+        type: "tex",
+        content: "",
+      },
+      {
+        id: "refs.bib",
+        relativePath: "refs.bib",
+        name: "refs.bib",
+        type: "bib",
+        content: "",
+      },
+    ],
+  } as never);
+  useCommandPalette.getState().setOpen(true);
+  root.render(
+    <ThemeProvider attribute="class" themes={THEME_IDS}>
+      <CommandPalette />
     </ThemeProvider>,
   );
 }

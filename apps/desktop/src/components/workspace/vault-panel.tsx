@@ -51,6 +51,7 @@ import { EMBED_SRC, noteFromHref, vaultMarkdown } from "@/lib/vault/render";
 import {
   findNote,
   neighbourhood,
+  PAPERS_GROUP,
   searchNotes,
   type VaultIndex,
   type VaultNote,
@@ -1047,7 +1048,7 @@ function CiteButton({
 type GraphScope = 1 | 2 | "all";
 
 /** Nodes and links for the map: the note's neighbourhood, or the whole vault. */
-function graphFor(index: VaultIndex, name: string, scope: GraphScope) {
+export function graphFor(index: VaultIndex, name: string, scope: GraphScope) {
   const ring = new Map<string, number>();
   let members: VaultNote[];
   if (scope === "all") {
@@ -1073,7 +1074,84 @@ function graphFor(index: VaultIndex, name: string, scope: GraphScope) {
       if (names.has(target)) links.push({ source: n.name, target });
     }
   }
-  return { nodes, links };
+  // The groups on the map, for its legend and filters.
+  const groupOf = new Map(members.map((n) => [n.name, n.group]));
+  const groups = new Map<string, { color: string; count: number }>();
+  for (const n of members) {
+    const g = groups.get(n.group);
+    groups.set(n.group, { color: noteColor(n), count: (g?.count ?? 0) + 1 });
+  }
+  return { nodes, links, groupOf, groups };
+}
+
+/** The map without the groups switched off (the note itself always stays). */
+export function filterGraph(
+  graph: ReturnType<typeof graphFor>,
+  hidden: Set<string>,
+): { nodes: GraphNodeInput[]; links: GraphLinkInput[] } {
+  if (hidden.size === 0) return graph;
+  const keep = new Set(
+    graph.nodes
+      .filter((n) => n.centre || !hidden.has(graph.groupOf.get(n.id) ?? ""))
+      .map((n) => n.id),
+  );
+  return {
+    nodes: graph.nodes.filter((n) => keep.has(n.id)),
+    links: graph.links.filter((l) => keep.has(l.source) && keep.has(l.target)),
+  };
+}
+
+/** Colored chips naming the map's groups; clicking one hides or shows it. */
+function GraphLegend({
+  groups,
+  hidden,
+  onToggle,
+}: {
+  groups: Map<string, { color: string; count: number }>;
+  hidden: Set<string>;
+  onToggle: (group: string) => void;
+}) {
+  if (groups.size < 2) return null;
+  const order = [...groups.keys()].sort((a, b) =>
+    a === PAPERS_GROUP ? -1 : b === PAPERS_GROUP ? 1 : a.localeCompare(b),
+  );
+  return (
+    <div
+      role="group"
+      className="mt-1.5 flex flex-wrap gap-1"
+      aria-label="Groups on the map"
+    >
+      {order.map((group) => {
+        const { color, count } = groups.get(group) as {
+          color: string;
+          count: number;
+        };
+        const off = hidden.has(group);
+        return (
+          <button
+            key={group}
+            type="button"
+            onClick={() => onToggle(group)}
+            aria-pressed={!off}
+            title={
+              off ? `Show ${groupLabel(group)}` : `Hide ${groupLabel(group)}`
+            }
+            className={cn(
+              "flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] transition-colors hover:bg-muted",
+              off && "opacity-40",
+            )}
+          >
+            <span
+              className="size-2 rounded-full"
+              style={{ backgroundColor: color }}
+            />
+            {groupLabel(group)}
+            <span className="text-muted-foreground">{count}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function Connections({
@@ -1091,10 +1169,22 @@ function Connections({
   const both = note.outgoing.filter((n) => note.incoming.includes(n));
   const linksTo = note.outgoing.filter((n) => !both.includes(n));
   const linkedFrom = note.incoming.filter((n) => !both.includes(n));
-  const graph = useMemo(
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const fullGraph = useMemo(
     () => graphFor(index, note.name, scope),
     [index, note.name, scope],
   );
+  const graph = useMemo(
+    () => filterGraph(fullGraph, hidden),
+    [fullGraph, hidden],
+  );
+  const toggleGroup = (group: string) =>
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
   const highlight = useMemo(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     if (words.length === 0) return null;
@@ -1162,6 +1252,11 @@ function Connections({
           onOpen={onOpen}
         />
       </PanelBoundary>
+      <GraphLegend
+        groups={fullGraph.groups}
+        hidden={hidden}
+        onToggle={toggleGroup}
+      />
       <LinkGroup title="Both ways" names={both} index={index} onOpen={onOpen} />
       <LinkGroup
         title="Links to"

@@ -64,7 +64,8 @@ tag.
   note. Scroll or pinch to zoom, drag to pan, hover a note to light up its
   links, click to open it, and type to highlight matching notes. Show a
   note's direct links, two steps out, or the whole vault; names fade in as
-  you zoom so a busy network stays readable.
+  you zoom so a busy network stays readable. A legend under the map names
+  its groups by color; click one to hide or show it.
 - Widen any side panel: the Reference, Vault and Notes panels each have a
   button that moves them into the big pane beside the editor, and back.
 - Your projects in your vault. Turn on "Keep this project's note here" in the
@@ -85,6 +86,11 @@ tag.
   \cite{}s if Zotero knows it by another key); what's in the bibliography
   but never cited; and cited papers that aren't in your vault yet, with a
   button to send them there.
+- A command palette: press ⌘K and type to jump to a file, a vault note or
+  an open PDF, or to run a command — show or hide a panel, check citations,
+  switch theme, open a settings section. Shortcuts too: ⌘⌥1, ⌘⌥2 and ⌘⌥3
+  show or hide Reference, Vault and Notes, and ⌘⇧] and ⌘⇧[ step through
+  the PDF pane's tabs.
 - Settings from anywhere: press ⌘, or click the gear at the bottom of the
   sidebar. New sections bring together what was scattered: Editor, PDF, Zotero
   and Vault.

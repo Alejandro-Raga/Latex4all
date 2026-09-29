@@ -19,6 +19,7 @@ import { SettingsWindow } from "@/components/settings/settings-view";
 import { ProjectNoteSync } from "./project-note-sync";
 import { CitationCheckDialog } from "./citation-check";
 import { WorkspaceMemory } from "./workspace-memory";
+import { CommandPalette, useWorkspaceShortcuts } from "./command-palette";
 import {
   useDockedPanels,
   useDockStore,
@@ -65,6 +66,7 @@ export function WorkspaceLayout() {
   const dockPanels = useOpenDockPanels();
   const dockedPanels = useDockedPanels();
   const setDockOpen = useDockStore((s) => s.setOpen);
+  useWorkspaceShortcuts();
 
   const getCollapsedSidebarSize = useCallback(() => {
     const workspaceWidth =
@@ -277,6 +279,7 @@ export function WorkspaceLayout() {
       <ProjectNoteSync />
       <CitationCheckDialog />
       <WorkspaceMemory />
+      <CommandPalette />
     </div>
   );
 }
