@@ -100,3 +100,7 @@ build/
 reference_pr
 reference_pr_claude
 external-libs/
+
+# Playwright
+apps/desktop/test-results/
+apps/desktop/playwright-report/

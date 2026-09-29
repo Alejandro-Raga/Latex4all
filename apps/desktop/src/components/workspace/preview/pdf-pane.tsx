@@ -14,6 +14,7 @@ import { useReadingStore } from "@/stores/reading-store";
 import { WideDockPanel } from "../dock/right-dock";
 import { PaperReader } from "./paper-reader";
 import { PdfPreview } from "./pdf-preview";
+import { PanelBoundary } from "@/components/panel-boundary";
 
 const WIDE_TAB: Record<DockPanel, { label: string; icon: LucideIcon }> = {
   reference: { label: "Reference", icon: LibraryIcon },
@@ -137,11 +138,15 @@ export function PdfPane() {
         }
       >
         <div className={shown("preview")}>
-          <PdfPreview />
+          <PanelBoundary name="PDF preview">
+            <PdfPreview />
+          </PanelBoundary>
         </div>
         {papers.map((p) => (
           <div key={p.id} className={shown(p.id)}>
-            <PaperReader paper={p} visible={active === p.id} />
+            <PanelBoundary name={p.label}>
+              <PaperReader paper={p} visible={active === p.id} />
+            </PanelBoundary>
           </div>
         ))}
         {wide && (

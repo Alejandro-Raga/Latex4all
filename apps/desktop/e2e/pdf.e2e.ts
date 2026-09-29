@@ -1,0 +1,40 @@
+import { expect, open, test } from "./fixtures";
+
+test("the PDF's text layer has its words and can be selected", async ({
+  page,
+}) => {
+  await open(page, "scenario=pdf");
+  const title = page.locator(".mupdf-text-layer text", {
+    hasText: "Scientific Report Title",
+  });
+  await expect(title).toHaveCount(1, { timeout: 30_000 });
+
+  // Every line carries text and sits on the page, not at y=0.
+  const lines = await page.evaluate(() =>
+    [...document.querySelectorAll(".mupdf-text-layer text")]
+      .filter((t) => (t.textContent ?? "").trim())
+      .map((t) => Number(t.getAttribute("y"))),
+  );
+  expect(lines.length).toBeGreaterThan(5);
+  expect(lines.every((y) => y > 0)).toBe(true);
+
+  // Drag across the title and subtitle (browser coordinates: Playwright's
+  // box for SVG text is off in WebKit).
+  const box = (text: string) =>
+    page.evaluate((t) => {
+      const el = [...document.querySelectorAll(".mupdf-text-layer text")].find(
+        (x) => x.textContent?.startsWith(t),
+      );
+      const r = (el as Element).getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height };
+    }, text);
+  const a = await box("Scientific Report Title");
+  const b = await box("Subtitle or Project Name");
+  await page.mouse.move(a.x + 3, a.y + a.h / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.w - 2, b.y + b.h / 2, { steps: 12 });
+  await page.mouse.up();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).lastSelection))
+    .toBe("Scientific Report Title\nSubtitle or Project Name");
+});

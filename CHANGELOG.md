@@ -106,6 +106,9 @@ tag.
   of each opening a column of its own, so the editor and PDF keep their width.
   Fold any of them to its header, resize the split, or open and close them
   from the icons along the right edge.
+- If a panel runs into a problem, only that panel stops, with a button to
+  reload it and one to copy the details for a bug report; the rest of the
+  window keeps working.
 - A project type you typed yourself is offered in the Type menu of every
   project, alongside the built-in ones.
 - Exporting a PDF opens the save dialog in the project's own folder.

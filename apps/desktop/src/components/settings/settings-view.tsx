@@ -43,6 +43,7 @@ import {
   SettingsDetailButton,
   SettingsPanel,
 } from "./settings-parts";
+import { PanelBoundary } from "@/components/panel-boundary";
 
 export type { SettingsSection };
 
@@ -514,7 +515,9 @@ export function SettingsView({
           icon={current.icon}
           contentClassName={current.flush ? "p-0" : undefined}
         >
-          {current.body}
+          <PanelBoundary name={current.label} resetKeys={[current.id]}>
+            {current.body}
+          </PanelBoundary>
         </SettingsPanel>
       </div>
     </div>

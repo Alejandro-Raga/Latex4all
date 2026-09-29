@@ -27,6 +27,7 @@ import { NotesPanel } from "../notes-panel";
 import { QuickReferencePanel } from "../quick-reference-panel";
 import { VaultPanel } from "../vault-panel";
 import { DockSectionProvider } from "./dock-section";
+import { PanelBoundary } from "@/components/panel-boundary";
 
 /** Header heights, so a collapsed section keeps exactly its header. */
 const FIRST_HEADER_PX = 70; // title bar + top bar
@@ -143,7 +144,9 @@ export function RightDock() {
                     toggleWide: () => setWide(panel),
                   }}
                 >
-                  <DockPanelContent panel={panel} />
+                  <PanelBoundary name={DOCK_INFO[panel].label}>
+                    <DockPanelContent panel={panel} />
+                  </PanelBoundary>
                 </DockSectionProvider>
               </Panel>
             </Fragment>
@@ -171,7 +174,9 @@ export function WideDockPanel() {
           toggleWide: () => setWide(null),
         }}
       >
-        <DockPanelContent panel={wide} />
+        <PanelBoundary name={DOCK_INFO[wide].label}>
+          <DockPanelContent panel={wide} />
+        </PanelBoundary>
       </DockSectionProvider>
     </div>
   );

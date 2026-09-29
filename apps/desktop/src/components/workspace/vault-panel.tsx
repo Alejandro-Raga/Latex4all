@@ -72,6 +72,7 @@ import {
   DockWideButton,
   useDockSection,
 } from "./dock/dock-section";
+import { PanelBoundary } from "@/components/panel-boundary";
 
 const REFRESH_MS = 30_000;
 
@@ -1109,13 +1110,15 @@ function Connections({
           />
         )}
       </div>
-      <VaultGraph
-        nodes={graph.nodes}
-        links={graph.links}
-        height={wide ? 460 : scope === 1 ? 200 : 280}
-        highlight={highlight}
-        onOpen={onOpen}
-      />
+      <PanelBoundary name="The map" resetKeys={[graph]}>
+        <VaultGraph
+          nodes={graph.nodes}
+          links={graph.links}
+          height={wide ? 460 : scope === 1 ? 200 : 280}
+          highlight={highlight}
+          onOpen={onOpen}
+        />
+      </PanelBoundary>
       <LinkGroup title="Both ways" names={both} index={index} onOpen={onOpen} />
       <LinkGroup
         title="Links to"
