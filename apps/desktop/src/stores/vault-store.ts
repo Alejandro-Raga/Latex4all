@@ -74,8 +74,10 @@ interface VaultState {
   error: string | null;
   /** Name of the note being read, or null for the list. */
   current: string | null;
-  /** Notes visited before `current`, for Back. */
+  /** Where you were before `current`, for Back; "" is the list of notes. */
   history: string[];
+  /** Where Back came from, for Forward. */
+  forward: string[];
   /** The note being edited, while it has changes that aren't saved. */
   unsavedEdit: string | null;
 
@@ -109,6 +111,7 @@ interface VaultState {
   ) => Promise<string>;
   open: (name: string) => void;
   back: () => void;
+  goForward: () => void;
   showList: () => void;
 }
 
@@ -134,6 +137,7 @@ export const useVaultStore = create<VaultState>()(
       error: null,
       current: null,
       history: [],
+      forward: [],
       unsavedEdit: null,
 
       ensureVault: async () => {
@@ -169,6 +173,7 @@ export const useVaultStore = create<VaultState>()(
           index: null,
           current: null,
           history: [],
+          forward: [],
         });
         get().reload();
       },
@@ -195,6 +200,7 @@ export const useVaultStore = create<VaultState>()(
           index: null,
           current: null,
           history: [],
+          forward: [],
         });
         get().reload();
       },
@@ -208,6 +214,7 @@ export const useVaultStore = create<VaultState>()(
           index: null,
           current: null,
           history: [],
+          forward: [],
         });
         await get().reload();
       },
@@ -284,21 +291,39 @@ export const useVaultStore = create<VaultState>()(
         if (name === current || !confirmLeaveVaultEdit()) return;
         set({
           current: name,
-          history: current ? [...history, current].slice(-50) : history,
+          history: [...history, current ?? ""].slice(-50),
+          forward: [],
         });
       },
 
       back: () => {
-        if (!confirmLeaveVaultEdit()) return;
-        const { history } = get();
+        const { current, history, forward } = get();
+        if (!history.length || !confirmLeaveVaultEdit()) return;
         set({
-          current: history[history.length - 1] ?? null,
+          current: history[history.length - 1] || null,
           history: history.slice(0, -1),
+          forward: [current ?? "", ...forward],
+        });
+      },
+
+      goForward: () => {
+        const { current, history, forward } = get();
+        if (!forward.length || !confirmLeaveVaultEdit()) return;
+        set({
+          current: forward[0] || null,
+          history: [...history, current ?? ""].slice(-50),
+          forward: forward.slice(1),
         });
       },
 
       showList: () => {
-        if (confirmLeaveVaultEdit()) set({ current: null, history: [] });
+        const { current, history } = get();
+        if (current === null || !confirmLeaveVaultEdit()) return;
+        set({
+          current: null,
+          history: [...history, current].slice(-50),
+          forward: [],
+        });
       },
     }),
     {

@@ -150,13 +150,25 @@ methods.getPageLinks = (docId: number, pageIndex: number): unknown[] => {
       href = uri;
     } else {
       try {
-        const resolved = doc.resolveLink(uri) as any;
-        if (typeof resolved === "number") {
-          href = `#page=${resolved + 1}`;
-        } else if (resolved && typeof resolved.page === "number") {
-          href = `#page=${resolved.page + 1}`;
-        } else {
+        // Where on the page it points (a bibliography entry, a figure), so
+        // following it lands there rather than at the top of the page.
+        const dest = doc.resolveLinkDestination?.(uri) as any;
+        const resolved =
+          dest && typeof dest.page === "number"
+            ? dest.page
+            : (doc.resolveLink(uri) as any);
+        const page =
+          typeof resolved === "number"
+            ? resolved
+            : resolved && typeof resolved.page === "number"
+              ? resolved.page
+              : null;
+        if (page === null) {
           href = uri;
+        } else {
+          href = `#page=${page + 1}`;
+          if (dest && Number.isFinite(dest.y))
+            href += `&y=${Math.round(dest.y)}`;
         }
       } catch {
         href = uri;

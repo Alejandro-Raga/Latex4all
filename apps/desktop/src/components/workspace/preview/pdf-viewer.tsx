@@ -8,7 +8,13 @@ import {
   useLayoutEffect,
   useState,
 } from "react";
-import { CheckIcon, LoaderIcon, MoonIcon, SunIcon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  CheckIcon,
+  LoaderIcon,
+  MoonIcon,
+  SunIcon,
+} from "lucide-react";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import { ask } from "@tauri-apps/plugin-dialog";
 import {
@@ -51,6 +57,12 @@ function clampPdfScale(value: number): number {
 
 function isModifiedZoomWheel(event: WheelEvent): boolean {
   return (event.metaKey || event.ctrlKey) && !event.altKey;
+}
+
+/** A place in the document: a page, and how far down it, in points. */
+interface LinkStop {
+  page: number;
+  offset: number;
 }
 
 function isWheelInsidePdfViewer(
@@ -333,6 +345,9 @@ export function PdfViewer({
   }, [annotations]);
 
   const scaleRef = useRef(scale);
+  // Places you followed a link from, newest last, for Back.
+  const [linkTrail, setLinkTrail] = useState<LinkStop[]>([]);
+  const linkTrailRef = useRef<LinkStop[]>([]);
   scaleRef.current = scale;
   const renderedScaleRef = useRef(scale);
   const pendingZoomScrollRef = useRef<PendingZoomScroll | null>(null);
@@ -471,6 +486,50 @@ export function PdfViewer({
     }
     return 1;
   }
+
+  /** Where the view is: the page at the top, and how far into it, in points. */
+  function viewPosition(container: HTMLElement): LinkStop {
+    const page = getVisiblePage();
+    const el = container.querySelector(
+      `[data-page-number="${page}"]`,
+    ) as HTMLElement | null;
+    const offset = el
+      ? (container.getBoundingClientRect().top -
+          el.getBoundingClientRect().top) /
+        scaleRef.current
+      : 0;
+    return { page, offset };
+  }
+
+  /** Scroll so a point `y` points down the page sits `margin` px from the top. */
+  function scrollToPoint(
+    container: HTMLElement,
+    page: number,
+    y: number,
+    margin = 16,
+  ) {
+    const el = container.querySelector(
+      `[data-page-number="${page}"]`,
+    ) as HTMLElement | null;
+    if (!el) return;
+    container.scrollTop +=
+      el.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      y * scaleRef.current -
+      margin;
+  }
+
+  /** Back to where the last followed link was clicked. */
+  const linkBack = () => {
+    const container = containerRef.current;
+    const stop = linkTrailRef.current[linkTrailRef.current.length - 1];
+    if (!container || !stop) return;
+    linkTrailRef.current = linkTrailRef.current.slice(0, -1);
+    setLinkTrail(linkTrailRef.current);
+    scrollToPoint(container, stop.page, stop.offset, 0);
+  };
+  const linkBackRef = useRef(linkBack);
+  linkBackRef.current = linkBack;
 
   /** Scroll the container so the given page is at the top (with 16px offset). */
   function scrollToPage(container: HTMLElement, page: number): boolean {
@@ -1087,6 +1146,17 @@ export function PdfViewer({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+      // Back from a followed link: ⌘[ as in Zotero's reader, or ⌥←.
+      if (
+        (mod && !e.shiftKey && e.key === "[") ||
+        (e.altKey && !mod && e.key === "ArrowLeft")
+      ) {
+        if (linkTrailRef.current.length) {
+          e.preventDefault();
+          linkBackRef.current();
+        }
+        return;
+      }
       if (!mod) return;
 
       if (e.key === "=" || e.key === "+") {
@@ -1123,10 +1193,19 @@ export function PdfViewer({
       if (!href) return;
 
       if (href.includes("#page=")) {
-        const match = href.match(/#page=(\d+)/);
+        const match = href.match(/#page=(\d+)(?:&y=(-?\d+))?/);
         if (match) {
           const pageNum = parseInt(match[1], 10);
-          scrollToPage(container, pageNum);
+          linkTrailRef.current = [
+            ...linkTrailRef.current,
+            viewPosition(container),
+          ].slice(-30);
+          setLinkTrail(linkTrailRef.current);
+          if (match[2] !== undefined) {
+            scrollToPoint(container, pageNum, Number(match[2]), 48);
+          } else {
+            scrollToPage(container, pageNum);
+          }
         }
         return;
       }
@@ -1347,6 +1426,18 @@ export function PdfViewer({
           />
         )}
       </div>
+      {linkTrail.length > 0 && (
+        <Button
+          variant="secondary"
+          size="sm"
+          className="absolute bottom-3 left-1/2 z-10 h-8 -translate-x-1/2 gap-1.5 rounded-full px-3 shadow-md"
+          onClick={linkBack}
+          title="Back (⌘[)"
+        >
+          <ArrowLeftIcon className="size-3.5" />
+          Back to p. {linkTrail[linkTrail.length - 1].page}
+        </Button>
+      )}
       {/* Bottom left: the bottom right corner is the chat button's. */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

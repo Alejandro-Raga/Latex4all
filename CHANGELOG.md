@@ -64,8 +64,15 @@ tag.
   note. Scroll or pinch to zoom, drag to pan, hover a note to light up its
   links, click to open it, and type to highlight matching notes. Show a
   note's direct links, two steps out, or the whole vault; names fade in as
-  you zoom so a busy network stays readable. A legend under the map names
-  its groups by color; click one to hide or show it.
+  you zoom so a busy network stays readable, and never on top of each
+  other. A legend under the map names its groups by color; click one to hide
+  or show it.
+- Find your way around the vault like a browser: Back and Forward, a Home
+  button that takes you straight to all your notes, a list of the notes you
+  came through, and your mouse's back and forward buttons.
+- Follow a link in a PDF, such as a citation, and it takes you to the exact
+  spot it points to; a "Back to p. N" button (or ⌘[) returns you to where
+  you were reading, as in Zotero's reader.
 - Widen any side panel: the Reference, Vault and Notes panels each have a
   button that moves them into the big pane beside the editor, and back.
 - Your projects in your vault. Turn on "Keep this project's note here" in the

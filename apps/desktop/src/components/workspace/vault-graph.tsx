@@ -146,6 +146,12 @@ export function VaultGraph({
     );
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
+    const labels: {
+      n: (typeof nodesRef.current)[number];
+      alpha: number;
+      on: boolean;
+      rank: number;
+    }[] = [];
     for (const n of nodesRef.current) {
       const on = lit ? lit.has(n.id) : true;
       const faint = n.ring >= 2 && !lit;
@@ -162,17 +168,52 @@ export function VaultGraph({
       const alpha =
         n.id === hover || n.centre || lit?.has(n.id) ? 1 : lit ? 0 : baseLabel;
       if (alpha > 0.02) {
-        ctx.globalAlpha = alpha * (on ? 1 : 0.3);
-        ctx.fillStyle = `rgb(${colors.text})`;
-        // On screen, text grows a little as you zoom in but never shrinks
-        // below readable; the canvas is in world units, hence the / t.k.
-        const screenPx = 11 * Math.min(Math.max(t.k, 0.9), 1.4);
-        const weight = n.id === hover || n.centre ? "600 " : "";
-        ctx.font = `${weight}${screenPx / t.k}px ui-sans-serif, system-ui, sans-serif`;
-        const label =
-          n.label.length > 32 ? `${n.label.slice(0, 31)}…` : n.label;
-        ctx.fillText(label, n.x, n.y + n.r + 3 / t.k);
+        const rank =
+          n.id === hover
+            ? 0
+            : n.centre
+              ? 1
+              : lit?.has(n.id)
+                ? 2
+                : 3 - n.r / 100;
+        labels.push({ n, alpha, on, rank });
       }
+    }
+
+    // Labels after every dot, most important first, and none on top of
+    // another: a label that would overlap one already drawn waits until you
+    // zoom in or hover. On screen, text grows a little as you zoom in but
+    // never shrinks below readable; the canvas is in world units (/ t.k).
+    labels.sort((a, b) => a.rank - b.rank);
+    const screenPx = 9.5 * Math.min(Math.max(t.k, 0.9), 1.3);
+    const lineH = (screenPx * 1.25) / t.k;
+    const placed: [number, number, number, number][] = [];
+    for (const { n, alpha, on, rank } of labels) {
+      const weight = rank < 2 ? "600 " : "";
+      ctx.font = `${weight}${screenPx / t.k}px ui-sans-serif, system-ui, sans-serif`;
+      const label = n.label.length > 28 ? `${n.label.slice(0, 27)}…` : n.label;
+      const w = ctx.measureText(label).width;
+      const x1 = n.x - w / 2;
+      const y1 = n.y + n.r + 2.5 / t.k;
+      const box: [number, number, number, number] = [
+        x1,
+        y1,
+        x1 + w,
+        y1 + lineH,
+      ];
+      if (
+        rank >= 2 &&
+        placed.some(
+          ([a1, b1, a2, b2]) =>
+            box[0] < a2 && box[2] > a1 && box[1] < b2 && box[3] > b1,
+        )
+      ) {
+        continue;
+      }
+      placed.push(box);
+      ctx.globalAlpha = alpha * (on ? 1 : 0.3);
+      ctx.fillStyle = `rgb(${colors.text})`;
+      ctx.fillText(label, n.x, y1);
     }
     ctx.globalAlpha = 1;
   }, []);

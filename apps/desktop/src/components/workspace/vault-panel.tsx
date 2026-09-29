@@ -5,7 +5,10 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import {
   ArrowLeftIcon,
+  ArrowRightIcon,
   CheckIcon,
+  HistoryIcon,
+  HomeIcon,
   ChevronDownIcon,
   ExternalLinkIcon,
   FolderOpenIcon,
@@ -148,8 +151,8 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
   const error = useVaultStore((s) => s.error);
   const current = useVaultStore((s) => s.current);
   const history = useVaultStore((s) => s.history);
-  const { ensureVault, reload, open, back, showList } =
-    useVaultStore.getState();
+  const forward = useVaultStore((s) => s.forward);
+  const { ensureVault, reload, open } = useVaultStore.getState();
   const [searched, setSearched] = useState(false);
   const [serverDialog, setServerDialog] = useState(false);
 
@@ -168,19 +171,17 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
   const note = index && current ? findNote(index, current) : undefined;
 
   return (
-    <div className="flex h-full min-w-0 flex-col bg-background">
+    <div
+      className="flex h-full min-w-0 flex-col bg-background"
+      // A mouse's own back and forward buttons.
+      onMouseUp={(e) => {
+        if (e.button === 3) useVaultStore.getState().back();
+        if (e.button === 4) useVaultStore.getState().goForward();
+      }}
+    >
       <DockHeaderBar>
-        {current ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6"
-            onClick={() => (history.length ? back() : showList())}
-            title="Back"
-            aria-label="Back"
-          >
-            <ArrowLeftIcon className="size-3.5" />
-          </Button>
+        {current || history.length || forward.length ? (
+          <VaultNav />
         ) : (
           <NotebookTextIcon className="size-3.5 shrink-0 text-muted-foreground" />
         )}
@@ -244,6 +245,86 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
       ) : null}
 
       <ServerDialog open={serverDialog} onOpenChange={setServerDialog} />
+    </div>
+  );
+}
+
+/**
+ * Back, forward, all notes, and the notes you came through, so getting back
+ * to the list never takes more than a click.
+ */
+function VaultNav() {
+  const current = useVaultStore((s) => s.current);
+  const history = useVaultStore((s) => s.history);
+  const forward = useVaultStore((s) => s.forward);
+  const { back, goForward, showList, open } = useVaultStore.getState();
+  const recent = useMemo(
+    () =>
+      [...new Set([...history].reverse())]
+        .filter((n) => n && n !== current)
+        .slice(0, 12),
+    [history, current],
+  );
+  const icon = "size-6 shrink-0";
+  return (
+    <div className="flex shrink-0 items-center">
+      <Button
+        variant="ghost"
+        size="icon"
+        className={icon}
+        onClick={back}
+        disabled={!history.length}
+        title="Back"
+        aria-label="Back"
+      >
+        <ArrowLeftIcon className="size-3.5" />
+      </Button>
+      {forward.length > 0 && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className={icon}
+          onClick={goForward}
+          title="Forward"
+          aria-label="Forward"
+        >
+          <ArrowRightIcon className="size-3.5" />
+        </Button>
+      )}
+      {current && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className={icon}
+          onClick={showList}
+          title="All notes"
+          aria-label="All notes"
+        >
+          <HomeIcon className="size-3.5" />
+        </Button>
+      )}
+      {recent.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={icon}
+              title="Recent notes"
+              aria-label="Recent notes"
+            >
+              <HistoryIcon className="size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="max-w-72">
+            {recent.map((name) => (
+              <DropdownMenuItem key={name} onSelect={() => open(name)}>
+                <span className="truncate">{name}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   );
 }

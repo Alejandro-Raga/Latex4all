@@ -61,7 +61,7 @@ if (scenario === "dock") {
 }
 
 if (scenario === "pdf") {
-  fetch("/examples/report-scientific/main.pdf")
+  fetch(`/examples/${params.get("pdf") ?? "report-scientific"}/main.pdf`)
     .then((r) => r.arrayBuffer())
     .then((buf) => {
       function Viewer() {
