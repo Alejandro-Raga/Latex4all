@@ -35,6 +35,7 @@ import {
   FlaskConicalIcon,
   TerminalIcon,
   LibraryIcon,
+  SettingsIcon,
   NotebookTextIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -56,6 +57,7 @@ import { useDocumentStore, type ProjectFile } from "@/stores/document-store";
 import { useHistoryStore } from "@/stores/history-store";
 import { cn } from "@/lib/utils";
 import { ZoteroPanel, ZoteroHeader } from "@/components/workspace/zotero-panel";
+import { useSettingsWindow } from "@/stores/settings-window-store";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -1589,6 +1591,16 @@ export function Sidebar({
           <div className="flex h-9 items-center justify-between border-sidebar-border border-t px-3 text-muted-foreground text-xs">
             <span className="truncate">Latex4All v{appVersion}</span>
             <div className="flex shrink-0 items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                onClick={() => useSettingsWindow.getState().show()}
+                title="Settings (⌘,)"
+                aria-label="Settings"
+              >
+                <SettingsIcon className="size-3.5" />
+              </Button>
               <Button variant="ghost" size="icon" className="size-6" asChild>
                 <a
                   href="https://github.com/Alejandro-Raga/Latex4all"

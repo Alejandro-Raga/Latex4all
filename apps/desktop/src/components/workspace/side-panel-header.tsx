@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAnnotationsStore } from "@/stores/annotations-store";
 import { useChatStore } from "@/stores/chat-store";
+import { DockHeaderBar } from "./dock/dock-section";
 
 /**
  * The top of the side panel: its title, or a switch between notes and chat
@@ -16,7 +17,7 @@ export function SidePanelHeader({ onClose }: { onClose: () => void }) {
   const showing = chatDays > 0 ? tab : "notes";
 
   return (
-    <div className="flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] shrink-0 items-center gap-2 border-border border-b px-3 pt-[var(--titlebar-height)]">
+    <DockHeaderBar>
       {chatDays > 0 ? (
         <div className="flex min-w-0 flex-1 items-center gap-0.5">
           {(
@@ -64,6 +65,6 @@ export function SidePanelHeader({ onClose }: { onClose: () => void }) {
       >
         <XIcon className="size-3.5" />
       </Button>
-    </div>
+    </DockHeaderBar>
   );
 }

@@ -14,12 +14,9 @@ import {
 import { Sidebar } from "./sidebar";
 import { LatexEditor } from "./editor/latex-editor";
 import { PdfPreview } from "./preview/pdf-preview";
-import { QuickReferencePanel } from "./quick-reference-panel";
-import { NotesPanel } from "./notes-panel";
-import { VaultPanel } from "./vault-panel";
-import { ChatPanel } from "./chat-panel";
-import { useChatStore } from "@/stores/chat-store";
-import { useAnnotationsStore } from "@/stores/annotations-store";
+import { DockRail, RightDock } from "./dock/right-dock";
+import { SettingsWindow } from "@/components/settings/settings-view";
+import { useDockStore, useOpenDockPanels } from "@/stores/dock-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { usePreviewStore } from "@/stores/preview-store";
 
@@ -47,12 +44,8 @@ export function WorkspaceLayout() {
     SIDEBAR_COLLAPSED_SIZE_FALLBACK,
   );
   const [codeVisible, setCodeVisible] = useState(true);
-  const [quickRefOpen, setQuickRefOpen] = useState(false);
-  const [vaultOpen, setVaultOpen] = useState(false);
-  const notesOpen = useAnnotationsStore((s) => s.panelOpen);
-  const setNotesOpen = useAnnotationsStore((s) => s.setPanelOpen);
-  const panelTab = useAnnotationsStore((s) => s.panelTab);
-  const chatDays = useChatStore((s) => s.days);
+  const dockPanels = useOpenDockPanels();
+  const setDockOpen = useDockStore((s) => s.setOpen);
 
   const getCollapsedSidebarSize = useCallback(() => {
     const workspaceWidth =
@@ -192,8 +185,8 @@ export function WorkspaceLayout() {
   }
 
   return (
-    <div ref={workspaceRef} className="h-full">
-      <PanelGroup direction="horizontal" className="h-full">
+    <div ref={workspaceRef} className="flex h-full">
+      <PanelGroup direction="horizontal" className="h-full min-w-0 flex-1">
         <Panel
           ref={sidebarPanelRef}
           defaultSize={SIDEBAR_DEFAULT_SIZE}
@@ -217,13 +210,13 @@ export function WorkspaceLayout() {
               codeVisible,
               pdfVisible: previewVisible,
               sidebarVisible: !sidebarCollapsed,
-              referenceVisible: quickRefOpen,
-              vaultVisible: vaultOpen,
+              referenceVisible: dockPanels.includes("reference"),
+              vaultVisible: dockPanels.includes("vault"),
               setCodeVisible: setCodePaneVisible,
               setPdfVisible: setPdfPaneVisible,
               setSidebarVisible: (visible) => setSidebarPaneCollapsed(!visible),
-              setReferenceVisible: setQuickRefOpen,
-              setVaultVisible: setVaultOpen,
+              setReferenceVisible: (open) => setDockOpen("reference", open),
+              setVaultVisible: (open) => setDockOpen("vault", open),
             }}
           />
         </Panel>
@@ -254,40 +247,18 @@ export function WorkspaceLayout() {
           </Panel>
         )}
 
-        {quickRefOpen && (
+        {dockPanels.length > 0 && (
           <PanelResizeHandle className="w-px bg-border transition-colors hover:bg-ring" />
         )}
 
-        {quickRefOpen && (
-          <Panel defaultSize={24} minSize={16} maxSize={45} className="min-w-0">
-            <QuickReferencePanel onClose={() => setQuickRefOpen(false)} />
-          </Panel>
-        )}
-
-        {vaultOpen && (
-          <PanelResizeHandle className="w-px bg-border transition-colors hover:bg-ring" />
-        )}
-
-        {vaultOpen && (
-          <Panel defaultSize={22} minSize={15} maxSize={40} className="min-w-0">
-            <VaultPanel onClose={() => setVaultOpen(false)} />
-          </Panel>
-        )}
-
-        {notesOpen && (
-          <PanelResizeHandle className="w-px bg-border transition-colors hover:bg-ring" />
-        )}
-
-        {notesOpen && (
-          <Panel defaultSize={20} minSize={14} maxSize={40} className="min-w-0">
-            {panelTab === "chat" && chatDays > 0 ? (
-              <ChatPanel onClose={() => setNotesOpen(false)} />
-            ) : (
-              <NotesPanel onClose={() => setNotesOpen(false)} />
-            )}
+        {dockPanels.length > 0 && (
+          <Panel defaultSize={26} minSize={16} maxSize={45} className="min-w-0">
+            <RightDock />
           </Panel>
         )}
       </PanelGroup>
+      <DockRail />
+      <SettingsWindow />
     </div>
   );
 }

@@ -85,6 +85,7 @@ import {
 } from "@/lib/reference-import";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
+import { DockHeaderBar } from "./dock/dock-section";
 
 const log = createLogger("quick-reference");
 
@@ -545,7 +546,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-background">
-      <div className="flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] shrink-0 items-center gap-2 border-border border-b px-3">
+      <DockHeaderBar>
         {refProjectPath ? (
           <Button
             variant="ghost"
@@ -573,7 +574,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
         >
           <XIcon className="size-3.5" />
         </Button>
-      </div>
+      </DockHeaderBar>
 
       {!refProjectPath && (
         <PanelGroup direction="vertical" className="min-h-0 flex-1">

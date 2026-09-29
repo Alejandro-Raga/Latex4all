@@ -23,6 +23,17 @@ tag.
 
 ### Added
 
+- Leaving a vault note with unsaved edits (closing the panel, going back,
+  following a link) now asks first instead of discarding them.
+- Settings from anywhere: ⌘, or the gear at the bottom of the sidebar opens
+  them over your project. New sections gather what was scattered: Editor
+  (Vim keys, grammar checking, highlights), PDF (page colors for each
+  viewer), Zotero (connect, change key, disconnect) and Vault (where your
+  vault is and how it's reached).
+- A calmer right side. Reference, Vault and Notes now share one column,
+  stacked, instead of each taking a column of its own, so the editor and PDF
+  keep their width. Fold any of them to its header, resize the split, or open
+  and close them from the icons along the right edge.
 - Your Obsidian vault next to your writing. Turn on Vault in the layout menu
   to search, read and edit your notes without leaving the editor, see what
   each links to and what links back, and follow the links on a small map of

@@ -19,6 +19,20 @@ import {
 /** A read of the vault is under way (reloads don't overlap). */
 let reading = false;
 
+/**
+ * Asks before throwing away unsaved edits to a vault note. True when there
+ * are none, or the user agrees to lose them.
+ */
+export function confirmLeaveVaultEdit(): boolean {
+  const { unsavedEdit } = useVaultStore.getState();
+  if (!unsavedEdit) return true;
+  if (!window.confirm(`Discard your unsaved changes to “${unsavedEdit}”?`)) {
+    return false;
+  }
+  useVaultStore.setState({ unsavedEdit: null });
+  return true;
+}
+
 /** The index with one note replaced (or added), without rereading the vault. */
 function withNote(index: VaultIndex | null, path: string, text: string) {
   const others = (index?.list ?? []).filter((n) => n.path !== path);
@@ -56,6 +70,8 @@ interface VaultState {
   current: string | null;
   /** Notes visited before `current`, for Back. */
   history: string[];
+  /** The note being edited, while it has changes that aren't saved. */
+  unsavedEdit: string | null;
 
   /** Picks the source to read from; uses Obsidian's last vault when none is set. */
   ensureVault: () => Promise<void>;
@@ -104,6 +120,7 @@ export const useVaultStore = create<VaultState>()(
       error: null,
       current: null,
       history: [],
+      unsavedEdit: null,
 
       ensureVault: async () => {
         if (get().source) {
@@ -232,7 +249,7 @@ export const useVaultStore = create<VaultState>()(
 
       open: (name) => {
         const { current, history } = get();
-        if (name === current) return;
+        if (name === current || !confirmLeaveVaultEdit()) return;
         set({
           current: name,
           history: current ? [...history, current].slice(-50) : history,
@@ -240,6 +257,7 @@ export const useVaultStore = create<VaultState>()(
       },
 
       back: () => {
+        if (!confirmLeaveVaultEdit()) return;
         const { history } = get();
         set({
           current: history[history.length - 1] ?? null,
@@ -247,7 +265,9 @@ export const useVaultStore = create<VaultState>()(
         });
       },
 
-      showList: () => set({ current: null, history: [] }),
+      showList: () => {
+        if (confirmLeaveVaultEdit()) set({ current: null, history: [] });
+      },
     }),
     {
       name: "latex4all-vault",

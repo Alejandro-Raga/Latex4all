@@ -17,6 +17,7 @@ import {
   RefreshCwIcon,
   SearchIcon,
   ServerIcon,
+  SettingsIcon,
   UnplugIcon,
   XIcon,
 } from "lucide-react";
@@ -58,6 +59,8 @@ import { useDocumentStore } from "@/stores/document-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { MarkdownNoteEditor } from "./markdown-note-editor";
+import { useSettingsWindow } from "@/stores/settings-window-store";
+import { DockHeaderBar } from "./dock/dock-section";
 
 const REFRESH_MS = 30_000;
 
@@ -188,7 +191,7 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-background">
-      <div className="flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] shrink-0 items-center gap-1.5 border-border border-b px-3 pt-[var(--titlebar-height)]">
+      <DockHeaderBar>
         {current ? (
           <Button
             variant="ghost"
@@ -232,7 +235,7 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
         >
           <XIcon className="size-3.5" />
         </Button>
-      </div>
+      </DockHeaderBar>
 
       <CursorCitation onOpen={open} />
 
@@ -395,6 +398,12 @@ function VaultMenu({
             Connect to a server…
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem
+          onSelect={() => useSettingsWindow.getState().show("vault")}
+        >
+          <SettingsIcon className="size-3.5" />
+          Vault settings…
+        </DropdownMenuItem>
         {source && (
           <DropdownMenuItem
             onSelect={() =>
@@ -415,7 +424,7 @@ function VaultMenu({
 }
 
 /** Address and login of a WebDAV folder holding the vault. */
-function ServerDialog({
+export function ServerDialog({
   open,
   onOpenChange,
 }: {
@@ -838,6 +847,18 @@ function NoteEditor({
   const [saving, setSaving] = useState(false);
   const [conflict, setConflict] = useState(false);
   const generated = initial.includes("%% begin zotero %%");
+
+  // Let the rest of the panel ask before navigating away from unsaved edits.
+  const dirty = text !== initial;
+  useEffect(() => {
+    useVaultStore.setState({ unsavedEdit: dirty ? note.name : null });
+  }, [dirty, note.name]);
+  useEffect(
+    () => () => {
+      useVaultStore.setState({ unsavedEdit: null });
+    },
+    [],
+  );
 
   const save = async (force = false) => {
     if (saving) return;

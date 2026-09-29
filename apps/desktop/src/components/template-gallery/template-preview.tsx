@@ -465,7 +465,6 @@ export function TemplatePreview() {
   return (
     <Dialog open={!!previewTemplateId} onOpenChange={handleOpenChange}>
       <DialogContent
-        showCloseButton={false}
         className={`flex max-w-none flex-col gap-0 overflow-hidden p-0 transition-[width] duration-300 sm:max-w-none ${modalWidth} ${modalStep === "preview" ? "h-[70vh]" : "max-h-[80vh]"}`}
       >
         {modalStep === "preview" ? (
@@ -660,7 +659,10 @@ export function TemplatePreview() {
                                   {path.split(/[/\\]/).pop()}
                                 </span>
                                 <button
+                                  type="button"
                                   onClick={() => handleRemoveAttachment(path)}
+                                  title="Remove"
+                                  aria-label={`Remove ${path.split(/[/\\]/).pop()}`}
                                   className="flex size-4 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive"
                                 >
                                   <XIcon className="size-3" />
