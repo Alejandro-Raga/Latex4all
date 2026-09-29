@@ -7,114 +7,89 @@ section matching that version and uses it for both the GitHub release body and
 the notes shown in the app's update dialog. If the section is missing or empty
 the build fails on purpose, so a release cannot ship with placeholder notes.
 
-Test-channel builds use the `## [Unreleased]` section below as their notes,
-so keep it current as features land; only if it is empty do they fall back to
-the commit subjects since the last stable release.
+Test-channel builds use the `## [Unreleased]
 
-**Entries are for users.** A change earns a line here if someone could notice
-it: a new feature, or a fix to something that was broken for them. Describe the
-symptom, not the plumbing — "updates stopped being offered" rather than which
-URL changed. Branch layout, CI, refactors and tests belong in commit messages.
-
-Write entries under `## [Unreleased]` and rename it to `## [x.y.z]` when you
-tag.
-
-## [Unreleased]
+## [1.2.0] - 2026-09-29
 
 ### Added
 
-- Leaving a vault note with unsaved edits (closing the panel, going back,
-  following a link) now asks first instead of discarding them.
-- Settings from anywhere: ⌘, or the gear at the bottom of the sidebar opens
-  them over your project. New sections gather what was scattered: Editor
-  (Vim keys, grammar checking, highlights), PDF (page colors for each
-  viewer), Zotero (connect, change key, disconnect) and Vault (where your
-  vault is and how it's reached).
-- A calmer right side. Reference, Vault and Notes now share one column,
-  stacked, instead of each taking a column of its own, so the editor and PDF
-  keep their width. Fold any of them to its header, resize the split, or open
-  and close them from the icons along the right edge.
-- Your Obsidian vault next to your writing. Turn on Vault in the layout menu
-  to search, read and edit your notes without leaving the editor, see what
-  each links to and what links back, and follow the links on a small map of
-  connected notes. It works with however you keep your vault: a folder on this
-  computer (Obsidian Sync, iCloud, Dropbox, Syncthing, Git…), found on its own
-  when Obsidian knows it, or a WebDAV server (Remotely Save, Nextcloud,
-  Seafile…), read and saved there directly so it's current without opening
-  Obsidian. New notes go where Obsidian puts them and can start from your own
-  templates. Literature notes from Zotero plugins are recognised as papers:
-  their Cite button adds the paper to the bibliography and inserts the
-  citation, and a citation under the cursor leads to its note.
-- Copy text from PDFs. Text in PDFs can be selected again (it had stopped
-  working in every viewer), and copies with ⌘C or the new Copy button as
-  readable text: lines joined, paragraphs kept, hyphenated words rejoined.
-- More ways to show PDFs: besides light and dark, a softer off-white, sepia,
-  dim (dark grey with off-white text) and a warm dark. Pick one from the
-  button at the bottom left of any PDF, which no longer sits under the chat
-  button.
-- Shared projects. Click Share in the editor to get an invite link, and
-  anyone who opens it with Join — picking where to save their copy — works on
-  the same project: text, figures and files stay in sync, with everyone's
-  cursors shown. Changes are kept until the others open the project, so nobody
-  starts from an old copy, and edits made offline merge in on reconnecting.
-  Everything is encrypted on your computer before it's sent.
-- Move a project to another folder from inside the app. Right-click a project
-  on the projects screen, or its name in the sidebar, and choose "Move to…".
-  Another drive works too, and a shared project stays shared.
-- Highlights and notes. Select text to highlight it or add a note (⌘⇧H,
-  ⌘⌥M). Hover a highlight to read the note, reply, resolve it or change its
-  color. Resolved notes turn grey, and the notes bar lists every note in the
-  project, lets you reply there and jumps to it. Highlights and notes also
-  appear over the compiled PDF, and exporting the PDF asks whether to include
-  them, as annotations any PDF reader shows. In a shared project everyone sees
-  them.
-- Suggested edits. Right-click text, or select it, and choose "Suggest edit"
-  (⌘⌥E) to write what it should say. It shows with a green underline; anyone
-  can accept or reject it from the text or the notes bar, and reply to it
-  like a note. Accepted and rejected suggestions stay in the notes bar's
-  Resolved tab, greyed out, with who settled them and when.
-- Pick your color for shared projects in the Shared button, next to your
-  name. It's used for your cursor, notes and chat, and kept from then on;
-  changing it recolors what you wrote before too, for everyone. Use the same
-  name on each of your computers and they share one color.
+- Shared projects. Click Share in the editor to get an invite link; whoever
+  opens it with Join chooses where to keep their copy, and from then on text,
+  figures and files stay in sync, with everyone's cursors shown. Changes wait
+  until the others open the project, so nobody starts from an old copy, and
+  edits made offline merge in when you reconnect. Everything is encrypted on
+  your computer before it's sent.
 - Chat in shared projects, next to Notes: messages and images for everyone on
-  the project. Messages are deleted after 30 days.
-- Add a paper's PDF to the project from quick reference. Right-click it —
-  a Zotero item or a PDF in another project — and choose "Add PDF to
-  references" to keep a copy, or "Add PDF to chat" to hand it to Claude to
-  work from.
-- Warnings when a shared project can't sync: when it's nearly full or full,
-  when a file is too large to share or couldn't be sent or received, or when
-  Latex4All needs updating. They show on the Shared button, along with how
-  much space the project uses.
-
-### Fixed
-
-- When two people change the same words while out of sync, you get one
-  version whole instead of both mixed letter by letter, and the other is
-  offered as a suggestion.
-- Claude's edits, and undoing them, no longer erase what you or a
-  collaborator wrote in the meantime.
-- A note's icon stays at the end of its highlight while you type after it.
-- Cut (⌘X / Ctrl+X) works in text again. Capture and ask moved to ⌘⇧X /
-  Ctrl+Shift+X.
-- Undo and redo take back whole actions on highlights, notes and suggestions
-  too: undoing an accepted suggestion puts the old text and the suggestion
-  back. They also work right after acting from the notes bar.
-- Right-clicking a Spanish word finds its definition for plurals, verb forms
-  and other inflections, not only the dictionary form. The Spanish language
-  pack is also half the size to download.
-- The setup window can always be closed: it has a close button, and on small
-  screens its list scrolls instead of pushing Done out of reach.
-- Grammar checking works on computers with an older Java installed, as is
-  common on Windows. Its downloads also retry instead of hanging on a stalled
-  connection.
+  the project, deleted after 30 days.
+- Your own color in shared projects, picked in the Share button. It marks
+  your cursor, notes and chat, recolors what you wrote before, and follows
+  your name onto your other computers.
+- The Share button warns you when a shared project is nearly full, when a
+  file is too large to share or couldn't be sent, and when Latex4All needs
+  updating, and shows how much space the project uses.
+- Highlights and notes. Select text to highlight it or add a note (⌘⇧H,
+  ⌘⌥M); hover a highlight to read the note, reply, resolve it or change its
+  color. The notes bar lists every note in the project and jumps to it.
+  Highlights and notes also show on the compiled PDF, and exporting the PDF
+  can include them as annotations any PDF reader shows.
+- Suggested edits. Select text and choose "Suggest edit" (⌘⌥E) to propose
+  what it should say. Anyone can accept or reject it, from the text or the
+  notes bar, and reply to it like a note; settled suggestions stay in the
+  notes bar as a record of who decided what.
+- Your Obsidian vault beside your writing. Open Vault from the icons on the
+  right to search, read and edit your notes, create new ones from your own
+  templates, and see what each note links to and what links back, on a small
+  map of connected notes. It works however you keep your vault: a folder on
+  this computer (Obsidian Sync, iCloud, Dropbox, Syncthing, Git…), found on
+  its own when Obsidian knows it, or a WebDAV server (Remotely Save,
+  Nextcloud, Seafile…), read and saved there directly so it's up to date
+  without opening Obsidian. Literature notes from Zotero plugins are
+  recognised as papers: Cite adds the paper to the bibliography and inserts
+  the citation, and a citation under the cursor leads to its note.
+- Settings from anywhere: press ⌘, or click the gear at the bottom of the
+  sidebar. New sections bring together what was scattered: Editor, PDF, Zotero
+  and Vault.
+- Copy text from PDFs with ⌘C or the Copy button, as readable text: lines of a
+  paragraph joined, paragraphs kept apart, hyphenated words made whole.
+- More ways to show a PDF: besides light and dark, a softer off-white, sepia,
+  a dim grey with off-white text, and a warm dark. Each viewer remembers its
+  own.
+- Move a project to another folder or drive from inside the app: right-click
+  it on the projects screen, or its name in the sidebar, and choose "Move
+  to…". A shared project stays shared.
+- Add a paper to the project from quick reference: right-click a Zotero item,
+  or a PDF in another project, and choose "Add PDF to references" to keep a
+  copy, or "Add PDF to chat" to give it to Claude.
 
 ### Changed
 
-- A project type you typed yourself is offered in the Type menu on every other
+- Reference, Vault and Notes share one column on the right, stacked, instead
+  of each opening a column of its own, so the editor and PDF keep their width.
+  Fold any of them to its header, resize the split, or open and close them
+  from the icons along the right edge.
+- A project type you typed yourself is offered in the Type menu of every
   project, alongside the built-in ones.
 - Exporting a PDF opens the save dialog in the project's own folder.
+
+### Fixed
+
+- Text in PDFs couldn't be selected, so nothing could be copied, proofread or
+  double-clicked to its place in the source. All of it works again.
+- The PDF's dark-mode button sat under the chat button; its replacement, the
+  page colors button, is at the bottom left.
+- Cut (⌘X / Ctrl+X) works in text again. Capture and ask moved to ⌘⇧X /
+  Ctrl+Shift+X.
+- Claude's edits, and undoing them, no longer erase what you or a
+  collaborator wrote in the meantime.
+- Right-clicking a Spanish word finds its definition for plurals, verb forms
+  and other inflections, not only the dictionary form, and the Spanish
+  language pack is half the size to download.
+- The setup window can always be closed: it has a close button, and on small
+  screens its list scrolls instead of pushing Done out of reach. The
+  new-project and template windows have their close button back too.
+- Grammar checking works on computers with an older Java installed, as is
+  common on Windows, and its downloads retry instead of hanging on a stalled
+  connection.
 
 ## [1.1.3] - 2026-09-11
 
