@@ -7,9 +7,19 @@ section matching that version and uses it for both the GitHub release body and
 the notes shown in the app's update dialog. If the section is missing or empty
 the build fails on purpose, so a release cannot ship with placeholder notes.
 
-Test-channel builds use the `## [Unreleased]
+Test-channel builds use the `## [Unreleased]` section below as their notes,
+so keep it current as features land; only if it is empty do they fall back to
+the commit subjects since the last stable release.
 
-## [1.2.0] - 2026-09-29
+**Entries are for users.** A change earns a line here if someone could notice
+it: a new feature, or a fix to something that was broken for them. Describe the
+symptom, not the plumbing — "updates stopped being offered" rather than which
+URL changed. Branch layout, CI, refactors and tests belong in commit messages.
+
+Write entries under `## [Unreleased]` and rename it to `## [x.y.z]` when you
+tag.
+
+## [Unreleased]
 
 ### Added
 
