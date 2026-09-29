@@ -49,6 +49,8 @@ interface VaultState {
   linkedProjects: Record<string, true>;
   /** Vault folder for those notes. */
   projectsFolder: string;
+  /** Zotero tag that brings a paper into the vault (whatever syncs it watches for). */
+  paperTag: string;
   /** Folder and template last used for a new note ("" / null: none). */
   lastNoteFolder: string | null;
   lastTemplate: string | null;
@@ -82,6 +84,7 @@ interface VaultState {
   useLocalFolder: (path: string) => void;
   linkProject: (root: string, linked: boolean) => void;
   setProjectsFolder: (folder: string) => void;
+  setPaperTag: (tag: string) => void;
   /** Switches back to the connected server. */
   useServer: () => void;
   connectServer: (
@@ -118,6 +121,7 @@ export const useVaultStore = create<VaultState>()(
       lastTemplate: null,
       linkedProjects: {},
       projectsFolder: "My work",
+      paperTag: "obsidian",
       source: null,
       server: null,
       index: null,
@@ -176,6 +180,8 @@ export const useVaultStore = create<VaultState>()(
           else delete next[root];
           return { linkedProjects: next };
         }),
+
+      setPaperTag: (tag) => set({ paperTag: tag.trim() }),
 
       setProjectsFolder: (folder) =>
         set({ projectsFolder: folder.replace(/^\/+|\/+$/g, "") }),
@@ -304,6 +310,7 @@ export const useVaultStore = create<VaultState>()(
         lastTemplate: state.lastTemplate,
         linkedProjects: state.linkedProjects,
         projectsFolder: state.projectsFolder,
+        paperTag: state.paperTag,
       }),
     },
   ),

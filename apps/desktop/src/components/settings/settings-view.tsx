@@ -252,6 +252,8 @@ function VaultSettings() {
   const useServer = useVaultStore((s) => s.useServer);
   const disconnectServer = useVaultStore((s) => s.disconnectServer);
   const projectsFolder = useVaultStore((s) => s.projectsFolder);
+  const paperTag = useVaultStore((s) => s.paperTag);
+  const setPaperTag = useVaultStore((s) => s.setPaperTag);
   const setProjectsFolder = useVaultStore((s) => s.setProjectsFolder);
   const linkProject = useVaultStore((s) => s.linkProject);
   const projectRoot = useDocumentStore((s) => s.projectRoot);
@@ -347,6 +349,17 @@ function VaultSettings() {
           onChange={(e) => setProjectsFolder(e.target.value)}
           className="h-7 w-44 text-xs"
           aria-label="Project notes folder"
+        />
+      </SettingRow>
+      <SettingRow
+        label="Zotero tag for the vault"
+        detail="“Add to vault” tags a paper with this in Zotero"
+      >
+        <Input
+          value={paperTag}
+          onChange={(e) => setPaperTag(e.target.value)}
+          className="h-7 w-44 text-xs"
+          aria-label="Zotero tag for the vault"
         />
       </SettingRow>
       {projectRoot && (

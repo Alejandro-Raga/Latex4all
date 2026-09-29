@@ -77,3 +77,109 @@ describe("saving highlights to Zotero", () => {
     ).rejects.toBeInstanceOf(ZoteroWriteDeniedError);
   });
 });
+
+describe("finding and tagging papers", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const json = (body: unknown) =>
+    new Response(JSON.stringify(body), { status: 200 });
+
+  it("finds the item whose BibTeX key matches exactly", async () => {
+    const { findItemForCitekey } = await import("./zotero-api");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        json([
+          {
+            key: "AAA",
+            bibtex: "@article{nelson_other_1959,",
+            data: { date: "1959" },
+          },
+          {
+            key: "BBB",
+            bibtex: "@article{nelson_simple_1959,",
+            data: { date: "1959" },
+          },
+        ]),
+      ),
+    );
+    expect(
+      await findItemForCitekey("k", "1", "nelson_simple_1959", {
+        words: "nelson",
+        year: "1959",
+      }),
+    ).toBe("BBB");
+  });
+
+  it("falls back to a lone same-year match, but doesn't guess between two", async () => {
+    const { findItemForCitekey } = await import("./zotero-api");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        json([
+          {
+            key: "AAA",
+            bibtex: "@article{nelson_simple_1959,",
+            data: { date: "1959-06" },
+          },
+          {
+            key: "CCC",
+            bibtex: "@book{nelson_later_1977,",
+            data: { date: "1977" },
+          },
+        ]),
+      ),
+    );
+    expect(
+      await findItemForCitekey("k", "1", "Nelson1959", {
+        words: "Nelson",
+        year: "1959",
+      }),
+    ).toBe("AAA");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        json([
+          { key: "AAA", data: { date: "1959" } },
+          { key: "DDD", data: { date: "1959" } },
+        ]),
+      ),
+    );
+    expect(
+      await findItemForCitekey("k", "1", "Nelson1959", {
+        words: "Nelson",
+        year: "1959",
+      }),
+    ).toBeNull();
+  });
+
+  it("adds a tag keeping the others, and skips one already there", async () => {
+    const { addZoteroTag } = await import("./zotero-api");
+    const fetch = vi.fn(async (_url: string, init?: RequestInit) =>
+      init?.method === "PATCH"
+        ? new Response(null, { status: 204 })
+        : json({ version: 7, data: { tags: [{ tag: "econ" }] } }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    await addZoteroTag("k", "1", "AAA", "obsidian");
+    const patch = fetch.mock.calls.find(
+      ([, init]) => init?.method === "PATCH",
+    ) as unknown as [string, RequestInit];
+    expect(JSON.parse(patch[1].body as string)).toEqual({
+      tags: [{ tag: "econ" }, { tag: "obsidian" }],
+    });
+    expect(
+      (patch[1].headers as Record<string, string>)[
+        "If-Unmodified-Since-Version"
+      ],
+    ).toBe("7");
+
+    fetch.mockClear();
+    fetch.mockImplementation(async () =>
+      json({ version: 8, data: { tags: [{ tag: "Obsidian" }] } }),
+    );
+    await addZoteroTag("k", "1", "AAA", "obsidian");
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(
+      false,
+    );
+  });
+});

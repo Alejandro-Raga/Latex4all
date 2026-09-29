@@ -61,6 +61,7 @@ import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { MarkdownNoteEditor } from "./markdown-note-editor";
 import { syncProjectNote } from "./project-note-sync";
+import { useCitationCheck } from "./citation-check";
 import {
   type GraphLinkInput,
   type GraphNodeInput,
@@ -405,6 +406,12 @@ function VaultMenu({
                 className={cn("size-3.5", !projectLinked && "invisible")}
               />
               Keep this project's note here
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => useCitationCheck.getState().show()}
+            >
+              <QuoteIcon className="size-3.5" />
+              Check citations…
             </DropdownMenuItem>
             {projectLinked && (
               <DropdownMenuItem onSelect={updateProjectNote}>

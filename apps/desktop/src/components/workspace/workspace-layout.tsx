@@ -17,6 +17,7 @@ import { PdfPane } from "./preview/pdf-pane";
 import { DockRail, RightDock } from "./dock/right-dock";
 import { SettingsWindow } from "@/components/settings/settings-view";
 import { ProjectNoteSync } from "./project-note-sync";
+import { CitationCheckDialog } from "./citation-check";
 import {
   useDockedPanels,
   useDockStore,
@@ -273,6 +274,7 @@ export function WorkspaceLayout() {
       <DockRail />
       <SettingsWindow />
       <ProjectNoteSync />
+      <CitationCheckDialog />
     </div>
   );
 }

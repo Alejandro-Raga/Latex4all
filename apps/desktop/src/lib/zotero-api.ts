@@ -521,6 +521,78 @@ export interface ZoteroAnnotation {
   type: "highlight" | "underline";
 }
 
+/**
+ * The top-level Zotero item behind a citation key: the one whose BibTeX key
+ * is exactly `key`, or failing that a lone match on the key's name and year.
+ */
+export async function findItemForCitekey(
+  apiKey: string,
+  userID: string,
+  key: string,
+  search: { words: string; year: string | null },
+): Promise<string | null> {
+  const params = new URLSearchParams({
+    q: search.words,
+    qmode: "titleCreatorYear",
+    include: "bibtex,data",
+    limit: "25",
+  });
+  const response = await zoteroFetch(
+    apiKey,
+    `/users/${userID}/items/top?${params}`,
+  );
+  const items = (await response.json()) as {
+    key: string;
+    bibtex?: string;
+    data?: { date?: string; itemType?: string };
+  }[];
+  const exact = items.find((i) => i.bibtex && extractCitekey(i.bibtex) === key);
+  if (exact) return exact.key;
+  const sameYear = items.filter(
+    (i) =>
+      i.data?.itemType !== "attachment" &&
+      i.data?.itemType !== "note" &&
+      (!search.year || (i.data?.date ?? "").includes(search.year)),
+  );
+  return sameYear.length === 1 ? sameYear[0].key : null;
+}
+
+/** Adds a tag to a Zotero item, keeping its others. */
+export async function addZoteroTag(
+  apiKey: string,
+  userID: string,
+  itemKey: string,
+  tag: string,
+): Promise<void> {
+  const current = await zoteroFetch(
+    apiKey,
+    `/users/${userID}/items/${itemKey}`,
+  );
+  const item = (await current.json()) as {
+    version: number;
+    data: { tags?: { tag: string; type?: number }[] };
+  };
+  const tags = item.data.tags ?? [];
+  if (tags.some((t) => t.tag.toLowerCase() === tag.toLowerCase())) return;
+  const response = await fetch(
+    `${ZOTERO_BASE}/users/${userID}/items/${itemKey}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Zotero-API-Key": apiKey,
+        "Zotero-API-Version": "3",
+        "Content-Type": "application/json",
+        "If-Unmodified-Since-Version": String(item.version),
+      },
+      body: JSON.stringify({ tags: [...tags, { tag }] }),
+    },
+  );
+  if (response.status === 403) throw new ZoteroWriteDeniedError();
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Zotero API error: ${response.status}`);
+  }
+}
+
 /** Zotero's own highlight colors, which its apps show as named swatches. */
 export const ZOTERO_HIGHLIGHT_COLORS = {
   yellow: "#ffd400",

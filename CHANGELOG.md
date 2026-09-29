@@ -79,6 +79,11 @@ tag.
   sidebar, text and accent color, starting from any theme, and the rest of
   the interface follows. Choose from the palette at the bottom of the
   sidebar, or in Settings under Appearance.
+- Check citations (in the Vault menu): what you cite that isn't in your
+  bibliography, with a button to add it from Zotero (and to update your
+  \cite{}s if Zotero knows it by another key); what's in the bibliography
+  but never cited; and cited papers that aren't in your vault yet, with a
+  button to send them there.
 - Settings from anywhere: press ⌘, or click the gear at the bottom of the
   sidebar. New sections bring together what was scattered: Editor, PDF, Zotero
   and Vault.
