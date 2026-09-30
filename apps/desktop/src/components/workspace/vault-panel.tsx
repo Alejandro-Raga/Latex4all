@@ -49,11 +49,10 @@ import { Input } from "@/components/ui/input";
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuSeparator,
+  ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { isTopicNote } from "@/lib/vault/topics";
-import { DeleteNoteItem, NoteKindMenu, TopicMenu } from "./topic-menu";
+import { NoteContextMenu, NoteMenuItems } from "./topic-menu";
 import { kindFolder } from "@/lib/vault/kind-folders";
 import { chooseNoteKind, unlinkProject } from "@/lib/vault/note-changes";
 import { citeKeyAtCursor } from "@/lib/vault/cite-at-cursor";
@@ -777,23 +776,10 @@ function NoteList({
                   </span>
                 </button>
               );
-              // Right-click: what the note is, and (but for a topic) the
-              // topics it's filed under.
               return (
-                <ContextMenu key={n.name}>
-                  <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
-                  <ContextMenuContent className="w-52">
-                    <NoteKindMenu noteName={n.name} />
-                    {!isTopicNote(n) && (
-                      <TopicMenu
-                        noteName={n.name}
-                        resolve={async () => n.name}
-                      />
-                    )}
-                    <ContextMenuSeparator />
-                    <DeleteNoteItem noteName={n.name} />
-                  </ContextMenuContent>
-                </ContextMenu>
+                <NoteContextMenu key={n.name} noteName={n.name}>
+                  {row}
+                </NoteContextMenu>
               );
             })}
           </div>
@@ -1388,6 +1374,8 @@ function Connections({
     () => filterGraph(fullGraph, hidden),
     [fullGraph, hidden],
   );
+  // The note a right-click on the map landed on, for its menu.
+  const [menuNote, setMenuNote] = useState<string | null>(null);
   const toggleGroup = (group: string) =>
     setHidden((prev) => {
       const next = new Set(prev);
@@ -1454,29 +1442,45 @@ function Connections({
         )}
       </div>
       <PanelBoundary name="The map" resetKeys={[graph]}>
-        <VaultGraph
-          nodes={graph.nodes}
-          links={graph.links}
-          height={wide ? 460 : scope === 1 ? 200 : 280}
-          layout={scope === "all" ? "force" : "radial"}
-          onSaveImage={async (jpeg) => {
-            const path = await saveDialog({
-              defaultPath: `${scope === "all" ? "Vault" : note.name} map.jpg`,
-              filters: [{ name: "JPEG image", extensions: ["jpg", "jpeg"] }],
-            });
-            if (!path) return;
-            try {
-              await writeFile(path, jpeg);
-              toast.success(`Saved ${path.split(/[\\/]/).pop()}`);
-            } catch (err) {
-              toast.error(
-                `Couldn't save the image. ${err instanceof Error ? err.message : String(err)}`,
-              );
-            }
-          }}
-          highlight={highlight}
-          onOpen={onOpen}
-        />
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <div>
+              <VaultGraph
+                onNodeMenu={setMenuNote}
+                nodes={graph.nodes}
+                links={graph.links}
+                height={wide ? 460 : scope === 1 ? 200 : 280}
+                layout={scope === "all" ? "force" : "radial"}
+                onSaveImage={async (jpeg) => {
+                  const path = await saveDialog({
+                    defaultPath: `${scope === "all" ? "Vault" : note.name} map.jpg`,
+                    filters: [
+                      { name: "JPEG image", extensions: ["jpg", "jpeg"] },
+                    ],
+                  });
+                  if (!path) return;
+                  try {
+                    await writeFile(path, jpeg);
+                    toast.success(`Saved ${path.split(/[\\/]/).pop()}`);
+                  } catch (err) {
+                    toast.error(
+                      `Couldn't save the image. ${err instanceof Error ? err.message : String(err)}`,
+                    );
+                  }
+                }}
+                highlight={highlight}
+                onOpen={onOpen}
+              />
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent className="w-52">
+            {menuNote ? (
+              <NoteMenuItems noteName={menuNote} />
+            ) : (
+              <ContextMenuItem disabled>Right-click a note</ContextMenuItem>
+            )}
+          </ContextMenuContent>
+        </ContextMenu>
       </PanelBoundary>
       <GraphLegend
         groups={fullGraph.groups}
@@ -1520,18 +1524,19 @@ function LinkGroup({
       {names.map((name) => {
         const n = findNote(index, name);
         return (
-          <button
-            key={name}
-            type="button"
-            onClick={() => onOpen(name)}
-            className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-xs transition-colors hover:bg-muted/60"
-          >
-            <span
-              className="size-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: n ? noteColor(n) : undefined }}
-            />
-            <span className="truncate">{n?.title ?? name}</span>
-          </button>
+          <NoteContextMenu key={name} noteName={name}>
+            <button
+              type="button"
+              onClick={() => onOpen(name)}
+              className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-xs transition-colors hover:bg-muted/60"
+            >
+              <span
+                className="size-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: n ? noteColor(n) : undefined }}
+              />
+              <span className="truncate">{n?.title ?? name}</span>
+            </button>
+          </NoteContextMenu>
         );
       })}
     </div>

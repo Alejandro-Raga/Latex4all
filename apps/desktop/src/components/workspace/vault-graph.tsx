@@ -183,7 +183,10 @@ export function VaultGraph({
   onOpen,
   layout = "force",
   onSaveImage,
+  onNodeMenu,
 }: {
+  /** Told which note a right-click landed on (null: none), before the menu opens. */
+  onNodeMenu?: (id: string | null) => void;
   /** Where "Save as image" puts the JPEG's bytes; no button without it. */
   onSaveImage?: (jpeg: Uint8Array) => Promise<void> | void;
   nodes: GraphNodeInput[];
@@ -216,6 +219,8 @@ export function VaultGraph({
   onOpenRef.current = onOpen;
   const onSaveImageRef = useRef(onSaveImage);
   onSaveImageRef.current = onSaveImage;
+  const onNodeMenuRef = useRef(onNodeMenu);
+  onNodeMenuRef.current = onNodeMenu;
   highlightRef.current = highlight ?? null;
   const [cursor, setCursor] = useState("grab");
 
@@ -615,7 +620,17 @@ export function VaultGraph({
     canvas.addEventListener("pointerleave", leave);
     canvas.addEventListener("wheel", wheel, { passive: false });
     canvas.addEventListener("dblclick", fit);
+    const menu = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const node = nodeAt(nodesRef.current, viewRef.current, {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
+      onNodeMenuRef.current?.(node?.id ?? null);
+    };
+    canvas.addEventListener("contextmenu", menu);
     return () => {
+      canvas.removeEventListener("contextmenu", menu);
       canvas.removeEventListener("pointerdown", down);
       canvas.removeEventListener("pointermove", move);
       canvas.removeEventListener("pointerup", up);

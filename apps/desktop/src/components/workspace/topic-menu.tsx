@@ -10,11 +10,14 @@ import { toast } from "sonner";
 import { create } from "zustand";
 import { Button } from "@/components/ui/button";
 import {
+  ContextMenu,
+  ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
+  ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
   Dialog,
@@ -254,5 +257,41 @@ export function NewTopicDialog() {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Everything a note's right-click offers: its type, its topics, deleting it. */
+export function NoteMenuItems({ noteName }: { noteName: string }) {
+  const note = useVaultStore((s) =>
+    s.index ? findNote(s.index, noteName) : undefined,
+  );
+  if (!note) return null;
+  return (
+    <>
+      <NoteKindMenu noteName={note.name} />
+      {note.kind !== "topic" && (
+        <TopicMenu noteName={note.name} resolve={async () => note.name} />
+      )}
+      <ContextMenuSeparator />
+      <DeleteNoteItem noteName={note.name} />
+    </>
+  );
+}
+
+/** A note anywhere it's listed, with its right-click menu. */
+export function NoteContextMenu({
+  noteName,
+  children,
+}: {
+  noteName: string;
+  children: React.ReactElement;
+}) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-52">
+        <NoteMenuItems noteName={noteName} />
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
