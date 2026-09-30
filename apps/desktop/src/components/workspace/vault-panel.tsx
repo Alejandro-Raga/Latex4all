@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/context-menu";
 import { isTopicNote } from "@/lib/vault/topics";
 import { DeleteNoteItem, NoteKindMenu, TopicMenu } from "./topic-menu";
+import { kindFolder } from "@/lib/vault/kind-folders";
 import { chooseNoteKind, unlinkProject } from "@/lib/vault/note-changes";
 import { citeKeyAtCursor } from "@/lib/vault/cite-at-cursor";
 import { noteForCitekey } from "@/lib/vault/cite-link";
@@ -68,6 +69,7 @@ import {
   findNote,
   neighbourhood,
   PAPERS_GROUP,
+  type NoteKind,
   searchNotes,
   type VaultIndex,
   type VaultNote,
@@ -801,6 +803,15 @@ function NoteList({
   );
 }
 
+/** The kind a template makes, going by its name ("Idea", "Topic note"…). */
+function kindFromTemplate(path: string): NoteKind | null {
+  const name = (path.split("/").pop() ?? "").toLowerCase();
+  for (const kind of ["idea", "topic", "project", "paper"] as const) {
+    if (name.includes(kind)) return kind;
+  }
+  return null;
+}
+
 /** A note just created from the list, to open straight into editing. */
 let editOnOpen: string | null = null;
 
@@ -877,7 +888,10 @@ function NewNoteForm({
           title="Folder"
           className={selectClass}
         >
-          {folders.map((f) => (
+          {(folders.includes(folder)
+            ? folders
+            : [...folders, folder].sort()
+          ).map((f) => (
             <option key={f} value={f}>
               {f || "Vault root"}
             </option>
@@ -886,7 +900,14 @@ function NewNoteForm({
         {templates.length > 0 && (
           <select
             value={template}
-            onChange={(e) => setTemplate(e.target.value)}
+            onChange={(e) => {
+              setTemplate(e.target.value);
+              // A template named for a kind (Idea, Topic…) files the note
+              // where that kind's notes live.
+              const kind = kindFromTemplate(e.target.value);
+              const where = kind ? kindFolder(kind) : null;
+              if (where !== null) setFolder(where);
+            }}
             aria-label="Template"
             title="Template"
             className={selectClass}
