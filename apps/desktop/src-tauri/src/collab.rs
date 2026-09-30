@@ -1071,8 +1071,9 @@ pub struct Health {
 #[tauri::command]
 pub async fn collab_health(link: String) -> Result<Health, String> {
     let link = Link::parse(&link)?;
+    let health_url = format!("{}/health", link.relay);
     let (relay, internet) = tokio::join!(
-        probe(&format!("{}/health", link.relay)),
+        probe(&health_url),
         probe("https://www.cloudflare.com/cdn-cgi/trace"),
     );
     Ok(Health { relay, internet })
