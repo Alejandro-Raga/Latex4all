@@ -8,7 +8,12 @@ import {
 } from "@/lib/vault/load";
 import { parseNote } from "@/lib/vault/parse";
 import { fillTemplate } from "@/lib/vault/template";
-import { buildVaultIndex, type VaultIndex } from "@/lib/vault/vault-index";
+import {
+  buildVaultIndex,
+  type KindOverrides,
+  type NoteKind,
+  type VaultIndex,
+} from "@/lib/vault/vault-index";
 import {
   webdavConnect,
   webdavDisconnect,
@@ -33,10 +38,21 @@ export function confirmLeaveVaultEdit(): boolean {
   return true;
 }
 
+/** Which vault hand-picked note kinds belong to. */
+function vaultKey(state: { mode: string; vaultPath: string | null }) {
+  return state.mode === "server" ? "server" : (state.vaultPath ?? "");
+}
+
+/** This vault's hand-picked note kinds. */
+function chosenKinds(): KindOverrides {
+  const state = useVaultStore.getState();
+  return state.noteKinds[vaultKey(state)] ?? {};
+}
+
 /** The index with one note replaced (or added), without rereading the vault. */
 function withNote(index: VaultIndex | null, path: string, text: string) {
   const others = (index?.list ?? []).filter((n) => n.path !== path);
-  return buildVaultIndex([...others, parseNote(path, text)]);
+  return buildVaultIndex([...others, parseNote(path, text)], chosenKinds());
 }
 
 interface VaultState {
@@ -53,6 +69,8 @@ interface VaultState {
   paperTag: string;
   /** Where Latex4All puts paper notes; "" finds where the vault keeps them. */
   papersFolder: string;
+  /** Note kinds picked by hand, per vault, by lower-cased note name. */
+  noteKinds: Record<string, KindOverrides>;
   /** Folder and template last used for a new note ("" / null: none). */
   lastNoteFolder: string | null;
   lastTemplate: string | null;
@@ -86,6 +104,10 @@ interface VaultState {
   /** Picks the source to read from; uses Obsidian's last vault when none is set. */
   ensureVault: () => Promise<void>;
   useLocalFolder: (path: string) => void;
+  /** A note was deleted: out of the index, and out of view if it was open. */
+  noteDeleted: (path: string) => void;
+  /** Sets what a note is (null: back to what it's found to be). */
+  setNoteKind: (name: string, kind: NoteKind | null) => void;
   linkProject: (root: string, linked: boolean) => void;
   setProjectsFolder: (folder: string) => void;
   setPaperTag: (tag: string) => void;
@@ -129,6 +151,7 @@ export const useVaultStore = create<VaultState>()(
       projectsFolder: "My work",
       paperTag: "obsidian",
       papersFolder: "",
+      noteKinds: {},
       source: null,
       server: null,
       index: null,
@@ -240,7 +263,7 @@ export const useVaultStore = create<VaultState>()(
           const loaded = await source.load();
           if (get().source === source) {
             set({
-              index: buildVaultIndex(loaded.notes),
+              index: buildVaultIndex(loaded.notes, chosenKinds()),
               attachments: loaded.attachments,
               versions: loaded.versions,
               templates: loaded.templates,
@@ -269,6 +292,35 @@ export const useVaultStore = create<VaultState>()(
           index: withNote(get().index, path, text),
         });
         get().reload();
+      },
+
+      noteDeleted: (path) => {
+        const index = get().index;
+        const gone = index?.list.find((n) => n.path === path);
+        const versions = new Map(get().versions);
+        versions.delete(path);
+        set({
+          versions,
+          index: index
+            ? buildVaultIndex(
+                index.list.filter((n) => n.path !== path),
+                chosenKinds(),
+              )
+            : null,
+        });
+        if (gone && get().current === gone.name) {
+          set({ current: null, forward: [] });
+        }
+      },
+
+      setNoteKind: (name, kind) => {
+        const key = vaultKey(get());
+        const mine = { ...(get().noteKinds[key] ?? {}) };
+        if (kind) mine[name.toLowerCase()] = kind;
+        else delete mine[name.toLowerCase()];
+        set({ noteKinds: { ...get().noteKinds, [key]: mine } });
+        const index = get().index;
+        if (index) set({ index: buildVaultIndex(index.list, mine) });
       },
 
       noteWritten: (path, text) => {
@@ -343,6 +395,7 @@ export const useVaultStore = create<VaultState>()(
         projectsFolder: state.projectsFolder,
         paperTag: state.paperTag,
         papersFolder: state.papersFolder,
+        noteKinds: state.noteKinds,
       }),
     },
   ),

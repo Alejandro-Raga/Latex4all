@@ -229,7 +229,7 @@ describe("paper detection across Zotero setups", () => {
       year: "2019",
     });
     expect(get("Lee")).toMatchObject({ kind: "paper", zoteroKey: "ABCD1234" });
-    expect(get("Thought")).toMatchObject({ kind: "note", group: "Ideas" });
+    expect(get("Thought")).toMatchObject({ kind: "idea", group: "Ideas" });
     expect(index.list.map((n) => n.group)).toEqual([
       "Papers",
       "Papers",

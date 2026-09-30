@@ -46,7 +46,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useProjectStore } from "@/stores/project-store";
-import { useDocumentStore } from "@/stores/document-store";
+import { projectRelocated, useDocumentStore } from "@/stores/document-store";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import {
@@ -254,6 +254,7 @@ export function ProjectPicker() {
         newPath: target,
       });
       renameRecentProject(project.path, target);
+      projectRelocated(project.path, target);
       setLastProjectFolder(destination);
       toast.success(`Moved to ${destination}`);
     } catch (err) {

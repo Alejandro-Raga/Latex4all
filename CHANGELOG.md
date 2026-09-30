@@ -83,6 +83,16 @@ tag.
   one. The paper links to the topic and the topic note lists the paper, so
   they appear together in the graph and in each other's links; in Zotero the
   paper gets the topic's tag too.
+- Save the map of your notes as a JPEG image, with the button beside "fit to
+  view".
+- Tell Latex4All what a note is when it guesses wrong: right-click a note in
+  the Vault panel, or click the label above an open note, and choose Paper,
+  Project, Topic, Idea or Note (or Automatic). It's grouped, colored and
+  mapped accordingly, and nothing in the note changes. Out of the box,
+  notes are sorted by what they say about themselves, whatever the vault's
+  layout.
+- Delete a note from the Vault panel (right-click it); Latex4All says first
+  how many notes link to it.
 - Widen any side panel: the Reference, Vault and Notes panels each have a
   button that moves them into the big pane beside the editor, and back.
 - Your projects in your vault. Turn on "Keep this project's note here" in the
@@ -179,6 +189,11 @@ tag.
 - Exporting a PDF opens the save dialog in the project's own folder.
 
 ### Fixed
+
+- A project's own note in the vault was listed among the papers.
+- Renaming or moving a project no longer strands its vault note: the note
+  takes the project's new name, and every link to it is updated. Turning off
+  "Keep this project's note here" asks whether to delete the note too.
 
 - Check citations was cramped and ran off the screen in bigger projects. It
   now shows one list at a time (not in the bibliography, not in your vault,

@@ -33,7 +33,7 @@ export const webdavConnect = (
 export const webdavDisconnect = () => invoke<void>("vault_webdav_disconnect");
 
 function request(
-  method: "PROPFIND" | "GET" | "PUT" | "MKCOL",
+  method: "PROPFIND" | "GET" | "PUT" | "MKCOL" | "DELETE",
   path: string,
   options: { depth?: string; body?: string; ifMatch?: string | null } = {},
 ) {
@@ -151,6 +151,14 @@ export class WebdavVault {
       throw new Error(`Couldn't save ${path} (${res.status})`);
     }
     return res.etag;
+  }
+
+  async remove(path: string): Promise<void> {
+    const res = await request("DELETE", path);
+    // 404: already gone.
+    if ((res.status < 200 || res.status >= 300) && res.status !== 404) {
+      throw new Error(`Couldn't delete ${path} (${res.status})`);
+    }
   }
 
   async makeFolder(path: string): Promise<void> {

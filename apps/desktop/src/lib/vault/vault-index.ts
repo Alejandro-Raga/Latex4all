@@ -1,11 +1,36 @@
 import { listField, noteName, type ParsedNote, textField } from "./parse";
 
-/** Papers (literature notes) are told apart; everything else is a note. */
-export type NoteKind = "paper" | "note";
+/**
+ * What a note is: a paper (a literature note), a project (your own work),
+ * a topic, an idea, or any other note. Found from the note itself, and
+ * changeable by hand when that guesses wrong.
+ */
+export type NoteKind = "paper" | "project" | "topic" | "idea" | "note";
+
+export const NOTE_KINDS: { kind: NoteKind; label: string }[] = [
+  { kind: "paper", label: "Paper" },
+  { kind: "project", label: "Project" },
+  { kind: "topic", label: "Topic" },
+  { kind: "idea", label: "Idea" },
+  { kind: "note", label: "Note" },
+];
+
+/** The group each kind is listed under; plain notes go by their folder. */
+const KIND_GROUPS: Record<Exclude<NoteKind, "note">, string> = {
+  paper: "Papers",
+  project: "Projects",
+  topic: "Topics",
+  idea: "Ideas",
+};
+
+/** Hand-picked kinds, by lower-cased note name. */
+export type KindOverrides = Record<string, NoteKind>;
 
 export interface VaultNote extends ParsedNote {
   kind: NoteKind;
-  /** Section it's listed under: "Papers", or its top-level folder ("" at the root). */
+  /** Whether `kind` was picked by hand rather than found. */
+  kindChosen: boolean;
+  /** Section it's listed under: its kind's, or for a plain note its top-level folder ("" at the root). */
   group: string;
   /** Title to show: a paper's title, or the note name. */
   title: string;
@@ -102,7 +127,17 @@ function citekeyOf(note: ParsedNote): string | null {
   return key ? key.replace(/^@/, "").trim() || null : null;
 }
 
-function describe(note: ParsedNote) {
+// Folder names that say what their notes are, as a last hint.
+const FOLDER_KINDS: [RegExp, NoteKind][] = [
+  [/^(topics?|temas?|themes?|concepts?|conceptos?|mocs?)$/i, "topic"],
+  [/^(ideas?|zettel|zettelkasten|permanent|fleeting)$/i, "idea"],
+  [
+    /^(projects?|proyectos?|my work|mi trabajo|writing|drafts?|manuscripts?)$/i,
+    "project",
+  ],
+];
+
+function describe(note: ParsedNote, chosen?: NoteKind) {
   const fm = note.frontmatter;
   // Nested tags count by any part: #literature/paper, #source/article.
   const tags = [...listField(fm, "tags"), ...listField(fm, "tag")].flatMap(
@@ -118,23 +153,41 @@ function describe(note: ParsedNote) {
     textField(fm, "year") ??
     textField(fm, "date")?.match(/\b\d{4}\b/)?.[0] ??
     null;
-  // A note that names its authors and year is about a publication, however
-  // the template that wrote it marks it (many write only these).
-  const kind: NoteKind =
-    zoteroKey ||
-    citekey ||
-    tags.some((t) => PAPER_TAGS.has(t)) ||
-    kinds.some((k) => PAPER_TAGS.has(k)) ||
-    (authors.length > 0 && year)
-      ? "paper"
-      : "note";
+  const has = (field: string) => textField(fm, field) !== null;
+  const folders = note.path.split("/").slice(0, -1);
+  const found = (): NoteKind => {
+    // What the note says it is, first.
+    if (tags.includes("topic") || has("zotero_topic")) return "topic";
+    // Latex4All's project notes (whose `type:` is the project's, say
+    // "article", so this comes before the paper rules).
+    if (tags.includes("project") || has("project") || has("latex4all_updated"))
+      return "project";
+    if (tags.includes("idea") || has("zotero_annotation")) return "idea";
+    // A note that names its authors and year is about a publication,
+    // however the template that wrote it marks it (many write only these).
+    if (
+      zoteroKey ||
+      citekey ||
+      tags.some((t) => PAPER_TAGS.has(t)) ||
+      kinds.some((k) => PAPER_TAGS.has(k)) ||
+      (authors.length > 0 && year)
+    )
+      return "paper";
+    for (const folder of folders) {
+      const hit = FOLDER_KINDS.find(([re]) => re.test(folder.trim()));
+      if (hit) return hit[1];
+    }
+    return "note";
+  };
+  const kind: NoteKind = chosen ?? found();
   const aliases = [...listField(fm, "aliases"), ...listField(fm, "alias")]
     .map((a) => a.trim())
     .filter(Boolean);
   const name = note.name.replace(/^@/, "");
   return {
     kind,
-    group: kind === "paper" ? PAPERS_GROUP : note.folder,
+    kindChosen: chosen !== undefined,
+    group: kind === "note" ? note.folder : KIND_GROUPS[kind],
     title: (kind === "paper" ? textField(fm, "title") : null) ?? name,
     zoteroKey,
     citekey,
@@ -144,7 +197,10 @@ function describe(note: ParsedNote) {
   };
 }
 
-export function buildVaultIndex(parsed: ParsedNote[]): VaultIndex {
+export function buildVaultIndex(
+  parsed: ParsedNote[],
+  chosen: KindOverrides = {},
+): VaultIndex {
   const notes = new Map<string, VaultNote>();
   // Obsidian links by file name; the first note with a name wins, like it.
   const sorted = [...parsed].sort((a, b) => a.path.localeCompare(b.path));
@@ -153,7 +209,7 @@ export function buildVaultIndex(parsed: ParsedNote[]): VaultIndex {
     if (notes.has(key)) continue;
     notes.set(key, {
       ...note,
-      ...describe(note),
+      ...describe(note, chosen[key]),
       outgoing: [],
       incoming: [],
       unresolved: [],

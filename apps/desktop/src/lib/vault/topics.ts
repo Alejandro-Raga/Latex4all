@@ -17,15 +17,7 @@ export const topicId = (name: string) =>
     .toLowerCase();
 
 export function isTopicNote(n: VaultNote): boolean {
-  const tags = [n.frontmatter.tags, n.frontmatter.tag]
-    .flat()
-    .filter((t): t is string => typeof t === "string")
-    .map((t) => t.toLowerCase().replace(/^#/, ""));
-  return (
-    tags.includes("topic") ||
-    "zotero_topic" in n.frontmatter ||
-    n.path.split("/").slice(0, -1).includes(DEFAULT_TOPICS_FOLDER)
-  );
+  return n.kind === "topic";
 }
 
 export function topicNotes(index: VaultIndex): VaultNote[] {

@@ -7,7 +7,8 @@ import {
   projectNotePath,
 } from "@/lib/vault/project-note";
 import { useAnnotationsStore } from "@/stores/annotations-store";
-import { useDocumentStore } from "@/stores/document-store";
+import { relinkProject } from "@/lib/vault/note-changes";
+import { onProjectRelocated, useDocumentStore } from "@/stores/document-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 
@@ -75,6 +76,17 @@ export async function syncProjectNote(): Promise<string | null> {
   useVaultStore.getState().noteWritten(path, merged);
   return name;
 }
+
+// A renamed or moved project keeps its note (renamed with it, links and all).
+onProjectRelocated((oldRoot, newRoot) => {
+  relinkProject(oldRoot, newRoot)
+    .then(() => syncProjectNote())
+    .catch((err) =>
+      toast.error(
+        `Couldn't carry the project's vault note over: ${err instanceof Error ? err.message : String(err)}`,
+      ),
+    );
+});
 
 /**
  * Keeps a linked project's vault note current: rewritten a few seconds after

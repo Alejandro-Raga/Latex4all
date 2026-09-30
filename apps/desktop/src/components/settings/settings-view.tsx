@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { clearPdfCache, pdfCacheSize } from "@/lib/zotero-pdf-cache";
 import { papersFolderOf } from "@/lib/vault/add-paper";
+import { unlinkProject } from "@/lib/vault/note-changes";
 import {
   EnvironmentStatus,
   SettingsDetailButton,
@@ -473,7 +474,11 @@ function VaultSettings() {
         >
           <Toggle
             checked={projectLinked}
-            onChange={(on) => linkProject(projectRoot, on)}
+            onChange={(on) =>
+              on
+                ? linkProject(projectRoot, true)
+                : void unlinkProject(projectRoot)
+            }
             label="Keep this project's note in the vault"
           />
         </SettingRow>

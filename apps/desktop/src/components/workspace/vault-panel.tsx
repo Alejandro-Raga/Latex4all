@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import {
+  open as openDialog,
+  save as saveDialog,
+} from "@tauri-apps/plugin-dialog";
+import { writeFile } from "@tauri-apps/plugin-fs";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import {
   ArrowLeftIcon,
@@ -45,10 +49,12 @@ import { Input } from "@/components/ui/input";
 import {
   ContextMenu,
   ContextMenuContent,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { isTopicNote } from "@/lib/vault/topics";
-import { TopicMenu } from "./topic-menu";
+import { DeleteNoteItem, NoteKindMenu, TopicMenu } from "./topic-menu";
+import { unlinkProject } from "@/lib/vault/note-changes";
 import { citeKeyAtCursor } from "@/lib/vault/cite-at-cursor";
 import { noteForCitekey } from "@/lib/vault/cite-link";
 import {
@@ -60,6 +66,7 @@ import { WebdavConflictError } from "@/lib/vault/webdav";
 import { EMBED_SRC, noteFromHref, vaultMarkdown } from "@/lib/vault/render";
 import {
   findNote,
+  NOTE_KINDS,
   neighbourhood,
   PAPERS_GROUP,
   searchNotes,
@@ -487,8 +494,16 @@ function VaultMenu({
             <DropdownMenuItem
               onSelect={(e) => {
                 e.preventDefault();
-                linkProject(projectRoot, !projectLinked);
-                if (!projectLinked) updateProjectNote();
+                if (projectLinked) {
+                  unlinkProject(projectRoot).catch((err) =>
+                    toast.error(
+                      err instanceof Error ? err.message : String(err),
+                    ),
+                  );
+                } else {
+                  linkProject(projectRoot, true);
+                  updateProjectNote();
+                }
               }}
             >
               <CheckIcon
@@ -742,14 +757,21 @@ function NoteList({
                   </span>
                 </button>
               );
-              // Right-click any note but a topic to file it under a topic.
-              return isTopicNote(n) ? (
-                row
-              ) : (
+              // Right-click: what the note is, and (but for a topic) the
+              // topics it's filed under.
+              return (
                 <ContextMenu key={n.name}>
                   <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
                   <ContextMenuContent className="w-52">
-                    <TopicMenu noteName={n.name} resolve={async () => n.name} />
+                    <NoteKindMenu noteName={n.name} />
+                    {!isTopicNote(n) && (
+                      <TopicMenu
+                        noteName={n.name}
+                        resolve={async () => n.name}
+                      />
+                    )}
+                    <ContextMenuSeparator />
+                    <DeleteNoteItem noteName={n.name} />
                   </ContextMenuContent>
                 </ContextMenu>
               );
@@ -935,12 +957,48 @@ function NoteView({
           <p className="font-medium text-sm leading-snug">{note.title}</p>
         )}
         <div className="flex flex-wrap items-center gap-1.5">
-          <span
-            className="rounded px-1.5 py-0.5 text-[11px] text-white"
-            style={{ backgroundColor: noteColor(note) }}
-          >
-            {note.kind === "paper" ? "Paper" : groupLabel(note.group)}
-          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-white"
+                style={{ backgroundColor: noteColor(note) }}
+                title="What this note is"
+              >
+                {note.kind === "note"
+                  ? groupLabel(note.group)
+                  : NOTE_KINDS.find((k) => k.kind === note.kind)?.label}
+                <ChevronDownIcon className="size-3 opacity-80" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-40">
+              {NOTE_KINDS.map(({ kind, label }) => (
+                <DropdownMenuItem
+                  key={kind}
+                  onSelect={() =>
+                    useVaultStore.getState().setNoteKind(note.name, kind)
+                  }
+                >
+                  {note.kind === kind ? (
+                    <CheckIcon className="size-3.5" />
+                  ) : (
+                    <span className="size-3.5" />
+                  )}
+                  {label}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!note.kindChosen}
+                onSelect={() =>
+                  useVaultStore.getState().setNoteKind(note.name, null)
+                }
+              >
+                <span className="size-3.5" />
+                Automatic
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {noteSubtitle(note) && (
             <span className="text-muted-foreground text-xs">
               {noteSubtitle(note)}
@@ -1353,6 +1411,21 @@ function Connections({
           links={graph.links}
           height={wide ? 460 : scope === 1 ? 200 : 280}
           layout={scope === "all" ? "force" : "radial"}
+          onSaveImage={async (jpeg) => {
+            const path = await saveDialog({
+              defaultPath: `${scope === "all" ? "Vault" : note.name} map.jpg`,
+              filters: [{ name: "JPEG image", extensions: ["jpg", "jpeg"] }],
+            });
+            if (!path) return;
+            try {
+              await writeFile(path, jpeg);
+              toast.success(`Saved ${path.split(/[\\/]/).pop()}`);
+            } catch (err) {
+              toast.error(
+                `Couldn't save the image. ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+          }}
           highlight={highlight}
           onOpen={onOpen}
         />

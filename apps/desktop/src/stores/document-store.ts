@@ -392,6 +392,20 @@ type StoreSet = StoreApi<DocumentState>["setState"];
  * opens it again there: everything is saved and settled first, then the paths
  * the app remembers are pointed at the new folder.
  */
+/** Told when the open project's folder moves or is renamed. */
+const relocationListeners = new Set<
+  (oldRoot: string, newRoot: string) => void
+>();
+export function onProjectRelocated(
+  listener: (oldRoot: string, newRoot: string) => void,
+) {
+  relocationListeners.add(listener);
+  return () => relocationListeners.delete(listener);
+}
+export function projectRelocated(oldRoot: string, newRoot: string) {
+  for (const listener of relocationListeners) listener(oldRoot, newRoot);
+}
+
 async function relocateOpenProject(
   get: () => DocumentState,
   set: StoreSet,
@@ -578,6 +592,7 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
       newRoot,
       renameProjectRootWithRetry,
     );
+    projectRelocated(oldRoot, get().projectRoot ?? newRoot);
   },
 
   moveProject: async (destinationParent: string) => {
@@ -592,6 +607,7 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
     await relocateOpenProject(get, set, oldRoot, newRoot, (from, to) =>
       invoke("move_project", { oldPath: from, newPath: to }),
     );
+    projectRelocated(oldRoot, get().projectRoot ?? newRoot);
   },
 
   closeProject: () => {

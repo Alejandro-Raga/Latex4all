@@ -5,6 +5,7 @@ import {
   readDir,
   readFile,
   readTextFile,
+  remove,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
 import { parseNote, type ParsedNote } from "./parse";
@@ -73,6 +74,7 @@ export interface VaultSource {
   ): Promise<string | null>;
   /** Creates a note, failing if one already exists at `path`. */
   createNote(path: string, text: string): Promise<void>;
+  deleteNote(path: string): Promise<void>;
 }
 
 const DEFAULT_TEMPLATES = "Templates";
@@ -182,6 +184,11 @@ export class LocalVaultSource implements VaultSource {
     const parent = path.split("/").slice(0, -1).join("/");
     if (parent) await mkdir(await this.abs(parent), { recursive: true });
     await writeTextFile(abs, text);
+  }
+
+  async deleteNote(path: string) {
+    const abs = await this.abs(path);
+    if (await exists(abs)) await remove(abs);
   }
 }
 
@@ -296,5 +303,10 @@ export class ServerVaultSource implements VaultSource {
       throw new NoteExistsError(path);
     }
     await this.dav.writeText(path, text);
+  }
+
+  async deleteNote(path: string) {
+    await this.dav.remove(path);
+    serverCache.delete(path);
   }
 }

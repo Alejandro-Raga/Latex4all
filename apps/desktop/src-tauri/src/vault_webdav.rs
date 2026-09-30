@@ -148,7 +148,7 @@ async fn send(
     body: Option<String>,
     if_match: Option<&str>,
 ) -> Result<VaultWebdavResponse, String> {
-    if !matches!(method, "PROPFIND" | "GET" | "PUT" | "MKCOL") {
+    if !matches!(method, "PROPFIND" | "GET" | "PUT" | "MKCOL" | "DELETE") {
         return Err(format!("Unsupported method {}", method));
     }
     let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(|e| e.to_string())?;

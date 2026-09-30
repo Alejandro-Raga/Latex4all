@@ -18,7 +18,7 @@ import {
   type SimulationLinkDatum,
   type SimulationNodeDatum,
 } from "d3-force";
-import { ScanIcon } from "lucide-react";
+import { ImageDownIcon, ScanIcon } from "lucide-react";
 import { APP_THEMES } from "@/lib/app-themes";
 import {
   fitTransform,
@@ -182,7 +182,10 @@ export function VaultGraph({
   highlight,
   onOpen,
   layout = "force",
+  onSaveImage,
 }: {
+  /** Where "Save as image" puts the JPEG's bytes; no button without it. */
+  onSaveImage?: (jpeg: Uint8Array) => Promise<void> | void;
   nodes: GraphNodeInput[];
   links: GraphLinkInput[];
   height: number;
@@ -211,8 +214,136 @@ export function VaultGraph({
   const frameRef = useRef<number | null>(null);
   const onOpenRef = useRef(onOpen);
   onOpenRef.current = onOpen;
+  const onSaveImageRef = useRef(onSaveImage);
+  onSaveImageRef.current = onSaveImage;
   highlightRef.current = highlight ?? null;
   const [cursor, setCursor] = useState("grab");
+
+  /**
+   * Draws the map into a canvas: the one on screen, or (`still`) an image
+   * of the whole map, every label that fits shown and nothing hovered.
+   */
+  const paint = useCallback(
+    (
+      ctx: CanvasRenderingContext2D,
+      w: number,
+      h: number,
+      dpr: number,
+      t: ViewTransform,
+      still?: { background: string },
+    ) => {
+      const colors = palette();
+      const hover = still ? null : hoverRef.current;
+      const lit = still
+        ? null
+        : hover
+          ? new Set([hover, ...(neighboursRef.current.get(hover) ?? [])])
+          : highlightRef.current;
+
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      if (still) {
+        ctx.fillStyle = still.background;
+        ctx.fillRect(0, 0, w, h);
+      }
+      ctx.setTransform(dpr * t.k, 0, 0, dpr * t.k, dpr * t.x, dpr * t.y);
+
+      // Links first, beneath the nodes.
+      for (const l of linksRef.current) {
+        const on = lit ? lit.has(l.source.id) && lit.has(l.target.id) : true;
+        const touchesHover =
+          hover && (l.source.id === hover || l.target.id === hover);
+        ctx.strokeStyle = `rgba(${colors.link},${touchesHover ? 0.9 : on ? 0.35 : 0.07})`;
+        ctx.lineWidth = (touchesHover ? 1.6 : 1) / t.k;
+        ctx.beginPath();
+        ctx.moveTo(l.source.x, l.source.y);
+        ctx.lineTo(l.target.x, l.target.y);
+        ctx.stroke();
+      }
+
+      const baseLabel = still
+        ? 1
+        : labelAlpha(t.k, fitKRef.current, nodesRef.current.length > CROWDED);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      const labels: {
+        n: (typeof nodesRef.current)[number];
+        alpha: number;
+        on: boolean;
+        rank: number;
+      }[] = [];
+      for (const n of nodesRef.current) {
+        const on = lit ? lit.has(n.id) : true;
+        const faint = n.ring >= 2 && !lit;
+        ctx.globalAlpha = on ? (faint ? 0.6 : 1) : 0.15;
+        ctx.fillStyle = n.color;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.fill();
+        if (n.id === hover || n.centre) {
+          ctx.strokeStyle = `rgba(${colors.text},0.7)`;
+          ctx.lineWidth = 1.5 / t.k;
+          ctx.stroke();
+        }
+        const alpha =
+          n.id === hover || n.centre || lit?.has(n.id)
+            ? 1
+            : lit
+              ? 0
+              : baseLabel;
+        if (alpha > 0.02) {
+          const rank =
+            n.id === hover
+              ? 0
+              : n.centre
+                ? 1
+                : lit?.has(n.id)
+                  ? 2
+                  : 3 - n.r / 100;
+          labels.push({ n, alpha, on, rank });
+        }
+      }
+
+      // Labels after every dot, most important first, and none on top of
+      // another: a label that would overlap one already drawn waits until you
+      // zoom in or hover. On screen, text grows a little as you zoom in but
+      // never shrinks below readable; the canvas is in world units (/ t.k).
+      labels.sort((a, b) => a.rank - b.rank);
+      const screenPx = 9.5 * Math.min(Math.max(t.k, 0.9), 1.3);
+      const lineH = (screenPx * 1.25) / t.k;
+      const placed: [number, number, number, number][] = [];
+      for (const { n, alpha, on, rank } of labels) {
+        const weight = rank < 2 ? "600 " : "";
+        ctx.font = `${weight}${screenPx / t.k}px ui-sans-serif, system-ui, sans-serif`;
+        const label =
+          n.label.length > 28 ? `${n.label.slice(0, 27)}…` : n.label;
+        const w = ctx.measureText(label).width;
+        const x1 = n.x - w / 2;
+        const y1 = n.y + n.r + 2.5 / t.k;
+        const box: [number, number, number, number] = [
+          x1,
+          y1,
+          x1 + w,
+          y1 + lineH,
+        ];
+        if (
+          rank >= 2 &&
+          placed.some(
+            ([a1, b1, a2, b2]) =>
+              box[0] < a2 && box[2] > a1 && box[1] < b2 && box[3] > b1,
+          )
+        ) {
+          continue;
+        }
+        placed.push(box);
+        ctx.globalAlpha = alpha * (on ? 1 : 0.3);
+        ctx.fillStyle = `rgb(${colors.text})`;
+        ctx.fillText(label, n.x, y1);
+      }
+      ctx.globalAlpha = 1;
+    },
+    [],
+  );
 
   const draw = useCallback(() => {
     frameRef.current = null;
@@ -220,109 +351,41 @@ export function VaultGraph({
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
     const { w, h } = sizeRef.current;
-    const dpr = window.devicePixelRatio || 1;
-    const t = viewRef.current;
-    const colors = palette();
-    const hover = hoverRef.current;
-    const lit = hover
-      ? new Set([hover, ...(neighboursRef.current.get(hover) ?? [])])
-      : highlightRef.current;
+    paint(ctx, w, h, window.devicePixelRatio || 1, viewRef.current);
+  }, [paint]);
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    ctx.setTransform(dpr * t.k, 0, 0, dpr * t.k, dpr * t.x, dpr * t.y);
-
-    // Links first, beneath the nodes.
-    for (const l of linksRef.current) {
-      const on = lit ? lit.has(l.source.id) && lit.has(l.target.id) : true;
-      const touchesHover =
-        hover && (l.source.id === hover || l.target.id === hover);
-      ctx.strokeStyle = `rgba(${colors.link},${touchesHover ? 0.9 : on ? 0.35 : 0.07})`;
-      ctx.lineWidth = (touchesHover ? 1.6 : 1) / t.k;
-      ctx.beginPath();
-      ctx.moveTo(l.source.x, l.source.y);
-      ctx.lineTo(l.target.x, l.target.y);
-      ctx.stroke();
-    }
-
-    const baseLabel = labelAlpha(
-      t.k,
-      fitKRef.current,
-      nodesRef.current.length > CROWDED,
+  /** The whole map as a JPEG, framed and at print size, on the page's colour. */
+  const saveImage = useCallback(async () => {
+    const nodes = nodesRef.current;
+    if (nodes.length === 0) return;
+    // Framed to the map's own shape, 2400 px on its long side.
+    const xs = nodes.map((n) => n.x);
+    const ys = nodes.map((n) => n.y);
+    const spanX = Math.max(...xs) - Math.min(...xs) + 160;
+    const spanY = Math.max(...ys) - Math.min(...ys) + 160;
+    const long = 1200;
+    const w = spanX >= spanY ? long : Math.max(600, (long * spanX) / spanY);
+    const h = spanX >= spanY ? Math.max(600, (long * spanY) / spanX) : long;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(w * 2);
+    canvas.height = Math.round(h * 2);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const background =
+      getComputedStyle(wrapRef.current ?? document.body).backgroundColor ||
+      "#ffffff";
+    paint(ctx, w, h, 2, fitTransform(nodes, w, h, 60), {
+      background:
+        background === "rgba(0, 0, 0, 0)"
+          ? getComputedStyle(document.body).backgroundColor
+          : background,
+    });
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.92),
     );
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    const labels: {
-      n: (typeof nodesRef.current)[number];
-      alpha: number;
-      on: boolean;
-      rank: number;
-    }[] = [];
-    for (const n of nodesRef.current) {
-      const on = lit ? lit.has(n.id) : true;
-      const faint = n.ring >= 2 && !lit;
-      ctx.globalAlpha = on ? (faint ? 0.6 : 1) : 0.15;
-      ctx.fillStyle = n.color;
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-      ctx.fill();
-      if (n.id === hover || n.centre) {
-        ctx.strokeStyle = `rgba(${colors.text},0.7)`;
-        ctx.lineWidth = 1.5 / t.k;
-        ctx.stroke();
-      }
-      const alpha =
-        n.id === hover || n.centre || lit?.has(n.id) ? 1 : lit ? 0 : baseLabel;
-      if (alpha > 0.02) {
-        const rank =
-          n.id === hover
-            ? 0
-            : n.centre
-              ? 1
-              : lit?.has(n.id)
-                ? 2
-                : 3 - n.r / 100;
-        labels.push({ n, alpha, on, rank });
-      }
-    }
-
-    // Labels after every dot, most important first, and none on top of
-    // another: a label that would overlap one already drawn waits until you
-    // zoom in or hover. On screen, text grows a little as you zoom in but
-    // never shrinks below readable; the canvas is in world units (/ t.k).
-    labels.sort((a, b) => a.rank - b.rank);
-    const screenPx = 9.5 * Math.min(Math.max(t.k, 0.9), 1.3);
-    const lineH = (screenPx * 1.25) / t.k;
-    const placed: [number, number, number, number][] = [];
-    for (const { n, alpha, on, rank } of labels) {
-      const weight = rank < 2 ? "600 " : "";
-      ctx.font = `${weight}${screenPx / t.k}px ui-sans-serif, system-ui, sans-serif`;
-      const label = n.label.length > 28 ? `${n.label.slice(0, 27)}…` : n.label;
-      const w = ctx.measureText(label).width;
-      const x1 = n.x - w / 2;
-      const y1 = n.y + n.r + 2.5 / t.k;
-      const box: [number, number, number, number] = [
-        x1,
-        y1,
-        x1 + w,
-        y1 + lineH,
-      ];
-      if (
-        rank >= 2 &&
-        placed.some(
-          ([a1, b1, a2, b2]) =>
-            box[0] < a2 && box[2] > a1 && box[1] < b2 && box[3] > b1,
-        )
-      ) {
-        continue;
-      }
-      placed.push(box);
-      ctx.globalAlpha = alpha * (on ? 1 : 0.3);
-      ctx.fillStyle = `rgb(${colors.text})`;
-      ctx.fillText(label, n.x, y1);
-    }
-    ctx.globalAlpha = 1;
-  }, []);
+    if (blob)
+      await onSaveImageRef.current?.(new Uint8Array(await blob.arrayBuffer()));
+  }, [paint]);
 
   const redraw = useCallback(() => {
     if (frameRef.current === null) {
@@ -592,6 +655,17 @@ export function VaultGraph({
       >
         <ScanIcon className="size-3.5" />
       </button>
+      {onSaveImage && (
+        <button
+          type="button"
+          onClick={() => void saveImage()}
+          className="absolute right-9 bottom-1.5 flex size-6 items-center justify-center rounded bg-background/80 text-muted-foreground shadow-sm transition-colors hover:text-foreground"
+          title="Save as image"
+          aria-label="Save map as image"
+        >
+          <ImageDownIcon className="size-3.5" />
+        </button>
+      )}
     </div>
   );
 }
