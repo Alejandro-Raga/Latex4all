@@ -391,6 +391,46 @@ describe("shared projects", () => {
     expect(b.errors).toEqual([]);
   });
 
+  it("applies others' latest text without waiting on slow downloads", async () => {
+    const relay = new FakeRelay();
+    const a = new Device(
+      relay,
+      new FakeWorkspace(relay, {
+        "main.tex": "draft, with his latest changes",
+        "figures/plot.png": "PNGDATA",
+      }),
+    );
+    await a.open({ name: "Paper" });
+
+    // Joining with an image download that doesn't finish.
+    const slow = new FakeWorkspace(relay);
+    let release = () => {};
+    const download = slow.download.bind(slow);
+    slow.download = (path, blobId) =>
+      new Promise<void>((resolve) => {
+        release = () => void download(path, blobId).then(resolve);
+      });
+    const b = new Device(relay, slow);
+    // (The test's open also waits for the download, so it's checked midway.)
+    const opening = b.open();
+    for (let i = 0; i < 50 && b.session?.status !== "synced"; i++) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    // Caught up and editable, with the latest text, image still on its way.
+    expect(b.session!.status).toBe("synced");
+    expect(b.sync!.textAt("main.tex")?.text.toString()).toBe(
+      "draft, with his latest changes",
+    );
+    expect(slow.disk.has("figures/plot.png")).toBe(false);
+
+    release();
+    await opening;
+    await settleAll(a, b);
+    expect(slow.snapshot()).toEqual(a.workspace.snapshot());
+    expect(b.conflicts).toEqual([]);
+  });
+
   it("merges changes made while offline, without an authoritative copy", async () => {
     const relay = new FakeRelay();
     const a = new Device(

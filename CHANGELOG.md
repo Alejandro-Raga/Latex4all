@@ -190,6 +190,17 @@ tag.
 
 ### Fixed
 
+- Shared projects could open showing an old version and stay stuck: others'
+  latest changes waited until every image and PDF had downloaded, the text
+  couldn't be edited at first, and what you typed meanwhile collided with
+  theirs, leaving highlighted conflicts that opened whenever you clicked.
+  The latest text now arrives first, with files following, so conflicts
+  don't appear out of nowhere.
+- Changes to a shared project could silently stop reaching the others
+  after the computer slept or changed network, until the project was
+  reopened. A dead connection is now noticed and replaced within a minute,
+  and what was waiting is sent.
+
 - A project's own note in the vault was listed among the papers.
 - Renaming or moving a project no longer strands its vault note: the note
   takes the project's new name, and every link to it is updated. Turning off

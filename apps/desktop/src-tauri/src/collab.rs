@@ -63,6 +63,10 @@ const CHAT_DAYS: u64 = 30;
 const MAX_INFLATED_BYTES: u64 = 64 * 1024 * 1024;
 
 const KEEPALIVE: Duration = Duration::from_secs(20);
+/// With nothing heard from the relay for this long (it pings every 30 s and
+/// answers ours), the connection is dead even if sending still "works" —
+/// as after the computer sleeps or changes network — so start a new one.
+const SILENCE: Duration = Duration::from_secs(50);
 const RETRY_DELAYS: [u64; 5] = [1, 2, 5, 10, 30];
 
 const FRAME_UPDATE: u8 = 1;
@@ -767,6 +771,7 @@ where
     let mut relay_nearly_full = false;
     let mut keepalive = tokio::time::interval(KEEPALIVE);
     keepalive.tick().await;
+    let mut last_heard = tokio::time::Instant::now();
     loop {
         tokio::select! {
             command = commands.recv() => match command {
@@ -813,7 +818,11 @@ where
                     }
                 }
             },
-            incoming = stream.next() => match incoming {
+            incoming = stream.next() => {
+                if matches!(incoming, Some(Ok(_))) {
+                    last_heard = tokio::time::Instant::now();
+                }
+                match incoming {
                 Some(Ok(Message::Binary(data))) => handle_frame(&data, keys, after, chat, emit),
                 Some(Ok(Message::Text(text))) => {
                     let Ok(message) = serde_json::from_str::<RelayMessage>(&text) else {
@@ -888,8 +897,12 @@ where
                 }
                 Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return SessionEnd::Dropped,
                 Some(Ok(_)) => {}
+                }
             },
             _ = keepalive.tick() => {
+                if last_heard.elapsed() > SILENCE {
+                    return SessionEnd::Dropped;
+                }
                 if sink.send(Message::Ping(Bytes::new())).await.is_err() {
                     return SessionEnd::Dropped;
                 }

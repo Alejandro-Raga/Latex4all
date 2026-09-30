@@ -94,6 +94,11 @@ export class ProjectSync {
   private lastLayoutSignature = "";
   /** Files that failed to upload; retried once they change. */
   private failedUploads = new Set<string>();
+  /**
+   * Images and other binary files left to download when opening: fetched
+   * after, so what others wrote is applied without waiting on them.
+   */
+  private blobsLater = false;
   private cleanup: Array<() => void> = [];
 
   constructor(
@@ -111,6 +116,11 @@ export class ProjectSync {
    */
   async start() {
     await this.run({ opening: true });
+    // Now the downloads put off while opening, in the background.
+    if (this.blobsLater) {
+      this.blobsLater = false;
+      this.schedule();
+    }
 
     const files = filesMap(this.doc);
     const onDoc = (events: Array<Y.YEvent<Y.AbstractType<unknown>>>) => {
@@ -252,6 +262,9 @@ export class ProjectSync {
     const byId = new Map([...placed.values()].map((f) => [f.fileId, f]));
     let local = this.localFiles();
     let wrote = false;
+    // Binary files put off until after opening: left alone this time round,
+    // so an old copy on disk isn't taken for a change made here.
+    const later = new Set<string>();
     const guard = async (what: string, action: () => Promise<void>) => {
       try {
         await action();
@@ -292,6 +305,12 @@ export class ProjectSync {
       }
       known.path = shared.path;
       if (shared.kind === "blob" && known.blobId !== shared.blobId) {
+        if (opening) {
+          this.blobsLater = true;
+          later.add(fileId);
+          later.add(shared.path);
+          continue;
+        }
         const downloaded = await guard(`Couldn't download ${shared.path}`, () =>
           this.workspace.download(shared.path, shared.blobId),
         );
@@ -303,6 +322,11 @@ export class ProjectSync {
     }
     for (const shared of placed.values()) {
       if (this.known.has(shared.fileId)) continue;
+      if (opening && shared.kind === "blob") {
+        this.blobsLater = true;
+        later.add(shared.path);
+        continue;
+      }
       const existing = local.get(shared.path);
       const text = shared.kind === "text" ? shared.text.toString() : "";
       const identical =
@@ -337,7 +361,9 @@ export class ProjectSync {
 
     // 2. Bring the document up to date with the files on disk.
     const knownPaths = new Set([...this.known.values()].map((k) => k.path));
-    const added = [...local.values()].filter((f) => !knownPaths.has(f.path));
+    const added = [...local.values()].filter(
+      (f) => !knownPaths.has(f.path) && !later.has(f.path),
+    );
     const missing = [...this.known].filter(([, k]) => !local.has(k.path));
     for (const [fileId, known] of missing) {
       const shared = byId.get(fileId);
@@ -391,6 +417,7 @@ export class ProjectSync {
 
     // 3. Changes to files already shared.
     for (const [fileId, known] of this.known) {
+      if (later.has(fileId)) continue;
       const mine = local.get(known.path);
       const shared = byId.get(fileId);
       const entry = this.entry(fileId);

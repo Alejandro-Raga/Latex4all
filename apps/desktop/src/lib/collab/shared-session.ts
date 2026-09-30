@@ -58,7 +58,10 @@ const COMPACT_AFTER_BYTES = 512 * 1024;
 const COMPACT_AFTER_ENTRIES = 1000;
 const SAVE_DELAY_MS = 1000;
 /** A connection attempt that hasn't failed nor succeeded by now counts as offline. */
-export const OFFLINE_AFTER_MS = 5000;
+// Long enough for a big project to catch up over a slow link: calling it
+// offline early makes edits typed meanwhile look like offline ones, which
+// then collide with what was on its way.
+export const OFFLINE_AFTER_MS = 12000;
 
 interface Hooks {
   /** This device's local state, saved with the document. */

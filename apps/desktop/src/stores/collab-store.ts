@@ -154,6 +154,11 @@ export function followOpenProject() {
       if (!info || useDocumentStore.getState().projectRoot !== root) return;
       await openShared(root, info).catch((err) => {
         reportError(`Couldn't sync this project: ${String(err)}`);
+        // Never leave the editor locked waiting for a sync that failed to
+        // start: it's editable, and changes go once it connects.
+        if (useCollabStore.getState().status === "syncing") {
+          useCollabStore.setState({ status: "offline" });
+        }
       });
     });
   void follow(useDocumentStore.getState().projectRoot);
