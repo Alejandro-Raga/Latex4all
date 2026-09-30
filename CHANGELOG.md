@@ -173,9 +173,8 @@ tag.
 
 ### Changed
 
-- Joining a shared project is clearer: labelled fields, a paste button (a
-  copied link fills in by itself), a warning when the text isn't an invite
-  link, and where the project will be saved.
+- Joining a shared project is clearer: labelled fields, a warning when the
+  text isn't an invite link, and where the project will be saved.
 
 - The Zotero section of the sidebar is gone: your library lives in the
   Reference panel, where you can browse, search, read, cite and add papers

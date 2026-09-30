@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ClipboardPasteIcon, FolderOpenIcon, Loader2Icon } from "lucide-react";
+import { FolderOpenIcon, Loader2Icon } from "lucide-react";
 import { homeDir } from "@tauri-apps/api/path";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
@@ -58,25 +58,6 @@ export function JoinDialog({
       .catch(() => {});
   }, []);
 
-  // A link already copied is filled in on opening.
-  useEffect(() => {
-    if (!open || link) return;
-    navigator.clipboard
-      ?.readText()
-      .then((text) => {
-        if (looksLikeLink(text)) setLink(text.trim());
-      })
-      .catch(() => {});
-  }, [open, link]);
-
-  const paste = async () => {
-    try {
-      setLink((await navigator.clipboard.readText()).trim());
-    } catch {
-      toast.error("Couldn't read the clipboard; paste the link into the box.");
-    }
-  };
-
   const chooseFolder = async () => {
     const selected = await openDialog({
       directory: true,
@@ -124,30 +105,18 @@ export function JoinDialog({
         >
           <div className="space-y-1.5">
             <Label htmlFor="join-link">Invite link</Label>
-            <div className="flex gap-1.5">
-              <Input
-                id="join-link"
-                autoFocus
-                value={link}
-                onChange={(e) => setLink(e.target.value)}
-                placeholder="https://…/p/…#…"
-                aria-invalid={invalid}
-                className="min-w-0 flex-1 font-mono text-xs"
-                disabled={joining}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="shrink-0"
-                onClick={paste}
-                disabled={joining}
-                title="Paste"
-                aria-label="Paste the link"
-              >
-                <ClipboardPasteIcon className="size-4" />
-              </Button>
-            </div>
+            {/* Pasted with ⌘V into the box, which has focus: reading the
+                clipboard from the page would make macOS ask first. */}
+            <Input
+              id="join-link"
+              autoFocus
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              placeholder="Paste it here (⌘V)"
+              aria-invalid={invalid}
+              className="font-mono text-xs"
+              disabled={joining}
+            />
             {invalid && (
               <p className="text-destructive text-xs">
                 That isn't a shared project link.
