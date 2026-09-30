@@ -98,7 +98,16 @@ tag.
   bibliography, with a button to add it from Zotero (and to update your
   \cite{}s if Zotero knows it by another key); what's in the bibliography
   but never cited; and cited papers that aren't in your vault yet, with a
-  button to send them there.
+  button to add each one, or all of them at once.
+- Add papers to your vault from Latex4All: right-click a Zotero item in the
+  Reference panel, or use Check citations. Latex4All writes the literature
+  note itself, always in the same shape (details, abstract, your highlights
+  with links back to the PDF, and a "My notes" section it never touches),
+  in the folder your vault keeps its paper notes in. Adding a paper again
+  refreshes its note and keeps what you wrote.
+- Add a whole Zotero collection, or your whole library, to any .bib file
+  of the project: right-click it in the Reference panel. Entries already in
+  the file are skipped.
 - A command palette: press ⌘K and type to jump to a file, a vault note or
   an open PDF, or to run a command — show or hide a panel, check citations,
   switch theme, open a settings section. Shortcuts too: ⌘⌥1, ⌘⌥2 and ⌘⌥3
@@ -139,6 +148,10 @@ tag.
 
 ### Changed
 
+- The Zotero section of the sidebar is gone: your library lives in the
+  Reference panel, where you can browse, search, read, cite and add papers
+  to the vault.
+
 - The editor, the PDF pane and the side column are set apart by a clear
   gutter, so documents side by side no longer run together.
 - Reference, Vault and Notes share one column on the right, stacked, instead
@@ -156,6 +169,9 @@ tag.
 - Exporting a PDF opens the save dialog in the project's own folder.
 
 ### Fixed
+
+- The red of spelling suggestions and errors glared on dark and colorful
+  themes; each theme now has a red that sits with it.
 
 - Papers exported with Zotero Integration (and other Obsidian–Zotero
   plugins) showed as "not in the vault" in project notes and citation

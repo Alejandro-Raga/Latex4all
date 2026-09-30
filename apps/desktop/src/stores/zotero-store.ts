@@ -86,6 +86,15 @@ interface ZoteroState {
     itemKey: string,
     targetFileId: string | null,
   ) => Promise<AddReferenceResult>;
+  /**
+   * Adds every item in a collection (and its subcollections), or the whole
+   * library, to a .bib file of the project, skipping entries it already has.
+   */
+  addCollectionToBib: (
+    collectionKey: string | null,
+    name: string,
+    targetFileId: string | null,
+  ) => Promise<{ added: number; skipped: number; fileName: string }>;
 }
 
 const MYLIB_KEY = "__my_library__";
@@ -534,6 +543,84 @@ export const useZoteroStore = create<ZoteroState>()(
 
         log.info(`Added ${citekey} to ${target.name}`);
         return { status: "added", citekey, fileName: target.name };
+      },
+
+      addCollectionToBib: async (collectionKey, name, targetFileId) => {
+        const { apiKey, userID, collections } = get();
+        if (!apiKey || !userID) throw new Error("Not connected to Zotero.");
+        const docStore = useDocumentStore.getState();
+        const projectRoot = docStore.projectRoot;
+        if (!projectRoot) throw new Error("No project is open.");
+
+        const result = await importCollection(
+          apiKey,
+          userID,
+          collectionKey ? collectSubtreeKeys(collections, collectionKey) : null,
+        );
+        const incoming = parseBibEntries(result.bibtex);
+
+        let target = targetFileId
+          ? docStore.files.find((f) => f.id === targetFileId)
+          : docStore.files.find((f) => f.name === DEFAULT_BIB_FILE_NAME);
+        let current = "";
+        if (target) {
+          current =
+            target.content ??
+            (await readTexFileContent(target.absolutePath).catch(() => ""));
+        }
+        const have = parseBibEntries(current);
+        const fresh = [...incoming].filter(([key]) => !have.has(key));
+        const content = fresh.length
+          ? `${current.trimEnd()}${current.trim() ? "\n\n" : ""}${fresh
+              .map(([, entry]) => entry)
+              .join("\n\n")}\n`
+          : current;
+
+        if (!target) {
+          const absolutePath = await createFileOnDisk(
+            projectRoot,
+            DEFAULT_BIB_FILE_NAME,
+            content,
+          );
+          docStore.addFile({
+            name: DEFAULT_BIB_FILE_NAME,
+            relativePath: DEFAULT_BIB_FILE_NAME,
+            absolutePath,
+            type: "bib",
+            content,
+          });
+          target = useDocumentStore
+            .getState()
+            .files.find((f) => f.name === DEFAULT_BIB_FILE_NAME);
+        } else if (fresh.length) {
+          docStore.updateFileContent(target.id, content);
+          await docStore.saveFile(target.id);
+        }
+
+        // Remember which Zotero item each key is, for citation checks and
+        // the vault (as a whole-collection import always has).
+        const fileName = target?.name ?? DEFAULT_BIB_FILE_NAME;
+        const sk = storeKey(collectionKey);
+        set((s) => ({
+          syncedCollections: {
+            ...s.syncedCollections,
+            [projectRoot]: {
+              ...(s.syncedCollections[projectRoot] ?? {}),
+              [sk]: {
+                collectionKey,
+                name,
+                bibFileName: fileName,
+                libraryVersion: result.libraryVersion,
+                keyMap: result.keyMap,
+              },
+            },
+          },
+        }));
+        return {
+          added: fresh.length,
+          skipped: incoming.size - fresh.length,
+          fileName,
+        };
       },
 
       removeCollection: (collectionKey) => {

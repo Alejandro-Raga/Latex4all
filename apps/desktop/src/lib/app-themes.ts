@@ -276,6 +276,7 @@ ${stripes}
 .${CUSTOM_THEME}.theme-dark { --syn-l: 0.8; }
 :is(${classes}).theme-dark {
   --frame: var(--t-frame, color-mix(in oklab, color-mix(in oklab, var(--t-surface) 70%, black) 86%, var(--t-accent)));
+  --destructive: color-mix(in oklab, oklch(0.72 0.15 24) 82%, var(--t-fg));
   --divider: ${mix("--frame", 82, "--t-fg")};
 }
 ${classes} {
@@ -303,6 +304,8 @@ ${classes} {
   --chart-4: var(--syn-string);
   --chart-5: var(--syn-math);
   --frame: var(--t-frame, ${mix("--t-surface", 76, "--t-accent")});
+  /* An error red that sits with the theme instead of shouting over it. */
+  --destructive: color-mix(in oklab, oklch(0.56 0.19 26) 85%, var(--t-fg));
   --divider: ${mix("--frame", 78, "--t-fg")};
   --sidebar: var(--t-surface);
   --sidebar-foreground: var(--t-fg);

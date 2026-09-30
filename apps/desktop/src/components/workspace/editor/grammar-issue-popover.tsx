@@ -64,7 +64,7 @@ export function GrammarIssuePopover({
     >
       <div className="flex items-center gap-2 border-border border-b px-3 py-2">
         <AlertTriangleIcon
-          className={`size-3.5 shrink-0 ${issue.isSpelling ? "text-destructive" : "text-blue-500"}`}
+          className={`size-3.5 shrink-0 ${issue.isSpelling ? "text-destructive/80" : "text-blue-500"}`}
         />
         <span className="min-w-0 flex-1 truncate font-medium text-sm">
           {issue.category || "Grammar"}
@@ -96,7 +96,9 @@ export function GrammarIssuePopover({
                 <button
                   key={replacement}
                   onClick={() => onReplace(replacement)}
-                  className="rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-destructive text-xs transition-colors hover:bg-destructive hover:text-primary-foreground"
+                  // Softened toward the text colour: pure red reads as an
+                  // alarm on dark and colourful themes.
+                  className="rounded-full border border-destructive/30 bg-destructive/8 px-2 py-0.5 text-[color-mix(in_oklab,var(--destructive)_65%,var(--foreground))] text-xs transition-colors hover:bg-destructive/20"
                 >
                   {replacement || "(remove)"}
                 </button>

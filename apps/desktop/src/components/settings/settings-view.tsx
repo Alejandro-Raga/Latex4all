@@ -42,6 +42,7 @@ import { useZoteroStore } from "@/stores/zotero-store";
 import { cn } from "@/lib/utils";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { clearPdfCache, pdfCacheSize } from "@/lib/zotero-pdf-cache";
+import { papersFolderOf } from "@/lib/vault/add-paper";
 import {
   EnvironmentStatus,
   SettingsDetailButton,
@@ -248,6 +249,25 @@ function ZoteroSettings() {
   );
 }
 
+/** Where "Add to vault" writes paper notes; empty finds it from the vault. */
+function PapersFolderRow() {
+  const chosen = useVaultStore((s) => s.papersFolder);
+  const setChosen = useVaultStore((s) => s.setPapersFolder);
+  const index = useVaultStore((s) => s.index);
+  const found = papersFolderOf(index, "");
+  return (
+    <SettingRow label="Paper notes folder">
+      <Input
+        value={chosen}
+        onChange={(e) => setChosen(e.target.value)}
+        placeholder={found || "Vault root"}
+        className="h-7 w-44 text-xs"
+        aria-label="Paper notes folder"
+      />
+    </SettingRow>
+  );
+}
+
 const megabytes = (bytes: number) =>
   bytes < 1e6
     ? `${Math.max(1, Math.round(bytes / 1e3))} KB`
@@ -434,6 +454,7 @@ function VaultSettings() {
           aria-label="Project notes folder"
         />
       </SettingRow>
+      <PapersFolderRow />
       <SettingRow
         label="Zotero tag for the vault"
         detail="“Add to vault” tags a paper with this in Zotero"

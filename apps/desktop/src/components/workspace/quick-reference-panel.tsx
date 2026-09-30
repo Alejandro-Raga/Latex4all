@@ -32,6 +32,7 @@ import {
   SearchIcon,
   XIcon,
   type LucideIcon,
+  NotebookTextIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useProjectStore } from "@/stores/project-store";
@@ -86,6 +87,7 @@ import {
 import { cn } from "@/lib/utils";
 import { itemsIn, pdfOf, useZoteroLibrary } from "@/lib/zotero-library";
 import { zoteroPdfBytes } from "@/lib/zotero-pdf-cache";
+import { addPaperToVault } from "@/lib/vault/add-paper";
 import { createLogger } from "@/lib/debug/logger";
 import { DockHeaderBar, DockWideButton } from "./dock/dock-section";
 
@@ -674,6 +676,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
                         <ZoteroTreeRow
                           icon={BookOpenIcon}
                           label="My Library"
+                          collectionKey={null}
                           expanded={expandedZoteroCollections.has(
                             MY_LIBRARY_KEY,
                           )}
@@ -820,13 +823,16 @@ function ZoteroTreeRow({
   label,
   expanded,
   onToggle,
+  collectionKey,
 }: {
   icon: LucideIcon;
   label: string;
   expanded: boolean;
   onToggle: () => void;
+  /** Right-click adds the whole collection (null: library) to a .bib file. */
+  collectionKey?: string | null;
 }) {
-  return (
+  const row = (
     <div className="flex w-full items-center rounded-md hover:bg-muted">
       <button
         type="button"
@@ -851,6 +857,64 @@ function ZoteroTreeRow({
       </button>
     </div>
   );
+  if (collectionKey === undefined) return row;
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+      <ContextMenuContent className="w-56">
+        <CollectionToBibItems collectionKey={collectionKey} name={label} />
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/** The project's .bib files, for "Add … to" menus. */
+function useBibFiles() {
+  const files = useDocumentStore((s) => s.files);
+  return useMemo(
+    () =>
+      files
+        .filter((f) => f.name.toLowerCase().endsWith(".bib"))
+        .sort((a, b) => a.relativePath.localeCompare(b.relativePath)),
+    [files],
+  );
+}
+
+/** "Add all to <file>.bib" for a collection or the whole library. */
+function CollectionToBibItems({
+  collectionKey,
+  name,
+}: {
+  collectionKey: string | null;
+  name: string;
+}) {
+  const bibFiles = useBibFiles();
+  const add = (fileId: string | null, label: string) =>
+    toast.promise(
+      useZoteroStore.getState().addCollectionToBib(collectionKey, name, fileId),
+      {
+        loading: `Adding ${name} to ${label}…`,
+        success: (r) =>
+          r.added
+            ? `Added ${r.added} to ${r.fileName}${r.skipped ? ` (${r.skipped} already there)` : ""}`
+            : `Everything in ${name} is already in ${r.fileName}`,
+        error: (err) =>
+          `Couldn't add ${name}. ${err instanceof Error ? err.message : String(err)}`,
+      },
+    );
+  return bibFiles.length === 0 ? (
+    <ContextMenuItem onClick={() => add(null, DEFAULT_BIB_FILE_NAME)}>
+      <PlusIcon className="size-3.5" />
+      Add all to new {DEFAULT_BIB_FILE_NAME}
+    </ContextMenuItem>
+  ) : (
+    bibFiles.map((file) => (
+      <ContextMenuItem key={file.id} onClick={() => add(file.id, file.name)}>
+        <PlusIcon className="size-3.5" />
+        <span className="truncate">Add all to {file.relativePath}</span>
+      </ContextMenuItem>
+    ))
+  );
 }
 
 function ZoteroItemRow({
@@ -863,19 +927,25 @@ function ZoteroItemRow({
   onSelect: (item: ZoteroItemSummary) => void;
 }) {
   const subtitle = [item.creators, item.year].filter(Boolean).join(" · ");
-  const files = useDocumentStore((s) => s.files);
   const addItemToBib = useZoteroStore((s) => s.addItemToBib);
   const [adding, setAdding] = useState(false);
 
   // Every .bib in the project is a candidate target; listing them flat beats a
   // submenu, since projects rarely have more than one or two.
-  const bibFiles = useMemo(
-    () =>
-      files
-        .filter((f) => f.name.toLowerCase().endsWith(".bib"))
-        .sort((a, b) => a.relativePath.localeCompare(b.relativePath)),
-    [files],
-  );
+  const bibFiles = useBibFiles();
+
+  const addToVault = () =>
+    toast.promise(addPaperToVault(item.key), {
+      loading: "Adding to your vault…",
+      success: (r) =>
+        r.status === "exists"
+          ? `${r.name} already has a note`
+          : r.status === "updated"
+            ? `Updated ${r.name} in your vault`
+            : `Added ${r.name} to your vault`,
+      error: (err) =>
+        `Couldn't add it to your vault. ${err instanceof Error ? err.message : String(err)}`,
+    });
 
   const handleAdd = useCallback(
     async (targetFileId: string | null, fileLabel: string) => {
@@ -928,6 +998,10 @@ function ZoteroItemRow({
         <ReferencePdfActions
           source={{ kind: "zotero", itemKey: item.key, title: item.title }}
         />
+        <ContextMenuItem onClick={addToVault}>
+          <NotebookTextIcon className="size-3.5" />
+          Add to vault
+        </ContextMenuItem>
         <ContextMenuSeparator />
         {bibFiles.length === 0 ? (
           <ContextMenuItem
@@ -1088,6 +1162,7 @@ function ZoteroCollectionTree({
         label={node.name}
         expanded={isExpanded}
         onToggle={() => onToggleExpand(node.key, node.key)}
+        collectionKey={node.key}
       />
       {isExpanded && (
         <ZoteroNestedGroup>

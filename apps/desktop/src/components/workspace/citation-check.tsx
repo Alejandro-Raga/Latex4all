@@ -22,7 +22,8 @@ import {
   renameCiteKey,
 } from "@/lib/citations";
 import { noteForCitekey } from "@/lib/vault/cite-link";
-import { addZoteroTag, findItemForCitekey } from "@/lib/zotero-api";
+import { findItemForCitekey } from "@/lib/zotero-api";
+import { addPaperToVault } from "@/lib/vault/add-paper";
 import { useDocumentStore } from "@/stores/document-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
@@ -76,17 +77,23 @@ function Section({
   empty,
   children,
   count,
+  action,
 }: {
   title: string;
   empty: string;
   count: number;
   children: React.ReactNode;
+  /** For the whole list, beside the title. */
+  action?: React.ReactNode;
 }) {
   return (
     <section className="space-y-1">
-      <h3 className="font-medium text-sm">
-        {title}
-        <span className="ml-1.5 text-muted-foreground">{count}</span>
+      <h3 className="flex items-center font-medium text-sm">
+        <span className="flex-1">
+          {title}
+          <span className="ml-1.5 text-muted-foreground">{count}</span>
+        </span>
+        {count > 0 && action}
       </h3>
       {count === 0 ? (
         <p className="flex items-center gap-1.5 text-muted-foreground text-xs">
@@ -170,7 +177,6 @@ export function CitationCheckDialog() {
   const close = useCitationCheck((s) => s.close);
   const zoteroConnected = useZoteroStore((s) => s.isAuthenticated);
   const vaultIndex = useVaultStore((s) => s.index);
-  const paperTag = useVaultStore((s) => s.paperTag);
   const [report, setReport] = useState<CitationReport | null>(null);
 
   const rescan = useCallback(() => setReport(scan()), []);
@@ -205,15 +211,47 @@ export function CitationCheckDialog() {
   };
 
   const addToVault = async (key: string) => {
-    const { apiKey, userID } = useZoteroStore.getState();
     const itemKey = await zoteroItemFor(key);
-    if (!apiKey || !userID || !itemKey) {
+    if (!itemKey) {
       throw new Error(`Couldn't find “${key}” in your Zotero library.`);
     }
-    await addZoteroTag(apiKey, userID, itemKey, paperTag || "obsidian");
+    const result = await addPaperToVault(itemKey, key);
     toast.success(
-      `Tagged “${paperTag}” in Zotero; it reaches the vault with your next sync`,
+      result.status === "exists"
+        ? `${result.name} already has a note`
+        : `Added ${result.name} to your vault`,
     );
+  };
+
+  // Every cited paper without a note, one after another, with progress.
+  const addAllToVault = async (keys: string[]) => {
+    const toastId = toast.loading(`Adding 0 of ${keys.length} to your vault…`);
+    let added = 0;
+    const missing: string[] = [];
+    for (const [i, key] of keys.entries()) {
+      toast.loading(`Adding ${i + 1} of ${keys.length} to your vault…`, {
+        id: toastId,
+      });
+      try {
+        const itemKey = await zoteroItemFor(key);
+        if (!itemKey) {
+          missing.push(key);
+          continue;
+        }
+        await addPaperToVault(itemKey, key);
+        added++;
+      } catch {
+        missing.push(key);
+      }
+    }
+    if (missing.length) {
+      toast.warning(`Added ${added} to your vault`, {
+        id: toastId,
+        description: `Not found in Zotero: ${missing.join(", ")}`,
+      });
+    } else {
+      toast.success(`Added ${added} to your vault`, { id: toastId });
+    }
   };
 
   const notInVault =
@@ -281,6 +319,15 @@ export function CitationCheckDialog() {
                 title="Cited, not in your vault"
                 count={notInVault.length}
                 empty="Every cited paper has a note."
+                action={
+                  zoteroConnected && (
+                    <ActionButton
+                      label="Add all"
+                      icon={NotebookTextIcon}
+                      run={() => addAllToVault(notInVault)}
+                    />
+                  )
+                }
               >
                 {notInVault.map((key) => (
                   <Row

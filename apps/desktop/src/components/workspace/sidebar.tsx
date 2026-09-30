@@ -53,7 +53,6 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useDocumentStore, type ProjectFile } from "@/stores/document-store";
 import { useHistoryStore } from "@/stores/history-store";
 import { cn } from "@/lib/utils";
-import { ZoteroPanel, ZoteroHeader } from "@/components/workspace/zotero-panel";
 import { useSettingsWindow } from "@/stores/settings-window-store";
 import { useReadingStore } from "@/stores/reading-store";
 import { readFile } from "@tauri-apps/plugin-fs";
@@ -1412,7 +1411,7 @@ export function Sidebar({
           {/* Resizable sections */}
           <PanelGroup direction="vertical" className="min-h-0 flex-1">
             {/* Files */}
-            <Panel defaultSize={50} minSize={15}>
+            <Panel defaultSize={70} minSize={15}>
               <div
                 ref={sidebarFilesRef}
                 className="flex h-full flex-col"
@@ -1549,7 +1548,7 @@ export function Sidebar({
             <PanelResizeHandle className="h-px bg-sidebar-border transition-colors hover:bg-ring data-resize-handle-active:bg-ring" />
 
             {/* Outline */}
-            <Panel defaultSize={20} minSize={10}>
+            <Panel defaultSize={30} minSize={10}>
               <div className="flex h-full flex-col">
                 <div className="flex h-8 shrink-0 items-center gap-2 px-3">
                   <ListIcon className="size-3.5 text-[var(--syn-heading)]" />
@@ -1577,20 +1576,6 @@ export function Sidebar({
                       No sections found
                     </div>
                   )}
-                </div>
-              </div>
-            </Panel>
-
-            <PanelResizeHandle className="h-px bg-sidebar-border transition-colors hover:bg-ring data-resize-handle-active:bg-ring" />
-
-            {/* Zotero */}
-            <Panel defaultSize={15} minSize={10}>
-              <div className="flex h-full flex-col">
-                <div className="flex h-8 shrink-0 items-center">
-                  <ZoteroHeader />
-                </div>
-                <div className="min-h-0 flex-1 overflow-hidden">
-                  <ZoteroPanel />
                 </div>
               </div>
             </Panel>

@@ -240,3 +240,33 @@ if (scenario === "workspace") {
       ),
   );
 }
+
+if (scenario === "grammar") {
+  const theme = params.get("theme") ?? "light";
+  import("@/components/workspace/editor/grammar-issue-popover").then(
+    ({ GrammarIssuePopover }) =>
+      root.render(
+        <ThemeProvider attribute="class" themes={THEME_IDS} forcedTheme={theme}>
+          <ThemeBridge />
+          <div className="h-full bg-background p-4 text-foreground">
+            <GrammarIssuePopover
+              issue={{
+                from: 0,
+                to: 5,
+                message: "Possible spelling mistake found.",
+                shortMessage: "Spelling mistake",
+                replacements: ["research", "researcher", "researched"],
+                category: "Possible Typo",
+                isSpelling: true,
+              }}
+              flaggedText="reserch"
+              anchor={{ x: 20, y: 20 }}
+              onReplace={() => {}}
+              onIgnore={() => {}}
+              onDismiss={() => {}}
+            />
+          </div>
+        </ThemeProvider>,
+      ),
+  );
+}

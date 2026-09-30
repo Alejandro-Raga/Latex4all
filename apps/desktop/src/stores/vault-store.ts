@@ -51,6 +51,8 @@ interface VaultState {
   projectsFolder: string;
   /** Zotero tag that brings a paper into the vault (whatever syncs it watches for). */
   paperTag: string;
+  /** Where Latex4All puts paper notes; "" finds where the vault keeps them. */
+  papersFolder: string;
   /** Folder and template last used for a new note ("" / null: none). */
   lastNoteFolder: string | null;
   lastTemplate: string | null;
@@ -87,6 +89,7 @@ interface VaultState {
   linkProject: (root: string, linked: boolean) => void;
   setProjectsFolder: (folder: string) => void;
   setPaperTag: (tag: string) => void;
+  setPapersFolder: (folder: string) => void;
   /** Switches back to the connected server. */
   useServer: () => void;
   connectServer: (
@@ -125,6 +128,7 @@ export const useVaultStore = create<VaultState>()(
       linkedProjects: {},
       projectsFolder: "My work",
       paperTag: "obsidian",
+      papersFolder: "",
       source: null,
       server: null,
       index: null,
@@ -187,6 +191,8 @@ export const useVaultStore = create<VaultState>()(
         }),
 
       setPaperTag: (tag) => set({ paperTag: tag.trim() }),
+      setPapersFolder: (folder) =>
+        set({ papersFolder: folder.trim().replace(/^\/+|\/+$/g, "") }),
 
       setProjectsFolder: (folder) =>
         set({ projectsFolder: folder.replace(/^\/+|\/+$/g, "") }),
@@ -336,6 +342,7 @@ export const useVaultStore = create<VaultState>()(
         linkedProjects: state.linkedProjects,
         projectsFolder: state.projectsFolder,
         paperTag: state.paperTag,
+        papersFolder: state.papersFolder,
       }),
     },
   ),
