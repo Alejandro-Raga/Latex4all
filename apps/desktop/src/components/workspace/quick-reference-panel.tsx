@@ -90,7 +90,14 @@ import { itemsIn, pdfOf, useZoteroLibrary } from "@/lib/zotero-library";
 import { zoteroPdfBytes } from "@/lib/zotero-pdf-cache";
 import { addPaperToVault } from "@/lib/vault/add-paper";
 import { useVaultStore } from "@/stores/vault-store";
-import { CitedAt, CitedToggle, useCitedItems } from "./cited-here";
+import {
+  CitedAt,
+  CitedHeader,
+  type CitedOrder,
+  CitedToggle,
+  orderCited,
+  useCitedItems,
+} from "./cited-here";
 import { TopicMenu } from "./topic-menu";
 import { createLogger } from "@/lib/debug/logger";
 import { DockHeaderBar, DockWideButton } from "./dock/dock-section";
@@ -286,6 +293,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   const [zoteroQuery, setZoteroQuery] = useState("");
   const [zoteroSort, setZoteroSort] = useState<ReferenceSort>("relevance");
   const [citedOnly, setCitedOnly] = useState(false);
+  const [citedOrder, setCitedOrder] = useState<CitedOrder>("text");
   const cited = useCitedItems(citedOnly);
 
   const treeCache = useRef(new Map<string, TreeNode>());
@@ -672,12 +680,17 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
                     </div>
                     {citedOnly ? (
                       <>
-                        <p className="px-2 py-1 text-muted-foreground text-xs">
+                        <CitedHeader order={citedOrder} onOrder={setCitedOrder}>
                           {cited.items.length} cited in this project
                           {cited.missing > 0 &&
                             ` · ${cited.missing} not found in Zotero`}
-                        </p>
-                        {cited.items.map(({ item, places }) => (
+                        </CitedHeader>
+                        {orderCited(
+                          cited.items,
+                          (c) => c.places,
+                          (c) => cited.items.indexOf(c),
+                          citedOrder,
+                        ).map(({ item, places }) => (
                           <ZoteroItemRow
                             key={item.key}
                             item={item}

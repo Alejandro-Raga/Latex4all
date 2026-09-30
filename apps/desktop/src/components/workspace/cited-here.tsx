@@ -61,12 +61,12 @@ export function useCitedNotes(enabled: boolean) {
   const itemKeys = useItemKeyByCitekey();
   return useMemo(() => {
     const byNote = new Map<string, CitePlace[]>();
-    let missing = 0;
+    const missing: string[] = [];
     if (!index) return { byNote, missing };
     for (const [key, at] of places) {
       const note = noteForCitekey(index, key, itemKeys);
       if (note) addPlaces(byNote, note.name, at);
-      else missing++;
+      else missing.push(key);
     }
     return { byNote, missing };
   }, [index, places, itemKeys]);
@@ -106,6 +106,48 @@ export function useCitedItems(enabled: boolean) {
     }
     return { items, missing };
   }, [mirror, places, titles, itemKeys]);
+}
+
+export type CitedOrder = "text" | "most";
+
+/** Cited things in the order the text first cites them, or most cited first. */
+export function orderCited<T>(
+  list: T[],
+  placesOf: (t: T) => CitePlace[] | undefined,
+  firstOrder: (t: T) => number,
+  order: CitedOrder,
+): T[] {
+  return [...list].sort((a, b) =>
+    order === "most"
+      ? (placesOf(b)?.length ?? 0) - (placesOf(a)?.length ?? 0) ||
+        firstOrder(a) - firstOrder(b)
+      : firstOrder(a) - firstOrder(b),
+  );
+}
+
+/** A count line for the cited view, with its order switch. */
+export function CitedHeader({
+  children,
+  order,
+  onOrder,
+}: {
+  children: React.ReactNode;
+  order: CitedOrder;
+  onOrder: (order: CitedOrder) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-2 pt-1 pb-1.5 text-muted-foreground text-xs">
+      <span className="min-w-0 flex-1">{children}</span>
+      <button
+        type="button"
+        onClick={() => onOrder(order === "text" ? "most" : "text")}
+        title="Change the order"
+        className="shrink-0 rounded px-1.5 py-0.5 hover:bg-muted hover:text-foreground"
+      >
+        {order === "text" ? "In text order" : "Most cited"}
+      </button>
+    </div>
+  );
 }
 
 /** The "only what this project cites" toggle. */
@@ -160,4 +202,54 @@ export function CitedAt({ places }: { places: CitePlace[] }) {
       )}
     </span>
   );
+}
+
+export interface CiteInfo {
+  key: string;
+  title: string | null;
+  /** Authors and year. */
+  detail: string;
+  /** Its vault note's name. */
+  note: string | null;
+  /** Its Zotero item's key. */
+  itemKey: string | null;
+}
+
+/** What's known about a citation key: its vault note, Zotero item, entry. */
+export function citeInfo(key: string): CiteInfo {
+  const { projectRoot, files } = useDocumentStore.getState();
+  const itemKeys = new Map<string, string>();
+  const synced =
+    (projectRoot && useZoteroStore.getState().syncedCollections[projectRoot]) ||
+    {};
+  for (const info of Object.values(synced)) {
+    for (const [item, citekey] of Object.entries(info.keyMap)) {
+      itemKeys.set(citekey, item);
+    }
+  }
+  const bibTitle = files
+    .filter((f) => f.name.toLowerCase().endsWith(".bib"))
+    .flatMap((f) => bibEntries(f.content ?? "", f.relativePath))
+    .find((e) => e.key === key)
+    ?.title?.replace(/[{}\\]/g, "");
+  const mirror = useZoteroLibrary.getState().mirror;
+  let item: LibraryItem | undefined;
+  const itemKey = itemKeys.get(key);
+  if (mirror && itemKey) item = mirror.items[itemKey];
+  if (mirror && !item && bibTitle) {
+    const want = fold(bibTitle);
+    item = Object.values(mirror.items).find((i) => fold(i.title) === want);
+  }
+  const index = useVaultStore.getState().index;
+  const note = index ? noteForCitekey(index, key, itemKeys) : undefined;
+  const author = note?.authors[0]?.split(",")[0].split(" ").pop();
+  return {
+    key,
+    title: item?.title ?? note?.title ?? bibTitle ?? null,
+    detail: item
+      ? [item.creators, item.year].filter(Boolean).join(" · ")
+      : [author, note?.year].filter(Boolean).join(" · "),
+    note: note?.name ?? null,
+    itemKey: item?.key ?? itemKey ?? null,
+  };
 }

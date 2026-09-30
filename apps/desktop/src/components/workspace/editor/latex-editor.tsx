@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { citeHover } from "./cite-hover";
 import { Compartment, EditorState, Prec, Transaction } from "@codemirror/state";
 import {
   EditorView,
@@ -1074,6 +1075,7 @@ export function LatexEditor() {
           ),
         ),
         annotationsExtension,
+        citeHover,
         updateListener,
         EditorView.lineWrapping,
         spellcheckExtension({

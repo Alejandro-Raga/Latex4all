@@ -63,7 +63,12 @@ tag.
   the connection map, along with changing its type and deleting it.
 - The quote button in the vault and in the Zotero library shows only what
   the open project cites, with the lines that cite each one; click a line to
-  go there in the editor.
+  go there in the editor. Sort it in text order or most cited first; in the
+  vault each paper shows its topics (or "no topic"), and one click adds the
+  cited papers the vault is missing.
+- A paper's note shows the lines where the open project cites it.
+- Hover a key in `\cite{…}` to see the paper's title, authors and year, with
+  a button to open its note or add it to the vault.
 - Type [[ while editing a note to link another, found by its title, author
   or citation key as well as its name.
 - Note types: Paper, Project, Topic, Idea or Note, found automatically and

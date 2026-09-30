@@ -52,9 +52,13 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { addCitekeysToVault } from "./citation-check";
 import {
   CitedAt,
+  CitedHeader,
+  type CitedOrder,
   CitedToggle,
+  orderCited,
   useCitedNotes,
   useItemKeyByCitekey,
 } from "./cited-here";
@@ -63,6 +67,7 @@ import { kindFolder } from "@/lib/vault/kind-folders";
 import { chooseNoteKind, unlinkProject } from "@/lib/vault/note-changes";
 import { citeKeyAtCursor } from "@/lib/vault/cite-at-cursor";
 import { noteForCitekey } from "@/lib/vault/cite-link";
+import { topicsOf } from "@/lib/vault/topics";
 import {
   findObsidianVaults,
   type KnownVault,
@@ -72,6 +77,7 @@ import { WebdavConflictError } from "@/lib/vault/webdav";
 import { EMBED_SRC, noteFromHref, vaultMarkdown } from "@/lib/vault/render";
 import {
   findNote,
+  KIND_GROUPS,
   neighbourhood,
   PAPERS_GROUP,
   type NoteKind,
@@ -683,16 +689,19 @@ function NoteList({
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [citedOnly, setCitedOnly] = useState(false);
+  const [citedOrder, setCitedOrder] = useState<CitedOrder>("text");
   const cited = useCitedNotes(citedOnly);
   const results = useMemo(() => {
     const found = searchNotes(index, query);
     if (!citedOnly) return found;
-    // In order of first citation, as the text reads.
-    const order = [...cited.byNote.keys()];
-    return found
-      .filter((n) => cited.byNote.has(n.name))
-      .sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
-  }, [index, query, citedOnly, cited]);
+    const first = [...cited.byNote.keys()];
+    return orderCited(
+      found.filter((n) => cited.byNote.has(n.name)),
+      (n) => cited.byNote.get(n.name),
+      (n) => first.indexOf(n.name),
+      citedOrder,
+    );
+  }, [index, query, citedOnly, cited, citedOrder]);
   const groups = useMemo(() => {
     if (query.trim() || citedOnly) return [{ group: null, notes: results }];
     const byGroup = new Map<string, VaultNote[]>();
@@ -740,10 +749,22 @@ function NoteList({
       )}
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
         {citedOnly && (
-          <p className="px-2 pt-1 pb-1.5 text-muted-foreground text-xs">
+          <CitedHeader order={citedOrder} onOrder={setCitedOrder}>
             {cited.byNote.size} cited in this project
-            {cited.missing > 0 && ` · ${cited.missing} not in the vault`}
-          </p>
+            {cited.missing.length > 0 && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  onClick={() => void addCitekeysToVault(cited.missing)}
+                  title={cited.missing.join(", ")}
+                  className="text-primary hover:underline"
+                >
+                  add {cited.missing.length} missing
+                </button>
+              </>
+            )}
+          </CitedHeader>
         )}
         {results.length === 0 && !citedOnly && (
           <p className="px-3 py-6 text-center text-muted-foreground text-xs">
@@ -787,6 +808,7 @@ function NoteList({
                       </span>
                     )}
                     {places && <CitedAt places={places} />}
+                    {places && <TopicChips index={index} note={n} />}
                   </span>
                 </div>
               );
@@ -800,6 +822,34 @@ function NoteList({
         ))}
       </div>
     </div>
+  );
+}
+
+/** The topics a note is filed under, or a nudge when it has none. */
+function TopicChips({ index, note }: { index: VaultIndex; note: VaultNote }) {
+  if (note.kind === "topic") return null;
+  const topics = [...topicsOf(index, note)];
+  return (
+    <span className="flex flex-wrap gap-1 pt-0.5">
+      {topics.length === 0 ? (
+        <span className="text-[10px] text-muted-foreground/70 italic">
+          no topic
+        </span>
+      ) : (
+        topics.map((t) => (
+          <span
+            key={t}
+            className="rounded px-1.5 py-px text-[10px]"
+            style={{
+              color: groupColor(KIND_GROUPS.topic, "topic"),
+              backgroundColor: `color-mix(in srgb, ${groupColor(KIND_GROUPS.topic, "topic")} 14%, transparent)`,
+            }}
+          >
+            {findNote(index, t)?.title ?? t}
+          </span>
+        ))
+      )}
+    </span>
   );
 }
 
@@ -950,6 +1000,10 @@ function NoteView({
   const [editing, setEditing] = useState<string | null>(null);
   const kindChoices = useKindChoices();
   const projectOpen = useDocumentStore((s) => Boolean(s.projectRoot));
+  // Where the open project cites this paper.
+  const citedAt = useCitedNotes(
+    projectOpen && note.kind === "paper",
+  ).byNote.get(note.name);
   // The papers an idea draws on: the ones it links to.
   const linkedPapers = useMemo(
     () =>
@@ -1075,6 +1129,12 @@ function NoteView({
             )
           )}
         </div>
+        {citedAt && (
+          <div className="flex items-baseline gap-1.5 text-muted-foreground text-xs">
+            <QuoteIcon className="size-3 shrink-0 translate-y-0.5" />
+            <CitedAt places={citedAt} />
+          </div>
+        )}
       </div>
 
       <Connections index={index} note={note} onOpen={onOpen} />

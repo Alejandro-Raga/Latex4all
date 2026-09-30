@@ -53,7 +53,7 @@ function itemKeysByCitekey(projectRoot: string | null): Map<string, string> {
   return map;
 }
 
-async function zoteroItemFor(key: string): Promise<string | null> {
+export async function zoteroItemFor(key: string): Promise<string | null> {
   const { apiKey, userID } = useZoteroStore.getState();
   const known = itemKeysByCitekey(useDocumentStore.getState().projectRoot).get(
     key,
@@ -74,6 +74,35 @@ async function zoteroItemFor(key: string): Promise<string | null> {
     if (byTitle) return byTitle;
   }
   return findItemForCitekey(apiKey, userID, key, citekeySearch(key));
+}
+
+/**
+ * Adds the papers behind these citation keys to the vault, one after
+ * another, with progress in a toast (for places outside this window).
+ */
+export async function addCitekeysToVault(keys: string[]) {
+  const id = toast.loading(`Adding ${keys.length} to your vault…`);
+  let added = 0;
+  const failed: string[] = [];
+  for (const [i, key] of keys.entries()) {
+    toast.loading(`Adding to your vault… ${i + 1}/${keys.length}`, { id });
+    try {
+      const itemKey = await zoteroItemFor(key);
+      if (!itemKey) throw new Error("not in Zotero");
+      await addPaperToVault(itemKey, key);
+      added++;
+    } catch {
+      failed.push(key);
+    }
+  }
+  if (failed.length) {
+    toast.warning(`Added ${added} to your vault`, {
+      id,
+      description: `Not found in Zotero: ${failed.join(", ")}`,
+    });
+  } else {
+    toast.success(`Added ${added} to your vault`, { id });
+  }
 }
 
 function bibFiles() {
