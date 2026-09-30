@@ -27,7 +27,12 @@ import { PdfViewer } from "@/components/workspace/preview/pdf-viewer";
 import { VaultGraph } from "@/components/workspace/vault-graph";
 import { themedEditor } from "@/components/workspace/editor/editor-theme";
 import { THEME_IDS } from "@/lib/app-themes";
+import { useCitationCheck } from "@/components/workspace/citation-check";
+import { parseNote } from "@/lib/vault/parse";
+import { buildVaultIndex } from "@/lib/vault/vault-index";
 import { useDockStore } from "@/stores/dock-store";
+import { useVaultStore } from "@/stores/vault-store";
+import { useZoteroStore } from "@/stores/zotero-store";
 import { useDocumentStore } from "@/stores/document-store";
 
 const params = new URLSearchParams(location.search);
@@ -228,6 +233,66 @@ if (scenario === "workspace") {
     collapsed: { reference: false, vault: false, notes: false },
   });
   useDockStore.getState().setOpen("notes", true);
+  if (params.get("dialog") === "cite") {
+    // A project citing papers: some in the bibliography, some in the vault.
+    const many = Number(params.get("many") ?? 0);
+    const cites = [
+      ...Array.from(
+        { length: many },
+        (_, i) => `author${i}_a_rather_long_title_word_${2000 + (i % 25)}`,
+      ),
+      "nelson_simple_1959",
+      "arrow1962",
+      "cohen_absorptive_1990",
+      "zahra_absorptive_2002",
+      "todorova_absorptive_2007",
+      "lane_reflexive_2006",
+      "volberda_perspective_2010",
+      "unknown2020",
+      "missing_key_2021",
+    ];
+    const tex = `\\section{Intro}\n${cites.map((c) => `\\cite{${c}}`).join(" ")}`;
+    const bib = cites
+      .slice(0, 7)
+      .concat(["never_cited_2019", "also_unused_2018"])
+      .map((k) => `@article{${k},\n  title = {A paper called ${k}},\n}`)
+      .join("\n\n");
+    const { files } = useDocumentStore.getState();
+    useDocumentStore.setState({
+      files: files.map((f) =>
+        f.id === "main.tex"
+          ? { ...f, content: tex }
+          : f.id === "refs.bib"
+            ? { ...f, content: bib }
+            : f,
+      ),
+    } as never);
+    const notes = [
+      parseNote(
+        "Papers/Nelson1959.md",
+        "---\ncitekey: nelson_simple_1959\n---\n",
+      ),
+      parseNote("Papers/Arrow1962.md", "---\ncitekey: arrow1962\n---\n"),
+    ];
+    const source = {
+      kind: "local",
+      label: "Commonplace",
+      load: async () => ({
+        notes,
+        attachments: new Map(),
+        versions: new Map(),
+        templates: [],
+        newNoteFolder: null,
+      }),
+    };
+    useVaultStore.setState({ source, index: buildVaultIndex(notes) } as never);
+    useZoteroStore.setState({
+      isAuthenticated: true,
+      apiKey: "k",
+      userID: "1",
+    });
+    setTimeout(() => useCitationCheck.getState().show(), 500);
+  }
   import("@/components/workspace/workspace-layout").then(
     ({ WorkspaceLayout }) =>
       root.render(

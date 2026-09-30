@@ -409,7 +409,9 @@ export function EditorToolbar({
         </span>
       </div>
       <div className="mx-2 h-4 w-px shrink-0 bg-border" />
-      <div className="scrollbar-none flex min-w-0 items-center gap-1 overflow-x-auto [&>*]:shrink-0">
+      {/* Scrolls sideways when the pane is narrow, fading out where it's cut
+          off so it never looks fused with the buttons after it. */}
+      <div className="scrollbar-none flex min-w-0 items-center gap-1 overflow-x-auto pr-5 [mask-image:linear-gradient(to_right,black_calc(100%-20px),transparent)] [&>*]:shrink-0">
         <TooltipIconButton
           tooltip="Bold (\\textbf)"
           onClick={() => insertText("\\textbf{", "}")}
@@ -458,7 +460,7 @@ export function EditorToolbar({
           tooltip="Display math (\\[...\\])"
           onClick={() => insertText("\\[\n  ", "\n\\]")}
         >
-          <span className="font-mono text-xs">∫</span>
+          <span className="font-serif text-base leading-none">∫</span>
         </TooltipIconButton>
         <div className="mx-2 h-4 w-px bg-border" />
         <TooltipIconButton
@@ -570,6 +572,7 @@ export function EditorToolbar({
         </Popover>
       </div>
       <div data-tauri-drag-region className="flex-1 self-stretch" />
+      <div className="mx-1 h-4 w-px shrink-0 bg-divider" />
       <TooltipIconButton
         tooltip={
           showAnnotations

@@ -170,6 +170,13 @@ tag.
 
 ### Fixed
 
+- Check citations was cramped and ran off the screen in bigger projects. It
+  now shows one list at a time (not in the bibliography, not in your vault,
+  never cited) with their counts, names each paper by its title, and has an
+  "Add all" for each list with a progress bar.
+- On a narrow editor, the formatting buttons ran into the highlights button;
+  they now fade out where they're cut off, with a divider in between.
+
 - The red of spelling suggestions and errors glared on dark and colorful
   themes; each theme now has a red that sits with it.
 

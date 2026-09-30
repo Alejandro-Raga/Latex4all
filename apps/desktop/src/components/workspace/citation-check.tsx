@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  BookPlusIcon,
   CheckIcon,
   Loader2Icon,
   NotebookTextIcon,
@@ -16,14 +17,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  bibEntries,
   type CitationReport,
   checkCitations,
   citekeySearch,
   renameCiteKey,
 } from "@/lib/citations";
+import { cn } from "@/lib/utils";
+import { addPaperToVault } from "@/lib/vault/add-paper";
 import { noteForCitekey } from "@/lib/vault/cite-link";
 import { findItemForCitekey } from "@/lib/zotero-api";
-import { addPaperToVault } from "@/lib/vault/add-paper";
 import { useDocumentStore } from "@/stores/document-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
@@ -60,52 +63,24 @@ async function zoteroItemFor(key: string): Promise<string | null> {
   return findItemForCitekey(apiKey, userID, key, citekeySearch(key));
 }
 
+function bibFiles() {
+  return useDocumentStore
+    .getState()
+    .files.filter((f) => f.name.toLowerCase().endsWith(".bib"))
+    .map((f) => ({ path: f.relativePath, content: f.content ?? "" }));
+}
+
 function scan(): CitationReport {
   const { files } = useDocumentStore.getState();
   return checkCitations(
     files
       .filter((f) => f.type === "tex")
       .map((f) => ({ content: f.content ?? "" })),
-    files
-      .filter((f) => f.name.toLowerCase().endsWith(".bib"))
-      .map((f) => ({ path: f.relativePath, content: f.content ?? "" })),
+    bibFiles(),
   );
 }
 
-function Section({
-  title,
-  empty,
-  children,
-  count,
-  action,
-}: {
-  title: string;
-  empty: string;
-  count: number;
-  children: React.ReactNode;
-  /** For the whole list, beside the title. */
-  action?: React.ReactNode;
-}) {
-  return (
-    <section className="space-y-1">
-      <h3 className="flex items-center font-medium text-sm">
-        <span className="flex-1">
-          {title}
-          <span className="ml-1.5 text-muted-foreground">{count}</span>
-        </span>
-        {count > 0 && action}
-      </h3>
-      {count === 0 ? (
-        <p className="flex items-center gap-1.5 text-muted-foreground text-xs">
-          <CheckIcon className="size-3.5 text-emerald-500" />
-          {empty}
-        </p>
-      ) : (
-        <ul className="max-h-48 space-y-0.5 overflow-y-auto">{children}</ul>
-      )}
-    </section>
-  );
-}
+type Tab = "bibliography" | "vault" | "unused";
 
 function Row({
   label,
@@ -117,16 +92,21 @@ function Row({
   action?: React.ReactNode;
 }) {
   return (
-    <li className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-muted/50">
-      <span className="min-w-0 flex-1">
-        <code className="text-xs">{label}</code>
+    <li className="flex min-h-11 items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted/60">
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-mono text-xs" title={label}>
+          {label}
+        </div>
         {detail && (
-          <span className="block truncate text-muted-foreground text-xs">
+          <div
+            className="truncate text-muted-foreground text-xs"
+            title={detail}
+          >
             {detail}
-          </span>
+          </div>
         )}
-      </span>
-      {action}
+      </div>
+      {action && <div className="w-28 shrink-0 text-right">{action}</div>}
     </li>
   );
 }
@@ -135,17 +115,19 @@ function ActionButton({
   label,
   icon: Icon,
   run,
+  primary,
 }: {
   label: string;
   icon: typeof PlusIcon;
   run: () => Promise<void>;
+  primary?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   return (
     <Button
       size="sm"
-      variant="outline"
-      className="h-6 shrink-0 gap-1 px-2 text-xs"
+      variant={primary ? "default" : "outline"}
+      className="h-7 shrink-0 gap-1.5 px-2.5 text-xs"
       disabled={busy}
       onClick={async () => {
         setBusy(true);
@@ -159,9 +141,9 @@ function ActionButton({
       }}
     >
       {busy ? (
-        <Loader2Icon className="size-3 animate-spin" />
+        <Loader2Icon className="size-3.5 animate-spin" />
       ) : (
-        <Icon className="size-3" />
+        <Icon className="size-3.5" />
       )}
       {label}
     </Button>
@@ -170,7 +152,7 @@ function ActionButton({
 
 /**
  * The project's citations against its bibliography and the vault, each
- * problem with the fix beside it.
+ * problem with the fix beside it, one list at a time.
  */
 export function CitationCheckDialog() {
   const open = useCitationCheck((s) => s.open);
@@ -178,14 +160,48 @@ export function CitationCheckDialog() {
   const zoteroConnected = useZoteroStore((s) => s.isAuthenticated);
   const vaultIndex = useVaultStore((s) => s.index);
   const [report, setReport] = useState<CitationReport | null>(null);
+  const [tab, setTab] = useState<Tab | null>(null);
+  const [progress, setProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
 
   const rescan = useCallback(() => setReport(scan()), []);
   useEffect(() => {
     if (open) {
       rescan();
+      setTab(null);
       useVaultStore.getState().ensureVault();
     }
   }, [open, rescan]);
+
+  // Titles from the bibliography, so a row names the paper, not just its key.
+  const titles = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!report) return map;
+    for (const f of bibFiles()) {
+      for (const e of bibEntries(f.content, f.path)) {
+        if (e.title) map.set(e.key, e.title);
+      }
+    }
+    return map;
+  }, [report]);
+
+  const notInVault = useMemo(
+    () =>
+      report && vaultIndex
+        ? report.cited.filter(
+            (key) =>
+              !report.missing.includes(key) &&
+              !noteForCitekey(
+                vaultIndex,
+                key,
+                itemKeysByCitekey(useDocumentStore.getState().projectRoot),
+              ),
+          )
+        : [],
+    [report, vaultIndex],
+  );
 
   const addToBib = async (key: string) => {
     const itemKey = await zoteroItemFor(key);
@@ -216,60 +232,134 @@ export function CitationCheckDialog() {
       throw new Error(`Couldn't find “${key}” in your Zotero library.`);
     }
     const result = await addPaperToVault(itemKey, key);
-    toast.success(
-      result.status === "exists"
-        ? `${result.name} already has a note`
-        : `Added ${result.name} to your vault`,
-    );
+    if (result.status === "exists")
+      toast.info(`${result.name} already has a note`);
   };
 
-  // Every cited paper without a note, one after another, with progress.
-  const addAllToVault = async (keys: string[]) => {
-    const toastId = toast.loading(`Adding 0 of ${keys.length} to your vault…`);
+  // One after another, with progress in the window.
+  const addAll = async (
+    keys: string[],
+    add: (key: string) => Promise<void>,
+    what: string,
+  ) => {
     let added = 0;
-    const missing: string[] = [];
+    const failed: string[] = [];
+    setProgress({ done: 0, total: keys.length });
     for (const [i, key] of keys.entries()) {
-      toast.loading(`Adding ${i + 1} of ${keys.length} to your vault…`, {
-        id: toastId,
-      });
       try {
-        const itemKey = await zoteroItemFor(key);
-        if (!itemKey) {
-          missing.push(key);
-          continue;
-        }
-        await addPaperToVault(itemKey, key);
+        await add(key);
         added++;
       } catch {
-        missing.push(key);
+        failed.push(key);
       }
+      setProgress({ done: i + 1, total: keys.length });
     }
-    if (missing.length) {
-      toast.warning(`Added ${added} to your vault`, {
-        id: toastId,
-        description: `Not found in Zotero: ${missing.join(", ")}`,
+    setProgress(null);
+    rescan();
+    if (failed.length) {
+      toast.warning(`Added ${added} to ${what}`, {
+        description: `Not found in Zotero: ${failed.join(", ")}`,
       });
     } else {
-      toast.success(`Added ${added} to your vault`, { id: toastId });
+      toast.success(`Added ${added} to ${what}`);
     }
   };
 
-  const notInVault =
-    report && vaultIndex
-      ? report.cited.filter(
-          (key) =>
-            !report.missing.includes(key) &&
-            !noteForCitekey(
-              vaultIndex,
-              key,
-              itemKeysByCitekey(useDocumentStore.getState().projectRoot),
+  const tabs: { id: Tab; label: string; count: number }[] = report
+    ? [
+        {
+          id: "bibliography",
+          label: "Not in bibliography",
+          count: report.missing.length,
+        },
+        ...(vaultIndex
+          ? [
+              {
+                id: "vault" as const,
+                label: "Not in vault",
+                count: notInVault.length,
+              },
+            ]
+          : []),
+        { id: "unused", label: "Never cited", count: report.unused.length },
+      ]
+    : [];
+  // Open on the first list with something in it.
+  const shown =
+    tab ?? tabs.find((t) => t.count > 0)?.id ?? tabs[0]?.id ?? "bibliography";
+
+  const list = !report
+    ? null
+    : shown === "bibliography"
+      ? {
+          keys: report.missing,
+          empty: "Every citation has an entry.",
+          bulk: zoteroConnected && {
+            label: "Add all from Zotero",
+            icon: BookPlusIcon,
+            run: () => addAll(report.missing, addToBib, "the bibliography"),
+          },
+          row: (key: string) => (
+            <Row
+              key={key}
+              label={key}
+              action={
+                zoteroConnected && (
+                  <ActionButton
+                    label="Add"
+                    icon={PlusIcon}
+                    run={() => addToBib(key)}
+                  />
+                )
+              }
+            />
+          ),
+        }
+      : shown === "vault"
+        ? {
+            keys: notInVault,
+            empty: "Every cited paper has a note.",
+            bulk: zoteroConnected && {
+              label: "Add all to vault",
+              icon: NotebookTextIcon,
+              run: () => addAll(notInVault, addToVault, "your vault"),
+            },
+            row: (key: string) => (
+              <Row
+                key={key}
+                label={key}
+                detail={titles.get(key)}
+                action={
+                  zoteroConnected && (
+                    <ActionButton
+                      label="Add"
+                      icon={NotebookTextIcon}
+                      run={() => addToVault(key)}
+                    />
+                  )
+                }
+              />
             ),
-        )
-      : [];
+          }
+        : {
+            keys: report.unused.map((e) => e.key),
+            empty: "Every entry is cited.",
+            bulk: null,
+            row: (key: string) => {
+              const e = report.unused.find((u) => u.key === key);
+              return (
+                <Row
+                  key={`${e?.file}:${key}`}
+                  label={key}
+                  detail={e?.title ?? e?.file}
+                />
+              );
+            },
+          };
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && close()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="flex max-h-[80vh] flex-col gap-3 sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Citations</DialogTitle>
           <DialogDescription>
@@ -278,75 +368,82 @@ export function CitationCheckDialog() {
               : "Checking…"}
           </DialogDescription>
         </DialogHeader>
+
         {report && (
-          <div className="space-y-4">
-            <Section
-              title="Cited, not in the bibliography"
-              count={report.missing.length}
-              empty="Every citation has an entry."
+          <>
+            <div
+              role="tablist"
+              className="flex shrink-0 gap-1 rounded-lg bg-muted p-1"
             >
-              {report.missing.map((key) => (
-                <Row
-                  key={key}
-                  label={key}
-                  action={
-                    zoteroConnected && (
-                      <ActionButton
-                        label="Add from Zotero"
-                        icon={PlusIcon}
-                        run={() => addToBib(key)}
-                      />
-                    )
-                  }
-                />
+              {tabs.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={shown === t.id}
+                  onClick={() => setTab(t.id)}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors",
+                    shown === t.id
+                      ? "bg-background font-medium shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t.label}
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 text-[10px] tabular-nums",
+                      t.count > 0
+                        ? "bg-primary/15 text-foreground"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {t.count}
+                  </span>
+                </button>
               ))}
-            </Section>
-            <Section
-              title="In the bibliography, never cited"
-              count={report.unused.length}
-              empty="Every entry is cited."
-            >
-              {report.unused.map((e) => (
-                <Row
-                  key={`${e.file}:${e.key}`}
-                  label={e.key}
-                  detail={e.title ?? e.file}
-                />
-              ))}
-            </Section>
-            {vaultIndex && (
-              <Section
-                title="Cited, not in your vault"
-                count={notInVault.length}
-                empty="Every cited paper has a note."
-                action={
-                  zoteroConnected && (
-                    <ActionButton
-                      label="Add all"
-                      icon={NotebookTextIcon}
-                      run={() => addAllToVault(notInVault)}
-                    />
-                  )
-                }
-              >
-                {notInVault.map((key) => (
-                  <Row
-                    key={key}
-                    label={key}
-                    action={
-                      zoteroConnected && (
-                        <ActionButton
-                          label="Add to vault"
-                          icon={NotebookTextIcon}
-                          run={() => addToVault(key)}
-                        />
-                      )
-                    }
-                  />
-                ))}
-              </Section>
+            </div>
+
+            {list && list.keys.length === 0 ? (
+              <p className="flex items-center justify-center gap-1.5 py-8 text-muted-foreground text-sm">
+                <CheckIcon className="size-4 text-emerald-500" />
+                {list.empty}
+              </p>
+            ) : (
+              list && (
+                <>
+                  {list.bulk && (
+                    <div className="flex shrink-0 items-center gap-3">
+                      {progress ? (
+                        <div className="flex flex-1 items-center gap-2">
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                            <div
+                              className="h-full rounded-full bg-primary transition-[width]"
+                              style={{
+                                width: `${(progress.done / progress.total) * 100}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="text-muted-foreground text-xs tabular-nums">
+                            {progress.done} of {progress.total}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="flex-1 text-muted-foreground text-xs">
+                          {list.keys.length}{" "}
+                          {list.keys.length === 1 ? "paper" : "papers"}
+                        </span>
+                      )}
+                      <ActionButton primary {...list.bulk} />
+                    </div>
+                  )}
+                  <ul className="-mx-2 min-h-0 flex-1 space-y-0.5 overflow-y-auto">
+                    {list.keys.map((key) => list.row(key))}
+                  </ul>
+                </>
+              )
             )}
-          </div>
+          </>
         )}
       </DialogContent>
     </Dialog>
