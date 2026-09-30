@@ -94,6 +94,8 @@ interface VaultState {
   noteTypes: Record<string, CustomNoteType[]>;
   /** Colors picked for groups (a type's or a folder's), per vault, by group name. */
   groupColors: Record<string, Record<string, string>>;
+  /** Folders picked for the built-in topic and idea kinds, per vault. */
+  kindFolders: Record<string, Record<string, string>>;
   /** Folder and template last used for a new note ("" / null: none). */
   lastNoteFolder: string | null;
   lastTemplate: string | null;
@@ -135,6 +137,8 @@ interface VaultState {
     change: Partial<Omit<CustomNoteType, "id">>,
   ) => void;
   removeNoteType: (id: string) => void;
+  /** Where notes of a built-in kind go ("" finds it from the vault). */
+  setKindFolder: (kind: string, folder: string) => void;
   /** Colors a group (null: back to its own color). */
   setGroupColor: (group: string, color: string | null) => void;
   /** Sets what a note is (null: back to what it's found to be). */
@@ -185,6 +189,7 @@ export const useVaultStore = create<VaultState>()(
       noteKinds: {},
       noteTypes: {},
       groupColors: {},
+      kindFolders: {},
       source: null,
       server: null,
       index: null,
@@ -394,6 +399,15 @@ export const useVaultStore = create<VaultState>()(
         set({ index: rebuilt(get().index) });
       },
 
+      setKindFolder: (kind, folder) => {
+        const key = vaultKey(get());
+        const mine = { ...(get().kindFolders[key] ?? {}) };
+        const clean = folder.trim().replace(/^\/+|\/+$/g, "");
+        if (clean) mine[kind] = clean;
+        else delete mine[kind];
+        set({ kindFolders: { ...get().kindFolders, [key]: mine } });
+      },
+
       setGroupColor: (group, color) => {
         const key = vaultKey(get());
         const mine = { ...(get().groupColors[key] ?? {}) };
@@ -479,6 +493,7 @@ export const useVaultStore = create<VaultState>()(
         noteKinds: state.noteKinds,
         noteTypes: state.noteTypes,
         groupColors: state.groupColors,
+        kindFolders: state.kindFolders,
       }),
     },
   ),
@@ -513,4 +528,10 @@ export function useKindChoices(): { kind: NoteKind; label: string }[] {
     ...NOTE_KINDS,
     ...types.map((t) => ({ kind: t.id as NoteKind, label: t.label })),
   ];
+}
+
+/** Folders picked for this vault's built-in kinds. */
+export function chosenKindFolders(): Record<string, string> {
+  const state = useVaultStore.getState();
+  return state.kindFolders[vaultKey(state)] ?? EMPTY_COLORS;
 }

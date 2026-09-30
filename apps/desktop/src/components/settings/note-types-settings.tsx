@@ -3,6 +3,7 @@ import { PlusIcon, RotateCcwIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { groupColor } from "@/components/workspace/vault-panel";
+import { detectedKindFolder } from "@/lib/vault/kind-folders";
 import { KIND_GROUPS } from "@/lib/vault/vault-index";
 import {
   useGroupColors,
@@ -51,6 +52,49 @@ function ColorPick({
 }
 
 /**
+ * The folder a built-in type keeps its notes in: papers and projects use
+ * their own settings, the rest one picked here. Empty finds it from the
+ * vault (plain notes: stay where they are).
+ */
+function BuiltInFolder({ kind, label }: { kind: string; label: string }) {
+  const papersFolder = useVaultStore((s) => s.papersFolder);
+  const projectsFolder = useVaultStore((s) => s.projectsFolder);
+  const picked = useVaultStore(
+    (s) =>
+      s.kindFolders[s.mode === "server" ? "server" : (s.vaultPath ?? "")]?.[
+        kind
+      ],
+  );
+  const { setPapersFolder, setProjectsFolder, setKindFolder } =
+    useVaultStore.getState();
+  useVaultStore((s) => s.index); // placeholders follow the vault
+  const value =
+    kind === "paper"
+      ? papersFolder
+      : kind === "project"
+        ? projectsFolder
+        : (picked ?? "");
+  const set = (folder: string) =>
+    kind === "paper"
+      ? setPapersFolder(folder)
+      : kind === "project"
+        ? setProjectsFolder(folder)
+        : setKindFolder(kind, folder);
+  const found = detectedKindFolder(kind);
+  return (
+    <Input
+      value={value}
+      onChange={(e) => set(e.target.value)}
+      placeholder={
+        kind === "note" ? "Stay where they are" : found || "Vault root"
+      }
+      className="h-7 min-w-0 flex-1 text-xs"
+      aria-label={`Folder for ${label}`}
+    />
+  );
+}
+
+/**
  * Note types for Settings → Vault: the built-in ones and folders (color
  * only), and your own (name, color, and the folder or tag that brings notes
  * into them on their own).
@@ -88,12 +132,15 @@ export function NoteTypesSettings() {
       {builtIn.map(([kind, group]) => (
         <div key={kind} className={row}>
           <ColorPick group={group} kind={kind} label={group} />
-          <span className="text-sm">{group}</span>
-          <span className="ml-auto text-muted-foreground text-xs">
-            Built in
-          </span>
+          <span className="w-20 shrink-0 text-sm">{group}</span>
+          <BuiltInFolder kind={kind} label={group} />
         </div>
       ))}
+      <div className={row}>
+        <span className="size-6 shrink-0" />
+        <span className="w-20 shrink-0 text-sm">Notes</span>
+        <BuiltInFolder kind="note" label="Notes" />
+      </div>
 
       {types.map((t) => (
         <div key={t.id} className={`${row} flex-wrap`}>

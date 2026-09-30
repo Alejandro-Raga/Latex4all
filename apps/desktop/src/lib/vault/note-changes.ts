@@ -5,7 +5,8 @@
  */
 import { readProjectId } from "@/lib/project-meta";
 import { readLink } from "@/lib/tauri/collab";
-import { useVaultStore, vaultStyle } from "@/stores/vault-store";
+import { useVaultStore } from "@/stores/vault-store";
+import { kindFolder } from "./kind-folders";
 import { textField } from "./parse";
 import { findNote, type NoteKind } from "./vault-index";
 import { projectNotePath } from "./project-note";
@@ -94,14 +95,13 @@ export async function chooseNoteKind(
 ): Promise<string | null> {
   const vault = useVaultStore.getState();
   vault.setNoteKind(name, kind);
-  const type = vaultStyle().types.find((t) => t.id === kind);
-  const folder = type?.folder?.trim().replace(/^\/+|\/+$/g, "");
   const note = vault.index ? findNote(vault.index, name) : undefined;
+  const folder = kindFolder(kind);
   if (!folder || !note) return null;
   const dir = note.path.split("/").slice(0, -1).join("/");
   if (dir.toLowerCase() === folder.toLowerCase()) return null;
   const file = note.path.split("/").pop() ?? `${name}.md`;
-  const target = `${folder}/${file}`;
+  const target = folder ? `${folder}/${file}` : file;
   await renameNote(note.path, target);
   return folder;
 }

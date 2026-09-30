@@ -42,7 +42,6 @@ import { useZoteroStore } from "@/stores/zotero-store";
 import { cn } from "@/lib/utils";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { clearPdfCache, pdfCacheSize } from "@/lib/zotero-pdf-cache";
-import { papersFolderOf } from "@/lib/vault/add-paper";
 import { NoteTypesSettings } from "./note-types-settings";
 import { unlinkProject } from "@/lib/vault/note-changes";
 import {
@@ -251,25 +250,6 @@ function ZoteroSettings() {
   );
 }
 
-/** Where "Add to vault" writes paper notes; empty finds it from the vault. */
-function PapersFolderRow() {
-  const chosen = useVaultStore((s) => s.papersFolder);
-  const setChosen = useVaultStore((s) => s.setPapersFolder);
-  const index = useVaultStore((s) => s.index);
-  const found = papersFolderOf(index, "");
-  return (
-    <SettingRow label="Paper notes folder">
-      <Input
-        value={chosen}
-        onChange={(e) => setChosen(e.target.value)}
-        placeholder={found || "Vault root"}
-        className="h-7 w-44 text-xs"
-        aria-label="Paper notes folder"
-      />
-    </SettingRow>
-  );
-}
-
 const megabytes = (bytes: number) =>
   bytes < 1e6
     ? `${Math.max(1, Math.round(bytes / 1e3))} KB`
@@ -356,10 +336,8 @@ function VaultSettings() {
   const useLocalFolder = useVaultStore((s) => s.useLocalFolder);
   const useServer = useVaultStore((s) => s.useServer);
   const disconnectServer = useVaultStore((s) => s.disconnectServer);
-  const projectsFolder = useVaultStore((s) => s.projectsFolder);
   const paperTag = useVaultStore((s) => s.paperTag);
   const setPaperTag = useVaultStore((s) => s.setPaperTag);
-  const setProjectsFolder = useVaultStore((s) => s.setProjectsFolder);
   const linkProject = useVaultStore((s) => s.linkProject);
   const projectRoot = useDocumentStore((s) => s.projectRoot);
   const projectLinked = useVaultStore((s) =>
@@ -445,18 +423,6 @@ function VaultSettings() {
           </Button>
         )}
       </SettingRow>
-      <SettingRow
-        label="Project notes folder"
-        detail="Where linked projects keep their note in the vault"
-      >
-        <Input
-          value={projectsFolder}
-          onChange={(e) => setProjectsFolder(e.target.value)}
-          className="h-7 w-44 text-xs"
-          aria-label="Project notes folder"
-        />
-      </SettingRow>
-      <PapersFolderRow />
       <NoteTypesSettings />
       <SettingRow
         label="Zotero tag for the vault"

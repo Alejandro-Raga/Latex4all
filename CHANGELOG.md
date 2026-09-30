@@ -62,9 +62,9 @@ tag.
 - Type [[ while editing a note to link another, found by its title, author
   or citation key as well as its name.
 - Note types: Paper, Project, Topic, Idea or Note, found automatically and
-  changeable by hand, plus types of your own. A type can have a folder, where
-  its notes are kept (choosing the type moves a note there), and a tag. Each
-  type and folder can have its own color.
+  changeable by hand, plus types of your own. Every type has a folder where
+  its notes are kept (choosing the type moves a note there), and yours can
+  have a tag too. Each type and folder can have its own color.
 - Your projects as notes: "Keep this project's note here" gives a project a
   note listing what it cites, its outline and your highlights, kept up to
   date as you write. Renaming the project renames the note, links and all,
