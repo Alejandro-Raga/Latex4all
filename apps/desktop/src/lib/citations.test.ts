@@ -31,6 +31,17 @@ describe("citation check", () => {
     ]);
   });
 
+  it("reads titles with inner braces, accents and escapes whole", () => {
+    const bib = String.raw`@article{a, shorttitle = {Short},
+  title = {The {Rate} and {Direction} of {R\&D}: {M}arkets in {Espa\~{n}a}},
+}
+@book{b, title = "A {Quoted} Title"}`;
+    expect(bibEntries(bib, "r.bib").map((e) => e.title)).toEqual([
+      "The Rate and Direction of R&D: Markets in Espana",
+      "A Quoted Title",
+    ]);
+  });
+
   it("finds citations without entries and entries never cited", () => {
     const report = checkCitations(
       [

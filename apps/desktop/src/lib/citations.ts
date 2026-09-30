@@ -11,6 +11,39 @@ export interface BibEntry {
   file: string;
 }
 
+/**
+ * A field's text, braces and all read through: `{The {Rate} of {R\&D}}` is
+ * "The Rate of R&D".
+ */
+function fieldValue(body: string, field: string): string | null {
+  const m = new RegExp(`\\b${field}\\s*=\\s*([{"])`, "i").exec(body);
+  if (!m) return null;
+  let depth = m[1] === "{" ? 1 : 0;
+  let out = "";
+  for (let i = m.index + m[0].length; i < body.length; i++) {
+    const c = body[i];
+    if (c === "\\" && i + 1 < body.length) {
+      out += c + body[++i];
+      continue;
+    }
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0 && m[1] === "{") break;
+    } else if (c === '"' && m[1] === '"' && depth === 0) break;
+    out += c;
+  }
+  const text = out
+    .replace(/\\([&%$#_])/g, "$1")
+    // Accents (\'e) and commands (\textit) go; the letters they wrap stay.
+    .replace(/\\[^A-Za-z\s]/g, "")
+    .replace(/\\[A-Za-z]+\s*/g, "")
+    .replace(/[{}]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text || null;
+}
+
 /** Entries in a .bib file: `@type{key, ... title = {...}}`. */
 export function bibEntries(content: string, file: string): BibEntry[] {
   const entries: BibEntry[] = [];
@@ -23,9 +56,7 @@ export function bibEntries(content: string, file: string): BibEntry[] {
       m.index ?? 0,
       starts[i + 1]?.index ?? content.length,
     );
-    const title =
-      body.match(/\btitle\s*=\s*[{"]+([^}"]*)/i)?.[1]?.trim() ?? null;
-    entries.push({ key: m[2], title, file });
+    entries.push({ key: m[2], title: fieldValue(body, "title"), file });
   });
   return entries;
 }

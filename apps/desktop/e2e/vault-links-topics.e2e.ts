@@ -54,3 +54,19 @@ test("right-click a paper to connect it to a new topic", async ({ page }) => {
     page.getByRole("menuitem", { name: "Absorptive capacity" }),
   ).toBeDisabled();
 });
+
+test("pointing at a link suggestion selects it", async ({ page }) => {
+  await open(page, "scenario=vault");
+  await page.getByRole("button", { name: /My idea/ }).click();
+  await page.getByRole("button", { name: "Edit" }).click();
+  const editor = page.locator(".cm-content");
+  await editor.click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" [[");
+  const options = page.locator(".cm-tooltip-autocomplete li");
+  await expect(options.nth(1)).toBeVisible();
+  await expect(options.nth(0)).toHaveAttribute("aria-selected", "true");
+  await options.nth(1).hover();
+  await expect(options.nth(1)).toHaveAttribute("aria-selected", "true");
+  await expect(options.nth(0)).not.toHaveAttribute("aria-selected", "true");
+});

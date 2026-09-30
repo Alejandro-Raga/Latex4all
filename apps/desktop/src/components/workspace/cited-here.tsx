@@ -2,6 +2,7 @@ import { useDeferredValue, useMemo } from "react";
 import { QuoteIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { bibEntries } from "@/lib/citations";
+import { itemForCitekey, itemsByTitle } from "@/lib/cite-match";
 import { openAtLine } from "@/lib/open-at-line";
 import { noteForCitekey } from "@/lib/vault/cite-link";
 import { type CitePlace, citeLocations } from "@/lib/vault/project-note";
@@ -75,37 +76,31 @@ export function useCitedNotes(enabled: boolean) {
   }, [index, places, itemKeys]);
 }
 
-const fold = (s: string) =>
-  s
-    .normalize("NFKD")
-    .replace(/[^A-Za-z0-9]/g, "")
-    .toLowerCase();
-
 /** Zotero items the open project cites, with where. */
 export function useCitedItems(enabled: boolean) {
   const { places, titles } = useCitePlaces(enabled);
   const mirror = useZoteroLibrary((s) => s.mirror);
+  const index = useVaultStore((s) => s.index);
   const itemKeys = useItemKeyByCitekey();
   // Only when the library changes, not with every keystroke.
-  const byTitle = useMemo(() => {
-    const map = new Map<string, LibraryItem>();
-    if (!enabled || !mirror) return map;
-    for (const item of Object.values(mirror.items)) {
-      map.set(fold(item.title), item);
-    }
-    return map;
-  }, [enabled, mirror]);
+  const byTitle = useMemo(
+    () => itemsByTitle(enabled && mirror ? Object.values(mirror.items) : []),
+    [enabled, mirror],
+  );
   return useMemo(() => {
     const items: { item: LibraryItem; places: CitePlace[] }[] = [];
     let missing = 0;
     if (!mirror) return { items, missing };
-    // By the synced .bib's own record, else by the entry's title.
     const found = new Map<string, CitePlace[]>();
     for (const [key, at] of places) {
-      const itemKey = itemKeys.get(key);
-      const item =
-        (itemKey && mirror.items[itemKey]) ||
-        (titles[key] ? byTitle.get(fold(titles[key])) : undefined);
+      const note = index ? noteForCitekey(index, key, itemKeys) : undefined;
+      const item = itemForCitekey(key, {
+        items: mirror.items,
+        byTitle,
+        itemKeys,
+        bibTitle: titles[key],
+        noteItemKey: note?.zoteroKey,
+      });
       if (item) addPlaces(found, item.key, at);
       else missing++;
     }
@@ -113,7 +108,7 @@ export function useCitedItems(enabled: boolean) {
       items.push({ item: mirror.items[key], places: at });
     }
     return { items, missing };
-  }, [mirror, byTitle, places, titles, itemKeys]);
+  }, [mirror, byTitle, index, places, titles, itemKeys]);
 }
 
 export type CitedOrder = "text" | "most";
@@ -249,18 +244,20 @@ export function citeInfo(key: string): CiteInfo {
   const bibTitle = files
     .filter((f) => f.name.toLowerCase().endsWith(".bib"))
     .flatMap((f) => bibEntries(f.content ?? "", f.relativePath))
-    .find((e) => e.key === key)
-    ?.title?.replace(/[{}\\]/g, "");
-  const mirror = useZoteroLibrary.getState().mirror;
-  let item: LibraryItem | undefined;
-  const itemKey = itemKeys.get(key);
-  if (mirror && itemKey) item = mirror.items[itemKey];
-  if (mirror && !item && bibTitle) {
-    const want = fold(bibTitle);
-    item = Object.values(mirror.items).find((i) => fold(i.title) === want);
-  }
+    .find((e) => e.key === key)?.title;
   const index = useVaultStore.getState().index;
   const note = index ? noteForCitekey(index, key, itemKeys) : undefined;
+  const mirror = useZoteroLibrary.getState().mirror;
+  const itemKey = itemKeys.get(key);
+  const item = mirror
+    ? itemForCitekey(key, {
+        items: mirror.items,
+        byTitle: itemsByTitle(Object.values(mirror.items)),
+        itemKeys,
+        bibTitle,
+        noteItemKey: note?.zoteroKey,
+      })
+    : undefined;
   const author = note?.authors[0]?.split(",")[0].split(" ").pop();
   return {
     key,

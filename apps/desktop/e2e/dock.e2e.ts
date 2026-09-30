@@ -22,7 +22,7 @@ test("a lone panel can't fold, and folding survives neighbours coming and going"
     (window as any).dock.getState().setOpen("vault", false),
   );
   await expect(page.locator(arrows)).toHaveCount(0);
-  await expect(page.getByText("Open folder…")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open folder" })).toBeVisible();
 
   await page.evaluate(() =>
     (window as any).dock.getState().setOpen("vault", true),

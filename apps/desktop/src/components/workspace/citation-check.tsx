@@ -27,6 +27,8 @@ import { cn } from "@/lib/utils";
 import { addPaperToVault } from "@/lib/vault/add-paper";
 import { noteForCitekey } from "@/lib/vault/cite-link";
 import { findItemForCitekey } from "@/lib/zotero-api";
+import { itemForCitekey, itemsByTitle } from "@/lib/cite-match";
+import { useZoteroLibrary } from "@/lib/zotero-library";
 import { useDocumentStore } from "@/stores/document-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
@@ -59,6 +61,24 @@ export async function zoteroItemFor(key: string): Promise<string | null> {
     key,
   );
   if (known) return known;
+  // The library as last synced: no network needed.
+  const mirror = useZoteroLibrary.getState().mirror;
+  if (mirror) {
+    const index = useVaultStore.getState().index;
+    const itemKeys = itemKeysByCitekey(useDocumentStore.getState().projectRoot);
+    const local = itemForCitekey(key, {
+      items: mirror.items,
+      byTitle: itemsByTitle(Object.values(mirror.items)),
+      itemKeys,
+      bibTitle: bibFiles()
+        .flatMap((f) => bibEntries(f.content, f.path))
+        .find((e) => e.key === key)?.title,
+      noteItemKey: index
+        ? noteForCitekey(index, key, itemKeys)?.zoteroKey
+        : undefined,
+    });
+    if (local) return local.key;
+  }
   if (!apiKey || !userID) return null;
   // By the entry's own title when the bibliography has it: far surer than
   // words guessed from the key (which may be "noauthor_horizon_2025").

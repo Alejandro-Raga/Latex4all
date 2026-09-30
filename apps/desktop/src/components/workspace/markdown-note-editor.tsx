@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
-import { autocompletion } from "@codemirror/autocomplete";
+import {
+  autocompletion,
+  selectedCompletionIndex,
+  setSelectedCompletion,
+} from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
@@ -143,7 +147,23 @@ export function MarkdownNoteEditor({
       }),
     });
     view.focus();
-    return () => view.destroy();
+    // The pointer picks a suggestion too (CodeMirror only follows the keys),
+    // so its full name shows beside whichever one it's on.
+    const hover = (e: MouseEvent) => {
+      const li = (e.target as Element | null)?.closest?.(
+        ".cm-tooltip-autocomplete li[id]",
+      );
+      if (!li) return;
+      const i = Number(li.id.split("-").pop());
+      if (Number.isInteger(i) && selectedCompletionIndex(view.state) !== i) {
+        view.dispatch({ effects: setSelectedCompletion(i) });
+      }
+    };
+    document.addEventListener("mousemove", hover);
+    return () => {
+      document.removeEventListener("mousemove", hover);
+      view.destroy();
+    };
   }, [initial]);
 
   return <div ref={hostRef} className="min-h-0 flex-1 overflow-y-auto" />;

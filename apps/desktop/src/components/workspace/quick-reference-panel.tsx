@@ -90,6 +90,7 @@ import { itemsIn, pdfOf, useZoteroLibrary } from "@/lib/zotero-library";
 import { zoteroPdfBytes } from "@/lib/zotero-pdf-cache";
 import { addPaperToVault } from "@/lib/vault/add-paper";
 import { useVaultStore } from "@/stores/vault-store";
+import { useSettingsWindow } from "@/stores/settings-window-store";
 import {
   CitedAt,
   CitedHeader,
@@ -554,6 +555,44 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   const selectedZoteroItemKey =
     selectedFile?.source === "zotero" ? selectedFile.itemKey : null;
 
+  // Only once something is picked: an empty preview is wasted room.
+  const previewPane = selectedFile && (
+    <>
+      <PanelResizeHandle className="h-px bg-border transition-colors hover:bg-ring" />
+      <Panel
+        id="preview"
+        order={2}
+        defaultSize={50}
+        minSize={15}
+        className="min-h-0"
+      >
+        <div className="flex h-full flex-col">
+          <div className="flex shrink-0 items-center gap-1.5 border-border border-b px-2 py-1">
+            <span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
+              {selectedFile.label}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-5"
+              onClick={() => {
+                setSelectedFile(null);
+                setPreview(null);
+              }}
+              title="Close the preview"
+              aria-label="Close the preview"
+            >
+              <XIcon className="size-3" />
+            </Button>
+          </div>
+          <div className="min-h-0 flex-1">
+            <FilePreview selectedFile={selectedFile} preview={preview} />
+          </div>
+        </div>
+      </Panel>
+    </>
+  );
+
   return (
     <div className="flex h-full min-w-0 flex-col bg-background">
       <DockHeaderBar>
@@ -589,48 +628,47 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
 
       {!refProjectPath && (
         <PanelGroup direction="vertical" className="min-h-0 flex-1">
-          <Panel defaultSize={55} minSize={20} className="min-h-0">
+          <Panel
+            id="browse"
+            order={1}
+            defaultSize={55}
+            minSize={20}
+            className="min-h-0"
+          >
             <div className="h-full overflow-y-auto p-2">
-              {availableProjects.length === 0 ? (
-                <p className="p-3 text-muted-foreground text-xs">
-                  No other recent projects yet. Open a folder to reference it
-                  here.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-0.5">
-                  {availableProjects.map((p) => (
-                    <button
-                      key={p.path}
-                      type="button"
-                      onClick={() => openReferenceProject(p.path)}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-muted"
-                    >
-                      <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="mt-1 border-border border-t p-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={handleBrowse}
-                >
-                  Open folder…
-                </Button>
-              </div>
+              <FoldSection
+                id="projects"
+                title="Projects"
+                count={availableProjects.length}
+                action={
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    onClick={handleBrowse}
+                    title="Open folder…"
+                    aria-label="Open folder"
+                  >
+                    <FolderOpenIcon className="size-3.5" />
+                  </Button>
+                }
+              >
+                <ReferenceProjects
+                  projects={availableProjects}
+                  onOpen={openReferenceProject}
+                  onBrowse={handleBrowse}
+                />
+              </FoldSection>
 
-              <div className="mt-3 border-border border-t pt-2">
-                <p className="mb-1 px-2 font-medium text-muted-foreground text-xs uppercase tracking-wide">
-                  Zotero
-                </p>
+              <FoldSection id="zotero" title="Zotero">
                 {!zoteroAuthenticated ? (
-                  <p className="px-2 text-muted-foreground text-xs">
-                    Connect Zotero from the sidebar's Zotero tab to browse your
-                    library here.
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => useSettingsWindow.getState().show("zotero")}
+                    className="px-2 py-1 text-left text-muted-foreground text-xs hover:text-foreground"
+                  >
+                    Connect Zotero in Settings to browse your library here.
+                  </button>
                 ) : (
                   <div className="flex flex-col gap-0.5">
                     <div className="mb-1 flex items-center gap-1.5 px-2">
@@ -757,19 +795,22 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
                     )}
                   </div>
                 )}
-              </div>
+              </FoldSection>
             </div>
           </Panel>
-          <PanelResizeHandle className="h-px bg-border transition-colors hover:bg-ring" />
-          <Panel minSize={15} className="min-h-0">
-            <FilePreview selectedFile={selectedFile} preview={preview} />
-          </Panel>
+          {previewPane}
         </PanelGroup>
       )}
 
       {refProjectPath && (
         <PanelGroup direction="vertical" className="min-h-0 flex-1">
-          <Panel defaultSize={45} minSize={15} className="min-h-0">
+          <Panel
+            id="browse"
+            order={1}
+            defaultSize={45}
+            minSize={15}
+            className="min-h-0"
+          >
             <div className="h-full overflow-y-auto p-1.5">
               {treeLoading && (
                 <div className="flex items-center gap-2 p-2 text-muted-foreground text-xs">
@@ -794,11 +835,147 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
               )}
             </div>
           </Panel>
-          <PanelResizeHandle className="h-px bg-border transition-colors hover:bg-ring" />
-          <Panel minSize={15} className="min-h-0">
-            <FilePreview selectedFile={selectedFile} preview={preview} />
-          </Panel>
+          {previewPane}
         </PanelGroup>
+      )}
+    </div>
+  );
+}
+
+/** Whether a section is folded, remembered on this computer. */
+function useFolded(id: string): [boolean, (folded: boolean) => void] {
+  const storageKey = `quick-reference-folded:${id}`;
+  const [folded, setFolded] = useState(() => {
+    try {
+      return localStorage.getItem(storageKey) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const set = (next: boolean) => {
+    setFolded(next);
+    try {
+      localStorage.setItem(storageKey, next ? "1" : "0");
+    } catch {}
+  };
+  return [folded, set];
+}
+
+/** A titled section that folds away. */
+function FoldSection({
+  id,
+  title,
+  count,
+  action,
+  children,
+}: {
+  id: string;
+  title: string;
+  count?: number;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  const [folded, setFolded] = useFolded(id);
+  return (
+    <div className="mb-2 border-border border-b pb-2 last:border-b-0">
+      <div className="flex items-center gap-1 pr-1">
+        <button
+          type="button"
+          onClick={() => setFolded(!folded)}
+          aria-expanded={!folded}
+          className="flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-1 text-left font-medium text-muted-foreground text-xs uppercase tracking-wide hover:text-foreground"
+        >
+          {folded ? (
+            <ChevronRightIcon className="size-3 shrink-0" />
+          ) : (
+            <ChevronDownIcon className="size-3 shrink-0" />
+          )}
+          {title}
+          {count !== undefined && count > 0 && (
+            <span className="font-normal normal-case">{count}</span>
+          )}
+        </button>
+        {action}
+      </div>
+      {!folded && <div className="pt-1">{children}</div>}
+    </div>
+  );
+}
+
+const PROJECTS_SHOWN = 5;
+
+/** Other projects to reference: starred first, then the latest opened. */
+function ReferenceProjects({
+  projects,
+  onOpen,
+  onBrowse,
+}: {
+  projects: { path: string; name: string; lastOpened: number }[];
+  onOpen: (path: string) => void;
+  onBrowse: () => void;
+}) {
+  const favorites = useProjectStore((s) => s.favorites);
+  const [query, setQuery] = useState("");
+  const [all, setAll] = useState(false);
+  const ordered = useMemo(() => {
+    const starred = (path: string) =>
+      favorites.some((f) => normalizePath(f) === normalizePath(path));
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    return projects
+      .filter((p) => words.every((w) => p.name.toLowerCase().includes(w)))
+      .sort(
+        (a, b) =>
+          Number(starred(b.path)) - Number(starred(a.path)) ||
+          b.lastOpened - a.lastOpened,
+      );
+  }, [projects, favorites, query]);
+
+  if (projects.length === 0) {
+    return (
+      <button
+        type="button"
+        onClick={onBrowse}
+        className="px-2 py-1 text-muted-foreground text-xs hover:text-foreground"
+      >
+        Open a folder to reference it here.
+      </button>
+    );
+  }
+  const shown = all || query ? ordered : ordered.slice(0, PROJECTS_SHOWN);
+  return (
+    <div className="flex flex-col gap-0.5">
+      {projects.length > PROJECTS_SHOWN && (
+        <div className="relative mb-1 px-1">
+          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Find a project…"
+            aria-label="Find a project"
+            className="h-7 pl-7 text-xs"
+          />
+        </div>
+      )}
+      {shown.map((p) => (
+        <button
+          key={p.path}
+          type="button"
+          onClick={() => onOpen(p.path)}
+          title={p.path}
+          className="flex items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-muted"
+        >
+          <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate">{p.name}</span>
+        </button>
+      ))}
+      {!query && ordered.length > PROJECTS_SHOWN && (
+        <button
+          type="button"
+          onClick={() => setAll(!all)}
+          className="px-2 py-0.5 text-left text-muted-foreground text-xs hover:text-foreground"
+        >
+          {all ? "Show fewer" : `Show all ${ordered.length}`}
+        </button>
       )}
     </div>
   );

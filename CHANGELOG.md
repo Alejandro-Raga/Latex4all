@@ -127,6 +127,10 @@ tag.
   editor, the PDF and that column apart.
 - Your Zotero library lives in the Reference panel; the old Zotero section
   of the sidebar is gone.
+- The Reference panel's Projects and Zotero sections fold away, and the
+  projects are listed starred first, then latest, with a search when there
+  are many. The preview opens only when you pick something, with a button
+  to close it.
 - Each project remembers the papers and panels you had open.
 - If a panel runs into a problem, only that panel stops, with a button to
   reload it.
@@ -135,6 +139,12 @@ tag.
 
 ### Fixed
 
+- "Cited in this project" in the Zotero library missed papers whose titles
+  have capitals kept in braces, as Zotero writes them; it now finds them,
+  and by author and year when the title differs. Check citations finds
+  them in Zotero too, and without going online.
+- Link suggestions after "[[" follow the pointer, so the full name shows
+  beside the one you point at, not just the first.
 - Text in PDFs couldn't be selected, so nothing could be copied or
   double-clicked to its place in the source. Selection now works like in a
   PDF reader, from the nearest letter, and shows on every page color.
