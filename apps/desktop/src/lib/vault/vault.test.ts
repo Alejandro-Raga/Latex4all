@@ -1,3 +1,4 @@
+import { noteForCitekey } from "./cite-link";
 import { describe, expect, it } from "vitest";
 import { citeKeyAtCursor } from "./cite-at-cursor";
 import { parseFrontmatter, parseNote } from "./parse";
@@ -234,6 +235,59 @@ describe("paper detection across Zotero setups", () => {
       "Papers",
       "Ideas",
     ]);
+  });
+});
+
+describe("Zotero Integration notes and their citation keys", () => {
+  // Notes as Zotero Integration templates commonly write them.
+  const index = buildVaultIndex([
+    parseNote(
+      "Literature/Cohen and Levinthal - Absorptive capacity.md",
+      [
+        "---",
+        "category: literaturenote",
+        "---",
+        "> [!info]- Info",
+        "> **Citekey**:: cohenAbsorptiveCapacityNew1990",
+        "> **Year**:: 1990",
+        "",
+        "[Zotero](zotero://select/items/1_QWER1234)",
+      ].join("\n"),
+    ),
+    parseNote(
+      "Literature/Zahra.md",
+      "---\ntags: [literature/paper]\n---\n[Open](zotero://select/items/@zahra2002)",
+    ),
+    parseNote("Literature/Todorova.md", '---\ncitekey: "@todorova2007"\n---\n'),
+    parseNote("Literature/Lane.md", "---\naliases: ['@lane2006']\n---\nnotes"),
+    // Renamed by hand to the key, with nothing else marking it a paper.
+    parseNote("Inbox/volberda2010.md", "My notes on Volberda."),
+  ]);
+  const cite = (key: string) => noteForCitekey(index, key, new Map())?.name;
+
+  it("recognises the note as a paper and reads its key", () => {
+    expect(
+      index.notes.get("cohen and levinthal - absorptive capacity"),
+    ).toMatchObject({
+      kind: "paper",
+      citekey: "cohenAbsorptiveCapacityNew1990",
+      zoteroKey: "QWER1234",
+    });
+    expect(index.notes.get("zahra")).toMatchObject({
+      kind: "paper",
+      citekey: "zahra2002",
+    });
+  });
+
+  it("finds the note for each citation, however it gives its key", () => {
+    expect(cite("cohenAbsorptiveCapacityNew1990")).toBe(
+      "Cohen and Levinthal - Absorptive capacity",
+    );
+    expect(cite("zahra2002")).toBe("Zahra");
+    expect(cite("todorova2007")).toBe("Todorova");
+    expect(cite("lane2006")).toBe("Lane");
+    expect(cite("volberda2010")).toBe("volberda2010");
+    expect(cite("missing2020")).toBeUndefined();
   });
 });
 

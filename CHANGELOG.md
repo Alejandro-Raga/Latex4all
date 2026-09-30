@@ -149,6 +149,12 @@ tag.
 
 ### Fixed
 
+- Papers exported with Zotero Integration (and other Obsidian–Zotero
+  plugins) showed as "not in the vault" in project notes and citation
+  checks, even when a note was named after the citation key. Latex4All now
+  reads the key wherever these notes keep it (a Citekey:: line, a Better
+  BibTeX link, an alias, a key with an @) and finds any note named after
+  the key.
 - Text in PDFs couldn't be selected, so nothing could be copied, proofread or
   double-clicked to its place in the source. All of it works again.
 - The PDF's dark-mode button sat under the chat button; its replacement, the

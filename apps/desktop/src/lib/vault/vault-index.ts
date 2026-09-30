@@ -12,6 +12,8 @@ export interface VaultNote extends ParsedNote {
   /** Zotero item key, when the note says which item it's about. */
   zoteroKey: string | null;
   citekey: string | null;
+  /** Other names the note answers to (its `aliases`). */
+  aliases: string[];
   authors: string[];
   year: string | null;
   /** Names of notes this one links to (resolved, no duplicates, not itself). */
@@ -57,10 +59,22 @@ const PAPER_TAGS = new Set([
   "literaturenote",
   "reference",
   "source",
+  "zotero",
 ]);
+// Fields some templates use instead of tags to say what a note is
+// (Zotero Integration's examples use `category: literaturenote`).
+const KIND_FIELDS = ["category", "type", "note-type", "notetype", "kind"];
 const ZOTERO_ITEM_KEY = /^[A-Z0-9]{8}$/;
+// zotero://select/library/items/KEY, …/groups/123/items/KEY, and the
+// library-prefixed …/select/items/1_KEY form.
 const ZOTERO_SELECT_LINK =
-  /zotero:\/\/select\/(?:library|groups\/\d+)\/items\/([A-Z0-9]{8})\b/;
+  /zotero:\/\/select\/(?:(?:library|groups\/\d+)\/items\/|items\/\d+_)([A-Z0-9]{8})\b/;
+// Better BibTeX's link by citation key: zotero://select/items/@key.
+const BBT_SELECT_LINK = /zotero:\/\/select\/items\/@([^\s)\]>"'|]+)/;
+// A Dataview-style inline field in the body, as templates often write it:
+// "Citekey:: key", "**Citation key**:: key", "- citekey:: @key".
+const INLINE_CITEKEY =
+  /^[\s>*_-]*(?:\*\*|__)?\s*(?:cite\s*key|citation[\s_-]*key)\s*(?:\*\*|__)?\s*::\s*@?([^\s\]|,;]+)/im;
 
 function firstText(note: ParsedNote, fields: string[]): string | null {
   for (const field of fields) {
@@ -79,24 +93,36 @@ function zoteroKeyOf(note: ParsedNote): string | null {
 }
 
 function citekeyOf(note: ParsedNote): string | null {
-  return (
+  const key =
     firstText(note, CITEKEY_FIELDS) ??
+    note.body.match(INLINE_CITEKEY)?.[1] ??
+    note.body.match(BBT_SELECT_LINK)?.[1] ??
     // Zotero Integration's default: literature notes named @citekey.
-    (note.name.startsWith("@") ? note.name.slice(1) : null)
-  );
+    (note.name.startsWith("@") ? note.name.slice(1) : null);
+  return key ? key.replace(/^@/, "").trim() || null : null;
 }
 
 function describe(note: ParsedNote) {
   const fm = note.frontmatter;
-  const tags = listField(fm, "tags").map((t) =>
-    t.toLowerCase().replace(/^#/, ""),
+  // Nested tags count by any part: #literature/paper, #source/article.
+  const tags = [...listField(fm, "tags"), ...listField(fm, "tag")].flatMap(
+    (t) => t.toLowerCase().replace(/^#/, "").split("/"),
+  );
+  const kinds = KIND_FIELDS.flatMap((f) => listField(fm, f)).map((v) =>
+    v.toLowerCase().replace(/^#/, "").replace(/\s+/g, ""),
   );
   const zoteroKey = zoteroKeyOf(note);
   const citekey = citekeyOf(note);
   const kind: NoteKind =
-    zoteroKey || citekey || tags.some((t) => PAPER_TAGS.has(t))
+    zoteroKey ||
+    citekey ||
+    tags.some((t) => PAPER_TAGS.has(t)) ||
+    kinds.some((k) => PAPER_TAGS.has(k))
       ? "paper"
       : "note";
+  const aliases = [...listField(fm, "aliases"), ...listField(fm, "alias")]
+    .map((a) => a.trim())
+    .filter(Boolean);
   const authors = [...listField(fm, "authors"), ...listField(fm, "author")];
   const year =
     textField(fm, "year") ??
@@ -109,6 +135,7 @@ function describe(note: ParsedNote) {
     title: (kind === "paper" ? textField(fm, "title") : null) ?? name,
     zoteroKey,
     citekey,
+    aliases,
     authors,
     year,
   };
