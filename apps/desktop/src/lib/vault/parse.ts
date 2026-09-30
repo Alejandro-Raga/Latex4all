@@ -129,16 +129,27 @@ export function parseNote(path: string, text: string): ParsedNote {
   };
 }
 
+/**
+ * A frontmatter value by key, ignoring case when there's no exact match:
+ * templates write `Title:` and `Authors:` as often as `title:`.
+ */
+function fieldValue(fm: Frontmatter, key: string) {
+  if (key in fm) return fm[key];
+  const lower = key.toLowerCase();
+  const found = Object.keys(fm).find((k) => k.toLowerCase() === lower);
+  return found === undefined ? undefined : fm[found];
+}
+
 /** A frontmatter field as a list of strings, whatever form it was written in. */
 export function listField(fm: Frontmatter, key: string): string[] {
-  const value = fm[key];
+  const value = fieldValue(fm, key);
   if (Array.isArray(value)) return value;
   if (value === null || value === undefined || value === "") return [];
   return [String(value)];
 }
 
 export function textField(fm: Frontmatter, key: string): string | null {
-  const value = fm[key];
+  const value = fieldValue(fm, key);
   if (value === null || value === undefined || Array.isArray(value))
     return null;
   return String(value);

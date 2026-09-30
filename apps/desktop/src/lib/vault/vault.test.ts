@@ -1,3 +1,4 @@
+import zoteroIntegrationNote from "./fixtures/zotero-integration-note.md?raw";
 import { noteForCitekey } from "./cite-link";
 import { describe, expect, it } from "vitest";
 import { citeKeyAtCursor } from "./cite-at-cursor";
@@ -288,6 +289,38 @@ describe("Zotero Integration notes and their citation keys", () => {
     expect(cite("lane2006")).toBe("Lane");
     expect(cite("volberda2010")).toBe("volberda2010");
     expect(cite("missing2020")).toBeUndefined();
+  });
+});
+
+describe("a user's Zotero Integration template", () => {
+  // A real note from a user's vault: capitalised fields, no citation key or
+  // Zotero link anywhere, and a name of its own (not the key).
+  const text = zoteroIntegrationNote;
+
+  it("is a paper, cited by its Better BibTeX key", () => {
+    const index = buildVaultIndex([
+      parseNote("Lecturas/A human capability approach.md", text),
+      parseNote(
+        "Lecturas/Boni otro.md",
+        "---\nTitle: Another paper\nYear: 2025\nAuthors: Alejandra Boni\n---\n",
+      ),
+    ]);
+    const note = index.notes.get("a human capability approach");
+    expect(note).toMatchObject({
+      kind: "paper",
+      year: "2025",
+      title:
+        "A human capability approach to transformative innovation policy. Theoretical insights and practical implications for directionality",
+    });
+    expect(noteForCitekey(index, "boni_human_2025", new Map())?.name).toBe(
+      "A human capability approach",
+    );
+    expect(
+      noteForCitekey(index, "boniHumanCapability2025", new Map())?.name,
+    ).toBe("A human capability approach");
+    expect(noteForCitekey(index, "boni_another_2025", new Map())?.name).toBe(
+      "Boni otro",
+    );
   });
 });
 

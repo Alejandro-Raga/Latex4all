@@ -30,15 +30,28 @@ export function noteForCitekey(
   if (byName) return byName;
   const year = lower.match(/(1[5-9]|20)\d\d/)?.[0];
   if (!year) return undefined;
-  return papers.find((n) => {
-    const [author] = n.authors;
-    const last = author
-      ?.split(",")[0]
-      .split(" ")
-      .pop()
-      ?.normalize("NFKD")
+  const fold = (s: string) =>
+    s
+      .normalize("NFKD")
       .replace(/[^A-Za-z]/g, "")
       .toLowerCase();
-    return last && n.year === year && lower.startsWith(last);
+  const matches = papers.filter((n) => {
+    // "Boni, Alejandra" or "Alejandra Boni"; authors may also come as one
+    // comma-separated line, "Alejandra Boni, Diana Velasco".
+    const first = n.authors[0]?.split(",")[0].trim();
+    const last = first ? fold(first.split(/\s+/).pop() ?? "") : "";
+    return last && n.year === year && fold(lower).startsWith(last);
   });
+  if (matches.length < 2) return matches[0];
+  // Same author, same year: Better BibTeX keys carry a title word
+  // (boni_human_2025), so prefer the paper whose title has it.
+  const words = lower.split(/[^a-z]+/).filter((w) => w.length > 2);
+  return (
+    matches.find((n) =>
+      n.title
+        .toLowerCase()
+        .split(/[^a-z]+/)
+        .some((w) => w.length > 2 && words.includes(w)),
+    ) ?? matches[0]
+  );
 }

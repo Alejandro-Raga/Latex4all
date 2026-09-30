@@ -153,8 +153,9 @@ tag.
   plugins) showed as "not in the vault" in project notes and citation
   checks, even when a note was named after the citation key. Latex4All now
   reads the key wherever these notes keep it (a Citekey:: line, a Better
-  BibTeX link, an alias, a key with an @) and finds any note named after
-  the key.
+  BibTeX link, an alias, a key with an @), finds any note named after the
+  key, and recognises a paper by its authors and year even when the template
+  writes nothing else, with fields in any case (Title:, Authors:, Year:).
 - Text in PDFs couldn't be selected, so nothing could be copied, proofread or
   double-clicked to its place in the source. All of it works again.
 - The PDF's dark-mode button sat under the chat button; its replacement, the

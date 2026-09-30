@@ -113,21 +113,24 @@ function describe(note: ParsedNote) {
   );
   const zoteroKey = zoteroKeyOf(note);
   const citekey = citekeyOf(note);
-  const kind: NoteKind =
-    zoteroKey ||
-    citekey ||
-    tags.some((t) => PAPER_TAGS.has(t)) ||
-    kinds.some((k) => PAPER_TAGS.has(k))
-      ? "paper"
-      : "note";
-  const aliases = [...listField(fm, "aliases"), ...listField(fm, "alias")]
-    .map((a) => a.trim())
-    .filter(Boolean);
   const authors = [...listField(fm, "authors"), ...listField(fm, "author")];
   const year =
     textField(fm, "year") ??
     textField(fm, "date")?.match(/\b\d{4}\b/)?.[0] ??
     null;
+  // A note that names its authors and year is about a publication, however
+  // the template that wrote it marks it (many write only these).
+  const kind: NoteKind =
+    zoteroKey ||
+    citekey ||
+    tags.some((t) => PAPER_TAGS.has(t)) ||
+    kinds.some((k) => PAPER_TAGS.has(k)) ||
+    (authors.length > 0 && year)
+      ? "paper"
+      : "note";
+  const aliases = [...listField(fm, "aliases"), ...listField(fm, "alias")]
+    .map((a) => a.trim())
+    .filter(Boolean);
   const name = note.name.replace(/^@/, "");
   return {
     kind,
