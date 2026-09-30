@@ -3,7 +3,7 @@ import { autocompletion } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
-import { EditorView, keymap, placeholder } from "@codemirror/view";
+import { EditorView, keymap, placeholder, tooltips } from "@codemirror/view";
 import { noteLinkCompletions } from "@/lib/vault/link-complete";
 import { useVaultStore } from "@/stores/vault-store";
 import { themedHighlighting } from "./editor/editor-theme";
@@ -43,6 +43,8 @@ export function MarkdownNoteEditor({
           themedHighlighting,
           EditorView.lineWrapping,
           placeholder("Write…"),
+          // On the window, not inside the panel, which would clip it.
+          tooltips({ parent: document.body }),
           autocompletion({
             override: [
               noteLinkCompletions(
@@ -99,17 +101,21 @@ export function MarkdownNoteEditor({
               padding: "3px",
               boxShadow: "0 8px 24px rgb(0 0 0 / 0.18)",
             },
-            ".cm-tooltip-autocomplete > ul": {
-              fontFamily: "var(--font-sans, inherit)",
+            ".cm-tooltip.cm-tooltip-autocomplete > ul": {
+              fontFamily: "var(--font-sans, ui-sans-serif, system-ui)",
+              fontSize: "13px",
               maxHeight: "16rem",
-              minWidth: "16rem",
+              minWidth: "14rem",
+              maxWidth: "min(26rem, 90vw)",
             },
-            ".cm-tooltip-autocomplete > ul > li": {
+            ".cm-tooltip.cm-tooltip-autocomplete > ul > li": {
               padding: "4px 8px",
               borderRadius: "5px",
               lineHeight: "1.4",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             },
-            ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
+            ".cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]": {
               backgroundColor: "var(--accent)",
               color: "var(--accent-foreground)",
             },

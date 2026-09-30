@@ -80,7 +80,8 @@ export function NoteTypesSettings() {
       <div className="px-5 pt-1 pb-2">
         <div className="text-sm">Note types</div>
         <div className="text-muted-foreground text-xs">
-          Folders and tags assign notes to your types on their own.
+          A type's folder is where its notes live: choosing the type moves a
+          note there. Notes in it, or with its tag, get the type on their own.
         </div>
       </div>
 
@@ -118,7 +119,7 @@ export function NoteTypesSettings() {
             onChange={(e) =>
               updateNoteType(t.id, { folder: e.target.value || undefined })
             }
-            placeholder="Folder"
+            placeholder="Folder (optional)"
             className="h-7 min-w-0 flex-1 text-xs"
             aria-label={`Folder for ${t.label}`}
           />

@@ -54,7 +54,7 @@ import {
 } from "@/components/ui/context-menu";
 import { isTopicNote } from "@/lib/vault/topics";
 import { DeleteNoteItem, NoteKindMenu, TopicMenu } from "./topic-menu";
-import { unlinkProject } from "@/lib/vault/note-changes";
+import { chooseNoteKind, unlinkProject } from "@/lib/vault/note-changes";
 import { citeKeyAtCursor } from "@/lib/vault/cite-at-cursor";
 import { noteForCitekey } from "@/lib/vault/cite-link";
 import {
@@ -995,7 +995,15 @@ function NoteView({
                 <DropdownMenuItem
                   key={kind}
                   onSelect={() =>
-                    useVaultStore.getState().setNoteKind(note.name, kind)
+                    chooseNoteKind(note.name, kind)
+                      .then((moved) => {
+                        if (moved) toast.success(`Moved to ${moved}`);
+                      })
+                      .catch((err) =>
+                        toast.error(
+                          `Couldn't move it: ${err instanceof Error ? err.message : String(err)}`,
+                        ),
+                      )
                   }
                 >
                   {note.kind === kind ? (

@@ -101,6 +101,8 @@ export function normalizeType(raw: string): string {
 
 interface ProjectMeta {
   type?: string;
+  /** Stable across renames and moves; names the project's vault note. */
+  id?: string;
 }
 
 function metaPath(projectPath: string): string {
@@ -123,6 +125,28 @@ export async function readProjectType(
     log.warn(`Could not read project type for ${projectPath}: ${String(err)}`);
     return null;
   }
+}
+
+/**
+ * The project's id: made the first time it's asked for and kept in its
+ * metadata, so the project is known by it whatever its folder is called.
+ */
+export async function readProjectId(projectPath: string): Promise<string> {
+  const dir = `${projectPath}/${META_DIR}`;
+  const path = metaPath(projectPath);
+  let meta: ProjectMeta = {};
+  try {
+    if (await exists(path)) {
+      meta = JSON.parse(await readTextFile(path)) as ProjectMeta;
+    }
+  } catch {
+    meta = {};
+  }
+  if (typeof meta.id === "string" && meta.id) return meta.id;
+  meta.id = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+  if (!(await exists(dir))) await mkdir(dir, { recursive: true });
+  await writeTextFile(path, `${JSON.stringify(meta, null, 2)}\n`);
+  return meta.id;
 }
 
 /**

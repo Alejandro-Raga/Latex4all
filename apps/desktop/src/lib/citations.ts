@@ -80,6 +80,9 @@ export function citekeySearch(key: string): {
   const name = key
     .replace(/(1[5-9]|20)\d\d[a-z]?/, " ")
     .split(/[_\-:\s]+|(?<=[a-z])(?=[A-Z])/)
-    .filter((w) => w.length > 1)[0];
+    // Zotero writes "noauthor" (and others "anon") where a key's author goes.
+    .filter(
+      (w) => w.length > 1 && !/^(noauthor|anon|anonymous|nd)$/i.test(w),
+    )[0];
   return { words: name ?? key, year };
 }

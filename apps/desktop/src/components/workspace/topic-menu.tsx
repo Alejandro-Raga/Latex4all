@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { connectToTopic } from "@/lib/vault/connect-topic";
-import { deleteNote } from "@/lib/vault/note-changes";
+import { chooseNoteKind, deleteNote } from "@/lib/vault/note-changes";
 import { findNote, type NoteKind } from "@/lib/vault/vault-index";
 import { topicNotes, topicsOf } from "@/lib/vault/topics";
 import { useKindChoices, useVaultStore } from "@/stores/vault-store";
@@ -112,7 +112,15 @@ export function NoteKindMenu({ noteName }: { noteName: string }) {
   const choices = useKindChoices();
   if (!note) return null;
   const set = (kind: NoteKind | null) =>
-    useVaultStore.getState().setNoteKind(note.name, kind);
+    chooseNoteKind(note.name, kind)
+      .then((moved) => {
+        if (moved) toast.success(`Moved ${note.name} to ${moved}`);
+      })
+      .catch((err) =>
+        toast.error(
+          `Couldn't move ${note.name}: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
   return (
     <ContextMenuSub>
       <ContextMenuSubTrigger>

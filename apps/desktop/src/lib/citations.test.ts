@@ -73,5 +73,10 @@ describe("citation check", () => {
       words: "rotolo",
       year: "2022",
     });
+    // Zotero's key for an item without an author (a web page, say).
+    expect(citekeySearch("noauthor_horizon_2025")).toEqual({
+      words: "horizon",
+      year: "2025",
+    });
   });
 });

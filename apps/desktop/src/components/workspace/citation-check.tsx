@@ -60,6 +60,19 @@ async function zoteroItemFor(key: string): Promise<string | null> {
   );
   if (known) return known;
   if (!apiKey || !userID) return null;
+  // By the entry's own title when the bibliography has it: far surer than
+  // words guessed from the key (which may be "noauthor_horizon_2025").
+  const title = bibFiles()
+    .flatMap((f) => bibEntries(f.content, f.path))
+    .find((e) => e.key === key)?.title;
+  const year = citekeySearch(key).year;
+  if (title) {
+    const byTitle = await findItemForCitekey(apiKey, userID, key, {
+      words: title.replace(/[{}\\]/g, "").slice(0, 120),
+      year,
+    });
+    if (byTitle) return byTitle;
+  }
   return findItemForCitekey(apiKey, userID, key, citekeySearch(key));
 }
 

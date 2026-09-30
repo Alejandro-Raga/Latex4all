@@ -15,12 +15,22 @@ export const BEGIN = "%% begin latex4all %%";
 export const END = "%% end latex4all %%";
 
 /** Frontmatter keys Latex4All keeps current; the rest are the user's. */
-const OWNED_KEYS = ["type", "project", "latex4all_updated"];
+const OWNED_KEYS = [
+  "type",
+  "project",
+  "latex4all_project",
+  "latex4all_updated",
+];
 
 export interface ProjectNoteInput {
   name: string;
   /** Project folder on this computer. */
   root: string;
+  /**
+   * The project's id (a shared project's own, the same on every computer):
+   * how its note is found again whatever either is called.
+   */
+  id?: string;
   type: string | null;
   /** The project's LaTeX files, main file first. */
   texFiles: { path: string; content: string }[];
@@ -174,6 +184,7 @@ function owned(input: ProjectNoteInput): Record<string, string> {
   return {
     ...(input.type ? { type: input.type } : {}),
     project: input.root,
+    ...(input.id ? { latex4all_project: input.id } : {}),
     latex4all_updated: (input.now ?? new Date()).toISOString().slice(0, 10),
   };
 }

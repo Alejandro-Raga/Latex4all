@@ -4,10 +4,13 @@ import { readProjectType } from "@/lib/project-meta";
 import {
   mergeProjectNote,
   type ProjectNoteInput,
-  projectNotePath,
 } from "@/lib/vault/project-note";
 import { useAnnotationsStore } from "@/stores/annotations-store";
-import { relinkProject } from "@/lib/vault/note-changes";
+import {
+  projectNoteFor,
+  projectNoteId,
+  relinkProject,
+} from "@/lib/vault/note-changes";
 import { onProjectRelocated, useDocumentStore } from "@/stores/document-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
@@ -32,7 +35,7 @@ export async function syncProjectNote(): Promise<string | null> {
   const vault = useVaultStore.getState();
   if (!projectRoot || !vault.linkedProjects[projectRoot]) return null;
   await vault.ensureVault();
-  const { source, index, projectsFolder } = useVaultStore.getState();
+  const { source, index } = useVaultStore.getState();
   if (!source) return null;
 
   // Main file (the one with \documentclass) first, then the rest in order.
@@ -54,9 +57,11 @@ export async function syncProjectNote(): Promise<string | null> {
     }
   }
   const name = folderName(projectRoot);
+  const id = await projectNoteId(projectRoot);
   const input: ProjectNoteInput = {
     name,
     root: projectRoot,
+    id: id ?? undefined,
     type: await readProjectType(projectRoot).catch(() => null),
     texFiles,
     annotations: useAnnotationsStore.getState().source?.listAll() ?? [],
@@ -64,7 +69,9 @@ export async function syncProjectNote(): Promise<string | null> {
     itemKeyByCitekey,
   };
 
-  const path = projectNotePath(projectsFolder, name);
+  // By the project's id: the same note from every computer sharing the
+  // project, even after one of them renamed it.
+  const path = projectNoteFor(id, projectRoot);
   const existing = await source.readNote(path).catch(() => null);
   const merged = mergeProjectNote(existing?.text ?? null, input);
   if (merged === null) return null;
