@@ -25,9 +25,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { connectToTopic } from "@/lib/vault/connect-topic";
 import { deleteNote } from "@/lib/vault/note-changes";
-import { findNote, NOTE_KINDS, type NoteKind } from "@/lib/vault/vault-index";
+import { findNote, type NoteKind } from "@/lib/vault/vault-index";
 import { topicNotes, topicsOf } from "@/lib/vault/topics";
-import { useVaultStore } from "@/stores/vault-store";
+import { useKindChoices, useVaultStore } from "@/stores/vault-store";
 
 /** The note a menu acts on: its name, found (or made) when chosen. */
 type Resolve = () => Promise<string>;
@@ -109,6 +109,7 @@ export function NoteKindMenu({ noteName }: { noteName: string }) {
   const note = useVaultStore((s) =>
     s.index ? findNote(s.index, noteName) : undefined,
   );
+  const choices = useKindChoices();
   if (!note) return null;
   const set = (kind: NoteKind | null) =>
     useVaultStore.getState().setNoteKind(note.name, kind);
@@ -119,7 +120,7 @@ export function NoteKindMenu({ noteName }: { noteName: string }) {
         Type
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="w-44">
-        {NOTE_KINDS.map(({ kind, label }) => (
+        {choices.map(({ kind, label }) => (
           <ContextMenuItem key={kind} onClick={() => set(kind)}>
             {note.kind === kind ? (
               <CheckIcon className="size-3.5" />

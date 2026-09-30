@@ -91,6 +91,11 @@ tag.
   mapped accordingly, and nothing in the note changes. Out of the box,
   notes are sorted by what they say about themselves, whatever the vault's
   layout.
+- Your own note types, in Settings → Vault: give each a name and a color,
+  and optionally a folder or tag that assigns notes to it (Methods/, #dataset…).
+  They're offered alongside Paper, Project, Topic and Idea when you set what a
+  note is, and any type or folder can be recolored; the list, the labels, the
+  legend and the map all follow.
 - Delete a note from the Vault panel (right-click it); Latex4All says first
   how many notes link to it.
 - The Share button shows how a shared project's connection is doing: how

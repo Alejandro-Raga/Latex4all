@@ -5,9 +5,25 @@ import { listField, noteName, type ParsedNote, textField } from "./parse";
  * a topic, an idea, or any other note. Found from the note itself, and
  * changeable by hand when that guesses wrong.
  */
-export type NoteKind = "paper" | "project" | "topic" | "idea" | "note";
+export type BuiltInKind = "paper" | "project" | "topic" | "idea" | "note";
+/** A built-in kind, or the id of a note type the user made. */
+export type NoteKind = BuiltInKind | (string & {});
 
-export const NOTE_KINDS: { kind: NoteKind; label: string }[] = [
+/**
+ * A note type of the user's own: its name and color, and optionally a folder
+ * and a tag that give it to notes on their own (else it's picked by hand).
+ */
+export interface CustomNoteType {
+  id: string;
+  label: string;
+  color: string;
+  /** Notes in this folder (or below it) are of this type. */
+  folder?: string;
+  /** Notes with this tag (nested parts count) are of this type. */
+  tag?: string;
+}
+
+export const NOTE_KINDS: { kind: BuiltInKind; label: string }[] = [
   { kind: "paper", label: "Paper" },
   { kind: "project", label: "Project" },
   { kind: "topic", label: "Topic" },
@@ -16,7 +32,7 @@ export const NOTE_KINDS: { kind: NoteKind; label: string }[] = [
 ];
 
 /** The group each kind is listed under; plain notes go by their folder. */
-const KIND_GROUPS: Record<Exclude<NoteKind, "note">, string> = {
+export const KIND_GROUPS: Record<Exclude<BuiltInKind, "note">, string> = {
   paper: "Papers",
   project: "Projects",
   topic: "Topics",
@@ -128,7 +144,7 @@ function citekeyOf(note: ParsedNote): string | null {
 }
 
 // Folder names that say what their notes are, as a last hint.
-const FOLDER_KINDS: [RegExp, NoteKind][] = [
+const FOLDER_KINDS: [RegExp, BuiltInKind][] = [
   [/^(topics?|temas?|themes?|concepts?|conceptos?|mocs?)$/i, "topic"],
   [/^(ideas?|zettel|zettelkasten|permanent|fleeting)$/i, "idea"],
   [
@@ -137,7 +153,31 @@ const FOLDER_KINDS: [RegExp, NoteKind][] = [
   ],
 ];
 
-function describe(note: ParsedNote, chosen?: NoteKind) {
+/** The first of the user's types whose folder or tag a note matches. */
+function customKindOf(
+  note: ParsedNote,
+  tags: string[],
+  types: CustomNoteType[],
+): CustomNoteType | undefined {
+  const dir = note.path.split("/").slice(0, -1).join("/").toLowerCase();
+  return types.find((t) => {
+    const folder = t.folder
+      ?.trim()
+      .replace(/^\/+|\/+$/g, "")
+      .toLowerCase();
+    const tag = t.tag?.trim().replace(/^#/, "").toLowerCase();
+    return (
+      (folder && (dir === folder || dir.startsWith(`${folder}/`))) ||
+      (tag && tags.some((x) => x === tag || x.startsWith(`${tag}/`)))
+    );
+  });
+}
+
+function describe(
+  note: ParsedNote,
+  chosen: NoteKind | undefined,
+  types: CustomNoteType[],
+) {
   const fm = note.frontmatter;
   // Nested tags count by any part: #literature/paper, #source/article.
   const tags = [...listField(fm, "tags"), ...listField(fm, "tag")].flatMap(
@@ -179,15 +219,35 @@ function describe(note: ParsedNote, chosen?: NoteKind) {
     }
     return "note";
   };
-  const kind: NoteKind = chosen ?? found();
+  // What the user said, by hand and then by their own types' rules, over
+  // what's found.
+  const custom = types.length
+    ? customKindOf(
+        note,
+        [...listField(fm, "tags"), ...listField(fm, "tag")].map((t) =>
+          t.toLowerCase().replace(/^#/, ""),
+        ),
+        types,
+      )
+    : undefined;
+  const known = (k: NoteKind | undefined) =>
+    k && (k in KIND_GROUPS || k === "note" || types.some((t) => t.id === k))
+      ? k
+      : undefined;
+  const kind: NoteKind = known(chosen) ?? custom?.id ?? found();
+  const type = types.find((t) => t.id === kind);
   const aliases = [...listField(fm, "aliases"), ...listField(fm, "alias")]
     .map((a) => a.trim())
     .filter(Boolean);
   const name = note.name.replace(/^@/, "");
   return {
     kind,
-    kindChosen: chosen !== undefined,
-    group: kind === "note" ? note.folder : KIND_GROUPS[kind],
+    kindChosen: known(chosen) !== undefined,
+    group: type
+      ? type.label
+      : kind === "note"
+        ? note.folder
+        : KIND_GROUPS[kind as Exclude<BuiltInKind, "note">],
     title: (kind === "paper" ? textField(fm, "title") : null) ?? name,
     zoteroKey,
     citekey,
@@ -200,6 +260,7 @@ function describe(note: ParsedNote, chosen?: NoteKind) {
 export function buildVaultIndex(
   parsed: ParsedNote[],
   chosen: KindOverrides = {},
+  types: CustomNoteType[] = [],
 ): VaultIndex {
   const notes = new Map<string, VaultNote>();
   // Obsidian links by file name; the first note with a name wins, like it.
@@ -209,7 +270,7 @@ export function buildVaultIndex(
     if (notes.has(key)) continue;
     notes.set(key, {
       ...note,
-      ...describe(note, chosen[key]),
+      ...describe(note, chosen[key], types),
       outgoing: [],
       incoming: [],
       unresolved: [],

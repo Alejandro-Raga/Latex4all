@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { clearPdfCache, pdfCacheSize } from "@/lib/zotero-pdf-cache";
 import { papersFolderOf } from "@/lib/vault/add-paper";
+import { NoteTypesSettings } from "./note-types-settings";
 import { unlinkProject } from "@/lib/vault/note-changes";
 import {
   EnvironmentStatus,
@@ -456,6 +457,7 @@ function VaultSettings() {
         />
       </SettingRow>
       <PapersFolderRow />
+      <NoteTypesSettings />
       <SettingRow
         label="Zotero tag for the vault"
         detail="“Add to vault” tags a paper with this in Zotero"

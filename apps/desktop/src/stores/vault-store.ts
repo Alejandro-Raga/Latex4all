@@ -10,7 +10,9 @@ import { parseNote } from "@/lib/vault/parse";
 import { fillTemplate } from "@/lib/vault/template";
 import {
   buildVaultIndex,
+  type CustomNoteType,
   type KindOverrides,
+  NOTE_KINDS,
   type NoteKind,
   type VaultIndex,
 } from "@/lib/vault/vault-index";
@@ -49,10 +51,27 @@ function chosenKinds(): KindOverrides {
   return state.noteKinds[vaultKey(state)] ?? {};
 }
 
+/** This vault's own note types. */
+function customTypes(): CustomNoteType[] {
+  const state = useVaultStore.getState();
+  return state.noteTypes[vaultKey(state)] ?? [];
+}
+
+/** The index again, with this vault's kinds and types as they are now. */
+function rebuilt(index: VaultIndex | null): VaultIndex | null {
+  return index
+    ? buildVaultIndex(index.list, chosenKinds(), customTypes())
+    : null;
+}
+
 /** The index with one note replaced (or added), without rereading the vault. */
 function withNote(index: VaultIndex | null, path: string, text: string) {
   const others = (index?.list ?? []).filter((n) => n.path !== path);
-  return buildVaultIndex([...others, parseNote(path, text)], chosenKinds());
+  return buildVaultIndex(
+    [...others, parseNote(path, text)],
+    chosenKinds(),
+    customTypes(),
+  );
 }
 
 interface VaultState {
@@ -71,6 +90,10 @@ interface VaultState {
   papersFolder: string;
   /** Note kinds picked by hand, per vault, by lower-cased note name. */
   noteKinds: Record<string, KindOverrides>;
+  /** The user's own note types, per vault. */
+  noteTypes: Record<string, CustomNoteType[]>;
+  /** Colors picked for groups (a type's or a folder's), per vault, by group name. */
+  groupColors: Record<string, Record<string, string>>;
   /** Folder and template last used for a new note ("" / null: none). */
   lastNoteFolder: string | null;
   lastTemplate: string | null;
@@ -106,6 +129,14 @@ interface VaultState {
   useLocalFolder: (path: string) => void;
   /** A note was deleted: out of the index, and out of view if it was open. */
   noteDeleted: (path: string) => void;
+  addNoteType: (label: string, color: string) => string;
+  updateNoteType: (
+    id: string,
+    change: Partial<Omit<CustomNoteType, "id">>,
+  ) => void;
+  removeNoteType: (id: string) => void;
+  /** Colors a group (null: back to its own color). */
+  setGroupColor: (group: string, color: string | null) => void;
   /** Sets what a note is (null: back to what it's found to be). */
   setNoteKind: (name: string, kind: NoteKind | null) => void;
   linkProject: (root: string, linked: boolean) => void;
@@ -152,6 +183,8 @@ export const useVaultStore = create<VaultState>()(
       paperTag: "obsidian",
       papersFolder: "",
       noteKinds: {},
+      noteTypes: {},
+      groupColors: {},
       source: null,
       server: null,
       index: null,
@@ -263,7 +296,11 @@ export const useVaultStore = create<VaultState>()(
           const loaded = await source.load();
           if (get().source === source) {
             set({
-              index: buildVaultIndex(loaded.notes, chosenKinds()),
+              index: buildVaultIndex(
+                loaded.notes,
+                chosenKinds(),
+                customTypes(),
+              ),
               attachments: loaded.attachments,
               versions: loaded.versions,
               templates: loaded.templates,
@@ -305,6 +342,7 @@ export const useVaultStore = create<VaultState>()(
             ? buildVaultIndex(
                 index.list.filter((n) => n.path !== path),
                 chosenKinds(),
+                customTypes(),
               )
             : null,
         });
@@ -319,8 +357,51 @@ export const useVaultStore = create<VaultState>()(
         if (kind) mine[name.toLowerCase()] = kind;
         else delete mine[name.toLowerCase()];
         set({ noteKinds: { ...get().noteKinds, [key]: mine } });
-        const index = get().index;
-        if (index) set({ index: buildVaultIndex(index.list, mine) });
+        set({ index: rebuilt(get().index) });
+      },
+
+      addNoteType: (label, color) => {
+        const key = vaultKey(get());
+        const id = `type-${Date.now().toString(36)}`;
+        const types = [...(get().noteTypes[key] ?? []), { id, label, color }];
+        set({ noteTypes: { ...get().noteTypes, [key]: types } });
+        set({ index: rebuilt(get().index) });
+        return id;
+      },
+
+      updateNoteType: (id, change) => {
+        const key = vaultKey(get());
+        const types = (get().noteTypes[key] ?? []).map((t) =>
+          t.id === id ? { ...t, ...change } : t,
+        );
+        set({ noteTypes: { ...get().noteTypes, [key]: types } });
+        set({ index: rebuilt(get().index) });
+      },
+
+      removeNoteType: (id) => {
+        const key = vaultKey(get());
+        const types = (get().noteTypes[key] ?? []).filter((t) => t.id !== id);
+        // Notes picked by hand for it go back to what they're found to be.
+        const kinds = Object.fromEntries(
+          Object.entries(get().noteKinds[key] ?? {}).filter(
+            ([, k]) => k !== id,
+          ),
+        );
+        set({
+          noteTypes: { ...get().noteTypes, [key]: types },
+          noteKinds: { ...get().noteKinds, [key]: kinds },
+        });
+        set({ index: rebuilt(get().index) });
+      },
+
+      setGroupColor: (group, color) => {
+        const key = vaultKey(get());
+        const mine = { ...(get().groupColors[key] ?? {}) };
+        if (color) mine[group] = color;
+        else delete mine[group];
+        set({ groupColors: { ...get().groupColors, [key]: mine } });
+        // Everything colored from the index draws again.
+        set({ index: rebuilt(get().index) });
       },
 
       noteWritten: (path, text) => {
@@ -396,7 +477,40 @@ export const useVaultStore = create<VaultState>()(
         paperTag: state.paperTag,
         papersFolder: state.papersFolder,
         noteKinds: state.noteKinds,
+        noteTypes: state.noteTypes,
+        groupColors: state.groupColors,
       }),
     },
   ),
 );
+
+/** This vault's own note types (for menus and settings). */
+export function useNoteTypes(): CustomNoteType[] {
+  return useVaultStore((s) => s.noteTypes[vaultKey(s)] ?? EMPTY_TYPES);
+}
+const EMPTY_TYPES: CustomNoteType[] = [];
+
+/** Colors picked for this vault's groups. */
+export function useGroupColors(): Record<string, string> {
+  return useVaultStore((s) => s.groupColors[vaultKey(s)] ?? EMPTY_COLORS);
+}
+const EMPTY_COLORS: Record<string, string> = {};
+
+/** This vault's picked colors and own types, as they are now. */
+export function vaultStyle() {
+  const state = useVaultStore.getState();
+  const key = vaultKey(state);
+  return {
+    colors: state.groupColors[key] ?? EMPTY_COLORS,
+    types: state.noteTypes[key] ?? EMPTY_TYPES,
+  };
+}
+
+/** Every kind a note can be given: the built-in ones, then this vault's own. */
+export function useKindChoices(): { kind: NoteKind; label: string }[] {
+  const types = useNoteTypes();
+  return [
+    ...NOTE_KINDS,
+    ...types.map((t) => ({ kind: t.id as NoteKind, label: t.label })),
+  ];
+}

@@ -66,7 +66,6 @@ import { WebdavConflictError } from "@/lib/vault/webdav";
 import { EMBED_SRC, noteFromHref, vaultMarkdown } from "@/lib/vault/render";
 import {
   findNote,
-  NOTE_KINDS,
   neighbourhood,
   PAPERS_GROUP,
   searchNotes,
@@ -75,7 +74,11 @@ import {
 } from "@/lib/vault/vault-index";
 import { cn } from "@/lib/utils";
 import { useDocumentStore } from "@/stores/document-store";
-import { useVaultStore } from "@/stores/vault-store";
+import {
+  useKindChoices,
+  useVaultStore,
+  vaultStyle,
+} from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { MarkdownNoteEditor } from "./markdown-note-editor";
 import { syncProjectNote } from "./project-note-sync";
@@ -111,12 +114,27 @@ const FOLDER_COLORS = [
 const groupLabel = (group: string) => group || "Notes";
 
 /** A note's colour in lists and the map: papers blue, others by their folder. */
-function noteColor(note: VaultNote): string {
-  if (note.kind === "paper") return PAPER_COLOR;
-  if (!note.group) return ROOT_COLOR;
+/** A group's own color, before any picked for it. */
+function defaultGroupColor(group: string, kind?: string): string {
+  if (kind === "paper" || group === PAPERS_GROUP) return PAPER_COLOR;
+  if (!group) return ROOT_COLOR;
   let hash = 0;
-  for (const ch of note.group) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  for (const ch of group) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   return FOLDER_COLORS[hash % FOLDER_COLORS.length];
+}
+
+/** The color a group is drawn in: picked, its type's, or its own. */
+export function groupColor(group: string, kind?: string): string {
+  const { colors, types } = vaultStyle();
+  return (
+    colors[group] ??
+    types.find((t) => t.label === group)?.color ??
+    defaultGroupColor(group, kind)
+  );
+}
+
+function noteColor(note: VaultNote): string {
+  return groupColor(note.group, note.kind);
 }
 
 function noteSubtitle(note: VaultNote): string {
@@ -909,6 +927,7 @@ function NoteView({
     return note.kind === "paper" ? md.replace(/^# .*\n+/, "") : md;
   }, [note.body, note.kind]);
   const [editing, setEditing] = useState<string | null>(null);
+  const kindChoices = useKindChoices();
   const projectOpen = useDocumentStore((s) => Boolean(s.projectRoot));
   // The papers an idea draws on: the ones it links to.
   const linkedPapers = useMemo(
@@ -967,12 +986,12 @@ function NoteView({
               >
                 {note.kind === "note"
                   ? groupLabel(note.group)
-                  : NOTE_KINDS.find((k) => k.kind === note.kind)?.label}
+                  : kindChoices.find((k) => k.kind === note.kind)?.label}
                 <ChevronDownIcon className="size-3 opacity-80" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-40">
-              {NOTE_KINDS.map(({ kind, label }) => (
+              {kindChoices.map(({ kind, label }) => (
                 <DropdownMenuItem
                   key={kind}
                   onSelect={() =>
