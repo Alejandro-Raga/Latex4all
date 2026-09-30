@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { useZoteroLibrary } from "@/lib/zotero-library";
 import {
   validateApiKey,
   fetchCollections,
@@ -184,6 +185,7 @@ export const useZoteroStore = create<ZoteroState>()(
       },
 
       disconnect: () => {
+        useZoteroLibrary.getState().forget();
         set({
           apiKey: null,
           userID: null,

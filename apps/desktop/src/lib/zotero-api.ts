@@ -57,7 +57,7 @@ export async function cancelOAuth(): Promise<void> {
 
 // ─── Zotero Web API v3 ───
 
-async function zoteroFetch(
+export async function zoteroFetch(
   apiKey: string,
   path: string,
   headers?: Record<string, string>,

@@ -6,7 +6,15 @@ import {
   savedTab,
   saveWorkspace,
 } from "@/lib/workspace-memory";
-import { downloadAttachmentFile, fetchAnnotations } from "@/lib/zotero-api";
+import { fetchAnnotations } from "@/lib/zotero-api";
+import { useZoteroLibrary } from "@/lib/zotero-library";
+import { zoteroPdfBytes } from "@/lib/zotero-pdf-cache";
+
+/** The attachment's checksum, if the saved library knows it. */
+function savedMd5(key: string) {
+  const mirror = useZoteroLibrary.getState().mirror;
+  return mirror?.attachments[key]?.md5;
+}
 import { useAnnotationsStore } from "@/stores/annotations-store";
 import { useDockStore } from "@/stores/dock-store";
 import { useDocumentStore } from "@/stores/document-store";
@@ -30,7 +38,10 @@ async function reopen(tab: SavedTab): Promise<ReadingPaper | null> {
     const { apiKey, userID } = useZoteroStore.getState();
     if (!apiKey || !userID) return null;
     const [data, annotations] = await Promise.all([
-      downloadAttachmentFile(apiKey, userID, tab.zotero.attachmentKey),
+      zoteroPdfBytes(apiKey, userID, {
+        key: tab.zotero.attachmentKey,
+        md5: savedMd5(tab.zotero.attachmentKey),
+      }),
       fetchAnnotations(apiKey, userID, tab.zotero.attachmentKey).catch(
         () => [],
       ),

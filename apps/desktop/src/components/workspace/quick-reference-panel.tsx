@@ -51,9 +51,7 @@ import {
   type ProjectFileType,
 } from "@/lib/tauri/fs";
 import {
-  fetchLibraryItems,
   findPdfAttachment,
-  downloadAttachmentFile,
   fetchAnnotations,
   type ZoteroItemSummary,
 } from "@/lib/zotero-api";
@@ -86,6 +84,8 @@ import {
   type ReferencePdfSource,
 } from "@/lib/reference-import";
 import { cn } from "@/lib/utils";
+import { itemsIn, pdfOf, useZoteroLibrary } from "@/lib/zotero-library";
+import { zoteroPdfBytes } from "@/lib/zotero-pdf-cache";
 import { createLogger } from "@/lib/debug/logger";
 import { DockHeaderBar, DockWideButton } from "./dock/dock-section";
 
@@ -220,8 +220,11 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   const zoteroAuthenticated = useZoteroStore((s) => s.isAuthenticated);
   const zoteroApiKey = useZoteroStore((s) => s.apiKey);
   const zoteroUserID = useZoteroStore((s) => s.userID);
-  const zoteroCollections = useZoteroStore((s) => s.collections);
-  const loadZoteroCollections = useZoteroStore((s) => s.loadCollections);
+  const liveCollections = useZoteroStore((s) => s.collections);
+  const savedCollections = useZoteroLibrary((s) => s.mirror?.collections);
+  // The saved ones straight away; Zotero's own once they've been fetched.
+  const zoteroCollections =
+    liveCollections.length > 0 ? liveCollections : (savedCollections ?? []);
 
   const [refProjectPath, setRefProjectPath] = useState<string | null>(null);
   const [tree, setTree] = useState<TreeNode | null>(null);
@@ -234,14 +237,45 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   const [expandedZoteroCollections, setExpandedZoteroCollections] = useState<
     Set<string>
   >(new Set());
-  const [zoteroItemsByCollection, setZoteroItemsByCollection] = useState<
-    Map<string, ZoteroItemSummary[]>
-  >(new Map());
-  const [zoteroLoadingKeys, setZoteroLoadingKeys] = useState<Set<string>>(
-    new Set(),
+  // The library as last seen, kept on disk: there at once on launch, and
+  // brought up to date in the background (see zotero-library.ts).
+  const library = useZoteroLibrary((s) => s.mirror);
+  const libraryLoading = useZoteroLibrary((s) => s.loading);
+  const libraryError = useZoteroLibrary((s) => s.error);
+  const libraryReady = Boolean(library && library.version > 0);
+  const zoteroItemsByCollection = useMemo(() => {
+    const byKey = new Map<string, ZoteroItemSummary[]>();
+    if (!library || !libraryReady) return byKey;
+    const all = itemsIn(library, null);
+    byKey.set(MY_LIBRARY_KEY, all);
+    for (const item of all) {
+      for (const c of item.collections) {
+        const list = byKey.get(c);
+        if (list) list.push(item);
+        else byKey.set(c, [item]);
+      }
+    }
+    for (const c of library.collections) {
+      if (!byKey.has(c.key)) byKey.set(c.key, []);
+    }
+    return byKey;
+  }, [library, libraryReady]);
+  const everyZoteroKey = useMemo(
+    () => [MY_LIBRARY_KEY, ...zoteroCollections.map((c) => c.key)],
+    [zoteroCollections],
   );
-  const [zoteroErrorKeys, setZoteroErrorKeys] = useState<Map<string, string>>(
-    new Map(),
+  const zoteroLoadingKeys = useMemo(
+    () => new Set(libraryLoading && !libraryReady ? everyZoteroKey : []),
+    [libraryLoading, libraryReady, everyZoteroKey],
+  );
+  const zoteroErrorKeys = useMemo(
+    () =>
+      new Map(
+        libraryError && !libraryReady
+          ? everyZoteroKey.map((k) => [k, "Couldn't load the library."])
+          : [],
+      ),
+    [libraryError, libraryReady, everyZoteroKey],
   );
   const [zoteroQuery, setZoteroQuery] = useState("");
   const [zoteroSort, setZoteroSort] = useState<ReferenceSort>("relevance");
@@ -250,10 +284,10 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   const previewCache = useRef(new Map<string, Preview>());
 
   useEffect(() => {
-    if (zoteroAuthenticated && zoteroCollections.length === 0) {
-      loadZoteroCollections();
+    if (zoteroAuthenticated && zoteroApiKey && zoteroUserID) {
+      useZoteroLibrary.getState().ensure(zoteroApiKey, zoteroUserID);
     }
-  }, [zoteroAuthenticated, zoteroCollections.length, loadZoteroCollections]);
+  }, [zoteroAuthenticated, zoteroApiKey, zoteroUserID]);
 
   const availableProjects = useMemo(() => {
     const currentNormalized = currentProjectRoot
@@ -333,60 +367,16 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
     });
   }, []);
 
-  const loadZoteroItemsForKey = useCallback(
-    async (cacheKey: string, collectionKey: string | null) => {
-      if (zoteroItemsByCollection.has(cacheKey)) return;
-      if (!zoteroApiKey || !zoteroUserID) return;
-
-      setZoteroLoadingKeys((prev) => new Set(prev).add(cacheKey));
-      setZoteroErrorKeys((prev) => {
-        if (!prev.has(cacheKey)) return prev;
-        const next = new Map(prev);
-        next.delete(cacheKey);
-        return next;
-      });
-      try {
-        const items = await fetchLibraryItems(
-          zoteroApiKey,
-          zoteroUserID,
-          collectionKey,
-        );
-        setZoteroItemsByCollection((prev) =>
-          new Map(prev).set(cacheKey, items),
-        );
-      } catch (err) {
-        log.warn("Failed to load Zotero library items", {
-          collectionKey,
-          error: String(err),
-        });
-        setZoteroErrorKeys((prev) =>
-          new Map(prev).set(cacheKey, "Couldn't load items."),
-        );
-      } finally {
-        setZoteroLoadingKeys((prev) => {
-          const next = new Set(prev);
-          next.delete(cacheKey);
-          return next;
-        });
-      }
-    },
-    [zoteroApiKey, zoteroUserID, zoteroItemsByCollection],
-  );
-
   const toggleZoteroNode = useCallback(
-    (cacheKey: string, collectionKey: string | null) => {
+    (cacheKey: string, _collectionKey: string | null) => {
       setExpandedZoteroCollections((prev) => {
         const next = new Set(prev);
-        if (next.has(cacheKey)) {
-          next.delete(cacheKey);
-        } else {
-          next.add(cacheKey);
-          loadZoteroItemsForKey(cacheKey, collectionKey);
-        }
+        if (next.has(cacheKey)) next.delete(cacheKey);
+        else next.add(cacheKey);
         return next;
       });
     },
-    [loadZoteroItemsForKey],
+    [],
   );
 
   const selectZoteroItem = useCallback((item: ZoteroItemSummary) => {
@@ -421,11 +411,16 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
         if (!zoteroApiKey || !zoteroUserID) {
           return { kind: "error", message: "Not connected to Zotero." };
         }
-        const attachment = await findPdfAttachment(
-          zoteroApiKey,
-          zoteroUserID,
-          selectedFile.itemKey,
-        );
+        // Where the PDF is, from the saved library when it knows (offline
+        // too), else asked of Zotero.
+        const known = useZoteroLibrary.getState().mirror;
+        const attachment =
+          (known && pdfOf(known, selectedFile.itemKey)) ??
+          (await findPdfAttachment(
+            zoteroApiKey,
+            zoteroUserID,
+            selectedFile.itemKey,
+          ));
         if (!attachment) return { kind: "unsupported" };
         if (!attachment.downloadable) {
           return {
@@ -435,7 +430,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
           };
         }
         const [data, annotationsResult] = await Promise.all([
-          downloadAttachmentFile(zoteroApiKey, zoteroUserID, attachment.key),
+          zoteroPdfBytes(zoteroApiKey, zoteroUserID, attachment),
           fetchAnnotations(zoteroApiKey, zoteroUserID, attachment.key)
             .then((annotations) => ({ annotations, error: undefined }))
             .catch((err) => {
@@ -533,12 +528,6 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   );
 
   const searching = zoteroQuery.trim().length > 0;
-  // A search spans the library, not whichever collections happen to be open,
-  // so it needs the same full item list "My Library" loads — fetched once and
-  // then reused by both.
-  useEffect(() => {
-    if (searching) loadZoteroItemsForKey(MY_LIBRARY_KEY, null);
-  }, [searching, loadZoteroItemsForKey]);
 
   const searchResults = useMemo(() => {
     if (!searching) return [];

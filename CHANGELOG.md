@@ -125,6 +125,14 @@ tag.
   that syncs from Zotero. You can also copy a passage or ask Claude about
   it. (If Zotero was already connected, reconnect it once so Latex4All may
   save to your library.)
+- Your Zotero library is remembered between sessions: browsing and
+  searching it in the Reference panel is instant from the moment the app
+  opens, and it catches up with Zotero in the background, fetching only what
+  changed.
+- Read Zotero PDFs offline: turn on "Keep PDFs for offline reading" in
+  Settings → Zotero, and papers you've opened open again instantly, with or
+  without a connection. Settings shows the space they take, with a button to
+  clear them.
 - Add a paper to the project from quick reference: right-click a Zotero item,
   or a PDF in another project, and choose "Add PDF to references" to keep a
   copy, or "Add PDF to chat" to give it to Claude.
@@ -158,6 +166,12 @@ tag.
   writes nothing else, with fields in any case (Title:, Authors:, Year:).
 - Text in PDFs couldn't be selected, so nothing could be copied, proofread or
   double-clicked to its place in the source. All of it works again.
+- Selecting text in a PDF often grabbed everything from the top of the page
+  when the drag started beside the text or between lines; the selection now
+  starts at the nearest letter, like in a PDF reader, and you can drag across
+  links. It shows clearly on every page color (it was near invisible on dark
+  and sepia pages), and the highlight menu appears right under what you
+  selected.
 - The PDF's dark-mode button sat under the chat button; its replacement, the
   page colors button, is at the bottom left.
 - Cut (⌘X / Ctrl+X) works in text again. Capture and ask moved to ⌘⇧X /

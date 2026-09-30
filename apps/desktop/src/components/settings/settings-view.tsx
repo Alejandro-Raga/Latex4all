@@ -12,6 +12,7 @@ import {
   NotebookTextIcon,
   PaletteIcon,
   PenLineIcon,
+  RefreshCwIcon,
   ServerIcon,
   UnplugIcon,
 } from "lucide-react";
@@ -38,6 +39,9 @@ import {
 } from "@/stores/settings-window-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
+import { cn } from "@/lib/utils";
+import { useZoteroLibrary } from "@/lib/zotero-library";
+import { clearPdfCache, pdfCacheSize } from "@/lib/zotero-pdf-cache";
 import {
   EnvironmentStatus,
   SettingsDetailButton,
@@ -238,8 +242,87 @@ function ZoteroSettings() {
           </Button>
         </SettingRow>
       )}
+      {authenticated && <ZoteroOfflineSettings />}
       <ZoteroApiKeyDialog open={keyDialog} onOpenChange={setKeyDialog} />
     </div>
+  );
+}
+
+const megabytes = (bytes: number) =>
+  bytes < 1e6
+    ? `${Math.max(1, Math.round(bytes / 1e3))} KB`
+    : `${(bytes / 1e6).toFixed(bytes < 1e7 ? 1 : 0)} MB`;
+
+/** The saved library, and the PDFs kept for offline reading. */
+function ZoteroOfflineSettings() {
+  const apiKey = useZoteroStore((s) => s.apiKey);
+  const userID = useZoteroStore((s) => s.userID);
+  const mirror = useZoteroLibrary((s) => s.mirror);
+  const syncing = useZoteroLibrary((s) => s.syncing);
+  const keep = useSettingsStore((s) => s.keepZoteroPdfs);
+  const setKeep = useSettingsStore((s) => s.setKeepZoteroPdfs);
+  const [kept, setKept] = useState<{ files: number; bytes: number } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (apiKey && userID) useZoteroLibrary.getState().ensure(apiKey, userID);
+  }, [apiKey, userID]);
+  useEffect(() => {
+    pdfCacheSize().then(setKept);
+  }, [keep]);
+
+  const items = mirror ? Object.keys(mirror.items).length : 0;
+  return (
+    <>
+      <SettingRow
+        label="Library on this computer"
+        detail={
+          syncing && !items
+            ? "Saving…"
+            : `${items} item${items === 1 ? "" : "s"}, for instant search`
+        }
+      >
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={syncing || !apiKey || !userID}
+          onClick={() =>
+            apiKey && userID && useZoteroLibrary.getState().sync(apiKey, userID)
+          }
+        >
+          <RefreshCwIcon
+            className={cn("size-3.5", syncing && "animate-spin")}
+          />
+          Update
+        </Button>
+      </SettingRow>
+      <SettingRow
+        label="Keep PDFs for offline reading"
+        detail={
+          kept?.files
+            ? `${kept.files} PDF${kept.files === 1 ? "" : "s"}, ${megabytes(kept.bytes)}`
+            : undefined
+        }
+      >
+        {kept && kept.files > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              clearPdfCache().then(() => pdfCacheSize().then(setKept))
+            }
+          >
+            Clear
+          </Button>
+        )}
+        <Toggle
+          checked={keep}
+          onChange={setKeep}
+          label="Keep PDFs for offline reading"
+        />
+      </SettingRow>
+    </>
   );
 }
 

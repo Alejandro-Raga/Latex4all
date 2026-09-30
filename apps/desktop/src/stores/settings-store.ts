@@ -79,6 +79,9 @@ interface SettingsState {
   /** Highlights and notes in the editor; hiding them keeps them, just out of sight. */
   showAnnotations: boolean;
   setShowAnnotations: (show: boolean) => void;
+  /** Keep Zotero PDFs once opened, to reopen instantly and offline. */
+  keepZoteroPdfs: boolean;
+  setKeepZoteroPdfs: (keep: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -112,6 +115,8 @@ export const useSettingsStore = create<SettingsState>()(
             (w) => w !== word.toLowerCase(),
           ),
         })),
+      keepZoteroPdfs: false,
+      setKeepZoteroPdfs: (keep) => set({ keepZoteroPdfs: keep }),
       customTheme: DEFAULT_CUSTOM_COLORS,
       setCustomTheme: (colors) => set({ customTheme: colors }),
       pdfThemeMain: "light",

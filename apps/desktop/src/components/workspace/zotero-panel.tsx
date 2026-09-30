@@ -23,6 +23,7 @@ import {
   type ZoteroCollectionNode,
 } from "@/lib/zotero-collection-tree";
 import { cn } from "@/lib/utils";
+import { useZoteroLibrary } from "@/lib/zotero-library";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -164,6 +165,12 @@ export function ZoteroHeader() {
   const isLoadingCollections = useZoteroStore((s) => s.isLoadingCollections);
   const disconnect = useZoteroStore((s) => s.disconnect);
   const loadCollections = useZoteroStore((s) => s.loadCollections);
+  const librarySyncing = useZoteroLibrary((s) => s.syncing);
+  const refresh = () => {
+    loadCollections();
+    const { apiKey, userID } = useZoteroStore.getState();
+    if (apiKey && userID) useZoteroLibrary.getState().sync(apiKey, userID);
+  };
 
   return (
     <div className="relative flex w-full items-center px-3">
@@ -182,11 +189,14 @@ export function ZoteroHeader() {
         <div className="absolute right-3 flex items-center gap-1">
           <button
             className="rounded p-1 text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
-            onClick={loadCollections}
+            onClick={refresh}
             title="Refresh"
           >
             <RefreshCwIcon
-              className={cn("size-3.5", isLoadingCollections && "animate-spin")}
+              className={cn(
+                "size-3.5",
+                (isLoadingCollections || librarySyncing) && "animate-spin",
+              )}
             />
           </button>
           <DropdownMenu>
