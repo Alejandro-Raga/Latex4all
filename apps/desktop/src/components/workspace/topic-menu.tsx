@@ -265,7 +265,9 @@ export function NoteMenuItems({ noteName }: { noteName: string }) {
   const note = useVaultStore((s) =>
     s.index ? findNote(s.index, noteName) : undefined,
   );
-  if (!note) return null;
+  if (!note) {
+    return <ContextMenuItem disabled>No note by this name yet</ContextMenuItem>;
+  }
   return (
     <>
       <NoteKindMenu noteName={note.name} />

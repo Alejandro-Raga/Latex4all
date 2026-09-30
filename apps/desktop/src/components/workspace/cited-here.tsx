@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useDeferredValue, useMemo } from "react";
 import { QuoteIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { bibEntries } from "@/lib/citations";
@@ -32,7 +32,10 @@ export function useItemKeyByCitekey(): Map<string, string> {
  * while `enabled` is off, so a closed filter costs nothing as you type.
  */
 function useCitePlaces(enabled: boolean) {
-  const files = useDocumentStore((s) => (enabled ? s.files : null));
+  // Deferred, so a long project doesn't slow typing down.
+  const files = useDeferredValue(
+    useDocumentStore((s) => (enabled ? s.files : null)),
+  );
   return useMemo(() => {
     if (!files) return { places: new Map<string, CitePlace[]>(), titles: {} };
     const places = citeLocations(
@@ -83,15 +86,20 @@ export function useCitedItems(enabled: boolean) {
   const { places, titles } = useCitePlaces(enabled);
   const mirror = useZoteroLibrary((s) => s.mirror);
   const itemKeys = useItemKeyByCitekey();
+  // Only when the library changes, not with every keystroke.
+  const byTitle = useMemo(() => {
+    const map = new Map<string, LibraryItem>();
+    if (!enabled || !mirror) return map;
+    for (const item of Object.values(mirror.items)) {
+      map.set(fold(item.title), item);
+    }
+    return map;
+  }, [enabled, mirror]);
   return useMemo(() => {
     const items: { item: LibraryItem; places: CitePlace[] }[] = [];
     let missing = 0;
     if (!mirror) return { items, missing };
     // By the synced .bib's own record, else by the entry's title.
-    const byTitle = new Map<string, LibraryItem>();
-    for (const item of Object.values(mirror.items)) {
-      byTitle.set(fold(item.title), item);
-    }
     const found = new Map<string, CitePlace[]>();
     for (const [key, at] of places) {
       const itemKey = itemKeys.get(key);
@@ -105,7 +113,7 @@ export function useCitedItems(enabled: boolean) {
       items.push({ item: mirror.items[key], places: at });
     }
     return { items, missing };
-  }, [mirror, places, titles, itemKeys]);
+  }, [mirror, byTitle, places, titles, itemKeys]);
 }
 
 export type CitedOrder = "text" | "most";
@@ -135,6 +143,14 @@ export function CitedHeader({
   order: CitedOrder;
   onOrder: (order: CitedOrder) => void;
 }) {
+  const projectOpen = useDocumentStore((s) => Boolean(s.projectRoot));
+  if (!projectOpen) {
+    return (
+      <p className="px-2 pt-1 pb-1.5 text-muted-foreground text-xs">
+        Open a project to see what it cites.
+      </p>
+    );
+  }
   return (
     <div className="flex items-center gap-2 px-2 pt-1 pb-1.5 text-muted-foreground text-xs">
       <span className="min-w-0 flex-1">{children}</span>
@@ -178,7 +194,10 @@ export function CitedToggle({
 /** Where something is cited, as file:line chips that open the editor there. */
 export function CitedAt({ places }: { places: CitePlace[] }) {
   const shown = places.slice(0, 4);
-  const single = new Set(places.map((p) => p.file)).size === 1;
+  // Just "line 12" when the project has one LaTeX file.
+  const single = useDocumentStore(
+    (s) => s.files.filter((f) => f.type === "tex").length === 1,
+  );
   return (
     <span className="flex flex-wrap gap-1 pt-0.5">
       {shown.map((p) => (

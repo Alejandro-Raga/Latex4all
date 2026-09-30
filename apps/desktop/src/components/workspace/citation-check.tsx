@@ -80,7 +80,18 @@ export async function zoteroItemFor(key: string): Promise<string | null> {
  * Adds the papers behind these citation keys to the vault, one after
  * another, with progress in a toast (for places outside this window).
  */
+let addingToVault = false;
 export async function addCitekeysToVault(keys: string[]) {
+  if (addingToVault) return;
+  addingToVault = true;
+  try {
+    await addEach(keys);
+  } finally {
+    addingToVault = false;
+  }
+}
+
+async function addEach(keys: string[]) {
   const id = toast.loading(`Adding ${keys.length} to your vault…`);
   let added = 0;
   const failed: string[] = [];

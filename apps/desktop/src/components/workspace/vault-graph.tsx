@@ -538,7 +538,8 @@ export function VaultGraph({
     };
 
     const down = (e: PointerEvent) => {
-      if (e.button !== 0) return;
+      // Ctrl-click is a right-click on a Mac: it opens the menu instead.
+      if (e.button !== 0 || e.ctrlKey) return;
       const p = local(e);
       const node = nodeAt(nodesRef.current, viewRef.current, p);
       press = { start: p, last: p, node, moved: false };

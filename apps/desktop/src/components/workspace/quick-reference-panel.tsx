@@ -681,12 +681,16 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
                     {citedOnly ? (
                       <>
                         <CitedHeader order={citedOrder} onOrder={setCitedOrder}>
-                          {cited.items.length} cited in this project
-                          {cited.missing > 0 &&
-                            ` · ${cited.missing} not found in Zotero`}
+                          {!libraryReady
+                            ? "Loading your library…"
+                            : `${cited.items.length} cited in this project${
+                                cited.missing > 0
+                                  ? ` · ${cited.missing} not found in Zotero`
+                                  : ""
+                              }`}
                         </CitedHeader>
                         {orderCited(
-                          cited.items,
+                          matchingQuery(cited.items, zoteroQuery),
                           (c) => c.places,
                           (c) => cited.items.indexOf(c),
                           citedOrder,
@@ -952,6 +956,19 @@ function CollectionToBibItems({
       </ContextMenuItem>
     ))
   );
+}
+
+/** Cited items whose title or authors have every word typed. */
+function matchingQuery<T extends { item: ZoteroItemSummary }>(
+  list: T[],
+  query: string,
+): T[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return list;
+  return list.filter(({ item }) => {
+    const text = `${item.title} ${item.creators} ${item.year}`.toLowerCase();
+    return words.every((w) => text.includes(w));
+  });
 }
 
 function ZoteroItemRow({
