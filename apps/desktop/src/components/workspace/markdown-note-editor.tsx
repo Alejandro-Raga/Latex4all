@@ -1,20 +1,26 @@
 import { useEffect, useRef } from "react";
+import { autocompletion } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, placeholder } from "@codemirror/view";
+import { noteLinkCompletions } from "@/lib/vault/link-complete";
+import { useVaultStore } from "@/stores/vault-store";
 import { themedHighlighting } from "./editor/editor-theme";
 
 /**
- * A plain Markdown editor for a vault note: wraps lines, saves with ⌘S and
- * gives up with Escape.
+ * A plain Markdown editor for a vault note: wraps lines, saves with ⌘S,
+ * gives up with Escape, and suggests notes to link after "[[".
  */
 export function MarkdownNoteEditor({
   initial,
   onChange,
   onSave,
   onCancel,
+  noteName,
 }: {
+  /** The note being edited, left out of link suggestions. */
+  noteName?: string;
   initial: string;
   onChange: (text: string) => void;
   onSave: () => void;
@@ -37,6 +43,16 @@ export function MarkdownNoteEditor({
           themedHighlighting,
           EditorView.lineWrapping,
           placeholder("Write…"),
+          autocompletion({
+            override: [
+              noteLinkCompletions(
+                () => useVaultStore.getState().index,
+                () => noteName,
+              ),
+            ],
+            icons: false,
+            maxRenderedOptions: 40,
+          }),
           keymap.of([
             {
               key: "Mod-s",
@@ -75,6 +91,43 @@ export function MarkdownNoteEditor({
             },
             ".cm-line": { padding: "0 12px", lineHeight: "1.6" },
             ".cm-cursor": { borderLeftColor: "var(--foreground)" },
+            ".cm-tooltip.cm-tooltip-autocomplete": {
+              backgroundColor: "var(--popover)",
+              color: "var(--popover-foreground)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              padding: "3px",
+              boxShadow: "0 8px 24px rgb(0 0 0 / 0.18)",
+            },
+            ".cm-tooltip-autocomplete > ul": {
+              fontFamily: "var(--font-sans, inherit)",
+              maxHeight: "16rem",
+              minWidth: "16rem",
+            },
+            ".cm-tooltip-autocomplete > ul > li": {
+              padding: "4px 8px",
+              borderRadius: "5px",
+              lineHeight: "1.4",
+            },
+            ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
+              backgroundColor: "var(--accent)",
+              color: "var(--accent-foreground)",
+            },
+            ".cm-completionDetail": {
+              marginLeft: "0.75em",
+              fontStyle: "normal",
+              color: "var(--muted-foreground)",
+              fontSize: "11px",
+            },
+            ".cm-tooltip.cm-completionInfo": {
+              backgroundColor: "var(--popover)",
+              color: "var(--muted-foreground)",
+              border: "1px solid var(--border)",
+              borderRadius: "8px",
+              padding: "6px 8px",
+              maxWidth: "18rem",
+              fontSize: "12px",
+            },
             "&.cm-focused .cm-selectionBackground, .cm-selectionBackground": {
               backgroundColor:
                 "color-mix(in oklab, var(--primary) 25%, transparent)",

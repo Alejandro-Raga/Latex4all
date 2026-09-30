@@ -42,6 +42,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { isTopicNote } from "@/lib/vault/topics";
+import { TopicMenu } from "./topic-menu";
 import { citeKeyAtCursor } from "@/lib/vault/cite-at-cursor";
 import { noteForCitekey } from "@/lib/vault/cite-link";
 import {
@@ -711,27 +718,42 @@ function NoteList({
                 <span className="ml-1 normal-case">{notes.length}</span>
               </p>
             )}
-            {notes.map((n) => (
-              <button
-                key={n.name}
-                type="button"
-                onClick={() => onOpen(n.name)}
-                className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60"
-              >
-                <span
-                  className="mt-1.5 size-1.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: noteColor(n) }}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="line-clamp-2 block text-sm">{n.title}</span>
-                  {noteSubtitle(n) && (
-                    <span className="block truncate text-muted-foreground text-xs">
-                      {noteSubtitle(n)}
+            {notes.map((n) => {
+              const row = (
+                <button
+                  key={n.name}
+                  type="button"
+                  onClick={() => onOpen(n.name)}
+                  className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60"
+                >
+                  <span
+                    className="mt-1.5 size-1.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: noteColor(n) }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="line-clamp-2 block text-sm">
+                      {n.title}
                     </span>
-                  )}
-                </span>
-              </button>
-            ))}
+                    {noteSubtitle(n) && (
+                      <span className="block truncate text-muted-foreground text-xs">
+                        {noteSubtitle(n)}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              );
+              // Right-click any note but a topic to file it under a topic.
+              return isTopicNote(n) ? (
+                row
+              ) : (
+                <ContextMenu key={n.name}>
+                  <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+                  <ContextMenuContent className="w-52">
+                    <TopicMenu noteName={n.name} resolve={async () => n.name} />
+                  </ContextMenuContent>
+                </ContextMenu>
+              );
+            })}
           </div>
         ))}
       </div>
@@ -1056,6 +1078,7 @@ function NoteEditor({
         </div>
       )}
       <MarkdownNoteEditor
+        noteName={note.name}
         initial={initial}
         onChange={setText}
         onSave={() => save()}
@@ -1329,6 +1352,7 @@ function Connections({
           nodes={graph.nodes}
           links={graph.links}
           height={wide ? 460 : scope === 1 ? 200 : 280}
+          layout={scope === "all" ? "force" : "radial"}
           highlight={highlight}
           onOpen={onOpen}
         />

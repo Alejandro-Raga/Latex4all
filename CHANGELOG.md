@@ -65,7 +65,9 @@ tag.
   links, click to open it, and type to highlight matching notes. Show a
   note's direct links, two steps out, or the whole vault; names fade in as
   you zoom so a busy network stays readable, and never on top of each
-  other. A legend under the map names its groups by color; click one to hide
+  other. A note's own map is laid out as a tree: the note in the middle,
+  what it links to around it, and the next step out beyond those; the whole
+  vault spreads its clusters apart. A legend under the map names its groups by color; click one to hide
   or show it.
 - Find your way around the vault like a browser: Back and Forward, a Home
   button that takes you straight to all your notes, a list of the notes you
@@ -73,6 +75,14 @@ tag.
 - Follow a link in a PDF, such as a citation, and it takes you to the exact
   spot it points to; a "Back to p. N" button (or ⌘[) returns you to where
   you were reading, as in Zotero's reader.
+- Link notes without remembering what they're called: type [[ while
+  editing a vault note and pick from your notes, narrowed as you type by
+  name, a paper's title, its citation key or its authors.
+- Topics: right-click a paper in the Vault panel, or in the Reference
+  panel, and "Connect to topic" files it under one of your topics or a new
+  one. The paper links to the topic and the topic note lists the paper, so
+  they appear together in the graph and in each other's links; in Zotero the
+  paper gets the topic's tag too.
 - Widen any side panel: the Reference, Vault and Notes panels each have a
   button that moves them into the big pane beside the editor, and back.
 - Your projects in your vault. Turn on "Keep this project's note here" in the

@@ -108,11 +108,32 @@ if (scenario === "graph") {
   for (let i = 1; i < 60; i++) {
     links.push({ source: `n${i}`, target: `n${Math.floor(rnd() * i)}` });
   }
+  // ?layout=radial: the centre's neighbourhood two steps out, by ring.
+  const radial = params.get("layout") === "radial";
+  let shown = nodes as ((typeof nodes)[number] & { ring?: number })[];
+  if (radial) {
+    const ring = new Map([["n0", 0]]);
+    for (let step = 1; step <= 2; step++) {
+      for (const l of links) {
+        for (const [a, b] of [
+          [l.source, l.target],
+          [l.target, l.source],
+        ]) {
+          if (ring.get(a) === step - 1 && !ring.has(b)) ring.set(b, step);
+        }
+      }
+    }
+    shown = nodes
+      .filter((n) => ring.has(n.id))
+      .map((n) => ({ ...n, ring: ring.get(n.id) }));
+  }
+  const ids = new Set(shown.map((n) => n.id));
   root.render(
     <div style={{ width: 800, padding: 16 }}>
       <VaultGraph
-        nodes={nodes}
-        links={links}
+        nodes={shown}
+        links={links.filter((l) => ids.has(l.source) && ids.has(l.target))}
+        layout={radial ? "radial" : "force"}
         height={500}
         onOpen={(id) => {
           (window as any).opened = id;
@@ -333,5 +354,62 @@ if (scenario === "grammar") {
           </div>
         </ThemeProvider>,
       ),
+  );
+}
+
+if (scenario === "vault") {
+  // A vault held in memory, so notes can be written and then checked.
+  const files = new Map<string, string>([
+    [
+      "Papers/Cohen1990.md",
+      "---\ntitle: 'Absorptive capacity: a new perspective on learning and innovation'\ncitekey: cohen_absorptive_1990\nauthors:\n- Wesley M. Cohen\nyear: 1990\n---\n%% begin zotero %%\n# Absorptive capacity\n%% end zotero %%\n\n## My notes\n\n",
+    ],
+    [
+      "Lecturas/A human capability approach.md",
+      "---\nTitle: A human capability approach to transformative innovation policy\nYear: 2025\nAuthors: Alejandra Boni\n---\n",
+    ],
+    ["Ideas/My idea.md", "Something to link."],
+  ]);
+  (window as any).vaultFiles = files;
+  const source = {
+    kind: "local",
+    label: "Vault",
+    load: async () => ({
+      notes: [...files].map(([p, t]) => parseNote(p, t)),
+      attachments: new Map(),
+      versions: new Map(),
+      templates: [],
+      newNoteFolder: null,
+    }),
+    readAttachment: async () => new Uint8Array(),
+    readNote: async (p: string) => ({
+      text: files.get(p) ?? "",
+      version: null,
+    }),
+    writeNote: async (p: string, t: string) => {
+      files.set(p, t);
+      return null;
+    },
+    createNote: async (p: string, t: string) => {
+      if (files.has(p)) throw new Error(`exists: ${p}`);
+      files.set(p, t);
+    },
+  };
+  useVaultStore.setState({ source, index: null } as never);
+  Promise.all([
+    import("@/components/workspace/vault-panel"),
+    import("@/components/workspace/topic-menu"),
+  ]).then(([{ VaultPanel }, { NewTopicDialog }]) =>
+    root.render(
+      <ThemeProvider attribute="class" themes={THEME_IDS}>
+        <ThemeBridge />
+        <div className="flex h-full" style={chrome}>
+          <div style={{ width: 420 }} className="flex h-full flex-col">
+            <VaultPanel onClose={() => {}} />
+          </div>
+        </div>
+        <NewTopicDialog />
+      </ThemeProvider>,
+    ),
   );
 }

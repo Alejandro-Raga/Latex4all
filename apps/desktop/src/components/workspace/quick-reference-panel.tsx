@@ -88,6 +88,8 @@ import { cn } from "@/lib/utils";
 import { itemsIn, pdfOf, useZoteroLibrary } from "@/lib/zotero-library";
 import { zoteroPdfBytes } from "@/lib/zotero-pdf-cache";
 import { addPaperToVault } from "@/lib/vault/add-paper";
+import { useVaultStore } from "@/stores/vault-store";
+import { TopicMenu } from "./topic-menu";
 import { createLogger } from "@/lib/debug/logger";
 import { DockHeaderBar, DockWideButton } from "./dock/dock-section";
 
@@ -934,6 +936,11 @@ function ZoteroItemRow({
   // submenu, since projects rarely have more than one or two.
   const bibFiles = useBibFiles();
 
+  // Its note in the vault, if it has one; a topic needs one to list.
+  const vaultNoteName = useVaultStore(
+    (s) => s.index?.list.find((n) => n.zoteroKey === item.key)?.name,
+  );
+
   const addToVault = () =>
     toast.promise(addPaperToVault(item.key), {
       loading: "Adding to your vault…",
@@ -1002,6 +1009,12 @@ function ZoteroItemRow({
           <NotebookTextIcon className="size-3.5" />
           Add to vault
         </ContextMenuItem>
+        <TopicMenu
+          noteName={vaultNoteName}
+          resolve={async () =>
+            vaultNoteName ?? (await addPaperToVault(item.key)).name
+          }
+        />
         <ContextMenuSeparator />
         {bibFiles.length === 0 ? (
           <ContextMenuItem

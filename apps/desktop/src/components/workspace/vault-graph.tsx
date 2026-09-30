@@ -8,7 +8,9 @@ import {
 import {
   forceCollide,
   forceLink,
+  type Force,
   forceManyBody,
+  forceRadial,
   forceSimulation,
   forceX,
   forceY,
@@ -56,6 +58,104 @@ interface GNode extends SimulationNodeDatum {
 
 type GLink = SimulationLinkDatum<GNode> & { source: GNode; target: GNode };
 
+/**
+ * The forces that shape the map.
+ *
+ * Radial: the centre note pinned in the middle, each step out on a ring
+ * around it (sized to hold its notes with room for their labels), and a
+ * note's own links pulling its neighbours to its side of the next ring, so
+ * the map reads as a tree.
+ *
+ * Force: notes repel (more gently the more there are), links pull (longer
+ * around hubs, so they don't bunch up), every note keeps clear of the
+ * others, and unlinked notes gather at the edge instead of crowding in.
+ */
+function graphLayout(
+  layout: "radial" | "force",
+  nodes: GNode[],
+  links: GLink[],
+  degree: Map<string, number>,
+): [string, Force<GNode, GLink>][] {
+  const deg = (n: GNode) => degree.get(n.id) ?? 0;
+  if (layout === "radial") {
+    const perRing = new Map<number, number>();
+    for (const n of nodes) {
+      if (n.centre) {
+        n.fx = 0;
+        n.fy = 0;
+      } else {
+        perRing.set(n.ring, (perRing.get(n.ring) ?? 0) + 1);
+      }
+    }
+    // Each ring holds its notes ~34px apart, and sits past the one inside.
+    const radius = new Map<number, number>();
+    let inner = 0;
+    for (const ring of [...perRing.keys()].sort((a, b) => a - b)) {
+      const around = ((perRing.get(ring) ?? 0) * 34) / (2 * Math.PI);
+      inner = Math.max(inner + 90, around, 90 * ring);
+      radius.set(ring, inner);
+    }
+    return [
+      [
+        "link",
+        forceLink<GNode, GLink>(links)
+          .id((n) => n.id)
+          .distance(
+            (l) =>
+              Math.abs(
+                (radius.get(l.source.ring) ?? 0) -
+                  (radius.get(l.target.ring) ?? 0),
+              ) || 40,
+          )
+          .strength((l) => (l.source.ring === l.target.ring ? 0.02 : 0.25)),
+      ],
+      [
+        "ring",
+        forceRadial<GNode>(
+          (n) => (n.centre ? 0 : (radius.get(n.ring) ?? 90)),
+          0,
+          0,
+        ).strength((n) => (n.centre ? 0 : 0.9)),
+      ],
+      ["charge", forceManyBody<GNode>().strength(-60).distanceMax(160)],
+      [
+        "collide",
+        forceCollide<GNode>()
+          .radius((n) => n.r + 9)
+          .strength(0.9),
+      ],
+    ];
+  }
+  const count = Math.max(nodes.length, 1);
+  return [
+    [
+      "link",
+      forceLink<GNode, GLink>(links)
+        .id((n) => n.id)
+        .distance(
+          (l) => 36 + 7 * (Math.sqrt(deg(l.source)) + Math.sqrt(deg(l.target))),
+        )
+        .strength((l) => 0.7 / Math.min(deg(l.source), deg(l.target)) || 0.4),
+    ],
+    [
+      "charge",
+      forceManyBody<GNode>()
+        .strength(-Math.max(70, 260 / Math.sqrt(count / 20)))
+        .distanceMax(500),
+    ],
+    [
+      "collide",
+      forceCollide<GNode>()
+        .radius((n) => n.r + 8)
+        .strength(0.9),
+    ],
+    // A gentle pull to the middle; loose notes pulled less, so they ring
+    // the network rather than land on it.
+    ["x", forceX<GNode>(0).strength((n) => (deg(n) ? 0.05 : 0.015))],
+    ["y", forceY<GNode>(0).strength((n) => (deg(n) ? 0.05 : 0.015))],
+  ];
+}
+
 const DRAG_THRESHOLD = 3;
 /** Above this many notes, labels wait until you zoom in. */
 const CROWDED = 20;
@@ -81,10 +181,16 @@ export function VaultGraph({
   height,
   highlight,
   onOpen,
+  layout = "force",
 }: {
   nodes: GraphNodeInput[];
   links: GraphLinkInput[];
   height: number;
+  /**
+   * "radial" for a note's neighbourhood: the note in the middle, each step
+   * out on a ring around it. "force" for a whole network.
+   */
+  layout?: "radial" | "force";
   /** Ids to bring forward (e.g. search matches); others dim. */
   highlight?: Set<string> | null;
   onOpen: (id: string) => void;
@@ -260,7 +366,7 @@ export function VaultGraph({
   // only refresh labels and colours rather than shaking it up again.
   const shapeRef = useRef("");
   useEffect(() => {
-    const shape = `${nodeInput.map((n) => n.id).join("\u0000")}\u0001${linkInput
+    const shape = `${layout}\u0003${nodeInput.map((n) => n.id).join("\u0000")}\u0001${linkInput
       .map((l) => `${l.source}\u0002${l.target}`)
       .join("\u0000")}`;
     if (shape === shapeRef.current) {
@@ -319,35 +425,22 @@ export function VaultGraph({
 
     simRef.current?.stop();
     let ticks = 0;
+    const forces = graphLayout(layout, nodes, links, degree);
     const sim = forceSimulation<GNode, GLink>(nodes)
       // Nodes already placed only need to make room for the new ones.
-      .alpha(known ? 0.35 : 1)
-      .force(
-        "link",
-        forceLink<GNode, GLink>(links)
-          .id((n) => n.id)
-          .distance(50)
-          .strength(0.4),
-      )
-      .force("charge", forceManyBody<GNode>().strength(-140).distanceMax(400))
-      .force(
-        "collide",
-        forceCollide<GNode>().radius((n) => n.r + 4),
-      )
-      // Gentle pull to the middle keeps loose notes from drifting away.
-      .force("x", forceX<GNode>(0).strength(0.04))
-      .force("y", forceY<GNode>(0).strength(0.04))
-      .on("tick", () => {
-        ticks++;
-        // Frame the graph once it has spread out, then leave the view alone.
-        if (!fittedRef.current && (ticks > 60 || sim.alpha() < 0.2)) {
-          fittedRef.current = true;
-          fit();
-        }
-        redraw();
-      });
+      .alpha(known ? 0.35 : 1);
+    for (const [name, force] of forces) sim.force(name, force);
+    sim.on("tick", () => {
+      ticks++;
+      // Frame the graph once it has spread out, then leave the view alone.
+      if (!fittedRef.current && (ticks > 60 || sim.alpha() < 0.2)) {
+        fittedRef.current = true;
+        fit();
+      }
+      redraw();
+    });
     simRef.current = sim;
-  }, [nodeInput, linkInput, fit, redraw]);
+  }, [nodeInput, linkInput, layout, fit, redraw]);
 
   useEffect(
     () => () => {

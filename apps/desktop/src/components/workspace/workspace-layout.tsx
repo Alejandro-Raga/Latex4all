@@ -20,6 +20,7 @@ import { ProjectNoteSync } from "./project-note-sync";
 import { CitationCheckDialog } from "./citation-check";
 import { WorkspaceMemory } from "./workspace-memory";
 import { CommandPalette, useWorkspaceShortcuts } from "./command-palette";
+import { NewTopicDialog } from "./topic-menu";
 import {
   useDockedPanels,
   useDockStore,
@@ -280,6 +281,7 @@ export function WorkspaceLayout() {
       <CitationCheckDialog />
       <WorkspaceMemory />
       <CommandPalette />
+      <NewTopicDialog />
     </div>
   );
 }
