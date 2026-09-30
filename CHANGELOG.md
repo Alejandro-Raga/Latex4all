@@ -93,6 +93,11 @@ tag.
   layout.
 - Delete a note from the Vault panel (right-click it); Latex4All says first
   how many notes link to it.
+- The Share button shows how a shared project's connection is doing: how
+  long it's been connected, when it last dropped and why, changes not yet
+  sent, and a "Copy diagnostics" report to send if something's wrong.
+  When the connection fails for a while, Latex4All tells you whether the
+  sync service is down or your internet is, and when it's back.
 - Widen any side panel: the Reference, Vault and Notes panels each have a
   button that moves them into the big pane beside the editor, and back.
 - Your projects in your vault. Turn on "Keep this project's note here" in the
@@ -167,6 +172,10 @@ tag.
   copy, or "Add PDF to chat" to give it to Claude.
 
 ### Changed
+
+- Joining a shared project is clearer: labelled fields, a paste button (a
+  copied link fills in by itself), a warning when the text isn't an invite
+  link, and where the project will be saved.
 
 - The Zotero section of the sidebar is gone: your library lives in the
   Reference panel, where you can browse, search, read, cite and add papers

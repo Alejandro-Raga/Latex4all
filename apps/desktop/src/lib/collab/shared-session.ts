@@ -5,7 +5,12 @@ import { LOADED, REMOTE, liveBlobs } from "./project-doc";
 
 /** Events from the sync client (collab.rs `SyncEvent`). */
 export type SyncEvent =
-  | { type: "status"; state: "connecting" | "online" | "offline" }
+  | {
+      type: "status";
+      state: "connecting" | "online" | "offline";
+      /** Why it went offline, for diagnosing. */
+      reason?: string;
+    }
   | {
       type: "caughtUp";
       seq: number;

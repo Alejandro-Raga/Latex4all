@@ -44,6 +44,7 @@ import { useDocumentStore } from "@/stores/document-store";
 import { useHistoryStore } from "@/stores/history-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useSettingsStore } from "@/stores/settings-store";
+import { useConnection } from "@/lib/collab/connection";
 import { useChatStore } from "@/stores/chat-store";
 import { fileUndoManager } from "@/lib/annotations/shared-annotations";
 import {
@@ -505,6 +506,7 @@ export const useCollabStore = create<CollabState>()(
         const { session } = target;
         if (saved) session.load(saved.seq, saved.data);
         active = target;
+        useConnection.getState().reset(info.link);
         set({
           status: "syncing",
           link: info.link,
@@ -524,6 +526,7 @@ export const useCollabStore = create<CollabState>()(
           );
         target.cleanup.push(
           await listenForSyncEvents((event) => {
+            if (active === target) useConnection.getState().record(event);
             // Chat has nothing to do with the document; it's shown as it comes.
             if (event.type === "chat") {
               useChatStore.getState().receive(event);
@@ -583,6 +586,7 @@ export const useCollabStore = create<CollabState>()(
           }),
         );
         await disconnect().catch(() => {});
+        useConnection.getState().reset(null);
         useChatStore.getState().reset();
         set((s) => ({
           status: "none",

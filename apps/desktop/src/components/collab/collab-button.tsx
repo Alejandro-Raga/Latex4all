@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import {
   AlertTriangleIcon,
   CheckIcon,
@@ -14,6 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { diagnostics, useConnection } from "@/lib/collab/connection";
 import { megabytes } from "@/lib/collab/sync-warnings";
 import { cn } from "@/lib/utils";
 import {
@@ -76,6 +78,116 @@ function YouRow() {
         ))}
       </div>
     </div>
+  );
+}
+
+const ago = (ms: number | null, now: number) => {
+  if (!ms) return "never";
+  const s = Math.max(0, Math.round((now - ms) / 1000));
+  if (s < 60) return `${s} s ago`;
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  return `${Math.round(s / 3600)} h ago`;
+};
+
+/**
+ * The connection to the sync service, in detail: for working out what's
+ * wrong when changes don't arrive, and a report to send.
+ */
+function ConnectionDetails() {
+  const c = useConnection();
+  const [now, setNow] = useState(Date.now());
+  const [checking, setChecking] = useState(false);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(timer);
+  }, []);
+  const state =
+    c.state === "online"
+      ? `Connected since ${ago(c.since, now)}`
+      : c.state === "offline"
+        ? c.outage === "service"
+          ? "The sync service isn't answering"
+          : c.outage === "internet"
+            ? "No internet connection"
+            : "Not connected; trying again"
+        : "Connecting…";
+  const rows: [string, string][] = [
+    ["Last heard from the service", ago(c.lastHeard, now)],
+    ...(c.pending > 0
+      ? [["Changes not yet sent", String(c.pending)] as [string, string]]
+      : []),
+    ...(c.reconnects > 0
+      ? [
+          [
+            "Reconnected",
+            `${c.reconnects} time${c.reconnects === 1 ? "" : "s"}`,
+          ] as [string, string],
+        ]
+      : []),
+    ...(c.lastOffline
+      ? [
+          [
+            "Last dropped",
+            `${ago(c.lastOffline, now)}${c.lastReason ? `: ${c.lastReason}` : ""}`,
+          ] as [string, string],
+        ]
+      : []),
+    ...(c.health
+      ? [
+          [
+            "Last check",
+            `service ${c.health.relay.ok ? `ok, ${c.health.relay.ms} ms` : "down"} · internet ${c.health.internet.ok ? "ok" : "down"}`,
+          ] as [string, string],
+        ]
+      : []),
+  ];
+  return (
+    <details className="group rounded-md border border-border text-xs">
+      <summary className="cursor-pointer select-none list-none px-2 py-1.5 text-muted-foreground hover:text-foreground">
+        Connection · {state}
+      </summary>
+      <div className="space-y-1 border-border border-t px-2 py-2">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex gap-2">
+            <span className="shrink-0 text-muted-foreground">{label}</span>
+            <span className="ml-auto truncate text-right" title={value}>
+              {value}
+            </span>
+          </div>
+        ))}
+        <div className="flex gap-1.5 pt-1">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 flex-1 text-xs"
+            disabled={checking}
+            onClick={async () => {
+              setChecking(true);
+              await c.check();
+              setChecking(false);
+            }}
+          >
+            {checking && <Loader2Icon className="size-3 animate-spin" />}
+            Check now
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 flex-1 text-xs"
+            onClick={async () => {
+              const version = await getVersion().catch(() => "?");
+              await navigator.clipboard.writeText(diagnostics(version));
+              toast.success("Diagnostics copied", {
+                description: "Paste them into your message or bug report.",
+              });
+            }}
+          >
+            <CopyIcon className="size-3" />
+            Copy diagnostics
+          </Button>
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -252,6 +364,7 @@ export function CollabButton() {
               </div>
             )}
             <YouRow />
+            <ConnectionDetails />
             <Button
               variant="outline"
               size="sm"

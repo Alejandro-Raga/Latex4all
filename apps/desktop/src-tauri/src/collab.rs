@@ -514,9 +514,11 @@ impl ChatLog {
 #[derive(Serialize, Clone, Debug, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum SyncEvent {
-    /// `connecting`, `online` or `offline`.
+    /// `connecting`, `online` or `offline`; for `offline`, why.
     Status {
         state: &'static str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
     },
     /// Everything the relay had has been delivered.
     #[serde(rename_all = "camelCase")]
@@ -587,7 +589,8 @@ enum Command {
 
 enum SessionEnd {
     Stopped,
-    Dropped,
+    /// Why, for the connection log.
+    Dropped(&'static str),
 }
 
 #[derive(Deserialize)]
@@ -637,8 +640,10 @@ async fn run_connection(
     let mut chat_pending = VecDeque::new();
     let mut attempt = 0;
     loop {
+        let reason: String;
         emit(SyncEvent::Status {
             state: "connecting",
+            reason: None,
         });
         let request = link.sync_url().into_client_request().map(|mut request| {
             if let Ok(value) = format!("Bearer {}", keys.access_token).parse() {
@@ -670,7 +675,7 @@ async fn run_connection(
                 };
                 match session(ws, &keys, &mut state, &mut commands, &emit).await {
                     SessionEnd::Stopped => return,
-                    SessionEnd::Dropped => {}
+                    SessionEnd::Dropped(why) => reason = why.to_string(),
                 }
             }
             Err(WsError::Http(response)) if matches!(response.status().as_u16(), 401 | 404) => {
@@ -685,10 +690,16 @@ async fn run_connection(
                 });
                 return;
             }
-            Err(_) => {}
+            Err(WsError::Http(response)) => {
+                reason = format!("the relay answered HTTP {}", response.status().as_u16());
+            }
+            Err(err) => reason = format!("couldn't connect: {err}"),
         }
 
-        emit(SyncEvent::Status { state: "offline" });
+        emit(SyncEvent::Status {
+            state: "offline",
+            reason: Some(reason),
+        });
         let delay = RETRY_DELAYS[attempt.min(RETRY_DELAYS.len() - 1)];
         attempt += 1;
         let wait = tokio::time::sleep(Duration::from_secs(delay));
@@ -744,7 +755,7 @@ where
 
     let hello = json!({ "type": "hello", "after": **after, "chatAfter": chat.after }).to_string();
     if sink.send(Message::text(hello)).await.is_err() {
-        return SessionEnd::Dropped;
+        return SessionEnd::Dropped("couldn't send to the relay");
     }
     // Whatever didn't get confirmed last time goes again. If the relay had in
     // fact stored some of it, the copies are harmless: Yjs ignores updates it
@@ -754,7 +765,7 @@ where
             continue;
         };
         if sink.send(frame).await.is_err() {
-            return SessionEnd::Dropped;
+            return SessionEnd::Dropped("couldn't send to the relay");
         }
     }
     for message in chat_pending.iter() {
@@ -762,7 +773,7 @@ where
             continue;
         };
         if sink.send(frame).await.is_err() {
-            return SessionEnd::Dropped;
+            return SessionEnd::Dropped("couldn't send to the relay");
         }
     }
 
@@ -784,7 +795,7 @@ where
                     outbox.push(update);
                     let Ok(frame) = frame else { continue };
                     if sink.send(frame).await.is_err() {
-                        return SessionEnd::Dropped;
+                        return SessionEnd::Dropped("couldn't send to the relay");
                     }
                 }
                 Some(Command::Chat(message)) => {
@@ -792,13 +803,13 @@ where
                     chat_pending.push_back(message);
                     let Ok(frame) = frame else { continue };
                     if sink.send(frame).await.is_err() {
-                        return SessionEnd::Dropped;
+                        return SessionEnd::Dropped("couldn't send to the relay");
                     }
                 }
                 Some(Command::Awareness(data)) => {
                     if let Ok(frame) = sealed_frame(Kind::Awareness, FRAME_AWARENESS, &data) {
                         if sink.send(frame).await.is_err() {
-                            return SessionEnd::Dropped;
+                            return SessionEnd::Dropped("couldn't send to the relay");
                         }
                     }
                 }
@@ -814,7 +825,7 @@ where
                     if sink.send(Message::Binary(Bytes::from(frame))).await.is_err()
                         || sink.send(Message::text(gc)).await.is_err()
                     {
-                        return SessionEnd::Dropped;
+                        return SessionEnd::Dropped("couldn't send to the relay");
                     }
                 }
             },
@@ -832,7 +843,7 @@ where
                         "caught-up" => {
                             **after = (**after).max(message.seq);
                             set_may_compress(&keys.project_id, message.min_protocol >= 2);
-                            emit(SyncEvent::Status { state: "online" });
+                            emit(SyncEvent::Status { state: "online", reason: None });
                             emit(SyncEvent::CaughtUp {
                                 seq: **after,
                                 log_entries: message.log_entries,
@@ -895,16 +906,19 @@ where
                         _ => {}
                     }
                 }
-                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => return SessionEnd::Dropped,
+                Some(Ok(Message::Close(_))) => {
+                    return SessionEnd::Dropped("the relay closed the connection")
+                }
+                Some(Err(_)) | None => return SessionEnd::Dropped("the connection broke"),
                 Some(Ok(_)) => {}
                 }
             },
             _ = keepalive.tick() => {
                 if last_heard.elapsed() > SILENCE {
-                    return SessionEnd::Dropped;
+                    return SessionEnd::Dropped("nothing heard from the relay for 50 s");
                 }
                 if sink.send(Message::Ping(Bytes::new())).await.is_err() {
-                    return SessionEnd::Dropped;
+                    return SessionEnd::Dropped("couldn't send to the relay");
                 }
             }
         }
@@ -1008,6 +1022,60 @@ async fn create_on_relay(link: &Link) -> Result<(), String> {
         507 => Err("The relay is full right now. Try again later.".into()),
         status => Err(http_error(status)),
     }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Probe {
+    ok: bool,
+    status: Option<u16>,
+    ms: u64,
+    error: Option<String>,
+}
+
+async fn probe(url: &str) -> Probe {
+    let start = std::time::Instant::now();
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+    {
+        Ok(client) => client,
+        Err(err) => {
+            return Probe { ok: false, status: None, ms: 0, error: Some(err.to_string()) }
+        }
+    };
+    match client.get(url).send().await {
+        Ok(response) => Probe {
+            ok: response.status().is_success(),
+            status: Some(response.status().as_u16()),
+            ms: start.elapsed().as_millis() as u64,
+            error: None,
+        },
+        Err(err) => Probe {
+            ok: false,
+            status: None,
+            ms: start.elapsed().as_millis() as u64,
+            error: Some(err.to_string()),
+        },
+    }
+}
+
+#[derive(Serialize)]
+pub struct Health {
+    relay: Probe,
+    internet: Probe,
+}
+
+/// Whether the relay behind a shared project answers, and whether the
+/// internet does at all, to tell "the service is down" from "you're offline".
+#[tauri::command]
+pub async fn collab_health(link: String) -> Result<Health, String> {
+    let link = Link::parse(&link)?;
+    let (relay, internet) = tokio::join!(
+        probe(&format!("{}/health", link.relay)),
+        probe("https://www.cloudflare.com/cdn-cgi/trace"),
+    );
+    Ok(Health { relay, internet })
 }
 
 /// Uploads a file; returns its id and size.

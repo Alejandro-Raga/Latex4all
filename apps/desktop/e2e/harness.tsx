@@ -413,3 +413,15 @@ if (scenario === "vault") {
     ),
   );
 }
+
+if (scenario === "join") {
+  import("@/components/collab/join-dialog").then(({ JoinDialog }) =>
+    root.render(
+      <ThemeProvider attribute="class" themes={THEME_IDS}>
+        <ThemeBridge />
+        <div className="h-full bg-background" />
+        <JoinDialog open onOpenChange={() => {}} />
+      </ThemeProvider>,
+    ),
+  );
+}
