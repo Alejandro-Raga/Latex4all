@@ -35,6 +35,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PDF_THEMES, type PdfTheme, pdfTheme } from "@/lib/pdf-themes";
 import { pdfSelectionText } from "@/lib/mupdf/selection-text";
+import {
+  caretNear,
+  selectionLineRects,
+} from "@/lib/mupdf/text-layer-selection";
 
 const log = createLogger("pdf-viewer");
 
@@ -345,6 +349,14 @@ export function PdfViewer({
   }, [annotations]);
 
   const scaleRef = useRef(scale);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Set when the last press became a drag, so it doesn't also follow a link.
+  const draggedRef = useRef(false);
+  // The selection, drawn by us: the page filter would recolour the
+  // browser's own highlight (near invisible on dark and sepia pages).
+  const [selectionBoxes, setSelectionBoxes] = useState<
+    { left: number; top: number; width: number; height: number }[]
+  >([]);
   // Places you followed a link from, newest last, for Back.
   const [linkTrail, setLinkTrail] = useState<LinkStop[]>([]);
   const linkTrailRef = useRef<LinkStop[]>([]);
@@ -851,7 +863,10 @@ export function PdfViewer({
           : 1;
 
         const range = sel!.getRangeAt(0);
+        const lines = selectionLineRects(range);
         const rect = range.getBoundingClientRect();
+        // The prompt goes under the last selected line, where the drag ended.
+        const last = lines[lines.length - 1];
 
         let pdfX = 0;
         let pdfY = 0;
@@ -863,7 +878,9 @@ export function PdfViewer({
           pdfX = (rect.left - pageRect.left) / currentScale;
           pdfY = (rect.top - pageRect.top) / currentScale;
           pageHeight = pageRect.height / currentScale;
-          for (const r of Array.from(range.getClientRects())) {
+          for (const r of lines.length
+            ? lines
+            : Array.from(range.getClientRects())) {
             // Only this page's lines, and not the zero-width line ends.
             if (r.width < 1 || r.height < 1) continue;
             if (r.bottom < pageRect.top || r.top > pageRect.bottom) continue;
@@ -878,7 +895,9 @@ export function PdfViewer({
         cb({
           text,
           pageNumber: pageNum,
-          position: { top: rect.bottom, left: rect.left },
+          position: last
+            ? { top: last.bottom, left: last.left }
+            : { top: rect.bottom, left: rect.left },
           pdfX,
           pdfY,
           rects,
@@ -1175,6 +1194,136 @@ export function PdfViewer({
     return () => container.removeEventListener("keydown", handleKeyDown);
   }, [onScaleChange, zoomAtPoint]);
 
+  // Drag-selecting text: from the letter nearest the pointer, not wherever
+  // WebKit snaps to when the press misses a glyph (the top of the page).
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    let anchor: ReturnType<typeof caretNear> = null;
+    let lastPoint = { x: 0, y: 0 };
+    let downAt = { x: 0, y: 0 };
+    let scrollTimer: number | null = null;
+
+    const extend = () => {
+      if (!anchor) return;
+      const focus = caretNear(container, lastPoint.x, lastPoint.y);
+      if (!focus) return;
+      window
+        .getSelection()
+        ?.setBaseAndExtent(
+          anchor.node,
+          anchor.offset,
+          focus.node,
+          focus.offset,
+        );
+    };
+    const onMove = (e: MouseEvent) => {
+      if (Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 3) {
+        draggedRef.current = true;
+      }
+      lastPoint = { x: e.clientX, y: e.clientY };
+      extend();
+    };
+    // Past the top or bottom edge, keep scrolling and selecting.
+    const autoScroll = () => {
+      const r = container.getBoundingClientRect();
+      const { y } = lastPoint;
+      const step =
+        y < r.top + 24
+          ? -(r.top + 24 - y)
+          : y > r.bottom - 24
+            ? y - (r.bottom - 24)
+            : 0;
+      if (step) {
+        container.scrollTop += Math.max(-40, Math.min(40, step));
+        extend();
+      }
+    };
+    const onUp = (e: MouseEvent) => {
+      anchor = null;
+      if (scrollTimer !== null) window.clearInterval(scrollTimer);
+      scrollTimer = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp, true);
+      // Released outside the viewer: still report the selection.
+      if (!container.contains(e.target as Node)) {
+        container.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+      }
+    };
+    const onDown = (e: MouseEvent) => {
+      if (e.button !== 0 || e.detail > 1 || captureMode) return;
+      const target = e.target as Element;
+      // Anywhere in the viewer, beside a page too. A link is followed on a
+      // plain click, and selected across on a drag.
+      if (!container.contains(target) || target.closest("button")) return;
+      const at = caretNear(container, e.clientX, e.clientY);
+      if (!at) return;
+      e.preventDefault();
+      const sel = window.getSelection();
+      if (!sel) return;
+      if (e.shiftKey && sel.anchorNode && container.contains(sel.anchorNode)) {
+        anchor = { node: sel.anchorNode as Text, offset: sel.anchorOffset };
+        sel.setBaseAndExtent(anchor.node, anchor.offset, at.node, at.offset);
+      } else {
+        anchor = at;
+        sel.collapse(at.node, at.offset);
+      }
+      lastPoint = { x: e.clientX, y: e.clientY };
+      downAt = lastPoint;
+      draggedRef.current = false;
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp, true);
+      scrollTimer = window.setInterval(autoScroll, 40);
+    };
+    container.addEventListener("mousedown", onDown);
+    return () => {
+      container.removeEventListener("mousedown", onDown);
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp, true);
+      if (scrollTimer !== null) window.clearInterval(scrollTimer);
+    };
+  }, [captureMode]);
+
+  // Draw the selection over the pages, in content coordinates.
+  useEffect(() => {
+    const container = containerRef.current;
+    const root = rootRef.current;
+    if (!container || !root) return;
+    let frame = 0;
+    const draw = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const sel = window.getSelection();
+        if (
+          !sel ||
+          sel.isCollapsed ||
+          !sel.anchorNode ||
+          !container.contains(sel.anchorNode)
+        ) {
+          setSelectionBoxes((prev) => (prev.length ? [] : prev));
+          return;
+        }
+        const origin = root.getBoundingClientRect();
+        setSelectionBoxes(
+          selectionLineRects(sel.getRangeAt(0)).map((r) => ({
+            left: r.left - origin.left,
+            top: r.top - origin.top,
+            width: r.width,
+            height: r.height,
+          })),
+        );
+      });
+    };
+    document.addEventListener("selectionchange", draw);
+    container.addEventListener("scroll", draw, { passive: true });
+    draw();
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("selectionchange", draw);
+      container.removeEventListener("scroll", draw);
+    };
+  }, [scale, pageSizes]);
+
   // Intercept link clicks
   useEffect(() => {
     const container = containerRef.current;
@@ -1188,6 +1337,7 @@ export function PdfViewer({
 
       e.preventDefault();
       e.stopPropagation();
+      if (draggedRef.current) return; // a drag that selected text over it
 
       const href = anchor.getAttribute("href");
       if (!href) return;
@@ -1370,7 +1520,28 @@ export function PdfViewer({
       : null;
 
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
+    <div ref={rootRef} className="relative flex min-h-0 flex-1 flex-col">
+      {selectionBoxes.length > 0 && (
+        // Outside the page filter, so the selection keeps its colour on
+        // every page theme.
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-[5] overflow-hidden"
+        >
+          {selectionBoxes.map((b, i) => (
+            <div
+              key={i}
+              className="absolute rounded-[2px] bg-[rgba(56,132,255,0.32)]"
+              style={{
+                left: b.left,
+                top: b.top,
+                width: b.width,
+                height: b.height,
+              }}
+            />
+          ))}
+        </div>
+      )}
       <div
         ref={containerRef}
         tabIndex={-1}

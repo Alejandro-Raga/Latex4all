@@ -18,31 +18,28 @@ test("the PDF's text layer has its words and can be selected", async ({
   expect(lines.length).toBeGreaterThan(5);
   expect(lines.every((y) => y > 0)).toBe(true);
 
-  // A real drag across the title selects it: the text layer takes the mouse.
-  // Aim at the letters themselves (SVG reports where each is drawn), so it
-  // holds for any font — they differ between macOS and the Linux CI machines.
-  const letter = (text: string, which: "first" | "last") =>
+  // A real drag across the title selects it, from just before its first
+  // letter to just past its last: the viewer takes the nearest letter, so
+  // this holds for any font (they differ between macOS and Linux CI).
+  const edge = (text: string, which: "first" | "last") =>
     page.evaluate(
       ([t, w]) => {
         const el = [
           ...document.querySelectorAll(".mupdf-text-layer text"),
         ].find((x) => x.textContent?.startsWith(t as string)) as SVGTextElement;
-        const i = w === "first" ? 0 : el.getNumberOfChars() - 1;
-        const box = el.getExtentOfChar(i);
-        const m = el.getScreenCTM() as DOMMatrix;
-        const p = new DOMPoint(
-          box.x + box.width / 2,
-          box.y + box.height / 2,
-        ).matrixTransform(m);
-        return { x: p.x, y: p.y };
+        const r = el.getBoundingClientRect();
+        return {
+          x: w === "first" ? r.left - 4 : r.right + 4,
+          y: r.top + r.height / 2,
+        };
       },
       [text, which],
     );
-  const a = await letter("Scientific Report Title", "first");
-  const b = await letter("Scientific Report Title", "last");
-  await page.mouse.move(a.x - 1, a.y);
+  const a = await edge("Scientific Report Title", "first");
+  const b = await edge("Scientific Report Title", "last");
+  await page.mouse.move(a.x, a.y);
   await page.mouse.down();
-  await page.mouse.move(b.x + 1, b.y, { steps: 12 });
+  await page.mouse.move(b.x, b.y, { steps: 12 });
   await page.mouse.up();
   await expect
     .poll(() => page.evaluate(() => (window as any).lastSelection))

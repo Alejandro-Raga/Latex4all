@@ -331,8 +331,12 @@
   -webkit-user-select: text;
 }
 
+/* The viewer draws the selection itself (see pdf-viewer.tsx): the browser's
+   own would be recoloured by the page filter, and would reveal the text
+   layer's letters, which never sit exactly on the printed ones. */
 .mupdf-text-layer text::selection {
-  fill: hsla(220, 100%, 50%, 0.3);
+  fill: transparent;
+  background-color: transparent;
 }
 
 /* MuPDF link overlay layer */

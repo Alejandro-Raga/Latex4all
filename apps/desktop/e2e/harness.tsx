@@ -61,7 +61,10 @@ if (scenario === "dock") {
 }
 
 if (scenario === "pdf") {
-  fetch(`/examples/${params.get("pdf") ?? "report-scientific"}/main.pdf`)
+  fetch(
+    params.get("src") ??
+      `/examples/${params.get("pdf") ?? "report-scientific"}/main.pdf`,
+  )
     .then((r) => r.arrayBuffer())
     .then((buf) => {
       function Viewer() {
@@ -72,7 +75,7 @@ if (scenario === "pdf") {
               data={new Uint8Array(buf)}
               scale={scale}
               onScaleChange={setScale}
-              theme="light"
+              theme={(params.get("ptheme") ?? "light") as never}
               onThemeChange={() => {}}
               onTextSelect={(s) => {
                 (window as any).lastSelection = s?.text ?? null;
