@@ -85,10 +85,12 @@ import {
   type ReferencePdfSource,
 } from "@/lib/reference-import";
 import { cn } from "@/lib/utils";
+import type { CitePlace } from "@/lib/vault/project-note";
 import { itemsIn, pdfOf, useZoteroLibrary } from "@/lib/zotero-library";
 import { zoteroPdfBytes } from "@/lib/zotero-pdf-cache";
 import { addPaperToVault } from "@/lib/vault/add-paper";
 import { useVaultStore } from "@/stores/vault-store";
+import { CitedAt, CitedToggle, useCitedItems } from "./cited-here";
 import { TopicMenu } from "./topic-menu";
 import { createLogger } from "@/lib/debug/logger";
 import { DockHeaderBar, DockWideButton } from "./dock/dock-section";
@@ -283,6 +285,8 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   );
   const [zoteroQuery, setZoteroQuery] = useState("");
   const [zoteroSort, setZoteroSort] = useState<ReferenceSort>("relevance");
+  const [citedOnly, setCitedOnly] = useState(false);
+  const cited = useCitedItems(citedOnly);
 
   const treeCache = useRef(new Map<string, TreeNode>());
   const previewCache = useRef(new Map<string, Preview>());
@@ -664,8 +668,26 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
                           ))}
                         </SelectContent>
                       </Select>
+                      <CitedToggle on={citedOnly} onChange={setCitedOnly} />
                     </div>
-                    {searching ? (
+                    {citedOnly ? (
+                      <>
+                        <p className="px-2 py-1 text-muted-foreground text-xs">
+                          {cited.items.length} cited in this project
+                          {cited.missing > 0 &&
+                            ` · ${cited.missing} not found in Zotero`}
+                        </p>
+                        {cited.items.map(({ item, places }) => (
+                          <ZoteroItemRow
+                            key={item.key}
+                            item={item}
+                            isSelected={selectedZoteroItemKey === item.key}
+                            onSelect={selectZoteroItem}
+                            places={places}
+                          />
+                        ))}
+                      </>
+                    ) : searching ? (
                       <ZoteroSearchResults
                         results={searchResults}
                         loading={zoteroLoadingKeys.has(MY_LIBRARY_KEY)}
@@ -923,10 +945,13 @@ function ZoteroItemRow({
   item,
   isSelected,
   onSelect,
+  places,
 }: {
   item: ZoteroItemSummary;
   isSelected: boolean;
   onSelect: (item: ZoteroItemSummary) => void;
+  /** Where the open project cites it. */
+  places?: CitePlace[];
 }) {
   const subtitle = [item.creators, item.year].filter(Boolean).join(" · ");
   const addItemToBib = useZoteroStore((s) => s.addItemToBib);
@@ -982,24 +1007,31 @@ function ZoteroItemRow({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <button
-          type="button"
-          onClick={() => onSelect(item)}
-          className={cn(
-            "flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left text-xs transition-colors hover:bg-muted",
-            isSelected && "bg-muted font-medium",
-          )}
-        >
-          <FileTextIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate">{item.title}</span>
-            {subtitle && (
-              <span className="block truncate font-normal text-muted-foreground">
-                {subtitle}
-              </span>
+        <div>
+          <button
+            type="button"
+            onClick={() => onSelect(item)}
+            className={cn(
+              "flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left text-xs transition-colors hover:bg-muted",
+              isSelected && "bg-muted font-medium",
             )}
-          </span>
-        </button>
+          >
+            <FileTextIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">{item.title}</span>
+              {subtitle && (
+                <span className="block truncate font-normal text-muted-foreground">
+                  {subtitle}
+                </span>
+              )}
+            </span>
+          </button>
+          {places && (
+            <div className="pb-1 pl-7">
+              <CitedAt places={places} />
+            </div>
+          )}
+        </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-56">
         <ReferencePdfActions

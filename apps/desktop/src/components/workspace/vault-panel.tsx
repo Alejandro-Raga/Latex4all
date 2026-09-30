@@ -52,6 +52,12 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  CitedAt,
+  CitedToggle,
+  useCitedNotes,
+  useItemKeyByCitekey,
+} from "./cited-here";
 import { NoteContextMenu, NoteMenuItems } from "./topic-menu";
 import { kindFolder } from "@/lib/vault/kind-folders";
 import { chooseNoteKind, unlinkProject } from "@/lib/vault/note-changes";
@@ -145,23 +151,6 @@ function noteSubtitle(note: VaultNote): string {
   }
   const links = note.outgoing.length + note.incoming.length;
   return links ? `${links} link${links === 1 ? "" : "s"}` : "";
-}
-
-/** Zotero item keys by the citation keys this project's .bib files use. */
-function useItemKeyByCitekey(): Map<string, string> {
-  const projectRoot = useDocumentStore((s) => s.projectRoot);
-  const synced = useZoteroStore((s) => s.syncedCollections);
-  return useMemo(() => {
-    const map = new Map<string, string>();
-    for (const info of Object.values(
-      (projectRoot && synced[projectRoot]) || {},
-    )) {
-      for (const [item, citekey] of Object.entries(info.keyMap)) {
-        map.set(citekey, item);
-      }
-    }
-    return map;
-  }, [projectRoot, synced]);
 }
 
 /** The citation key under the editor's cursor, if any. */
@@ -693,14 +682,24 @@ function NoteList({
 }) {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
-  const results = useMemo(() => searchNotes(index, query), [index, query]);
+  const [citedOnly, setCitedOnly] = useState(false);
+  const cited = useCitedNotes(citedOnly);
+  const results = useMemo(() => {
+    const found = searchNotes(index, query);
+    if (!citedOnly) return found;
+    // In order of first citation, as the text reads.
+    const order = [...cited.byNote.keys()];
+    return found
+      .filter((n) => cited.byNote.has(n.name))
+      .sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+  }, [index, query, citedOnly, cited]);
   const groups = useMemo(() => {
-    if (query.trim()) return [{ group: null, notes: results }];
+    if (query.trim() || citedOnly) return [{ group: null, notes: results }];
     const byGroup = new Map<string, VaultNote[]>();
     for (const n of results)
       byGroup.set(n.group, [...(byGroup.get(n.group) ?? []), n]);
     return [...byGroup].map(([group, notes]) => ({ group, notes }));
-  }, [results, query]);
+  }, [results, query, citedOnly]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -715,6 +714,7 @@ function NoteList({
             className="h-7 pl-7 text-xs"
           />
         </div>
+        <CitedToggle on={citedOnly} onChange={setCitedOnly} />
         <Button
           variant="ghost"
           size="icon"
@@ -739,7 +739,13 @@ function NoteList({
         />
       )}
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
-        {results.length === 0 && (
+        {citedOnly && (
+          <p className="px-2 pt-1 pb-1.5 text-muted-foreground text-xs">
+            {cited.byNote.size} cited in this project
+            {cited.missing > 0 && ` · ${cited.missing} not in the vault`}
+          </p>
+        )}
+        {results.length === 0 && !citedOnly && (
           <p className="px-3 py-6 text-center text-muted-foreground text-xs">
             {query ? "No matching notes" : "No notes in this vault"}
           </p>
@@ -753,12 +759,19 @@ function NoteList({
               </p>
             )}
             {notes.map((n) => {
+              const places = citedOnly ? cited.byNote.get(n.name) : undefined;
               const row = (
-                <button
-                  key={n.name}
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onOpen(n.name)}
-                  className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onOpen(n.name);
+                    }
+                  }}
+                  className="flex w-full cursor-default items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60"
                 >
                   <span
                     className="mt-1.5 size-1.5 shrink-0 rounded-full"
@@ -773,8 +786,9 @@ function NoteList({
                         {noteSubtitle(n)}
                       </span>
                     )}
+                    {places && <CitedAt places={places} />}
                   </span>
-                </button>
+                </div>
               );
               return (
                 <NoteContextMenu key={n.name} noteName={n.name}>

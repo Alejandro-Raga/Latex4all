@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Annotation } from "@/lib/annotations/types";
 import { parseNote } from "./parse";
 import {
+  citeLocations,
   BEGIN,
   citedKeys,
   END,
@@ -148,5 +149,26 @@ describe("project notes", () => {
       "My work/Thesis draft 2.md",
     );
     expect(projectNotePath("", "Paper")).toBe("Paper.md");
+  });
+});
+
+describe("cite locations", () => {
+  it("gives each key's files and lines, skipping comments", () => {
+    const places = citeLocations([
+      {
+        path: "main.tex",
+        content:
+          "Intro \\cite{a}.\n% \\cite{b}\nMore \\citep[p.~2]{b, a} and \\cite{a}.",
+      },
+      { path: "ch/two.tex", content: "\n\\textcite{b}" },
+    ]);
+    expect(places.get("a")).toEqual([
+      { file: "main.tex", line: 1 },
+      { file: "main.tex", line: 3 },
+    ]);
+    expect(places.get("b")).toEqual([
+      { file: "main.tex", line: 3 },
+      { file: "ch/two.tex", line: 2 },
+    ]);
   });
 });

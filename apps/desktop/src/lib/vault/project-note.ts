@@ -67,6 +67,37 @@ export function citedKeys(texFiles: { content: string }[]): string[] {
   return keys;
 }
 
+export interface CitePlace {
+  file: string;
+  /** 1-based. */
+  line: number;
+}
+
+/** Where each key is cited: file and line, in order through the files. */
+export function citeLocations(
+  texFiles: { path: string; content: string }[],
+): Map<string, CitePlace[]> {
+  const places = new Map<string, CitePlace[]>();
+  for (const { path, content } of texFiles) {
+    // Comments go but their newlines stay, so line numbers still hold.
+    const text = uncommented(content);
+    for (const m of text.matchAll(CITE_RE)) {
+      const line = lineAt(text, m.index ?? 0);
+      for (const raw of m[1].split(",")) {
+        const key = raw.trim();
+        if (!key || key === "*") continue;
+        const list = places.get(key) ?? [];
+        const last = list[list.length - 1];
+        if (!last || last.file !== path || last.line !== line) {
+          list.push({ file: path, line });
+        }
+        places.set(key, list);
+      }
+    }
+  }
+  return places;
+}
+
 /** A heading's title as plain text: commands dropped, their text kept. */
 function plainTitle(title: string): string {
   return title

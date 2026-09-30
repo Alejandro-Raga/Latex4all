@@ -58,7 +58,12 @@ tag.
   Check citations to add every cited paper at once. The note is always
   written the same way, in the folder where your paper notes live.
 - Topics: right-click a paper and "Connect to topic" to file it under a
-  topic, new or existing; the paper and the topic link to each other.
+  topic, new or existing; the paper and the topic link to each other. It
+  works on any note, wherever it shows up: the note list, a note's links and
+  the connection map, along with changing its type and deleting it.
+- The quote button in the vault and in the Zotero library shows only what
+  the open project cites, with the lines that cite each one; click a line to
+  go there in the editor.
 - Type [[ while editing a note to link another, found by its title, author
   or citation key as well as its name.
 - Note types: Paper, Project, Topic, Idea or Note, found automatically and

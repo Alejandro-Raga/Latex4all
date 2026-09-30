@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { toast } from "sonner";
-import { offsetOfLine, parseLatex4AllLink } from "@/lib/deep-link";
+import { parseLatex4AllLink } from "@/lib/deep-link";
+import { openAtLine } from "@/lib/open-at-line";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
 
@@ -18,20 +19,7 @@ async function follow(url: string) {
       return;
     }
   }
-  if (!link.file) return;
-  const state = useDocumentStore.getState();
-  const file = state.files.find((f) => f.relativePath === link.file);
-  if (!file) {
-    toast.error(`There's no ${link.file} in this project.`);
-    return;
-  }
-  if (state.activeFileId !== file.id) state.setActiveFile(file.id);
-  const offset = link.line ? offsetOfLine(file.content ?? "", link.line) : 0;
-  // Give the editor a moment to show the file before moving into it.
-  setTimeout(
-    () => useDocumentStore.getState().requestJumpToPosition(offset),
-    150,
-  );
+  if (link.file) openAtLine(link.file, link.line);
 }
 
 /** Opens latex4all:// links: the one the app was started with, and later ones. */
