@@ -268,24 +268,28 @@ export function useClaudeEvents() {
         chatStore._setSessionId(tabId, msg.session_id);
       }
 
-      // Detect rate limit events and surface to user — never append to messages
+      // Claude's plan limits: kept for the usage meter (and a switch to
+      // another service when one is reached), never shown as chat.
       if ((msg as any).type === "rate_limit_event") {
-        const info = (msg as any).rate_limit_info;
+        const info = (msg as any).rate_limit_info as RateLimitInfo | undefined;
         if (info) {
           const resetsAt = info.resetsAt
             ? new Date(info.resetsAt * 1000).toLocaleTimeString()
             : "unknown";
           log.warn(
-            `[${tabId}] rate_limit: status=${info.status} type=${info.rateLimitType} resets=${resetsAt} overage=${info.overageStatus}`,
+            `[${tabId}] rate_limit: status=${info.status} type=${info.rateLimitType} resets=${resetsAt}`,
           );
-          if (info.status !== "allowed") {
+          const wasLimited = claudeLimited(useAiUsage.getState().claudeLimits);
+          useAiUsage.getState().recordLimits(info);
+          if (!wasLimited) fallBackIfLimited();
+          if (info.status === "rejected") {
             chatStore._setError(
               tabId,
-              `Rate limited (${info.rateLimitType}). Resets at ${resetsAt}`,
+              `Claude's ${info.rateLimitType === "seven_day" ? "weekly" : "5-hour"} limit is reached. It resets at ${resetsAt}.`,
             );
           }
         }
-        return; // rate_limit_event is informational — do not append to messages
+        return;
       }
 
       // Track tool_use blocks for file change detection
@@ -330,18 +334,6 @@ export function useClaudeEvents() {
         msg.message?.content?.length === 1 &&
         msg.message.content[0].type === "text"
       ) {
-        return;
-      }
-
-      // Claude's plan limits: kept for the usage meter, not shown as chat.
-      if ((msg as { type: string }).type === "rate_limit_event") {
-        const info = (msg as { rate_limit_info?: RateLimitInfo })
-          .rate_limit_info;
-        if (info) {
-          const wasLimited = claudeLimited(useAiUsage.getState().claudeLimits);
-          useAiUsage.getState().recordLimits(info);
-          if (!wasLimited) fallBackIfLimited();
-        }
         return;
       }
 
