@@ -4,20 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import {
   AlertTriangleIcon,
-  BoldIcon,
-  ItalicIcon,
   Loader2Icon,
-  ListIcon,
-  Heading1Icon,
-  Heading2Icon,
-  CodeIcon,
   CropIcon,
-  FunctionSquareIcon,
   FileTextIcon,
   ImageIcon,
   MinusIcon,
   PlusIcon,
-  BookMarkedIcon,
   ExternalLinkIcon,
   XIcon,
   HighlighterIcon,
@@ -50,6 +42,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { LatexRibbon } from "./latex-ribbon";
 import { refreshSpellingDecorations } from "./spellcheck-extension";
 import { forceGrammarRecheck } from "./grammar-check-extension";
 import { useDocumentStore } from "@/stores/document-store";
@@ -270,31 +263,6 @@ export function EditorToolbar({
     [projectRoot, activeFilePath, editorView],
   );
 
-  const insertText = (before: string, after: string = "") => {
-    const view = editorView.current;
-    if (!view) return;
-
-    const { from, to } = view.state.selection.main;
-    const selectedText = view.state.sliceDoc(from, to);
-
-    view.dispatch({
-      changes: {
-        from,
-        to,
-        insert: before + selectedText + after,
-      },
-      selection: {
-        anchor: from + before.length,
-        head: from + before.length + selectedText.length,
-      },
-    });
-    view.focus();
-  };
-
-  const wrapSelection = (wrapper: string) => {
-    insertText(wrapper, wrapper);
-  };
-
   const zoomIn = () => onImageScaleChange?.(Math.min(4, imageScale + 0.25));
   const zoomOut = () => onImageScaleChange?.(Math.max(0.25, imageScale - 0.25));
 
@@ -412,63 +380,7 @@ export function EditorToolbar({
       {/* Scrolls sideways when the pane is narrow, fading out where it's cut
           off so it never looks fused with the buttons after it. */}
       <div className="scrollbar-none flex min-w-0 items-center gap-1 overflow-x-auto pr-5 [mask-image:linear-gradient(to_right,black_calc(100%-20px),transparent)] [&>*]:shrink-0">
-        <TooltipIconButton
-          tooltip="Bold (\\textbf)"
-          onClick={() => insertText("\\textbf{", "}")}
-        >
-          <BoldIcon className="size-4" />
-        </TooltipIconButton>
-        <TooltipIconButton
-          tooltip="Italic (\\textit)"
-          onClick={() => insertText("\\textit{", "}")}
-        >
-          <ItalicIcon className="size-4" />
-        </TooltipIconButton>
-        <TooltipIconButton
-          tooltip="Code (\\texttt)"
-          onClick={() => insertText("\\texttt{", "}")}
-        >
-          <CodeIcon className="size-4" />
-        </TooltipIconButton>
-        <div className="mx-2 h-4 w-px bg-border" />
-        <TooltipIconButton
-          tooltip="Section"
-          onClick={() => insertText("\\section{", "}")}
-        >
-          <Heading1Icon className="size-4" />
-        </TooltipIconButton>
-        <TooltipIconButton
-          tooltip="Subsection"
-          onClick={() => insertText("\\subsection{", "}")}
-        >
-          <Heading2Icon className="size-4" />
-        </TooltipIconButton>
-        <TooltipIconButton
-          tooltip="List item"
-          onClick={() => insertText("\\item ")}
-        >
-          <ListIcon className="size-4" />
-        </TooltipIconButton>
-        <div className="mx-2 h-4 w-px bg-border" />
-        <TooltipIconButton
-          tooltip="Inline math ($...$)"
-          onClick={() => wrapSelection("$")}
-        >
-          <FunctionSquareIcon className="size-4" />
-        </TooltipIconButton>
-        <TooltipIconButton
-          tooltip="Display math (\\[...\\])"
-          onClick={() => insertText("\\[\n  ", "\n\\]")}
-        >
-          <span className="font-serif text-base leading-none">∫</span>
-        </TooltipIconButton>
-        <div className="mx-2 h-4 w-px bg-border" />
-        <TooltipIconButton
-          tooltip="Citation (\\cite)"
-          onClick={() => insertText("\\cite{", "}")}
-        >
-          <BookMarkedIcon className="size-4" />
-        </TooltipIconButton>
+        <LatexRibbon editorView={editorView} />
         <div className="mx-2 h-4 w-px bg-border" />
         <Button
           variant={vimMode ? "default" : "ghost"}

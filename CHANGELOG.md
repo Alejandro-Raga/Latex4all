@@ -42,6 +42,16 @@ tag.
 - Suggested edits (⌘⌥E): propose what a passage should say; anyone can accept
   or reject it, and the notes bar keeps a record of what was decided.
 
+### Writing LaTeX
+
+- The editor's ribbon does the LaTeX for you: bold, italic, underline,
+  headings, bulleted and numbered lists (select some lines to turn them
+  into one), quotations, footnotes, equations, figures from the project's
+  images, tables, links and page breaks. Cite in the sentence, "Nelson
+  (1959)", or in parentheses, "(Nelson, 1959)", and pick the paper from
+  the list that opens; the right command is used for your bibliography
+  setup, and a package a button needs is added to the preamble.
+
 ### Your Obsidian vault
 
 - Your vault beside your writing, from the icons on the right: search, read
