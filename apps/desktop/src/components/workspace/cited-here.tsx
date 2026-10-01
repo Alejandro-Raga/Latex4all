@@ -89,7 +89,7 @@ export function useCitedItems(enabled: boolean) {
   );
   return useMemo(() => {
     const items: { item: LibraryItem; places: CitePlace[] }[] = [];
-    let missing = 0;
+    const missing: string[] = [];
     if (!mirror) return { items, missing };
     const found = new Map<string, CitePlace[]>();
     for (const [key, at] of places) {
@@ -102,7 +102,7 @@ export function useCitedItems(enabled: boolean) {
         noteItemKey: note?.zoteroKey,
       });
       if (item) addPlaces(found, item.key, at);
-      else missing++;
+      else missing.push(key);
     }
     for (const [key, at] of found) {
       items.push({ item: mirror.items[key], places: at });

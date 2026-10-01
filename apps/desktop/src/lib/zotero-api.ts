@@ -750,3 +750,46 @@ export async function fetchAnnotations(
 
   return result;
 }
+
+/**
+ * Creates items in the library, 50 to a request as Zotero allows. Returns,
+ * for each item given, its new key or why Zotero refused it.
+ */
+export async function createZoteroItems(
+  apiKey: string,
+  userID: string,
+  items: Record<string, unknown>[],
+): Promise<({ key: string } | { error: string })[]> {
+  const out: ({ key: string } | { error: string })[] = [];
+  for (let start = 0; start < items.length; start += 50) {
+    const batch = items.slice(start, start + 50);
+    const response = await fetch(`${ZOTERO_BASE}/users/${userID}/items`, {
+      method: "POST",
+      headers: {
+        "Zotero-API-Key": apiKey,
+        "Zotero-API-Version": "3",
+        "Content-Type": "application/json",
+        "Zotero-Write-Token": crypto.randomUUID().replace(/-/g, ""),
+      },
+      body: JSON.stringify(batch),
+    });
+    if (response.status === 403) throw new ZoteroWriteDeniedError();
+    if (!response.ok) throw new Error(`Zotero API error: ${response.status}`);
+    const result = (await response.json()) as {
+      successful?: Record<string, { key: string }>;
+      failed?: Record<string, { message?: string }>;
+    };
+    batch.forEach((_, i) => {
+      const saved = result.successful?.[String(i)];
+      out.push(
+        saved
+          ? { key: saved.key }
+          : {
+              error:
+                result.failed?.[String(i)]?.message ?? "Zotero didn't save it.",
+            },
+      );
+    });
+  }
+  return out;
+}

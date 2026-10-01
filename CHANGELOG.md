@@ -96,6 +96,11 @@ tag.
 
 ### Zotero and reading papers
 
+- Papers a collaborator cited that aren't in your Zotero library go into it
+  from the project's bibliography, with their details and the same citation
+  key: "Not in Zotero" in Check citations, or "add" beside the count in the
+  Reference panel's cited view. Adding such a paper to the vault now puts it
+  in Zotero first instead of failing.
 - Tabs in the PDF pane, to read several papers at full size beside your
   editor, each keeping its page and zoom.
 - Highlight papers as you read them, and the highlights are saved in Zotero
@@ -149,6 +154,10 @@ tag.
 
 ### Fixed
 
+- Syncing a Zotero collection with a .bib file deleted the entries that
+  weren't in your library, such as a collaborator's, and could change a
+  paper's citation key when its details changed in Zotero, breaking the
+  citations. Both stay now.
 - "Cited in this project" in the Zotero library missed papers whose titles
   have capitals kept in braces, as Zotero writes them; it now finds them,
   and by author and year when the title differs. Check citations finds

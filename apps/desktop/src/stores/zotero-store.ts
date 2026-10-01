@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { mergeSyncedBib, parseBibEntries } from "@/lib/bib-sync";
 import { persist } from "zustand/middleware";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import {
@@ -107,21 +108,6 @@ function sanitizeFileName(name: string): string {
     .replace(/[^a-zA-Z0-9_\-\s]/g, "")
     .replace(/\s+/g, "-")
     .toLowerCase();
-}
-
-/** Parse a .bib file into a map of citekey → full entry string */
-function parseBibEntries(content: string): Map<string, string> {
-  const entries = new Map<string, string>();
-  const parts = content.split(/\n(?=@)/);
-  for (const part of parts) {
-    const trimmed = part.trim();
-    if (!trimmed) continue;
-    const match = trimmed.match(/@\w+\{([^,\s]+)/);
-    if (match) {
-      entries.set(match[1], trimmed);
-    }
-  }
-  return entries;
 }
 
 export const useZoteroStore = create<ZoteroState>()(
@@ -350,83 +336,35 @@ export const useZoteroStore = create<ZoteroState>()(
             },
           );
 
-          if (collectionKey) {
-            // For specific collections, syncCollection returns a full re-import
-            // Rebuild the .bib content from all entries
-            const newKeyMap: Record<string, string> = {};
-            const entries: string[] = [];
-            for (const entry of result.updatedEntries) {
-              if (entry.bibtex.trim()) {
-                entries.push(entry.bibtex);
-                newKeyMap[entry.key] = entry.citekey;
-              }
-            }
-            const updatedContent = `${entries.join("\n\n")}\n`;
-            docStore.updateFileContent(bibFile.id, updatedContent);
-
-            set((s) => {
-              const pColls = s.syncedCollections[projectRoot] ?? {};
-              return {
-                syncedCollections: {
-                  ...s.syncedCollections,
-                  [projectRoot]: {
-                    ...pColls,
-                    [sk]: {
-                      ...syncInfo,
-                      libraryVersion: result.libraryVersion,
-                      keyMap: newKeyMap,
-                    },
+          // Entries Zotero didn't make stay, and keys the text uses don't
+          // change (see bib-sync.ts).
+          const merged = mergeSyncedBib({
+            content: bibFile.content ?? "",
+            keyMap: syncInfo.keyMap,
+            updated: result.updatedEntries,
+            deleted: result.deletedKeys,
+            // A collection is read again whole; the library, what changed.
+            complete: Boolean(collectionKey),
+          });
+          docStore.updateFileContent(bibFile.id, merged.content);
+          set((s) => {
+            const pColls = s.syncedCollections[projectRoot] ?? {};
+            return {
+              syncedCollections: {
+                ...s.syncedCollections,
+                [projectRoot]: {
+                  ...pColls,
+                  [sk]: {
+                    ...syncInfo,
+                    libraryVersion: result.libraryVersion,
+                    keyMap: merged.keyMap,
                   },
                 },
-                isSyncing: null,
-                syncProgress: null,
-              };
-            });
-          } else {
-            // For "My Library", apply incremental diff
-            const currentContent = bibFile.content ?? "";
-            const entries = parseBibEntries(currentContent);
-            const newKeyMap = { ...syncInfo.keyMap };
-
-            for (const entry of result.updatedEntries) {
-              const oldCitekey = newKeyMap[entry.key];
-              if (oldCitekey && oldCitekey !== entry.citekey) {
-                entries.delete(oldCitekey);
-              }
-              entries.set(entry.citekey, entry.bibtex);
-              newKeyMap[entry.key] = entry.citekey;
-            }
-
-            for (const deletedKey of result.deletedKeys) {
-              const citekey = newKeyMap[deletedKey];
-              if (citekey) {
-                entries.delete(citekey);
-                delete newKeyMap[deletedKey];
-              }
-            }
-
-            const updatedContent = `${Array.from(entries.values()).join("\n\n")}\n`;
-            docStore.updateFileContent(bibFile.id, updatedContent);
-
-            set((s) => {
-              const pColls = s.syncedCollections[projectRoot] ?? {};
-              return {
-                syncedCollections: {
-                  ...s.syncedCollections,
-                  [projectRoot]: {
-                    ...pColls,
-                    [sk]: {
-                      ...syncInfo,
-                      libraryVersion: result.libraryVersion,
-                      keyMap: newKeyMap,
-                    },
-                  },
-                },
-                isSyncing: null,
-                syncProgress: null,
-              };
-            });
-          }
+              },
+              isSyncing: null,
+              syncProgress: null,
+            };
+          });
         } catch (err) {
           set({
             error: err instanceof Error ? err.message : "Sync failed",

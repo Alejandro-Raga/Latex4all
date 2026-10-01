@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   annotationSortIndex,
   createZoteroHighlight,
+  createZoteroItems,
   ZoteroWriteDeniedError,
 } from "./zotero-api";
 
@@ -180,6 +181,41 @@ describe("finding and tagging papers", () => {
     await addZoteroTag("k", "1", "AAA", "obsidian");
     expect(fetch.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(
       false,
+    );
+  });
+});
+
+describe("creating items in Zotero", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("posts in batches of 50 and reports each item", async () => {
+    const fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      const batch = JSON.parse(init.body as string) as unknown[];
+      const successful: Record<string, { key: string }> = {};
+      const failed: Record<string, { message: string }> = {};
+      batch.forEach((_, i) => {
+        if (i === 1) failed[i] = { message: "Invalid field" };
+        else successful[i] = { key: `K${i}` };
+      });
+      return new Response(JSON.stringify({ successful, failed }));
+    });
+    vi.stubGlobal("fetch", fetch);
+    const items = Array.from({ length: 52 }, () => ({ itemType: "book" }));
+    const out = await createZoteroItems("k", "1", items);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(out).toHaveLength(52);
+    expect(out[0]).toEqual({ key: "K0" });
+    expect(out[1]).toEqual({ error: "Invalid field" });
+    expect(out[51]).toEqual({ error: "Invalid field" });
+  });
+
+  it("says when Zotero won't let it write", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("", { status: 403 })),
+    );
+    await expect(createZoteroItems("k", "1", [{}])).rejects.toBeInstanceOf(
+      ZoteroWriteDeniedError,
     );
   });
 });

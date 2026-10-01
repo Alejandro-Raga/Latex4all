@@ -28,6 +28,7 @@ import { addPaperToVault } from "@/lib/vault/add-paper";
 import { noteForCitekey } from "@/lib/vault/cite-link";
 import { findItemForCitekey } from "@/lib/zotero-api";
 import { itemForCitekey, itemsByTitle } from "@/lib/cite-match";
+import { addCitekeysToZotero } from "@/lib/zotero-upload";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { useDocumentStore } from "@/stores/document-store";
 import { useVaultStore } from "@/stores/vault-store";
@@ -62,23 +63,8 @@ export async function zoteroItemFor(key: string): Promise<string | null> {
   );
   if (known) return known;
   // The library as last synced: no network needed.
-  const mirror = useZoteroLibrary.getState().mirror;
-  if (mirror) {
-    const index = useVaultStore.getState().index;
-    const itemKeys = itemKeysByCitekey(useDocumentStore.getState().projectRoot);
-    const local = itemForCitekey(key, {
-      items: mirror.items,
-      byTitle: itemsByTitle(Object.values(mirror.items)),
-      itemKeys,
-      bibTitle: bibFiles()
-        .flatMap((f) => bibEntries(f.content, f.path))
-        .find((e) => e.key === key)?.title,
-      noteItemKey: index
-        ? noteForCitekey(index, key, itemKeys)?.zoteroKey
-        : undefined,
-    });
-    if (local) return local.key;
-  }
+  const local = localItemFor(key);
+  if (local) return local;
   if (!apiKey || !userID) return null;
   // By the entry's own title when the bibliography has it: far surer than
   // words guessed from the key (which may be "noauthor_horizon_2025").
@@ -94,6 +80,50 @@ export async function zoteroItemFor(key: string): Promise<string | null> {
     if (byTitle) return byTitle;
   }
   return findItemForCitekey(apiKey, userID, key, citekeySearch(key));
+}
+
+/** The Zotero item for a key in the library as last synced, or null. */
+function localItemFor(key: string): string | null {
+  const mirror = useZoteroLibrary.getState().mirror;
+  if (!mirror) return null;
+  const index = useVaultStore.getState().index;
+  const itemKeys = itemKeysByCitekey(useDocumentStore.getState().projectRoot);
+  return (
+    itemForCitekey(key, {
+      items: mirror.items,
+      byTitle: itemsByTitle(Object.values(mirror.items)),
+      itemKeys,
+      bibTitle: bibFiles()
+        .flatMap((f) => bibEntries(f.content, f.path))
+        .find((e) => e.key === key)?.title,
+      noteItemKey: index
+        ? noteForCitekey(index, key, itemKeys)?.zoteroKey
+        : undefined,
+    })?.key ?? null
+  );
+}
+
+/** Puts these into Zotero from the bibliography, saying how it went. */
+export async function addCitekeysToZoteroWithToast(keys: string[]) {
+  const id = toast.loading(
+    `Adding ${keys.length === 1 ? keys[0] : `${keys.length} references`} to Zotero…`,
+  );
+  try {
+    const { added, failed } = await addCitekeysToZotero(keys);
+    const message = `Added ${added.size} to Zotero`;
+    if (failed.size) {
+      toast.warning(message, {
+        id,
+        description: [...failed].map(([k, why]) => `${k}: ${why}`).join("\n"),
+      });
+    } else {
+      toast.success(message, { id });
+    }
+    return added;
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err), { id });
+    return new Map<string, string>();
+  }
 }
 
 /**
@@ -113,12 +143,28 @@ export async function addCitekeysToVault(keys: string[]) {
 
 async function addEach(keys: string[]) {
   const id = toast.loading(`Adding ${keys.length} to your vault…`);
+  // Papers you don't have in Zotero (a collaborator's, say) go in first,
+  // from the bibliography: a note is written from a Zotero item.
+  const itemKeys = new Map<string, string>();
+  const notInZotero: string[] = [];
+  for (const key of keys) {
+    const itemKey = await zoteroItemFor(key).catch(() => null);
+    if (itemKey) itemKeys.set(key, itemKey);
+    else notInZotero.push(key);
+  }
+  if (notInZotero.length) {
+    toast.loading(`Adding ${notInZotero.length} to Zotero first…`, { id });
+    try {
+      const { added } = await addCitekeysToZotero(notInZotero);
+      for (const [key, itemKey] of added) itemKeys.set(key, itemKey);
+    } catch {}
+  }
   let added = 0;
   const failed: string[] = [];
   for (const [i, key] of keys.entries()) {
     toast.loading(`Adding to your vault… ${i + 1}/${keys.length}`, { id });
     try {
-      const itemKey = await zoteroItemFor(key);
+      const itemKey = itemKeys.get(key);
       if (!itemKey) throw new Error("not in Zotero");
       await addPaperToVault(itemKey, key);
       added++;
@@ -129,7 +175,7 @@ async function addEach(keys: string[]) {
   if (failed.length) {
     toast.warning(`Added ${added} to your vault`, {
       id,
-      description: `Not found in Zotero: ${failed.join(", ")}`,
+      description: `Not in Zotero or the bibliography: ${failed.join(", ")}`,
     });
   } else {
     toast.success(`Added ${added} to your vault`, { id });
@@ -153,7 +199,7 @@ function scan(): CitationReport {
   );
 }
 
-type Tab = "bibliography" | "vault" | "unused";
+type Tab = "bibliography" | "zotero" | "vault" | "unused";
 
 function Row({
   label,
@@ -276,6 +322,18 @@ export function CitationCheckDialog() {
     [report, vaultIndex],
   );
 
+  // In the bibliography but not your Zotero library: a collaborator's, say.
+  const library = useZoteroLibrary((s) => s.mirror);
+  const notInZotero = useMemo(
+    () =>
+      report && library && zoteroConnected
+        ? report.cited.filter(
+            (key) => !report.missing.includes(key) && !localItemFor(key),
+          )
+        : [],
+    [report, library, zoteroConnected],
+  );
+
   const addToBib = async (key: string) => {
     const itemKey = await zoteroItemFor(key);
     if (!itemKey)
@@ -300,9 +358,13 @@ export function CitationCheckDialog() {
   };
 
   const addToVault = async (key: string) => {
-    const itemKey = await zoteroItemFor(key);
+    const itemKey =
+      (await zoteroItemFor(key)) ??
+      (await addCitekeysToZotero([key])).added.get(key);
     if (!itemKey) {
-      throw new Error(`Couldn't find “${key}” in your Zotero library.`);
+      throw new Error(
+        `“${key}” isn't in your Zotero library or the bibliography.`,
+      );
     }
     const result = await addPaperToVault(itemKey, key);
     if (result.status === "exists")
@@ -345,6 +407,15 @@ export function CitationCheckDialog() {
           label: "Not in bibliography",
           count: report.missing.length,
         },
+        ...(library && zoteroConnected
+          ? [
+              {
+                id: "zotero" as const,
+                label: "Not in Zotero",
+                count: notInZotero.length,
+              },
+            ]
+          : []),
         ...(vaultIndex
           ? [
               {
@@ -388,14 +459,17 @@ export function CitationCheckDialog() {
             />
           ),
         }
-      : shown === "vault"
+      : shown === "zotero"
         ? {
-            keys: notInVault,
-            empty: "Every cited paper has a note.",
-            bulk: zoteroConnected && {
-              label: "Add all to vault",
-              icon: NotebookTextIcon,
-              run: () => addAll(notInVault, addToVault, "your vault"),
+            keys: notInZotero,
+            empty: "Every cited paper is in your Zotero library.",
+            bulk: {
+              label: "Add all to Zotero",
+              icon: BookPlusIcon,
+              run: async () => {
+                await addCitekeysToZoteroWithToast(notInZotero);
+                rescan();
+              },
             },
             row: (key: string) => (
               <Row
@@ -403,32 +477,59 @@ export function CitationCheckDialog() {
                 label={key}
                 detail={titles.get(key)}
                 action={
-                  zoteroConnected && (
-                    <ActionButton
-                      label="Add"
-                      icon={NotebookTextIcon}
-                      run={() => addToVault(key)}
-                    />
-                  )
+                  <ActionButton
+                    label="Add"
+                    icon={PlusIcon}
+                    run={async () => {
+                      await addCitekeysToZoteroWithToast([key]);
+                      rescan();
+                    }}
+                  />
                 }
               />
             ),
           }
-        : {
-            keys: report.unused.map((e) => e.key),
-            empty: "Every entry is cited.",
-            bulk: null,
-            row: (key: string) => {
-              const e = report.unused.find((u) => u.key === key);
-              return (
+        : shown === "vault"
+          ? {
+              keys: notInVault,
+              empty: "Every cited paper has a note.",
+              bulk: zoteroConnected && {
+                label: "Add all to vault",
+                icon: NotebookTextIcon,
+                run: () => addAll(notInVault, addToVault, "your vault"),
+              },
+              row: (key: string) => (
                 <Row
-                  key={`${e?.file}:${key}`}
+                  key={key}
                   label={key}
-                  detail={e?.title ?? e?.file}
+                  detail={titles.get(key)}
+                  action={
+                    zoteroConnected && (
+                      <ActionButton
+                        label="Add"
+                        icon={NotebookTextIcon}
+                        run={() => addToVault(key)}
+                      />
+                    )
+                  }
                 />
-              );
-            },
-          };
+              ),
+            }
+          : {
+              keys: report.unused.map((e) => e.key),
+              empty: "Every entry is cited.",
+              bulk: null,
+              row: (key: string) => {
+                const e = report.unused.find((u) => u.key === key);
+                return (
+                  <Row
+                    key={`${e?.file}:${key}`}
+                    label={key}
+                    detail={e?.title ?? e?.file}
+                  />
+                );
+              },
+            };
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && close()}>

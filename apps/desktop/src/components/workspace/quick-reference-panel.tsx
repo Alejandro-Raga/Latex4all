@@ -99,6 +99,10 @@ import {
   orderCited,
   useCitedItems,
 } from "./cited-here";
+import {
+  addCitekeysToVault,
+  addCitekeysToZoteroWithToast,
+} from "./citation-check";
 import { TopicMenu } from "./topic-menu";
 import { createLogger } from "@/lib/debug/logger";
 import { DockHeaderBar, DockWideButton } from "./dock/dock-section";
@@ -296,6 +300,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   const [citedOnly, setCitedOnly] = useState(false);
   const [citedOrder, setCitedOrder] = useState<CitedOrder>("text");
   const cited = useCitedItems(citedOnly);
+  const vaultReady = useVaultStore((s) => Boolean(s.index));
 
   const treeCache = useRef(new Map<string, TreeNode>());
   const previewCache = useRef(new Map<string, Preview>());
@@ -719,13 +724,47 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
                     {citedOnly ? (
                       <>
                         <CitedHeader order={citedOrder} onOrder={setCitedOrder}>
-                          {!libraryReady
-                            ? "Loading your library…"
-                            : `${cited.items.length} cited in this project${
-                                cited.missing > 0
-                                  ? ` · ${cited.missing} not found in Zotero`
-                                  : ""
-                              }`}
+                          {!libraryReady ? (
+                            "Loading your library…"
+                          ) : (
+                            <>
+                              {cited.items.length} cited in this project
+                              {cited.missing.length > 0 && (
+                                <>
+                                  {" · "}
+                                  <span title={cited.missing.join(", ")}>
+                                    {cited.missing.length} not in Zotero:
+                                  </span>{" "}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      void addCitekeysToZoteroWithToast(
+                                        cited.missing,
+                                      )
+                                    }
+                                    className="text-primary hover:underline"
+                                  >
+                                    add
+                                  </button>
+                                  {vaultReady && (
+                                    <>
+                                      {" · "}
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          void addCitekeysToVault(cited.missing)
+                                        }
+                                        className="text-primary hover:underline"
+                                        title="Adds them to Zotero, then writes their notes"
+                                      >
+                                        add with notes
+                                      </button>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                            </>
+                          )}
                         </CitedHeader>
                         {orderCited(
                           matchingQuery(cited.items, zoteroQuery),
