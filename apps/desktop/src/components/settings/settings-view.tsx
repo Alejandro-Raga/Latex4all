@@ -7,6 +7,7 @@ import {
   DownloadIcon,
   FileTextIcon,
   FolderOpenIcon,
+  GaugeIcon,
   KeyRoundIcon,
   LanguagesIcon,
   NotebookTextIcon,
@@ -43,6 +44,8 @@ import { cn } from "@/lib/utils";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { clearPdfCache, pdfCacheSize } from "@/lib/zotero-pdf-cache";
 import { NoteTypesSettings } from "./note-types-settings";
+import { AiUsageSettings } from "./ai-usage-settings";
+import { startOfToday, summarize, useAiUsage } from "@/lib/ai-usage";
 import { unlinkProject } from "@/lib/vault/note-changes";
 import {
   EnvironmentStatus,
@@ -487,6 +490,8 @@ export function SettingsView({
     refreshLanguagePacks();
   }, [refreshLanguagePacks]);
 
+  const aiEntries = useAiUsage((s) => s.entries);
+  const aiToday = `$${summarize(aiEntries, startOfToday()).costUsd.toFixed(2)} today`;
   const sections: {
     id: SettingsSection;
     label: string;
@@ -501,6 +506,14 @@ export function SettingsView({
       meta: isClaudeReady ? "Ready" : "Setup",
       icon: KeyRoundIcon,
       body: <ClaudeSetup variant="embedded" />,
+      flush: true,
+    },
+    {
+      id: "ai-usage",
+      label: "AI usage",
+      meta: aiToday,
+      icon: GaugeIcon,
+      body: <AiUsageSettings />,
       flush: true,
     },
     {

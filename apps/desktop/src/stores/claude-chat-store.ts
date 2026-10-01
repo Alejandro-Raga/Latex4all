@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { type ResultUsage, usageEntry, useAiUsage } from "@/lib/ai-usage";
 import { invoke } from "@tauri-apps/api/core";
 import { useDocumentStore } from "./document-store";
 import { useHistoryStore } from "./history-store";
@@ -649,6 +650,25 @@ interface ClaudeChatState {
 
 // ─── Store ───
 
+/** A chat setting kept between launches (an unknown value: the default). */
+function remembered<T extends string>(
+  name: string,
+  allowed: T[],
+  fallback: T,
+): T {
+  try {
+    const value = localStorage.getItem(`latex4all-chat-${name}`);
+    if (value && (allowed as string[]).includes(value)) return value as T;
+  } catch {}
+  return fallback;
+}
+
+function remember(name: string, value: string) {
+  try {
+    localStorage.setItem(`latex4all-chat-${name}`, value);
+  } catch {}
+}
+
 export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
   // Projected fields (initialized from default tab)
   messages: [],
@@ -665,8 +685,17 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
   activeTabId: DEFAULT_TAB_ID,
   activeProjectPath: null,
 
-  selectedModel: "opus",
-  setSelectedModel: (model) => set({ selectedModel: model }),
+  // Remembered between launches; Sonnet unless you pick another, as it
+  // does most writing as well as Opus for a fraction of the usage.
+  selectedModel: remembered(
+    "model",
+    ["sonnet", "opus", "haiku", "opusplan"],
+    "sonnet",
+  ),
+  setSelectedModel: (model) => {
+    remember("model", model);
+    set({ selectedModel: model });
+  },
   selectedProviderCredentialId:
     loadSelectedProviderCredentialId() ?? CLAUDE_CODE_PROVIDER_ID,
   setSelectedProviderCredentialId: (credentialId) => {
@@ -690,8 +719,11 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
       },
     })),
 
-  effortLevel: "medium",
-  setEffortLevel: (level) => set({ effortLevel: level }),
+  effortLevel: remembered("effort", ["low", "medium", "high"], "medium"),
+  setEffortLevel: (level) => {
+    remember("effort", level);
+    set({ effortLevel: level });
+  },
 
   pendingInitialPrompt: null,
   setPendingInitialPrompt: (prompt) => set({ pendingInitialPrompt: prompt }),
@@ -1511,6 +1543,20 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
   // ─── Internal Actions (routed by explicit tabId) ───
 
   _appendMessage: (tabId: string, msg: ClaudeStreamMessage) => {
+    if (msg.type === "result") {
+      // What the request took, for Settings → AI usage.
+      const { tabs, selectedModel } = get();
+      const tab = tabs.find((t) => t.id === tabId);
+      useAiUsage
+        .getState()
+        .record(
+          usageEntry(
+            msg as ResultUsage,
+            tab?.projectPath ?? null,
+            selectedModel,
+          ),
+        );
+    }
     set((state) => {
       const { input_tokens: inputDelta, output_tokens: outputDelta } =
         usageFromMessage(msg);

@@ -121,6 +121,18 @@ tag.
 - Add a paper to the project from the Reference panel: keep a copy of its
   PDF, or give it to Claude.
 
+### AI
+
+- Settings → AI usage: requests, tokens and what they'd cost at API prices,
+  today, this week or this month, by model and by project, with a daily
+  amount to be warned at.
+- The chat remembers its model and thinking effort between launches, and
+  starts on Sonnet, which uses far less than Opus.
+- A long chat says so, with a button for a new one: each message re-reads
+  the whole conversation.
+- Claude plans with a to-do list only for bigger tasks, and reads just the
+  part of a file it's changing, so small edits take fewer steps.
+
 ### Look and feel
 
 - Color themes for the whole app, editor included: classic, colorful and

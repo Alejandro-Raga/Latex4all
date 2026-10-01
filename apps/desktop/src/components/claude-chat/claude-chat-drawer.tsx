@@ -11,6 +11,7 @@ import { useClaudeChatStore } from "@/stores/claude-chat-store";
 import { useClaudeEvents } from "@/hooks/use-claude-events";
 import { ChatMessages } from "./chat-messages";
 import { ChatComposer } from "./chat-composer";
+import { LongChatNotice } from "./long-chat-notice";
 import { ChatTabBar } from "./chat-tab-bar";
 
 const MIN_HEIGHT = 260;
@@ -216,6 +217,7 @@ export function ClaudeChatDrawer() {
           <ChatMessages />
         </div>
 
+        <LongChatNotice />
         {/* Composer */}
         <ChatComposer isOpen={isOpen} />
       </div>
