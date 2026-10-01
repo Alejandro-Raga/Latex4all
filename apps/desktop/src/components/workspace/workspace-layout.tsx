@@ -21,6 +21,7 @@ import { CitationCheckDialog } from "./citation-check";
 import { WorkspaceMemory } from "./workspace-memory";
 import { CommandPalette, useWorkspaceShortcuts } from "./command-palette";
 import { NewTopicDialog } from "./topic-menu";
+import { ZoteroTargetDialog } from "./zotero-target-dialog";
 import {
   useDockedPanels,
   useDockStore,
@@ -282,6 +283,7 @@ export function WorkspaceLayout() {
       <WorkspaceMemory />
       <CommandPalette />
       <NewTopicDialog />
+      <ZoteroTargetDialog />
     </div>
   );
 }

@@ -29,6 +29,7 @@ import { noteForCitekey } from "@/lib/vault/cite-link";
 import { findItemForCitekey } from "@/lib/zotero-api";
 import { itemForCitekey, itemsByTitle } from "@/lib/cite-match";
 import { addCitekeysToZotero } from "@/lib/zotero-upload";
+import { chooseZoteroTarget } from "./zotero-target-dialog";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { useDocumentStore } from "@/stores/document-store";
 import { useVaultStore } from "@/stores/vault-store";
@@ -105,11 +106,13 @@ function localItemFor(key: string): string | null {
 
 /** Puts these into Zotero from the bibliography, saying how it went. */
 export async function addCitekeysToZoteroWithToast(keys: string[]) {
+  const target = await chooseZoteroTarget(keys.length);
+  if (!target) return new Map<string, string>();
   const id = toast.loading(
     `Adding ${keys.length === 1 ? keys[0] : `${keys.length} references`} to Zotero…`,
   );
   try {
-    const { added, failed } = await addCitekeysToZotero(keys);
+    const { added, failed } = await addCitekeysToZotero(keys, target);
     const message = `Added ${added.size} to Zotero`;
     if (failed.size) {
       toast.warning(message, {
@@ -152,10 +155,13 @@ async function addEach(keys: string[]) {
     if (itemKey) itemKeys.set(key, itemKey);
     else notInZotero.push(key);
   }
-  if (notInZotero.length) {
+  const target = notInZotero.length
+    ? await chooseZoteroTarget(notInZotero.length)
+    : null;
+  if (target) {
     toast.loading(`Adding ${notInZotero.length} to Zotero first…`, { id });
     try {
-      const { added } = await addCitekeysToZotero(notInZotero);
+      const { added } = await addCitekeysToZotero(notInZotero, target);
       for (const [key, itemKey] of added) itemKeys.set(key, itemKey);
     } catch {}
   }
@@ -175,7 +181,7 @@ async function addEach(keys: string[]) {
   if (failed.length) {
     toast.warning(`Added ${added} to your vault`, {
       id,
-      description: `Not in Zotero or the bibliography: ${failed.join(", ")}`,
+      description: `Not added: ${failed.join(", ")}`,
     });
   } else {
     toast.success(`Added ${added} to your vault`, { id });
@@ -358,9 +364,13 @@ export function CitationCheckDialog() {
   };
 
   const addToVault = async (key: string) => {
-    const itemKey =
-      (await zoteroItemFor(key)) ??
-      (await addCitekeysToZotero([key])).added.get(key);
+    let itemKey = await zoteroItemFor(key);
+    if (!itemKey) {
+      const target = await chooseZoteroTarget(1);
+      if (!target) return;
+      itemKey =
+        (await addCitekeysToZotero([key], target)).added.get(key) ?? null;
+    }
     if (!itemKey) {
       throw new Error(
         `“${key}” isn't in your Zotero library or the bibliography.`,
@@ -496,7 +506,11 @@ export function CitationCheckDialog() {
               bulk: zoteroConnected && {
                 label: "Add all to vault",
                 icon: NotebookTextIcon,
-                run: () => addAll(notInVault, addToVault, "your vault"),
+                // In one go, so papers not in Zotero yet ask where to go once.
+                run: async () => {
+                  await addCitekeysToVault(notInVault);
+                  rescan();
+                },
               },
               row: (key: string) => (
                 <Row

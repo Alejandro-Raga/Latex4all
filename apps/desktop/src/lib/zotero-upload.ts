@@ -4,6 +4,15 @@ import { useZoteroLibrary } from "@/lib/zotero-library";
 import { useDocumentStore } from "@/stores/document-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 
+/** The tag new items get, naming the project they came from. */
+export function projectTag(root: string | null): string {
+  const name = root
+    ?.replace(/[\\/]+$/, "")
+    .split(/[\\/]/)
+    .pop();
+  return `from: ${name || "Latex4All"}`;
+}
+
 export interface UploadResult {
   /** Citation key → the new Zotero item's key. */
   added: Map<string, string>;
@@ -14,11 +23,14 @@ export interface UploadResult {
 /**
  * Puts the papers behind these citation keys into your Zotero library, from
  * the project's .bib entries: for references a collaborator added that you
- * don't have. Each goes into the collection its .bib is synced with, if
- * any, and keeps the citation key the text uses.
+ * don't have. Each is tagged with the project, goes into the collection
+ * chosen (or the one its .bib is synced with), and keeps the citation key
+ * the text uses.
  */
 export async function addCitekeysToZotero(
   keys: string[],
+  /** A collection (or null: none); left out, the one the .bib follows. */
+  target?: { collection: string | null },
 ): Promise<UploadResult> {
   const { apiKey, userID, syncedCollections } = useZoteroStore.getState();
   const { files, projectRoot } = useDocumentStore.getState();
@@ -41,10 +53,13 @@ export async function addCitekeysToZotero(
     for (const record of parseBibRecords(f.content ?? "")) {
       if (!keys.includes(record.key) || found.has(record.key)) continue;
       const item = zoteroItemFromBib(record);
-      // Into the collection this .bib is kept in step with, if any.
-      const collection = synced.find(
-        ([, info]) => info.bibFileName === f.name && info.collectionKey,
-      )?.[1].collectionKey;
+      item.tags = [{ tag: projectTag(projectRoot) }];
+      // The collection chosen, else the one this .bib is kept in step with.
+      const collection = target
+        ? target.collection
+        : synced.find(
+            ([, info]) => info.bibFileName === f.name && info.collectionKey,
+          )?.[1].collectionKey;
       if (collection) item.collections = [collection];
       found.set(record.key, { item, bibFile: f.name });
     }
@@ -73,7 +88,16 @@ export async function addCitekeysToZotero(
       for (const [sk, info] of Object.entries(project)) {
         const keyMap = { ...info.keyMap };
         for (const [citekey, itemKey] of added) {
-          if (found.get(citekey)?.bibFile === info.bibFileName) {
+          const made = found.get(citekey);
+          // Only where the next sync will see it: the library, or the
+          // collection it went into. Otherwise its entry would count as
+          // gone from Zotero and be dropped.
+          const seen =
+            !info.collectionKey ||
+            ((made?.item.collections as string[] | undefined) ?? []).includes(
+              info.collectionKey,
+            );
+          if (made?.bibFile === info.bibFileName && seen) {
             keyMap[itemKey] = citekey;
           }
         }

@@ -33,6 +33,7 @@ import { buildVaultIndex } from "@/lib/vault/vault-index";
 import { useDockStore } from "@/stores/dock-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
+import { useZoteroLibrary } from "@/lib/zotero-library";
 import { useDocumentStore } from "@/stores/document-store";
 
 const params = new URLSearchParams(location.search);
@@ -313,6 +314,24 @@ if (scenario === "workspace") {
       userID: "1",
     });
     setTimeout(() => useCitationCheck.getState().show(), 500);
+  }
+  if (params.get("dialog") === "zotero-target") {
+    useZoteroLibrary.setState({
+      mirror: {
+        format: 1,
+        userID: "1",
+        version: 1,
+        items: {},
+        attachments: {},
+        collections: [
+          { key: "POL", name: "Policy", parentKey: false, itemCount: 0 },
+          { key: "EU", name: "EU programmes", parentKey: "POL", itemCount: 0 },
+        ],
+      },
+    });
+    import("@/components/workspace/zotero-target-dialog").then((m) => {
+      (window as any).chooseZoteroTarget = m.chooseZoteroTarget;
+    });
   }
   import("@/components/workspace/workspace-layout").then(
     ({ WorkspaceLayout }) =>

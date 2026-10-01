@@ -98,7 +98,8 @@ tag.
 
 - Papers a collaborator cited that aren't in your Zotero library go into it
   from the project's bibliography, with their details and the same citation
-  key: "Not in Zotero" in Check citations, or "add" beside the count in the
+  key, in the collection you pick (remembered for the project) and tagged
+  "from: <project>": "Not in Zotero" in Check citations, or "add" beside the count in the
   Reference panel's cited view. Adding such a paper to the vault now puts it
   in Zotero first instead of failing.
 - Tabs in the PDF pane, to read several papers at full size beside your
