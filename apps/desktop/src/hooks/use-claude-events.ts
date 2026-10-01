@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { type RateLimitInfo, useAiUsage } from "@/lib/ai-usage";
+import { fallBackIfLimited } from "@/lib/ai-fallback";
+import { claudeLimited, type RateLimitInfo, useAiUsage } from "@/lib/ai-usage";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { remove } from "@tauri-apps/plugin-fs";
@@ -336,7 +337,11 @@ export function useClaudeEvents() {
       if ((msg as { type: string }).type === "rate_limit_event") {
         const info = (msg as { rate_limit_info?: RateLimitInfo })
           .rate_limit_info;
-        if (info) useAiUsage.getState().recordLimits(info);
+        if (info) {
+          const wasLimited = claudeLimited(useAiUsage.getState().claudeLimits);
+          useAiUsage.getState().recordLimits(info);
+          if (!wasLimited) fallBackIfLimited();
+        }
         return;
       }
 

@@ -18,6 +18,7 @@ import {
 } from "@/lib/ai-usage";
 import { cn } from "@/lib/utils";
 import { useClaudeChatStore } from "@/stores/claude-chat-store";
+import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 
 const PERIODS = [
   { id: "today", label: "Today", since: () => startOfToday() },
@@ -153,12 +154,149 @@ function ClaudePlan({ entries }: { entries: AiUsageEntry[] }) {
   );
 }
 
+/** Which service takes over when Claude's limit is reached. */
+function Fallback() {
+  const services = useClaudeSetupStore((s) => s.openAiCredentials);
+  const fallback = useAiUsage((s) => s.fallbackService);
+  const setFallback = useAiUsage((s) => s.setFallbackService);
+  if (!services.length) return null;
+  const ASK = "\0ask";
+  return (
+    <Row label="When Claude's limit is reached">
+      <Select
+        value={
+          fallback && services.some((c) => c.id === fallback) ? fallback : ASK
+        }
+        onValueChange={(v) => setFallback(v === ASK ? null : v)}
+      >
+        <SelectTrigger size="sm" className="w-44" aria-label="Fallback service">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ASK}>Ask me</SelectItem>
+          {services.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              Switch to {c.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Row>
+  );
+}
+
+/** A number box that keeps what's typed ("0.", "1.2") and saves a number. */
+function NumberField({
+  value,
+  onChange,
+  placeholder,
+  label,
+}: {
+  value: number | null | undefined;
+  onChange: (n: number | null) => void;
+  placeholder: string;
+  label: string;
+}) {
+  const [text, setText] = useState(value ? String(value) : "");
+  return (
+    <Input
+      inputMode="decimal"
+      value={text}
+      placeholder={placeholder}
+      onChange={(e) => {
+        const next = e.target.value.replace(",", ".");
+        setText(next);
+        const n = Number.parseFloat(next);
+        onChange(Number.isFinite(n) && n > 0 ? n : null);
+      }}
+      className="h-8 w-20 text-sm"
+      aria-label={label}
+    />
+  );
+}
+
+/**
+ * Each AI service: its prices (Claude reports its own; the rest say
+ * nothing, so you give them, per million tokens) and a daily warning.
+ */
+function Services() {
+  const entries = useAiUsage((s) => s.entries);
+  const prices = useAiUsage((s) => s.prices);
+  const budgets = useAiUsage((s) => s.serviceBudgets);
+  const setPrice = useAiUsage((s) => s.setPrice);
+  const setServiceBudget = useAiUsage((s) => s.setServiceBudget);
+  const configured = useClaudeSetupStore((s) => s.openAiCredentials);
+  const services = useMemo(() => {
+    const names = new Set<string>(["Claude"]);
+    for (const c of configured) names.add(c.label);
+    for (const e of entries) if (e.provider) names.add(e.provider);
+    return [...names];
+  }, [configured, entries]);
+  if (services.length < 2) return null;
+  return (
+    <div className="border-border border-t px-5 py-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_5rem_5rem_5.5rem] items-center gap-x-2 gap-y-1.5 text-xs">
+        <span className="text-muted-foreground">Service</span>
+        <span className="text-muted-foreground">$ / M in</span>
+        <span className="text-muted-foreground">$ / M out</span>
+        <span className="text-muted-foreground">Warn past $/day</span>
+        {services.map((name) => {
+          const price = prices[name];
+          const set = (part: "input" | "output", n: number | null) => {
+            const next = {
+              input: price?.input ?? 0,
+              output: price?.output ?? 0,
+              [part]: n ?? 0,
+            };
+            setPrice(name, next.input || next.output ? next : null);
+          };
+          return (
+            <div key={name} className="contents">
+              <span className="truncate text-sm">{name}</span>
+              {name === "Claude" ? (
+                <span className="col-span-2 text-muted-foreground">
+                  Reported by Claude
+                </span>
+              ) : (
+                <>
+                  <NumberField
+                    value={price?.input}
+                    onChange={(n) => set("input", n)}
+                    placeholder="—"
+                    label={`${name} input price per million tokens`}
+                  />
+                  <NumberField
+                    value={price?.output}
+                    onChange={(n) => set("output", n)}
+                    placeholder="—"
+                    label={`${name} output price per million tokens`}
+                  />
+                </>
+              )}
+              <NumberField
+                value={budgets[name]}
+                onChange={(n) => setServiceBudget(name, n)}
+                placeholder="No limit"
+                label={`${name} daily budget in dollars`}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <p className="pt-2 text-muted-foreground text-xs">
+        Prices are on each provider's pricing page.
+      </p>
+    </div>
+  );
+}
+
 /** How much the AI has been used, and the settings that use less of it. */
 export function AiUsageSettings() {
   const entries = useAiUsage((s) => s.entries);
   const budget = useAiUsage((s) => s.dailyBudgetUsd);
   const setBudget = useAiUsage((s) => s.setDailyBudget);
   const clear = useAiUsage((s) => s.clear);
+  const prices = useAiUsage((s) => s.prices);
   const model = useClaudeChatStore((s) => s.selectedModel);
   const setModel = useClaudeChatStore((s) => s.setSelectedModel);
   const effort = useClaudeChatStore((s) => s.effortLevel);
@@ -169,14 +307,19 @@ export function AiUsageSettings() {
       summarize(
         entries,
         (PERIODS.find((p) => p.id === period) ?? PERIODS[0]).since(),
+        prices,
       ),
-    [entries, period],
+    [entries, period, prices],
   );
   const sent = summary.input + summary.cacheRead + summary.cacheWrite;
   const breakdown: {
     title: string;
     rows: { name: string; requests: number; costUsd: number }[];
   }[] = [
+    {
+      title: "By service",
+      rows: summary.byService.map((m) => ({ ...m, name: m.service })),
+    },
     {
       title: "By model",
       rows: summary.byModel.map((m) => ({ ...m, name: m.model })),
@@ -213,7 +356,7 @@ export function AiUsageSettings() {
       </div>
       <div className="grid grid-cols-2 gap-2 px-5 sm:grid-cols-4">
         <Stat label="Requests" value={String(summary.requests)} />
-        <Stat label="At API prices" value={usd(summary.costUsd)} />
+        <Stat label="Cost (estimate)" value={usd(summary.costUsd)} />
         <Stat label="Tokens read" value={tokens(sent)} />
         <Stat label="Tokens written" value={tokens(summary.output)} />
       </div>
@@ -281,22 +424,17 @@ export function AiUsageSettings() {
             </SelectContent>
           </Select>
         </Row>
+        <Fallback />
         <Row label="Warn me past, per day">
           <span className="text-muted-foreground text-sm">$</span>
-          <Input
-            type="number"
-            min={0}
-            step={0.5}
-            value={budget ?? ""}
+          <NumberField
+            value={budget}
+            onChange={setBudget}
             placeholder="No limit"
-            onChange={(e) => {
-              const n = Number.parseFloat(e.target.value);
-              setBudget(Number.isFinite(n) && n > 0 ? n : null);
-            }}
-            className="h-8 w-24 text-sm"
-            aria-label="Daily budget in dollars"
+            label="Daily budget in dollars"
           />
         </Row>
+        <Services />
         <Row label="Usage history">
           <Button
             variant="ghost"

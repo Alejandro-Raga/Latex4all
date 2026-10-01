@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { claudeLimited, nextLimits, summarize, usageEntry } from "./ai-usage";
+import {
+  claudeLimited,
+  entryCost,
+  nextLimits,
+  summarize,
+  usageEntry,
+} from "./ai-usage";
 
 const result = {
   type: "result",
@@ -107,5 +113,25 @@ describe("Claude's plan limits", () => {
     );
     expect(e.costUsd).toBeNull();
     expect(summarize([e], 0).byModel[0].model).toBe("DeepSeek · deepseek-chat");
+  });
+});
+
+describe("prices for other services", () => {
+  it("costs a request from the prices set, per million tokens", () => {
+    const e = usageEntry(
+      { usage: { input_tokens: 2_000_000, output_tokens: 500_000 } },
+      null,
+      "gpt-5",
+      0,
+      "OpenAI",
+    );
+    const prices = { OpenAI: { input: 1.25, output: 10 } };
+    expect(entryCost(e, prices)).toBeCloseTo(7.5);
+    expect(entryCost(e)).toBe(0);
+    const s = summarize([e], 0, prices);
+    expect(s.costUsd).toBeCloseTo(7.5);
+    expect(s.byService).toEqual([
+      { service: "OpenAI", requests: 1, costUsd: 7.5 },
+    ]);
   });
 });

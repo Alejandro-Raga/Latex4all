@@ -1,4 +1,5 @@
 import { type FC, memo, useEffect, useMemo, useRef, useState } from "react";
+import { contextTokens, type ResultUsage, usageEntry } from "@/lib/ai-usage";
 import {
   AlertCircleIcon,
   CheckIcon,
@@ -497,6 +498,32 @@ const AssistantMessage: FC<{
 
 // ─── Result Message ───
 
+/** What a reply took, small and to the right: so heavy ones stand out. */
+const ReplyUsage: FC<{ message: ClaudeStreamMessage }> = ({ message }) => {
+  const r = message as ResultUsage;
+  if (!r.usage) return null;
+  const model = Object.keys(r.modelUsage ?? {})[0] ?? r.model ?? "";
+  const e = usageEntry(
+    r,
+    null,
+    model,
+    0,
+    /^claude/i.test(model) ? "Claude" : "Other",
+  );
+  const read = contextTokens(e);
+  const k = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+  return (
+    <div
+      className="mt-1 px-1 text-right text-[11px] text-muted-foreground/70 tabular-nums"
+      title="Tokens this reply read (including the conversation so far) and wrote"
+    >
+      {k(read)} read · {k(e.output)} written
+      {e.costUsd !== null &&
+        ` · $${e.costUsd.toFixed(e.costUsd < 0.1 ? 3 : 2)}`}
+    </div>
+  );
+};
+
 const ResultMessage: FC<{ message: ClaudeStreamMessage }> = ({ message }) => {
   const isError = message.is_error || message.subtype === "error";
   const resultText = message.result;
@@ -520,11 +547,7 @@ const ResultMessage: FC<{ message: ClaudeStreamMessage }> = ({ message }) => {
       <div className="-mb-7.5 ml-2 flex min-h-7.5 items-center pt-1.5">
         <MessageActions text={resultText} />
       </div>
-      {message.cost_usd != null && (
-        <div className="mt-1 px-1 text-right text-muted-foreground text-xs">
-          Cost: ${message.cost_usd.toFixed(4)}
-        </div>
-      )}
+      <ReplyUsage message={message} />
     </div>
   );
 };

@@ -130,6 +130,14 @@ tag.
 - When a Claude limit is nearly reached the chat shows how full it is; once
   it's reached, a button switches the chat to another AI service you've set
   up (DeepSeek, say), conversation and all.
+- Other AI services get a price per million tokens and a daily warning of
+  their own, so their use shows as cost too; and Settings → AI usage can
+  switch the chat to one by itself when Claude's limit is reached, and back
+  once it resets.
+- Under each reply, how many tokens it read and wrote (and for Claude, its
+  cost), so heavy ones stand out.
+- OpenAI, Gemini, GLM and Ollama now count the tokens they read, not only
+  the ones they write.
 - The chat remembers its model and thinking effort between launches, and
   starts on Sonnet, which uses far less than Opus.
 - A long chat says so, with a button for a new one: each message re-reads

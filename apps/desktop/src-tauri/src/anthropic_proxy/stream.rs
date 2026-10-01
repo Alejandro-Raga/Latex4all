@@ -17,6 +17,8 @@ struct OpenAiStreamState {
     tool_blocks: HashMap<i64, StreamToolBlock>,
     stop_reason: Option<String>,
     output_tokens: u64,
+    /// The prompt's size as the provider counted it (in the last chunk).
+    input_tokens: u64,
 }
 
 #[derive(Default)]
@@ -171,6 +173,10 @@ fn openai_stream_chunk_to_anthropic(
                 "completion_token_count",
             ],
         );
+        state.input_tokens = usage_token(
+            usage,
+            &["prompt_tokens", "input_tokens", "prompt_token_count"],
+        );
     }
 
     let Some(choice) = chunk
@@ -257,12 +263,19 @@ fn ensure_stream_message_started(
                 "stop_reason": Value::Null,
                 "stop_sequence": Value::Null,
                 "usage": {
-                    "input_tokens": 0,
+                    // The real count only comes at the end (message_delta);
+                    // until then, roughly four characters to a token.
+                    "input_tokens": estimated_input_tokens(anthropic_request),
                     "output_tokens": 0,
                 },
             },
         }),
     );
+}
+
+fn estimated_input_tokens(anthropic_request: &Value) -> u64 {
+    let chars = anthropic_request.to_string().chars().count() as u64;
+    (chars / 4).max(1)
 }
 
 fn delta_text(delta: &Value, keys: &[&str]) -> Option<String> {
@@ -499,6 +512,7 @@ fn finish_anthropic_stream(state: &mut OpenAiStreamState) -> String {
                 "stop_sequence": Value::Null,
             },
             "usage": {
+                "input_tokens": state.input_tokens,
                 "output_tokens": state.output_tokens,
             },
         }),
@@ -788,6 +802,29 @@ mod tests {
         assert!(combined.contains("\"text\":\"Hello\""));
         assert!(combined.contains("\"stop_reason\":\"end_turn\""));
         assert!(finish_anthropic_stream(&mut state).is_empty());
+    }
+
+    #[test]
+    fn reports_the_prompt_size_from_the_final_usage_chunk() {
+        let request = json!({ "model": "claude-sonnet-4", "messages": [{ "role": "user", "content": "Hello there" }] });
+        let mut state = OpenAiStreamState::default();
+        let chunk = json!({
+            "id": "chatcmpl_1",
+            "choices": [{ "delta": { "content": "Hi" }, "finish_reason": null }]
+        });
+        let usage = json!({
+            "id": "chatcmpl_1",
+            "choices": [],
+            "usage": { "prompt_tokens": 1234, "completion_tokens": 56 }
+        });
+
+        let first = openai_stream_chunk_to_anthropic(&mut state, &chunk, &request, &credential());
+        let _ = openai_stream_chunk_to_anthropic(&mut state, &usage, &request, &credential());
+        let done = finish_anthropic_stream(&mut state);
+
+        assert!(!first.contains("\"input_tokens\":0"));
+        assert!(done.contains("\"input_tokens\":1234"));
+        assert!(done.contains("\"output_tokens\":56"));
     }
 
     #[test]

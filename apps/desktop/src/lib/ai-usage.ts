@@ -68,6 +68,27 @@ export function usageEntry(
   };
 }
 
+/** A service's prices, in dollars per million tokens. */
+export interface ServicePrice {
+  input: number;
+  output: number;
+}
+
+/** What a request cost: as reported for Claude, else from the prices set. */
+export function entryCost(
+  e: AiUsageEntry,
+  prices: Record<string, ServicePrice> = {},
+): number {
+  if (e.costUsd !== null) return e.costUsd;
+  const price = prices[e.provider ?? "Claude"];
+  if (!price) return 0;
+  return (
+    ((e.input + e.cacheRead + e.cacheWrite) * price.input +
+      e.output * price.output) /
+    1e6
+  );
+}
+
 export interface UsageSummary {
   requests: number;
   input: number;
@@ -77,11 +98,13 @@ export interface UsageSummary {
   costUsd: number;
   byModel: { model: string; requests: number; costUsd: number }[];
   byProject: { project: string; requests: number; costUsd: number }[];
+  byService: { service: string; requests: number; costUsd: number }[];
 }
 
 export function summarize(
   entries: AiUsageEntry[],
   since: number,
+  prices: Record<string, ServicePrice> = {},
 ): UsageSummary {
   const s: UsageSummary = {
     requests: 0,
@@ -92,9 +115,11 @@ export function summarize(
     costUsd: 0,
     byModel: [],
     byProject: [],
+    byService: [],
   };
   const models = new Map<string, { requests: number; costUsd: number }>();
   const projects = new Map<string, { requests: number; costUsd: number }>();
+  const services = new Map<string, { requests: number; costUsd: number }>();
   for (const e of entries) {
     if (e.at < since) continue;
     s.requests++;
@@ -102,7 +127,8 @@ export function summarize(
     s.output += e.output;
     s.cacheRead += e.cacheRead;
     s.cacheWrite += e.cacheWrite;
-    s.costUsd += e.costUsd ?? 0;
+    const cost = entryCost(e, prices);
+    s.costUsd += cost;
     for (const [map, key] of [
       [
         models,
@@ -111,10 +137,11 @@ export function summarize(
           : `${e.provider} · ${e.model}`,
       ],
       [projects, e.project ?? "No project"],
+      [services, e.provider ?? "Claude"],
     ] as const) {
       const row = map.get(key) ?? { requests: 0, costUsd: 0 };
       row.requests++;
-      row.costUsd += e.costUsd ?? 0;
+      row.costUsd += cost;
       map.set(key, row);
     }
   }
@@ -133,6 +160,7 @@ export function summarize(
       .sort((a, b) => b.costUsd - a.costUsd || b.requests - a.requests);
   s.byModel = sorted(models, "model");
   s.byProject = sorted(projects, "project");
+  s.byService = sorted(services, "service");
   return s;
 }
 
@@ -217,6 +245,18 @@ interface AiUsageState {
   /** The day the budget warning was last given, so it's given once. */
   warnedDay: number | null;
   claudeLimits: ClaudeLimits | null;
+  /** Prices for services that don't report a cost, by service name. */
+  prices: Record<string, ServicePrice>;
+  /** A daily amount per service to be warned at. */
+  serviceBudgets: Record<string, number>;
+  /** Service → the day its budget warning was given. */
+  serviceWarned: Record<string, number>;
+  /** The service (its credential id) to move to when Claude's limit is
+   *  reached; null: ask. */
+  fallbackService: string | null;
+  setFallbackService: (id: string | null) => void;
+  setPrice: (service: string, price: ServicePrice | null) => void;
+  setServiceBudget: (service: string, usd: number | null) => void;
   record: (entry: AiUsageEntry) => void;
   recordLimits: (info: RateLimitInfo) => void;
   setDailyBudget: (usd: number | null) => void;
@@ -230,6 +270,27 @@ export const useAiUsage = create<AiUsageState>()(
       dailyBudgetUsd: null,
       warnedDay: null,
       claudeLimits: null,
+      prices: {},
+      fallbackService: null,
+      setFallbackService: (id) => set({ fallbackService: id }),
+      serviceBudgets: {},
+      serviceWarned: {},
+      setPrice: (service, price) =>
+        set((s) => {
+          const prices = { ...s.prices };
+          if (price) prices[service] = price;
+          else delete prices[service];
+          return { prices };
+        }),
+      setServiceBudget: (service, usd) =>
+        set((s) => {
+          const serviceBudgets = { ...s.serviceBudgets };
+          if (usd) serviceBudgets[service] = usd;
+          else delete serviceBudgets[service];
+          const serviceWarned = { ...s.serviceWarned };
+          delete serviceWarned[service];
+          return { serviceBudgets, serviceWarned };
+        }),
       recordLimits: (info) => {
         const before = get().claudeLimits;
         const after = nextLimits(before, info);
@@ -243,14 +304,32 @@ export const useAiUsage = create<AiUsageState>()(
       },
       record: (entry) => {
         set((s) => ({ entries: [...s.entries, entry].slice(-KEEP) }));
-        const { dailyBudgetUsd, warnedDay, entries } = get();
+        const { dailyBudgetUsd, warnedDay, entries, prices } = get();
         const today = startOfToday();
+        // This service's own budget.
+        const service = entry.provider ?? "Claude";
+        const own = get().serviceBudgets[service];
+        if (own && get().serviceWarned[service] !== today) {
+          const spent = summarize(
+            entries.filter((e) => (e.provider ?? "Claude") === service),
+            today,
+            prices,
+          ).costUsd;
+          if (spent >= own) {
+            set((s) => ({
+              serviceWarned: { ...s.serviceWarned, [service]: today },
+            }));
+            toast.warning(`${service} today is past your $${own} budget`, {
+              description: `About $${spent.toFixed(2)}. Settings → AI usage has the details.`,
+            });
+          }
+        }
         if (!dailyBudgetUsd || warnedDay === today) return;
-        const spent = summarize(entries, today).costUsd;
+        const spent = summarize(entries, today, prices).costUsd;
         if (spent >= dailyBudgetUsd) {
           set({ warnedDay: today });
           toast.warning(`AI use today is past your $${dailyBudgetUsd} budget`, {
-            description: `About $${spent.toFixed(2)} at API prices. Settings → AI usage has the details.`,
+            description: `About $${spent.toFixed(2)}. Settings → AI usage has the details.`,
           });
         }
       },
