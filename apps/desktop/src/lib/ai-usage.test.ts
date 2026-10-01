@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarize, usageEntry } from "./ai-usage";
+import { claudeLimited, nextLimits, summarize, usageEntry } from "./ai-usage";
 
 const result = {
   type: "result",
@@ -19,6 +19,7 @@ describe("AI usage", () => {
   it("reads a request's usage from its result", () => {
     expect(usageEntry(result, "/p/Thesis", "opus", 1000)).toEqual({
       at: 1000,
+      provider: "Claude",
       model: "claude-opus-5-5",
       project: "/p/Thesis",
       input: 1200,
@@ -50,5 +51,61 @@ describe("AI usage", () => {
     expect(s.byProject).toEqual([
       { project: "/p/Thesis", requests: 2, costUsd: 0.5 },
     ]);
+  });
+});
+
+describe("Claude's plan limits", () => {
+  const now = 1_700_000_000_000;
+  it("reads both windows from a rate limit event", () => {
+    const l = nextLimits(
+      null,
+      {
+        status: "allowed_warning",
+        rateLimitType: "five_hour",
+        unifiedWindows: {
+          five_hour: { utilization: 0.82, resetsAt: now / 1000 + 3600 },
+          seven_day: { utilization: 0.31, resetsAt: now / 1000 + 86400 },
+        },
+      },
+      now,
+    );
+    expect(l.fiveHour).toEqual({
+      utilization: 0.82,
+      resetsAt: now + 3_600_000,
+    });
+    expect(l.sevenDay?.utilization).toBe(0.31);
+    expect(claudeLimited(l, now)).toBe(false);
+  });
+
+  it("knows when Claude refuses, and until when", () => {
+    const l = nextLimits(
+      null,
+      {
+        status: "rejected",
+        rateLimitType: "five_hour",
+        resetsAt: now / 1000 + 600,
+        utilization: 1,
+      },
+      now,
+    );
+    expect(l.fiveHour).toEqual({ utilization: 1, resetsAt: now + 600_000 });
+    expect(claudeLimited(l, now)).toBe(true);
+    expect(claudeLimited(l, now + 700_000)).toBe(false);
+    // A later event that doesn't mention a window keeps it until it resets.
+    const later = nextLimits(l, { status: "allowed" }, now + 1000);
+    expect(later.fiveHour?.utilization).toBe(1);
+    expect(claudeLimited(later, now + 1000)).toBe(false);
+  });
+
+  it("prices only Claude", () => {
+    const e = usageEntry(
+      { total_cost_usd: 1 },
+      null,
+      "deepseek-chat",
+      0,
+      "DeepSeek",
+    );
+    expect(e.costUsd).toBeNull();
+    expect(summarize([e], 0).byModel[0].model).toBe("DeepSeek · deepseek-chat");
   });
 });

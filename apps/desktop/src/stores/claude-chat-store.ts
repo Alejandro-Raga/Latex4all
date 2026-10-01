@@ -650,6 +650,16 @@ interface ClaudeChatState {
 
 // ─── Store ───
 
+/** The service a chat talks to, by the name it was given. */
+export function providerLabel(providerKey: string | null): string {
+  const id = providerCredentialIdFromSessionKey(providerKey);
+  if (!id || id === CLAUDE_CODE_PROVIDER_ID) return "Claude";
+  return (
+    useClaudeSetupStore.getState().openAiCredentials.find((c) => c.id === id)
+      ?.label ?? "Other"
+  );
+}
+
 /** A chat setting kept between launches (an unknown value: the default). */
 function remembered<T extends string>(
   name: string,
@@ -1554,6 +1564,8 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
             msg as ResultUsage,
             tab?.projectPath ?? null,
             selectedModel,
+            Date.now(),
+            providerLabel(tab?.providerKey ?? null),
           ),
         );
     }

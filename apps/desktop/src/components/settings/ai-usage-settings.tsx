@@ -8,7 +8,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { startOfToday, summarize, useAiUsage } from "@/lib/ai-usage";
+import {
+  type AiUsageEntry,
+  claudeLimited,
+  type LimitWindow,
+  startOfToday,
+  summarize,
+  useAiUsage,
+} from "@/lib/ai-usage";
 import { cn } from "@/lib/utils";
 import { useClaudeChatStore } from "@/stores/claude-chat-store";
 
@@ -56,6 +63,96 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** "in 2 h 10 min", "Thu 14:00": when a window starts over. */
+export function resetsLabel(at: number, now = Date.now()): string {
+  const mins = Math.max(0, Math.round((at - now) / 60000));
+  if (mins < 60) return `in ${mins} min`;
+  if (mins < 24 * 60) {
+    return `in ${Math.floor(mins / 60)} h ${String(mins % 60).padStart(2, "0")} min`;
+  }
+  return new Date(at).toLocaleString(undefined, {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** A window's bar: how full it is, and its colour once nearly full. */
+export function LimitBar({
+  label,
+  window: w,
+  compact,
+}: {
+  label: string;
+  window: LimitWindow;
+  compact?: boolean;
+}) {
+  const pct = Math.min(100, Math.round(w.utilization * 100));
+  return (
+    <div className={compact ? "min-w-0 flex-1" : undefined}>
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className={compact ? "text-muted-foreground" : "text-sm"}>
+          {label}
+        </span>
+        <span className="text-muted-foreground tabular-nums">
+          {pct}% · resets {resetsLabel(w.resetsAt)}
+        </span>
+      </div>
+      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn(
+            "h-full rounded-full",
+            pct >= 90
+              ? "bg-destructive"
+              : pct >= 70
+                ? "bg-amber-500"
+                : "bg-primary",
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** Claude's own 5-hour and weekly windows, and what this app sent in them. */
+function ClaudePlan({ entries }: { entries: AiUsageEntry[] }) {
+  const limits = useAiUsage((s) => s.claudeLimits);
+  if (!limits || (!limits.fiveHour && !limits.sevenDay)) return null;
+  const sentSince = (from: number) =>
+    summarize(
+      entries.filter((e) => !e.provider || e.provider === "Claude"),
+      from,
+    ).requests;
+  const windows = [
+    { label: "5-hour window", w: limits.fiveHour, span: 5 * 3600e3 },
+    { label: "Weekly", w: limits.sevenDay, span: 7 * 864e5 },
+  ].filter((x): x is { label: string; w: LimitWindow; span: number } =>
+    Boolean(x.w),
+  );
+  return (
+    <div className="mx-5 mb-4 space-y-3 rounded-lg border border-border p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-medium text-sm">Claude plan</span>
+        <span className="text-muted-foreground text-xs">
+          {claudeLimited(limits)
+            ? "Limit reached"
+            : `as of ${new Date(limits.observedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
+        </span>
+      </div>
+      {windows.map(({ label, w, span }) => (
+        <div key={label}>
+          <LimitBar label={label} window={w} />
+          <div className="pt-0.5 text-muted-foreground text-xs">
+            {sentSince(w.resetsAt - span)} requests from Latex4All in this
+            window
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** How much the AI has been used, and the settings that use less of it. */
 export function AiUsageSettings() {
   const entries = useAiUsage((s) => s.entries);
@@ -94,6 +191,9 @@ export function AiUsageSettings() {
 
   return (
     <div className="py-2">
+      <div className="pt-2">
+        <ClaudePlan entries={entries} />
+      </div>
       <div className="flex items-center gap-1 px-5 pt-1 pb-3">
         {PERIODS.map((p) => (
           <button

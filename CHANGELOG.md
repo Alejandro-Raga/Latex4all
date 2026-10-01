@@ -124,8 +124,12 @@ tag.
 ### AI
 
 - Settings → AI usage: requests, tokens and what they'd cost at API prices,
-  today, this week or this month, by model and by project, with a daily
-  amount to be warned at.
+  today, this week or this month, by service, model and project, with a
+  daily amount to be warned at. With a Claude plan, the 5-hour and weekly
+  limits as Claude counts them, and when each starts over.
+- When a Claude limit is nearly reached the chat shows how full it is; once
+  it's reached, a button switches the chat to another AI service you've set
+  up (DeepSeek, say), conversation and all.
 - The chat remembers its model and thinking effort between launches, and
   starts on Sonnet, which uses far less than Opus.
 - A long chat says so, with a button for a new one: each message re-reads

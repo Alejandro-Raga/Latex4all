@@ -1,4 +1,14 @@
-import { contextTokens, type ResultUsage } from "@/lib/ai-usage";
+import { LimitBar, resetsLabel } from "@/components/settings/ai-usage-settings";
+import {
+  claudeLimited,
+  contextTokens,
+  type LimitWindow,
+  type ResultUsage,
+  useAiUsage,
+} from "@/lib/ai-usage";
+import { CLAUDE_CODE_PROVIDER_ID } from "@/stores/claude-chat-store";
+import { useClaudeSetupStore } from "@/stores/claude-setup-store";
+import { useSettingsWindow } from "@/stores/settings-window-store";
 import { useClaudeChatStore } from "@/stores/claude-chat-store";
 
 /** Past this, each message re-reads a lot: a new chat is much lighter. */
@@ -38,6 +48,73 @@ export function LongChatNotice() {
       >
         New chat
       </button>
+    </div>
+  );
+}
+
+/** Shown from this full on: below it, the meter would be noise. */
+const NEARLY_FULL = 0.75;
+
+/**
+ * Claude's plan windows when they're filling up, and when a limit is
+ * reached, the other AI services you've set up, one click away.
+ */
+export function ClaudeLimitNotice() {
+  const limits = useAiUsage((s) => s.claudeLimits);
+  const providerId = useClaudeChatStore((s) => s.selectedProviderCredentialId);
+  const setProvider = useClaudeChatStore(
+    (s) => s.setSelectedProviderCredentialId,
+  );
+  const others = useClaudeSetupStore((s) => s.openAiCredentials);
+  const onClaude = !providerId || providerId === CLAUDE_CODE_PROVIDER_ID;
+  if (!onClaude || !limits) return null;
+
+  const now = Date.now();
+  if (claudeLimited(limits, now)) {
+    return (
+      <div className="mx-3 mb-1 space-y-1.5 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs">
+        <div>
+          Claude's limit is reached; it resets{" "}
+          {resetsLabel(limits.limitedUntil as number, now)}.
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {others.length > 0 ? (
+            others.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setProvider(c.id)}
+                className="rounded-md border border-border bg-background px-2 py-0.5 font-medium hover:bg-muted"
+              >
+                Use {c.label}
+              </button>
+            ))
+          ) : (
+            <button
+              type="button"
+              onClick={() => useSettingsWindow.getState().show("provider")}
+              className="font-medium text-primary hover:underline"
+            >
+              Add another AI service
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const full = [
+    { label: "5-hour", w: limits.fiveHour },
+    { label: "Week", w: limits.sevenDay },
+  ].filter((x): x is { label: string; w: LimitWindow } =>
+    Boolean(x.w && x.w.resetsAt > now && x.w.utilization >= NEARLY_FULL),
+  );
+  if (!full.length) return null;
+  return (
+    <div className="mx-3 mb-1 flex gap-3 rounded-lg border border-border bg-muted/50 px-3 py-1.5">
+      {full.map(({ label, w }) => (
+        <LimitBar key={label} label={label} window={w} compact />
+      ))}
     </div>
   );
 }

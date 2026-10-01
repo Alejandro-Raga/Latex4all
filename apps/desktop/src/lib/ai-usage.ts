@@ -5,6 +5,8 @@ import { persist } from "zustand/middleware";
 /** One request to the AI, as its final message reports it. */
 export interface AiUsageEntry {
   at: number;
+  /** The service: "Claude", or the name given to another provider. */
+  provider?: string;
   model: string;
   project: string | null;
   input: number;
@@ -43,6 +45,7 @@ export function usageEntry(
   project: string | null,
   fallbackModel: string,
   at = Date.now(),
+  provider = "Claude",
 ): AiUsageEntry {
   const u = msg.usage ?? {};
   // The model that did most of the work, by name, when it's listed.
@@ -51,13 +54,15 @@ export function usageEntry(
   const cost = msg.total_cost_usd ?? msg.cost_usd;
   return {
     at,
+    provider,
     model,
     project,
     input: u.input_tokens ?? 0,
     output: u.output_tokens ?? 0,
     cacheRead: u.cache_read_input_tokens ?? 0,
     cacheWrite: u.cache_creation_input_tokens ?? 0,
-    costUsd: typeof cost === "number" ? cost : null,
+    // Priced as Claude; for another service that figure means nothing.
+    costUsd: provider === "Claude" && typeof cost === "number" ? cost : null,
     turns: msg.num_turns ?? 1,
     durationMs: msg.duration_ms ?? 0,
   };
@@ -99,7 +104,12 @@ export function summarize(
     s.cacheWrite += e.cacheWrite;
     s.costUsd += e.costUsd ?? 0;
     for (const [map, key] of [
-      [models, e.model],
+      [
+        models,
+        !e.provider || e.provider === "Claude"
+          ? e.model
+          : `${e.provider} · ${e.model}`,
+      ],
       [projects, e.project ?? "No project"],
     ] as const) {
       const row = map.get(key) ?? { requests: 0, costUsd: 0 };
@@ -136,13 +146,79 @@ export const contextTokens = (
   e: Pick<AiUsageEntry, "input" | "cacheRead" | "cacheWrite">,
 ) => e.input + e.cacheRead + e.cacheWrite;
 
+/** One of Claude's plan windows: how much is used and when it resets. */
+export interface LimitWindow {
+  /** Fraction used, usually 0–1. */
+  utilization: number;
+  resetsAt: number;
+}
+
+/** Claude's plan limits as last reported (only for a Claude plan login). */
+export interface ClaudeLimits {
+  fiveHour?: LimitWindow;
+  sevenDay?: LimitWindow;
+  /** "rejected" when a limit is reached, until `limitedUntil`. */
+  status: "allowed" | "allowed_warning" | "rejected";
+  limitedUntil: number | null;
+  /** Which window is the one that counts now ("five_hour", "seven_day"…). */
+  limitType: string | null;
+  observedAt: number;
+}
+
+/** What Claude Code's rate_limit_event carries (times in seconds). */
+export interface RateLimitInfo {
+  status?: "allowed" | "allowed_warning" | "rejected";
+  resetsAt?: number;
+  rateLimitType?: string;
+  utilization?: number;
+  unifiedWindows?: {
+    five_hour?: { utilization: number; resetsAt: number };
+    seven_day?: { utilization: number; resetsAt: number };
+  };
+}
+
+/** The limits after an event, keeping windows it doesn't mention. */
+export function nextLimits(
+  prev: ClaudeLimits | null,
+  info: RateLimitInfo,
+  now = Date.now(),
+): ClaudeLimits {
+  const win = (w?: { utilization: number; resetsAt: number }) =>
+    w ? { utilization: w.utilization, resetsAt: w.resetsAt * 1000 } : undefined;
+  const fresh = (w?: LimitWindow) => (w && w.resetsAt > now ? w : undefined);
+  const out: ClaudeLimits = {
+    fiveHour: win(info.unifiedWindows?.five_hour) ?? fresh(prev?.fiveHour),
+    sevenDay: win(info.unifiedWindows?.seven_day) ?? fresh(prev?.sevenDay),
+    status: info.status ?? prev?.status ?? "allowed",
+    limitType: info.rateLimitType ?? prev?.limitType ?? null,
+    limitedUntil:
+      info.status === "rejected" && info.resetsAt ? info.resetsAt * 1000 : null,
+    observedAt: now,
+  };
+  // The window that counts, from the top-level figures, when it isn't listed.
+  if (info.utilization !== undefined && info.resetsAt) {
+    const w = { utilization: info.utilization, resetsAt: info.resetsAt * 1000 };
+    if (info.rateLimitType === "five_hour" && !out.fiveHour) out.fiveHour = w;
+    if (info.rateLimitType === "seven_day" && !out.sevenDay) out.sevenDay = w;
+  }
+  return out;
+}
+
+/** Whether Claude is refusing requests right now. */
+export const claudeLimited = (l: ClaudeLimits | null, now = Date.now()) =>
+  Boolean(
+    l && l.status === "rejected" && l.limitedUntil && l.limitedUntil > now,
+  );
+
 interface AiUsageState {
   entries: AiUsageEntry[];
   /** A daily amount (at API prices) to be warned at; null: none. */
   dailyBudgetUsd: number | null;
   /** The day the budget warning was last given, so it's given once. */
   warnedDay: number | null;
+  claudeLimits: ClaudeLimits | null;
   record: (entry: AiUsageEntry) => void;
+  recordLimits: (info: RateLimitInfo) => void;
   setDailyBudget: (usd: number | null) => void;
   clear: () => void;
 }
@@ -153,6 +229,18 @@ export const useAiUsage = create<AiUsageState>()(
       entries: [],
       dailyBudgetUsd: null,
       warnedDay: null,
+      claudeLimits: null,
+      recordLimits: (info) => {
+        const before = get().claudeLimits;
+        const after = nextLimits(before, info);
+        set({ claudeLimits: after });
+        if (claudeLimited(after) && !claudeLimited(before)) {
+          const until = new Date(after.limitedUntil as number);
+          toast.warning("Claude's usage limit is reached", {
+            description: `Until ${until.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}. You can switch to another AI service in the chat.`,
+          });
+        }
+      },
       record: (entry) => {
         set((s) => ({ entries: [...s.entries, entry].slice(-KEEP) }));
         const { dailyBudgetUsd, warnedDay, entries } = get();

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { type RateLimitInfo, useAiUsage } from "@/lib/ai-usage";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { remove } from "@tauri-apps/plugin-fs";
@@ -328,6 +329,14 @@ export function useClaudeEvents() {
         msg.message?.content?.length === 1 &&
         msg.message.content[0].type === "text"
       ) {
+        return;
+      }
+
+      // Claude's plan limits: kept for the usage meter, not shown as chat.
+      if ((msg as { type: string }).type === "rate_limit_event") {
+        const info = (msg as { rate_limit_info?: RateLimitInfo })
+          .rate_limit_info;
+        if (info) useAiUsage.getState().recordLimits(info);
         return;
       }
 
