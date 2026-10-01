@@ -1,4 +1,5 @@
 import type { PdfMark } from "@/lib/annotations/pdf-placement";
+import { cn } from "@/lib/utils";
 import { markAt, usePdfMarks } from "./use-pdf-annotations";
 import {
   useCallback,
@@ -1546,7 +1547,13 @@ export function PdfViewer({
         ref={containerRef}
         tabIndex={-1}
         {...{ [LOCAL_ZOOM_SHORTCUTS_ATTR]: "true" }}
-        className="min-h-0 flex-1 overflow-auto outline-none"
+        className={cn(
+          "min-h-0 flex-1 overflow-auto outline-none",
+          // The dark looks invert everything here, which turns the pages'
+          // shadow into a glow: a faint edge instead.
+          look.dark &&
+            "[&_.mupdf-page]:shadow-none [&_.mupdf-page]:outline [&_.mupdf-page]:outline-1 [&_.mupdf-page]:outline-black/15",
+        )}
         style={{
           cursor: captureMode ? "crosshair" : undefined,
           touchAction: captureMode ? "none" : "pan-x pan-y",

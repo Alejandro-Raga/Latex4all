@@ -45,9 +45,12 @@ export const PDF_THEMES: PdfThemeInfo[] = [
   {
     id: "sepia",
     label: "Sepia",
-    filter: "sepia(0.55) brightness(0.94) contrast(0.92)",
-    paper: "#ece2cd",
-    ink: "#3f3222",
+    // Darkened first, so the tint shows on white paper instead of clipping
+    // away; contrast up so the ink stays crisp.
+    filter:
+      "brightness(0.76) sepia(0.7) hue-rotate(-10deg) saturate(1.2) contrast(1.15)",
+    paper: "#ffe8be",
+    ink: "#271f17",
     dark: false,
   },
   {
