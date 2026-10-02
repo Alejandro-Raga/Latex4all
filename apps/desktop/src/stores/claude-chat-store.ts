@@ -658,6 +658,7 @@ const ENGINE_INSTRUCTIONS = [
   "Make small, targeted edits to the existing files; never rewrite a whole file. Keep the preamble, packages and structure.",
   "For small changes just make them; plan only for bigger tasks. Read only the part of a file you will change.",
   "Use proper LaTeX: \\section and friends, \\cite with the project's .bib keys, \\label and \\ref.",
+  "If agent skills are installed (folders with a SKILL.md), follow the ones that fit the task.",
 ].join("\n");
 
 /** The service a chat talks to, by the name it was given. */
