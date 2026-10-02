@@ -509,7 +509,10 @@ const AssistantMessage: FC<{
 
 /** "claude-sonnet-5-20260101" → "sonnet-5"; others as they are. */
 const shortModel = (model: string) =>
-  model.replace(/^claude-/, "").replace(/-\d{8}$/, "");
+  model
+    .replace(/^models\//, "")
+    .replace(/^claude-/, "")
+    .replace(/-\d{8}$/, "");
 
 /** A measured share: Claude only reports whole-percent moves, so 0 is
  *  "under 1%"; ChatGPT's come with decimals. */

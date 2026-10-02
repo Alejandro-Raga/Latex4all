@@ -225,6 +225,9 @@ tag.
 
 ### Fixed
 
+- A reply from a service added with a key (Gemini, DeepSeek…) was labelled
+  as Claude Sonnet and priced at Sonnet's rates, though that service's model
+  answered. It now shows the real model, priced by the service's own rates.
 - With a provider key added, Claude (signed in with a plan) dropped off the
   chat's list; it's there again. Gemini's model lists, in the chat too,
   offer only Google's current models, newest first. A model from another

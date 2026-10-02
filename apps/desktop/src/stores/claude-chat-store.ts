@@ -1933,6 +1933,33 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
       const tab = tabs.find((t) => t.id === tabId);
       const billing = billingOf(tab);
       msg = { ...msg, billing };
+      // A provider's model through Claude Code: Claude Code names and prices
+      // the reply as the Claude model it asked for ("sonnet"), though the
+      // provider's model answered. Its real name; its price is the user's.
+      const credentialId = providerCredentialIdFromSessionKey(
+        tab?.sessionProviderKey ?? tab?.providerKey ?? null,
+      );
+      if (
+        credentialId &&
+        credentialId !== CLAUDE_CODE_PROVIDER_ID &&
+        !engineOfProvider(credentialId)
+      ) {
+        const credential = useClaudeSetupStore
+          .getState()
+          .openAiCredentials.find((c) => c.id === credentialId);
+        const real =
+          get().selectedProviderModels[credentialId] ||
+          credential?.model ||
+          credential?.label ||
+          "model";
+        msg = {
+          ...msg,
+          model: real,
+          modelUsage: { [real]: {} },
+          total_cost_usd: undefined,
+          cost_usd: undefined,
+        } as ClaudeStreamMessage;
+      }
       useAiUsage
         .getState()
         .record(

@@ -525,6 +525,45 @@ describe("handing a chat to another AI", () => {
   });
 });
 
+describe("a provider's model through Claude Code", () => {
+  it("is named and priced as itself, not as the Claude model asked for", async () => {
+    const { useClaudeSetupStore } = await import("@/stores/claude-setup-store");
+    const { useAiUsage } = await import("@/lib/ai-usage");
+    resetClaudeChatStore();
+    useClaudeSetupStore.setState({
+      openAiCredentials: [
+        {
+          id: "gem",
+          label: "Gemini (API key)",
+          base_url: "https://generativelanguage.googleapis.com/v1beta/openai",
+          model: "models/gemini-3.8-flash",
+        },
+      ],
+    });
+    useAiUsage.setState({ entries: [] });
+    useClaudeChatStore.setState((s) => ({
+      tabs: s.tabs.map((t) => ({
+        ...t,
+        providerKey: "openai-compatible:gem",
+        sessionProviderKey: "openai-compatible:gem",
+      })),
+    }));
+    useClaudeChatStore.getState()._appendMessage("tab-default", {
+      type: "result",
+      result: "Hi",
+      usage: { input_tokens: 100, output_tokens: 10 },
+      modelUsage: { "claude-sonnet-5-5": {} },
+      total_cost_usd: 0.038,
+    } as any);
+    const msg = useClaudeChatStore.getState().tabs[0].messages.at(-1) as any;
+    expect(Object.keys(msg.modelUsage)).toEqual(["models/gemini-3.8-flash"]);
+    expect(msg.total_cost_usd).toBeUndefined();
+    const entry = useAiUsage.getState().entries.at(-1);
+    expect(entry?.model).toBe("models/gemini-3.8-flash");
+    expect(entry?.costUsd).toBeNull();
+  });
+});
+
 describe("useClaudeChatStore.resumeSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
