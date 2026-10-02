@@ -15,6 +15,11 @@ export interface AgentModel {
   id: string;
   name: string;
   description: string;
+  /** Copilot: "light", "versatile" or "powerful". */
+  category?: string;
+  /** Copilot: "available", "enable" (off in GitHub's settings) or
+   *  "upgrade" (not in the plan). */
+  status?: string;
 }
 
 interface AgentAccountsState {

@@ -130,8 +130,10 @@ tag.
   project like Claude, and its use shows in AI usage.
 - GitHub Copilot, with your Copilot plan (the free one included): Settings
   → Provider → "Sign in with an account". It uses your GitHub CLI sign-in if
-  you have one. The model menu lists the models your plan lets you pick,
-  with Auto first (free plans get Auto only). Next to the send button, how
+  you have one. Its model menu shows your plan and the premium requests
+  left this month, the models you can use (Auto first) marked Light,
+  Versatile or Powerful, and the ones your plan doesn't include, with a
+  link to turn them on or upgrade. Next to the send button, how
   much of the month's premium requests is used; under each reply, its
   tokens and share of the month. When the month runs out, the chat moves to
   your next AI.
@@ -182,6 +184,8 @@ tag.
 - The chat remembers its model and thinking effort, and starts on Sonnet,
   which uses much less than Opus.
 - Long chats show a notice with a button to start a new one.
+- A Stop button next to "Thinking…", so a request that hangs can always be
+  stopped, even with text in the message box.
 - Claude only makes a to-do list for bigger tasks and reads just the part
   of a file it's changing, so small edits take fewer steps.
 

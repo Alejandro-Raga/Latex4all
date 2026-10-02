@@ -425,6 +425,13 @@ pub struct AgentModel {
     id: String,
     name: String,
     description: String,
+    /// Copilot: "light", "versatile" or "powerful".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category: Option<String>,
+    /// Copilot: "available", "enable" (off in GitHub's settings) or
+    /// "upgrade" (not in the plan).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status: Option<String>,
 }
 
 /// The models one can pick: Codex's own catalog (it changes with OpenAI's
@@ -437,6 +444,8 @@ pub async fn agent_models(engine: String) -> Result<Vec<AgentModel>, String> {
         id: id.to_string(),
         name: name.to_string(),
         description: description.to_string(),
+        category: None,
+        status: None,
     };
     match engine {
         Engine::Gemini => Ok(vec![
@@ -453,6 +462,7 @@ pub async fn agent_models(engine: String) -> Result<Vec<AgentModel>, String> {
             )];
             if let Some(token) = github_token().await {
                 models.extend(copilot_models(&token).await.unwrap_or_default());
+                models[0].status = Some("available".to_string());
             }
             Ok(models)
         }
@@ -496,6 +506,8 @@ pub async fn agent_models(engine: String) -> Result<Vec<AgentModel>, String> {
                             name
                         },
                         description: text("description"),
+                        category: None,
+                        status: None,
                     })
                 })
                 .collect())
@@ -528,39 +540,70 @@ fn copilot_pickable(catalog: &serde_json::Value) -> Vec<AgentModel> {
             .unwrap_or_default()
             .to_string()
     };
-    catalog
+    let mut models: Vec<AgentModel> = catalog
         .get("data")
         .and_then(|d| d.as_array())
         .map(|models| {
             models
                 .iter()
-                .filter(|m| m.get("model_picker_enabled").and_then(|v| v.as_bool()) == Some(true))
-                .filter(|m| m.pointer("/policy/state").and_then(|v| v.as_str()) != Some("disabled"))
                 .filter(|m| {
                     m.pointer("/capabilities/type").and_then(|v| v.as_str()) == Some("chat")
                 })
-                .map(|m| {
+                // Without a picker category it's internal (search, compaction)
+                // or an old snapshot.
+                .filter_map(|m| {
+                    let category = match m.get("model_picker_category")?.as_str()? {
+                        "lightweight" => "light",
+                        "versatile" => "versatile",
+                        "powerful" => "powerful",
+                        _ => return None,
+                    };
+                    let pickable =
+                        m.get("model_picker_enabled").and_then(|v| v.as_bool()) == Some(true);
+                    let off =
+                        m.pointer("/policy/state").and_then(|v| v.as_str()) == Some("disabled");
+                    let status = match (pickable, off) {
+                        (true, false) => "available",
+                        (true, true) => "enable",
+                        (false, _) => "upgrade",
+                    };
                     let id = text(m, "id");
                     let name = text(m, "name");
-                    AgentModel {
+                    Some(AgentModel {
                         name: if name.is_empty() { id.clone() } else { name },
-                        description: [text(m, "vendor"), text(m, "model_picker_category")]
-                            .into_iter()
-                            .filter(|s| !s.is_empty())
-                            .collect::<Vec<_>>()
-                            .join(" · "),
+                        description: text(m, "vendor"),
                         id,
-                    }
+                        category: Some(category.to_string()),
+                        status: Some(status.to_string()),
+                    })
                 })
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    // Usable ones first, then by how capable.
+    let rank = |m: &AgentModel| {
+        let status = match m.status.as_deref() {
+            Some("available") => 0,
+            Some("enable") => 1,
+            _ => 2,
+        };
+        let category = match m.category.as_deref() {
+            Some("light") => 0,
+            Some("versatile") => 1,
+            _ => 2,
+        };
+        (status, category)
+    };
+    models.sort_by(|a, b| rank(a).cmp(&rank(b)).then_with(|| a.name.cmp(&b.name)));
+    models
 }
 
 /// Copilot's monthly allowance of premium requests, as GitHub counts it.
 #[derive(Serialize)]
 pub struct CopilotQuota {
     plan: Option<String>,
+    /// The kind of access: "free_educational_quota", "free_limited_copilot"…
+    sku: Option<String>,
     entitlement: f64,
     remaining: f64,
     unlimited: bool,
@@ -599,6 +642,10 @@ fn copilot_quota_from(user: &serde_json::Value) -> Option<CopilotQuota> {
     Some(CopilotQuota {
         plan: user
             .get("copilot_plan")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        sku: user
+            .get("access_type_sku")
             .and_then(|v| v.as_str())
             .map(str::to_string),
         entitlement: number("entitlement").unwrap_or(0.0),
@@ -789,16 +836,16 @@ fn agent_args(
                 .iter()
                 .map(|s| s.to_string()),
             );
+            let model = model.filter(|m| !m.is_empty()).unwrap_or("auto");
             args.push("--model".into());
-            args.push(
-                model
-                    .filter(|m| !m.is_empty())
-                    .unwrap_or("auto")
-                    .to_string(),
-            );
-            if let Some(e) = effort_level.filter(|e| matches!(*e, "low" | "medium" | "high")) {
-                args.push("--reasoning-effort".into());
-                args.push(e.to_string());
+            args.push(model.to_string());
+            // Auto picks the model, and with it the effort: Copilot refuses
+            // one set by hand.
+            if model != "auto" {
+                if let Some(e) = effort_level.filter(|e| matches!(*e, "low" | "medium" | "high")) {
+                    args.push("--reasoning-effort".into());
+                    args.push(e.to_string());
+                }
             }
             if let Some(id) = session_id.filter(|id| !id.is_empty()) {
                 args.push("--resume".into());
@@ -896,25 +943,50 @@ mod tests {
         assert!(args.contains(&"--allow-all-tools".to_string()));
         let resume = args.iter().position(|a| a == "--resume").unwrap();
         assert_eq!(args[resume + 1], "S1");
+        // Auto takes no effort; a named model does.
+        assert!(!args.contains(&"--reasoning-effort".to_string()));
+        let args = agent_args(
+            Engine::Copilot,
+            "/p",
+            Some("gpt-6-luna"),
+            None,
+            Some("high"),
+        );
         let effort = args.iter().position(|a| a == "--reasoning-effort").unwrap();
         assert_eq!(args[effort + 1], "high");
     }
 
     #[test]
-    fn copilot_lists_only_the_models_its_plan_can_pick() {
+    fn copilot_lists_its_models_with_what_the_plan_allows() {
         let catalog = serde_json::json!({"data": [
+            {"id": "claude-sonnet-5", "name": "Claude Sonnet 5", "vendor": "Anthropic", "model_picker_enabled": true,
+             "model_picker_category": "versatile", "policy": {"state": "disabled"}, "capabilities": {"type": "chat"}},
             {"id": "gpt-6-luna", "name": "GPT-6 Luna", "vendor": "OpenAI", "model_picker_enabled": true,
              "model_picker_category": "lightweight", "policy": {"state": "enabled"}, "capabilities": {"type": "chat"}},
-            {"id": "claude-sonnet-5", "name": "Claude Sonnet 5", "model_picker_enabled": true,
-             "policy": {"state": "disabled"}, "capabilities": {"type": "chat"}},
-            {"id": "gpt-5-mini", "model_picker_enabled": false, "policy": {"state": "enabled"},
-             "capabilities": {"type": "chat"}},
-            {"id": "text-embedding-3-small", "model_picker_enabled": true, "capabilities": {"type": "embeddings"}}
+            {"id": "gpt-6-sol", "name": "GPT-6 Sol", "model_picker_enabled": false,
+             "model_picker_category": "powerful", "policy": {"state": "enabled"}, "capabilities": {"type": "chat"}},
+            {"id": "exec-agent-a", "model_picker_enabled": false, "capabilities": {"type": "chat"}},
+            {"id": "text-embedding-3-small", "model_picker_category": "lightweight", "capabilities": {"type": "embeddings"}}
         ]});
         let models = copilot_pickable(&catalog);
-        assert_eq!(models.len(), 1);
-        assert_eq!(models[0].id, "gpt-6-luna");
-        assert_eq!(models[0].description, "OpenAI · lightweight");
+        let seen: Vec<(&str, &str, &str)> = models
+            .iter()
+            .map(|m| {
+                (
+                    m.id.as_str(),
+                    m.status.as_deref().unwrap(),
+                    m.category.as_deref().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            seen,
+            vec![
+                ("gpt-6-luna", "available", "light"),
+                ("claude-sonnet-5", "enable", "versatile"),
+                ("gpt-6-sol", "upgrade", "powerful"),
+            ]
+        );
     }
 
     #[test]

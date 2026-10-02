@@ -1,4 +1,12 @@
-import { type FC, memo, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type FC,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   contextTokens,
   isBilled,
@@ -24,49 +32,65 @@ import { ThinkingWidget, ToolWidget } from "./tool-widgets";
 
 // ─── Streaming Indicator (isolated to prevent re-render storms) ───
 
-const StreamingIndicator: FC<{ startedAt: number | null }> = memo(
-  ({ startedAt }) => {
-    const calculateElapsed = () =>
-      startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
+/** Past this with no answer, Stop is pointed out (a stuck request). */
+const SLOW_SECONDS = 90;
 
-    const [elapsed, setElapsed] = useState(calculateElapsed);
+const StreamingIndicator: FC<{
+  startedAt: number | null;
+  onStop: () => void;
+}> = memo(({ startedAt, onStop }) => {
+  const calculateElapsed = () =>
+    startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
 
-    useEffect(() => {
+  const [elapsed, setElapsed] = useState(calculateElapsed);
+
+  useEffect(() => {
+    setElapsed(calculateElapsed());
+    const timer = setInterval(() => {
       setElapsed(calculateElapsed());
-      const timer = setInterval(() => {
-        setElapsed(calculateElapsed());
-      }, 1000);
-      return () => clearInterval(timer);
-    }, [startedAt]);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [startedAt]);
 
-    return (
-      <div className="flex items-center gap-1.5 px-1 py-1.5 text-muted-foreground">
-        <div className="flex gap-0.5">
-          <span
-            className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50"
-            style={{ animationDelay: "0ms" }}
-          />
-          <span
-            className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50"
-            style={{ animationDelay: "150ms" }}
-          />
-          <span
-            className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50"
-            style={{ animationDelay: "300ms" }}
-          />
-        </div>
-        <span className="text-sm">
-          Thinking...
-          {elapsed >= 3 && (
-            <span className="ml-1 text-muted-foreground/60 text-xs">
-              {elapsed}s
-            </span>
-          )}
-        </span>
+  return (
+    <div className="flex items-center gap-1.5 px-1 py-1.5 text-muted-foreground">
+      <div className="flex gap-0.5">
+        <span
+          className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50"
+          style={{ animationDelay: "0ms" }}
+        />
+        <span
+          className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50"
+          style={{ animationDelay: "150ms" }}
+        />
+        <span
+          className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50"
+          style={{ animationDelay: "300ms" }}
+        />
       </div>
-    );
-  },
-);
+      <span className="text-sm">
+        Thinking...
+        {elapsed >= 3 && (
+          <span className="ml-1 text-muted-foreground/60 text-xs">
+            {elapsed}s
+          </span>
+        )}
+      </span>
+      <button
+        type="button"
+        onClick={onStop}
+        className={cn(
+          "ml-1 rounded px-1.5 py-0.5 text-xs hover:bg-muted",
+          elapsed >= SLOW_SECONDS
+            ? "font-medium text-foreground"
+            : "text-muted-foreground/60",
+        )}
+      >
+        Stop
+      </button>
+    </div>
+  );
+});
 
 const EMPTY_PENDING_GUIDANCE: QueuedGuidance[] = [];
 const THREAD_MAX_WIDTH = "max-w-[44rem]";
@@ -118,6 +142,10 @@ export const ChatMessages: FC = () => {
   const messages = useClaudeChatStore((s) => s.messages) ?? [];
   const isStreaming = useClaudeChatStore((s) => s.isStreaming);
   const streamingStartedAt = useClaudeChatStore((s) => s.streamingStartedAt);
+  const stopThis = useCallback(() => {
+    const chat = useClaudeChatStore.getState();
+    void chat.cancelExecution(chat.activeTabId);
+  }, []);
   const queuedGuidance =
     useClaudeChatStore(
       (s) => s.tabs.find((tab) => tab.id === s.activeTabId)?.queuedGuidance,
@@ -240,7 +268,10 @@ export const ChatMessages: FC = () => {
 
       {isStreaming && (
         <div className={cn("mx-auto w-full px-2", THREAD_MAX_WIDTH)}>
-          <StreamingIndicator startedAt={streamingStartedAt} />
+          <StreamingIndicator
+            startedAt={streamingStartedAt}
+            onStop={stopThis}
+          />
         </div>
       )}
 

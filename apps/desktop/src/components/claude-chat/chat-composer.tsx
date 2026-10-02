@@ -12,6 +12,7 @@ import {
 import { useCompare } from "./compare-view";
 import { RequestWeight } from "./request-weight";
 import { AddAiContent } from "./add-ai-dialog";
+import { CopilotModels } from "./copilot-models";
 import {
   type AgentEngine,
   ENGINE_LABELS,
@@ -241,20 +242,19 @@ function EngineModels({
   selected: string;
   onSelect: (id: string) => void;
 }) {
-  // Copilot's own default is Auto, which its list has first.
-  const options =
-    engine === "copilot"
-      ? models
-      : [
-          {
-            id: "",
-            name: "Default",
-            description:
-              engine === "codex" ? "Default for your plan" : "Default",
-          },
-          ...models,
-        ];
-  if (engine === "copilot" && !selected) selected = "auto";
+  if (engine === "copilot") {
+    return (
+      <CopilotModels models={models} selected={selected} onSelect={onSelect} />
+    );
+  }
+  const options = [
+    {
+      id: "",
+      name: "Default",
+      description: engine === "codex" ? "Default for your plan" : "Default",
+    },
+    ...models,
+  ];
   return (
     <>
       {options.map((m) => (
@@ -1524,7 +1524,8 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                         {ENGINE_LABELS[engine]}
                       </div>
                       <div className="truncate text-muted-foreground text-xs">
-                        {agentModels[engine] || "Your account"}
+                        {agentModels[engine] ||
+                          (engine === "copilot" ? "Auto" : "Your account")}
                       </div>
                     </div>
                     {selectedEngine === engine && (
@@ -1745,7 +1746,10 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                 {(claudeProviderActive ||
                   selectedProviderCredential ||
                   selectedEngine === "codex" ||
-                  selectedEngine === "copilot") && (
+                  // Copilot's Auto sets its own effort.
+                  (selectedEngine === "copilot" &&
+                    Boolean(agentModels.copilot) &&
+                    agentModels.copilot !== "auto")) && (
                   <div className="shrink-0">
                     <EffortControls
                       effortLevel={effortLevel}

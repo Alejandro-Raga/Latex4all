@@ -327,6 +327,8 @@ export function codexLimitsFrom(
 /** Copilot's monthly premium requests, as GitHub counts them. */
 export interface CopilotQuota {
   plan: string | null;
+  /** The kind of access: "free_educational_quota"… */
+  sku: string | null;
   entitlement: number;
   remaining: number;
   unlimited: boolean;
@@ -343,6 +345,7 @@ export function copilotQuotaFrom(
   const num = (v: unknown) => (typeof v === "number" ? v : 0);
   return {
     plan: typeof r.plan === "string" ? r.plan : null,
+    sku: typeof r.sku === "string" ? r.sku : null,
     entitlement: num(r.entitlement),
     remaining: num(r.remaining),
     unlimited: r.unlimited === true,
