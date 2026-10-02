@@ -234,7 +234,7 @@ export function RequestWeight({ input }: { input: string }) {
     ]
       .filter(Boolean)
       .join(" ");
-  const weightHint = `Each message sends about ${k(tokens)} tokens: the chat so far. A new chat sends less.`;
+  const weightHint = `Each message sends about ${k(tokens)} tokens.`;
   const dailyHint = daily
     ? `${today} of ${daily.known ? "" : "about "}${daily.limit} free requests used today. Each step of a reply counts as one. Resets ${resetAt(nextPacificDay(now), now)}.`
     : "";
