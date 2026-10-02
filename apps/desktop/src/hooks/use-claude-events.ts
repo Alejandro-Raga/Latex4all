@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { isLimitText, onLimitHit } from "@/lib/ai-continuity";
 import { useAgentAccounts } from "@/lib/agent-accounts";
 import { missingCitations } from "@/lib/citations";
 import { appendLog, shortAsk } from "@/lib/ai-memory";
@@ -10,9 +11,7 @@ import {
   type TranslateState,
   translateAgentLine,
 } from "@/lib/agent-events";
-import { fallBackIfLimited } from "@/lib/ai-fallback";
 import {
-  claudeLimited,
   codexLimitsFrom,
   type RateLimitInfo,
   useAiUsage,
@@ -326,6 +325,11 @@ export function useClaudeEvents() {
         }
       }
 
+      // A request stopped by a usage limit (429, quota, balance…).
+      if (msg.type === "result" && msg.is_error && isLimitText(msg.result)) {
+        chatStore._patchTab(tabId, { limitHit: true });
+      }
+
       // Extract session_id from system:init
       if (msg.type === "system" && msg.subtype === "init" && msg.session_id) {
         chatStore._setSessionId(tabId, msg.session_id);
@@ -347,10 +351,10 @@ export function useClaudeEvents() {
           log.warn(
             `[${tabId}] rate_limit: status=${info.status} type=${info.rateLimitType} resets=${resetsAt}`,
           );
-          const wasLimited = claudeLimited(useAiUsage.getState().claudeLimits);
           useAiUsage.getState().recordLimits(info);
-          if (!wasLimited) fallBackIfLimited();
           if (info.status === "rejected") {
+            // This request ran out: when it ends, the chat carries on.
+            chatStore._patchTab(tabId, { limitHit: true });
             chatStore._setError(
               tabId,
               `Claude's ${info.rateLimitType === "seven_day" ? "weekly" : "5-hour"} limit is reached. It resets at ${resetsAt}.`,
@@ -453,6 +457,23 @@ export function useClaudeEvents() {
       );
       const engineError = engineErrorRef.current.get(tabId) ?? null;
       engineErrorRef.current.delete(tabId);
+      // Out of usage: carry on with the next AI (once the state's settled).
+      const ranOut =
+        !chatStore._cancelledByUser &&
+        (useClaudeChatStore.getState().tabs.find((t) => t.id === tabId)
+          ?.limitHit ||
+          isLimitText(engineError));
+      if (ranOut) {
+        const lastUser = [...tab.messages]
+          .reverse()
+          .find((m) => m.type === "user" && m.message?.content?.[0]?.text);
+        const request = (lastUser?.message?.content?.[0]?.text ?? "")
+          .split("\n")
+          .filter((l) => !/^(@|~@|\[)/.test(l.trim()))
+          .join("\n")
+          .trim();
+        setTimeout(() => onLimitHit(tabId, request || null), 0);
+      }
       if (engine && !success && !tab.error && !chatStore._cancelledByUser) {
         chatStore._setError(tabId, engineErrorMessage(engine, engineError));
       } else if (

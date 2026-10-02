@@ -165,9 +165,13 @@ tag.
   it's reached, a button switches the chat to another AI service you've set
   up (DeepSeek, say), conversation and all.
 - Other AI services get a price per million tokens and a daily warning of
-  their own, so their use shows as cost too; and Settings → AI usage can
-  switch the chat to one by itself when Claude's limit is reached, and back
-  once it resets.
+  their own, so their use shows as cost too.
+- When an AI runs out of usage, the chat carries on with the next one in
+  your order (Settings → AI usage), by itself or after asking: it finishes
+  the request that was cut short, told what's already been changed and
+  what's left, and goes back when the first one's limit resets. Works for
+  Claude, ChatGPT and services with a key; from 95% the chat offers to
+  switch before a task is cut off.
 - Under each reply, the model that answered and how many tokens it read and
   wrote (and what it cost, when it's billed), so heavy ones stand out.
 - Beside the send button: how heavy the chat is (every message reads at

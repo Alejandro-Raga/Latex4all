@@ -1,16 +1,26 @@
 import { useState } from "react";
+import { engineOfProvider } from "@/lib/agent-events";
+import {
+  acceptHandoff,
+  availableServices,
+  fallbackOrder,
+  nextService,
+  outUntil,
+  serviceLabel,
+  serviceOf,
+  switchBack,
+} from "@/lib/ai-continuity";
 import { useCitationCheck } from "@/components/workspace/citation-check";
 import { useProposedChangesStore } from "@/stores/proposed-changes-store";
 import { LimitBar, resetsLabel } from "@/components/settings/ai-usage-settings";
 import {
-  claudeLimited,
   contextTokens,
   type LimitWindow,
   type ResultUsage,
   useAiUsage,
+  windowName,
 } from "@/lib/ai-usage";
 import { CLAUDE_CODE_PROVIDER_ID } from "@/stores/claude-chat-store";
-import { useFallbackChoices } from "@/lib/fallback-choices";
 import { useSettingsWindow } from "@/stores/settings-window-store";
 import { useClaudeChatStore } from "@/stores/claude-chat-store";
 
@@ -59,65 +69,141 @@ export function LongChatNotice() {
 const NEARLY_FULL = 0.75;
 
 /**
- * Claude's plan windows when they're filling up, and when a limit is
- * reached, the other AI services you've set up, one click away.
+ * The plan window filling up, for Claude or ChatGPT, with the next AI one
+ * click away from 95%; and when a service is out, where the chat goes next.
  */
 export function ClaudeLimitNotice() {
-  const limits = useAiUsage((s) => s.claudeLimits);
+  const claudeLimits = useAiUsage((s) => s.claudeLimits);
+  const codexLimits = useAiUsage((s) => s.codexLimits);
+  const blocked = useAiUsage((s) => s.blocked);
+  const autoContinue = useAiUsage((s) => s.autoContinue);
   const providerId = useClaudeChatStore((s) => s.selectedProviderCredentialId);
-  const setProvider = useClaudeChatStore(
-    (s) => s.setSelectedProviderCredentialId,
+  const handoff = useClaudeChatStore(
+    (s) => s.tabs.find((t) => t.id === s.activeTabId)?.handoff,
   );
-  const others = useFallbackChoices();
-  const onClaude = !providerId || providerId === CLAUDE_CODE_PROVIDER_ID;
-  if (!onClaude || !limits) return null;
-
+  if (handoff) return null;
+  const current = serviceOf(providerId);
   const now = Date.now();
-  if (claudeLimited(limits, now)) {
+  const out = outUntil(current, { claudeLimits, codexLimits, blocked }, now);
+  const next = nextService(
+    current,
+    fallbackOrder(),
+    availableServices(),
+    (id) => outUntil(id, { claudeLimits, codexLimits, blocked }, now) !== null,
+  );
+  const switchNow = () => {
+    if (next)
+      useClaudeChatStore.getState().setSelectedProviderCredentialId(next);
+  };
+
+  if (out !== null) {
     return (
-      <div className="mx-3 mb-1 space-y-1.5 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs">
-        <div>
-          Claude's limit is reached; it resets{" "}
-          {resetsLabel(limits.limitedUntil as number, now)}.
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {others.length > 0 ? (
-            others.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setProvider(c.id)}
-                className="rounded-md border border-border bg-background px-2 py-0.5 font-medium hover:bg-muted"
-              >
-                Use {c.label}
-              </button>
-            ))
-          ) : (
-            <button
-              type="button"
-              onClick={() => useSettingsWindow.getState().show("provider")}
-              className="font-medium text-primary hover:underline"
-            >
-              Add another AI service
-            </button>
-          )}
-        </div>
+      <div className="mx-3 mb-1 flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs">
+        <span className="min-w-0 flex-1">
+          {serviceLabel(current)} is out of usage; back {resetsLabel(out, now)}.
+          {next &&
+            autoContinue &&
+            ` Your next message goes to ${serviceLabel(next)}.`}
+        </span>
+        {next ? (
+          <button
+            type="button"
+            onClick={switchNow}
+            className="shrink-0 rounded-md border border-border bg-background px-2 py-0.5 font-medium hover:bg-muted"
+          >
+            Use {serviceLabel(next)}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => useSettingsWindow.getState().show("provider")}
+            className="shrink-0 font-medium text-primary hover:underline"
+          >
+            Add another AI
+          </button>
+        )}
       </div>
     );
   }
 
-  const full = [
-    { label: "5-hour", w: limits.fiveHour },
-    { label: "Week", w: limits.sevenDay },
-  ].filter((x): x is { label: string; w: LimitWindow } =>
-    Boolean(x.w && x.w.resetsAt > now && x.w.utilization >= NEARLY_FULL),
+  // The windows filling up, for the service in use.
+  const windows: { label: string; w: LimitWindow }[] = [];
+  if (current === CLAUDE_CODE_PROVIDER_ID && claudeLimits) {
+    if (claudeLimits.fiveHour)
+      windows.push({ label: "5-hour", w: claudeLimits.fiveHour });
+    if (claudeLimits.sevenDay)
+      windows.push({ label: "Week", w: claudeLimits.sevenDay });
+  }
+  if (engineOfProvider(current) === "codex" && codexLimits) {
+    for (const w of [codexLimits.primary, codexLimits.secondary]) {
+      if (w) {
+        windows.push({
+          label: windowName(w.minutes),
+          w: { utilization: w.usedPercent / 100, resetsAt: w.resetsAt },
+        });
+      }
+    }
+  }
+  const full = windows.filter(
+    ({ w }) => w.resetsAt > now && w.utilization >= NEARLY_FULL,
   );
   if (!full.length) return null;
+  const almostOut = full.some(({ w }) => w.utilization >= 0.95);
   return (
-    <div className="mx-3 mb-1 flex gap-3 rounded-lg border border-border bg-muted/50 px-3 py-1.5">
+    <div className="mx-3 mb-1 flex items-center gap-3 rounded-lg border border-border bg-muted/50 px-3 py-1.5">
       {full.map(({ label, w }) => (
         <LimitBar key={label} label={label} window={w} compact />
       ))}
+      {almostOut && next && (
+        <button
+          type="button"
+          onClick={switchNow}
+          className="shrink-0 font-medium text-primary text-xs hover:underline"
+          title="Before it runs out mid-task"
+        >
+          Switch to {serviceLabel(next)}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Carrying on with another AI while the one in use is out. */
+export function HandoffNotice() {
+  const tab = useClaudeChatStore((s) =>
+    s.tabs.find((t) => t.id === s.activeTabId),
+  );
+  const h = tab?.handoff;
+  if (!tab || !h) return null;
+  if (h.mode === "offer") {
+    return (
+      <div className="mx-3 mb-1 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs">
+        <span className="min-w-0 flex-1">
+          {h.from} reached its usage limit
+          {h.resume ? " in the middle of your request" : ""}.
+        </span>
+        <button
+          type="button"
+          onClick={() => acceptHandoff(tab.id)}
+          className="shrink-0 rounded-md border border-border bg-background px-2 py-0.5 font-medium hover:bg-muted"
+        >
+          {h.resume ? `Carry on with ${h.to}` : `Use ${h.to}`}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="mx-3 mb-1 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-muted-foreground text-xs">
+      <span className="min-w-0 flex-1">
+        {`${h.from} is out${h.backAt ? ` until ${resetsLabel(h.backAt)}` : ""}; continuing with ${h.to}${h.backAt ? ", and back after" : ""}.`}
+      </span>
+      <button
+        type="button"
+        onClick={() => switchBack(tab.id)}
+        className="shrink-0 hover:text-foreground"
+      >
+        Back to {h.from} now
+      </button>
     </div>
   );
 }

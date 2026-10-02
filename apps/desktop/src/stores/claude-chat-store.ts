@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { switchIfOut } from "@/lib/ai-continuity";
 import { readLog, readMemory, sharedContext } from "@/lib/ai-memory";
 import {
   ENGINE_LABELS,
@@ -164,6 +165,21 @@ export interface TabState {
   answerOnly?: boolean;
   /** How Claude Code said its session is paid ("none": a plan sign-in). */
   apiKeySource?: string | null;
+  /** Its request ran into the service's usage limit. */
+  limitHit?: boolean;
+  /** Carrying on with another service while the one in use is out. */
+  handoff?: {
+    fromId: string;
+    from: string;
+    to: string;
+    /** When the first one is back, if known. */
+    backAt: number | null;
+    /** "auto": switched; "offer": waiting for a click. */
+    mode: "auto" | "offer";
+    toId: string;
+    /** What to carry on with (an interrupted request). */
+    resume?: string;
+  } | null;
   /** The plan window's use when the request went out, to measure its share. */
   windowBefore?: {
     service: "claude" | "codex";
@@ -382,7 +398,7 @@ function sanitizeStoredUserMessageForDisplay(
 
 function buildProviderSwitchContext(
   messages: ClaudeStreamMessage[],
-  maxChars = 18000,
+  maxChars = 10000,
 ): string | null {
   const entries = messages
     .filter((msg) => msg.type === "user" || msg.type === "assistant")
@@ -405,13 +421,39 @@ function buildProviderSwitchContext(
   }
 
   return [
-    "[Provider switch context]",
-    "The conversation below happened earlier in this same Latex4All chat before switching model providers.",
-    "Use it as prior context. Do not repeat it; answer only the user's latest request after this block.",
+    "[Handoff: this chat continues with you, after another assistant]",
+    ...handoffBrief(messages),
+    "The conversation so far (latest part) follows. Do not repeat it; answer only the user's latest request after this block.",
     "",
     selected.join("\n\n"),
-    "[End provider switch context]",
+    "[End of handoff]",
   ].join("\n");
+}
+
+/** What a new assistant needs first: the files changed and what's left. */
+export function handoffBrief(messages: ClaudeStreamMessage[]): string[] {
+  const files = new Set<string>();
+  let todos: { content?: string; status?: string }[] = [];
+  for (const m of messages) {
+    for (const b of m.message?.content ?? []) {
+      if (b.type !== "tool_use") continue;
+      if (/^(Write|Edit|MultiEdit)$/i.test(b.name ?? "")) {
+        const path = b.input?.file_path;
+        if (typeof path === "string")
+          files.add(path.split(/[\\/]/).pop() ?? path);
+      }
+      if (b.name === "TodoWrite" && Array.isArray(b.input?.todos)) {
+        todos = b.input.todos;
+      }
+    }
+  }
+  const open = todos.filter((t) => t.status !== "completed" && t.content);
+  return [
+    files.size ? `Files changed in this chat: ${[...files].join(", ")}.` : null,
+    open.length
+      ? `Still to do: ${open.map((t) => t.content).join("; ")}.`
+      : null,
+  ].filter((l): l is string => Boolean(l));
 }
 
 let tabCounter = 0;
@@ -1011,6 +1053,14 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
       if (!activeTab || activeTab.isStreaming) return;
     }
 
+    // Its service is known to be out: carry on with the next one rather than
+    // send a request that would fail (see ai-continuity.ts).
+    if (switchIfOut(activeTabId)) {
+      state = get();
+      activeTab = state.tabs.find((t) => t.id === activeTabId);
+      if (!activeTab) return;
+    }
+
     // Another chat is editing this project: wait for it, rather than have
     // two assistants change the same files at once.
     // Requests that only answer neither wait nor make others wait.
@@ -1216,6 +1266,7 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
       set((s) =>
         applyTabUpdate(s, activeTabId, {
           lastRequestAt: sentAt,
+          limitHit: false,
           windowBefore: planWindowNow(providerCredentialId),
           answerOnly: Boolean(options?.answerOnly),
           lastTurn: null,

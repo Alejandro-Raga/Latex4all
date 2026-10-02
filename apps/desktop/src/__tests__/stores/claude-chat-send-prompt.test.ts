@@ -234,7 +234,9 @@ describe("useClaudeChatStore.sendPrompt context assembly", () => {
       expect.objectContaining({
         providerCredentialId: null,
         providerModelOverride: null,
-        prompt: expect.stringContaining("[Provider switch context]"),
+        prompt: expect.stringContaining(
+          "[Handoff: this chat continues with you",
+        ),
       }),
     );
     const prompt = (vi.mocked(invoke).mock.calls[0]?.[1] as any).prompt;
@@ -484,6 +486,42 @@ describe("asking two AIs", () => {
       expect((args as any).prompt).toContain("do not change any files");
     }
     expect(useCompare.getState().tabs).toHaveLength(2);
+  });
+});
+
+describe("handing a chat to another AI", () => {
+  it("leads with the files changed and what's left to do", async () => {
+    const { handoffBrief } = await import("@/stores/claude-chat-store");
+    const brief = handoffBrief([
+      {
+        type: "assistant",
+        message: {
+          content: [
+            {
+              type: "tool_use",
+              id: "1",
+              name: "Edit",
+              input: { file_path: "/p/chapters/intro.tex" },
+            },
+            {
+              type: "tool_use",
+              id: "2",
+              name: "TodoWrite",
+              input: {
+                todos: [
+                  { content: "Rewrite the intro", status: "completed" },
+                  { content: "Add the results table", status: "pending" },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    ]);
+    expect(brief).toEqual([
+      "Files changed in this chat: intro.tex.",
+      "Still to do: Add the results table.",
+    ]);
   });
 });
 

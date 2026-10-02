@@ -1,4 +1,6 @@
 import { type ReactNode, useMemo, useState } from "react";
+import { fallbackOrder } from "@/lib/ai-continuity";
+import { CLAUDE_CODE_PROVIDER_ID } from "@/stores/claude-chat-store";
 import { useMemoryDialog } from "@/components/claude-chat/memory-dialog";
 import { useFallbackChoices } from "@/lib/fallback-choices";
 import { Button } from "@/components/ui/button";
@@ -158,34 +160,101 @@ function ClaudePlan({ entries }: { entries: AiUsageEntry[] }) {
   );
 }
 
-/** Which service takes over when Claude's limit is reached. */
+/**
+ * Which AIs carry on, in what order, when the one in use runs out; and
+ * whether by themselves or after asking.
+ */
 function Fallback() {
-  const services = useFallbackChoices();
-  const fallback = useAiUsage((s) => s.fallbackService);
-  const setFallback = useAiUsage((s) => s.setFallbackService);
-  if (!services.length) return null;
-  const ASK = "\0ask";
+  const choices = useFallbackChoices();
+  const setOrder = useAiUsage((s) => s.setFallbackOrder);
+  const auto = useAiUsage((s) => s.autoContinue);
+  const setAuto = useAiUsage((s) => s.setAutoContinue);
+  useAiUsage((s) => s.fallbackOrder);
+  const all = [{ id: CLAUDE_CODE_PROVIDER_ID, label: "Claude" }, ...choices];
+  if (all.length < 2) return null;
+  const order = fallbackOrder().filter((id) => all.some((c) => c.id === id));
+  const rest = all.filter((c) => !order.includes(c.id));
+  const rows = [
+    ...order.map(
+      (id) => all.find((c) => c.id === id) as { id: string; label: string },
+    ),
+    ...rest,
+  ];
+  const move = (id: string, by: number) => {
+    const next = [...order];
+    const i = next.indexOf(id);
+    const j = i + by;
+    if (i < 0 || j < 0 || j >= next.length) return;
+    [next[i], next[j]] = [next[j], next[i]];
+    setOrder(next);
+  };
   return (
-    <Row label="When Claude's limit is reached">
-      <Select
-        value={
-          fallback && services.some((c) => c.id === fallback) ? fallback : ASK
-        }
-        onValueChange={(v) => setFallback(v === ASK ? null : v)}
-      >
-        <SelectTrigger size="sm" className="w-44" aria-label="Fallback service">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ASK}>Ask me</SelectItem>
-          {services.map((c) => (
-            <SelectItem key={c.id} value={c.id}>
-              Switch to {c.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </Row>
+    <div className="border-border border-t px-5 py-3">
+      <div className="flex items-center justify-between gap-2 pb-2">
+        <span className="text-sm">When an AI runs out, continue with</span>
+        <Select
+          value={auto ? "auto" : "ask"}
+          onValueChange={(v) => setAuto(v === "auto")}
+        >
+          <SelectTrigger
+            size="sm"
+            className="w-40"
+            aria-label="How to continue"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">Automatically</SelectItem>
+            <SelectItem value="ask">Ask me first</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {rows.map((c) => {
+        const i = order.indexOf(c.id);
+        return (
+          <div key={c.id} className="flex items-center gap-2 py-0.5 text-sm">
+            <input
+              type="checkbox"
+              checked={i >= 0}
+              onChange={(e) =>
+                setOrder(
+                  e.target.checked
+                    ? [...order, c.id]
+                    : order.filter((id) => id !== c.id),
+                )
+              }
+              aria-label={`Use ${c.label}`}
+            />
+            <span className="w-5 text-muted-foreground text-xs tabular-nums">
+              {i >= 0 ? `${i + 1}.` : ""}
+            </span>
+            <span className="min-w-0 flex-1 truncate">{c.label}</span>
+            {i >= 0 && (
+              <>
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  onClick={() => move(c.id, -1)}
+                  className="px-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                  aria-label={`Move ${c.label} up`}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  disabled={i === order.length - 1}
+                  onClick={() => move(c.id, 1)}
+                  className="px-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                  aria-label={`Move ${c.label} down`}
+                >
+                  ↓
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

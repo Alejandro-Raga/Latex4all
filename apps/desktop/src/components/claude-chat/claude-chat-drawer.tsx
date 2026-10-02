@@ -22,6 +22,7 @@ import { CompareDialog, CompareView } from "./compare-view";
 import {
   CitationNotice,
   ClaudeLimitNotice,
+  HandoffNotice,
   LongChatNotice,
   TurnNotice,
   WaitingNotice,
@@ -264,6 +265,7 @@ export function ClaudeChatDrawer() {
         <TurnNotice />
         <CitationNotice />
         <WaitingNotice />
+        <HandoffNotice />
         <ClaudeLimitNotice />
         <LongChatNotice />
         {/* Composer */}

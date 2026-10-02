@@ -345,6 +345,15 @@ interface AiUsageState {
    *  reached; null: ask. */
   fallbackService: string | null;
   setFallbackService: (id: string | null) => void;
+  /** Services to carry on with, in order, when the one in use runs out. */
+  fallbackOrder: string[];
+  setFallbackOrder: (ids: string[]) => void;
+  /** Carry on by itself (else: offer it in the chat). */
+  autoContinue: boolean;
+  setAutoContinue: (on: boolean) => void;
+  /** Services that said they're out (429, quota…): id → until when. */
+  blocked: Record<string, number>;
+  block: (id: string, until: number) => void;
   setPrice: (service: string, price: ServicePrice | null) => void;
   setServiceBudget: (service: string, usd: number | null) => void;
   record: (entry: AiUsageEntry, tab?: string) => void;
@@ -373,6 +382,13 @@ export const useAiUsage = create<AiUsageState>()(
       prices: {},
       fallbackService: null,
       setFallbackService: (id) => set({ fallbackService: id }),
+      fallbackOrder: [],
+      setFallbackOrder: (ids) => set({ fallbackOrder: ids }),
+      autoContinue: true,
+      setAutoContinue: (on) => set({ autoContinue: on }),
+      blocked: {},
+      block: (id, until) =>
+        set((s) => ({ blocked: { ...s.blocked, [id]: until } })),
       serviceBudgets: {},
       serviceWarned: {},
       setPrice: (service, price) =>
