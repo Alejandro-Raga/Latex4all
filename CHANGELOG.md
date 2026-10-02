@@ -250,6 +250,8 @@ tag.
 - Asking an AI to remember something now creates AGENTS.md if it's missing.
   The memory window and the Chats panel have more room.
 - Claude disappeared from the model list after adding an API key.
+- In a narrow chat, the bar under the message box wrapped onto two lines.
+  It stays on one now, dropping the less needed details first.
 - Claude Code's notices about connectors and unknown model names no longer
   show in the chat.
 - A Gemini model that used its free requests for the day is no longer

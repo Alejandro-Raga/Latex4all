@@ -240,16 +240,19 @@ export function RequestWeight({ input }: { input: string }) {
     : "";
 
   return (
-    <span className="flex items-center gap-1.5 text-[11px] tabular-nums">
+    <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] tabular-nums">
       {showWeight && (
         <span
-          className={cn("rounded-full px-2 py-0.5", weight.className)}
+          className={cn(
+            "@[26rem]/bar:inline hidden rounded-full px-2 py-0.5",
+            weight.className,
+          )}
           title={weightHint}
         >
           {weight.label} · {k(tokens)}/msg
         </span>
       )}
-      {shown.map((w) => (
+      {shown.map((w, i) => (
         <button
           type="button"
           key={w.name}
@@ -258,12 +261,14 @@ export function RequestWeight({ input }: { input: string }) {
             if (claude) void useAiUsage.getState().refreshClaudeUsage();
           }}
           className={cn(
-            "flex items-center gap-1",
+            // Narrow: the first window alone.
+            i === 0 ? "flex" : "@[26rem]/bar:flex hidden",
+            "items-center gap-1",
             claude && "cursor-pointer hover:underline",
             level(w.used),
           )}
         >
-          <span className="relative h-1.5 w-8 overflow-hidden rounded-full bg-muted">
+          <span className="relative @[20rem]/bar:block hidden h-1.5 w-8 overflow-hidden rounded-full bg-muted">
             <span
               className={cn(
                 "absolute inset-y-0 left-0 rounded-full",
@@ -277,7 +282,7 @@ export function RequestWeight({ input }: { input: string }) {
             />
           </span>
           {w.name} {pct(w.used)}%
-          <span className="text-muted-foreground/70">
+          <span className="@[32rem]/bar:inline hidden text-muted-foreground/70">
             · {timeLeft(w.resetsAt, now)} left
           </span>
         </button>

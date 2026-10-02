@@ -35,6 +35,9 @@ import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { useDocumentStore } from "@/stores/document-store";
+import { ChatComposer } from "@/components/claude-chat/chat-composer";
+import { useAiUsage } from "@/lib/ai-usage";
+import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 
 const params = new URLSearchParams(location.search);
 const scenario = params.get("scenario");
@@ -442,5 +445,29 @@ if (scenario === "join") {
         <JoinDialog open onOpenChange={() => {}} />
       </ThemeProvider>,
     ),
+  );
+}
+
+if (scenario === "composer") {
+  // The chat's message box at a given width, on Claude with its limits.
+  const width = Number(params.get("width") ?? 600);
+  const now = Date.now();
+  useClaudeSetupStore.setState({ status: "ready" } as never);
+  useAiUsage.setState({
+    claudeLimits: {
+      fiveHour: { utilization: 0.34, resetsAt: now + 130 * 60e3 },
+      sevenDay: { utilization: 0.81, resetsAt: now + 3 * 864e5 },
+      status: "allowed",
+      limitedUntil: null,
+      limitType: "five_hour",
+      observedAt: now,
+    },
+  });
+  root.render(
+    <ThemeProvider attribute="class" themes={THEME_IDS}>
+      <div data-testid="composer" style={{ width, padding: 8 }}>
+        <ChatComposer isOpen />
+      </div>
+    </ThemeProvider>,
   );
 }

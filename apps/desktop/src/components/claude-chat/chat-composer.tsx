@@ -463,6 +463,17 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
 
   const hasInput = input.trim().length > 0;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // A narrow box gets a shorter hint, which a long one would cut in two.
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) =>
+      setNarrow(entry.contentRect.width < 380),
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const hadStoredProviderSelectionRef = useRef(
     loadSelectedProviderCredentialId() !== null,
   );
@@ -2023,17 +2034,22 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
             onPaste={handlePaste}
             placeholder={
               isStreaming
-                ? "Add guidance for the next turn..."
-                : "Ask me anything (/ for commands, @ to mention)"
+                ? narrow
+                  ? "Add guidance…"
+                  : "Add guidance for the next turn..."
+                : narrow
+                  ? "Ask anything…"
+                  : "Ask me anything (/ for commands, @ to mention)"
             }
             className="max-h-32 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base outline-none placeholder:text-muted-foreground/80"
             rows={1}
           />
         )}
 
-        <div className="relative flex items-center justify-between">
+        {/* One line however narrow: the less needed bits give way first. */}
+        <div className="@container/bar relative flex items-center justify-between gap-1 whitespace-nowrap">
           {/* Attachments, model & settings selector */}
-          <div className="flex items-center gap-1">
+          <div className="flex min-w-0 items-center gap-1">
             <TooltipIconButton
               tooltip="Attach files"
               side="top"
@@ -2051,18 +2067,20 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
               type="button"
               onClick={() => setModelPickerOpen((v) => !v)}
               title="Switch provider or model"
-              className="flex h-7 items-center gap-1.5 rounded-full px-2 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
+              className="flex h-7 min-w-[4.5rem] items-center gap-1.5 overflow-hidden rounded-full px-2 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
             >
               {selectedEngine ? (
                 <>
-                  <BoxIcon className="size-3" />
-                  <span>{ENGINE_LABELS[selectedEngine]}</span>
+                  <BoxIcon className="size-3 shrink-0" />
+                  <span className="truncate">
+                    {ENGINE_LABELS[selectedEngine]}
+                  </span>
                   {agentModels[selectedEngine] && (
-                    <span className="max-w-32 truncate text-muted-foreground/60">
+                    <span className="@[28rem]/bar:inline hidden max-w-32 truncate text-muted-foreground/60">
                       {agentModels[selectedEngine]}
                     </span>
                   )}
-                  <ChevronDownIcon className="size-3" />
+                  <ChevronDownIcon className="size-3 shrink-0" />
                 </>
               ) : selectedProviderCredential ? (
                 <>
@@ -2075,16 +2093,16 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                   ) : (
                     <BoxIcon className="size-3" />
                   )}
-                  <span className="max-w-36 truncate">
+                  <span className="@[30rem]/bar:inline hidden max-w-36 truncate">
                     {selectedProviderDisplayName}
                   </span>
                   <span className="max-w-32 truncate text-muted-foreground/60">
                     {directProviderModel}
                   </span>
-                  <span className="text-muted-foreground/60">
+                  <span className="@[34rem]/bar:inline hidden text-muted-foreground/60">
                     {effortShortLabel(effortLevel)}
                   </span>
-                  <ChevronDownIcon className="size-3" />
+                  <ChevronDownIcon className="size-3 shrink-0" />
                 </>
               ) : showClaudeProvider ? (
                 <>
@@ -2097,14 +2115,16 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                   ) : (
                     <BoxIcon className="size-3" />
                   )}
-                  <span>Claude Code</span>
+                  <span className="@[30rem]/bar:inline hidden">
+                    Claude Code
+                  </span>
                   <span className="max-w-32 truncate">
                     {claudeModelDisplayName(selectedModel)}
                   </span>
-                  <span className="text-muted-foreground/60">
+                  <span className="@[34rem]/bar:inline hidden text-muted-foreground/60">
                     {effortShortLabel(effortLevel)}
                   </span>
-                  <ChevronDownIcon className="size-3" />
+                  <ChevronDownIcon className="size-3 shrink-0" />
                 </>
               ) : (
                 <>
@@ -2113,13 +2133,13 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                   <span className="text-muted-foreground/60">
                     {setupStatus === "checking" ? "Loading" : "Select"}
                   </span>
-                  <ChevronDownIcon className="size-3" />
+                  <ChevronDownIcon className="size-3 shrink-0" />
                 </>
               )}
             </button>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             <RequestWeight input={input} />
             <TooltipIconButton
               tooltip={
