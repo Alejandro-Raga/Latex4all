@@ -170,9 +170,11 @@ tag.
   once it resets.
 - Under each reply, the model that answered and how many tokens it read and
   wrote (and what it cost, when it's billed), so heavy ones stand out.
-- Beside the send button, how heavy the message will be (Light, Medium,
-  Heavy) and, on a Claude plan, about what share of your 5-hour limit it
-  takes, learned from your own requests; hover for why.
+- Beside the send button: how heavy the chat is (every message reads at
+  least the conversation so far) and how full your plan's limit is, for
+  Claude and ChatGPT alike. Under each reply, what it actually used of that
+  limit, measured; Settings → AI usage shows ChatGPT's plan beside Claude's
+  and what replies typically use.
 - OpenAI, Gemini, GLM and Ollama now count the tokens they read, not only
   the ones they write.
 - The chat remembers its model and thinking effort between launches, and
@@ -216,6 +218,10 @@ tag.
 
 ### Fixed
 
+- Adding a Gemini key failed on models Google has retired or that can't
+  chat (live audio, images, speech). The model list now offers only chat
+  models, newest first, and a retired model is swapped for the one Google
+  names.
 - Syncing a Zotero collection with a .bib file deleted the entries that
   weren't in your library, such as a collaborator's, and could change a
   paper's citation key when its details changed in Zotero, breaking the

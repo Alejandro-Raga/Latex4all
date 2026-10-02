@@ -13,9 +13,11 @@ import {
   type AiUsageEntry,
   claudeLimited,
   type LimitWindow,
+  type PlanWindow,
   startOfToday,
   summarize,
   useAiUsage,
+  windowName,
 } from "@/lib/ai-usage";
 import { cn } from "@/lib/utils";
 import { useClaudeChatStore } from "@/stores/claude-chat-store";
@@ -300,6 +302,71 @@ function Services() {
   );
 }
 
+/** ChatGPT's plan windows, as Codex last recorded them. */
+function ChatGptPlan() {
+  const limits = useAiUsage((s) => s.codexLimits);
+  const now = Date.now();
+  const windows = [limits?.primary, limits?.secondary].filter(
+    (w): w is PlanWindow => Boolean(w && w.resetsAt > now),
+  );
+  if (!limits || !windows.length) return null;
+  return (
+    <div className="mx-5 mb-4 space-y-3 rounded-lg border border-border p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-medium text-sm">
+          ChatGPT plan{limits.plan ? ` (${limits.plan})` : ""}
+        </span>
+        <span className="text-muted-foreground text-xs">
+          as of{" "}
+          {new Date(limits.observedAt).toLocaleTimeString(undefined, {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </span>
+      </div>
+      {windows.map((w) => (
+        <LimitBar
+          key={w.minutes}
+          label={`${windowName(w.minutes)} window`}
+          window={{ utilization: w.usedPercent / 100, resetsAt: w.resetsAt }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** What replies used of their plan windows, measured, per window. */
+function MeasuredShares({ entries }: { entries: AiUsageEntry[] }) {
+  const byWindow = new Map<string, number[]>();
+  for (const e of entries) {
+    if (typeof e.windowDelta !== "number" || !e.window) continue;
+    const key = `${e.provider ?? "Claude"} · ${e.window}`;
+    byWindow.set(key, [...(byWindow.get(key) ?? []), e.windowDelta]);
+  }
+  if (!byWindow.size) return null;
+  const fmt = (n: number) => (n < 1 ? n.toFixed(1) : n.toFixed(0));
+  return (
+    <div className="px-5 pt-3">
+      <div className="pb-1 text-muted-foreground text-xs">
+        Measured per reply (share of the plan window it used)
+      </div>
+      {[...byWindow].map(([key, deltas]) => {
+        const sorted = [...deltas].sort((a, b) => a - b);
+        const median = sorted[Math.floor(sorted.length / 2)];
+        return (
+          <div key={key} className="flex justify-between gap-2 py-0.5 text-xs">
+            <span>{key}</span>
+            <span className="text-muted-foreground tabular-nums">
+              usually {fmt(median)}% · {fmt(sorted[0])}–
+              {fmt(sorted[sorted.length - 1])}% · {deltas.length} replies
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** How much the AI has been used, and the settings that use less of it. */
 export function AiUsageSettings() {
   const entries = useAiUsage((s) => s.entries);
@@ -346,6 +413,7 @@ export function AiUsageSettings() {
     <div className="py-2">
       <div className="pt-2">
         <ClaudePlan entries={entries} />
+        <ChatGptPlan />
       </div>
       <div className="flex items-center gap-1 px-5 pt-1 pb-3">
         {PERIODS.map((p) => (
@@ -370,6 +438,13 @@ export function AiUsageSettings() {
         <Stat label="Tokens read" value={tokens(sent)} />
         <Stat label="Tokens written" value={tokens(summary.output)} />
       </div>
+      <MeasuredShares
+        entries={entries.filter(
+          (e) =>
+            e.at >=
+            (PERIODS.find((p) => p.id === period) ?? PERIODS[0]).since(),
+        )}
+      />
       {summary.planRequests > 0 && (
         <p className="px-5 pt-2 text-muted-foreground text-xs">
           {summary.planRequests === summary.requests

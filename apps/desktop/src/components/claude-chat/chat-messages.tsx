@@ -511,6 +511,11 @@ const AssistantMessage: FC<{
 const shortModel = (model: string) =>
   model.replace(/^claude-/, "").replace(/-\d{8}$/, "");
 
+/** A measured share: Claude only reports whole-percent moves, so 0 is
+ *  "under 1%"; ChatGPT's come with decimals. */
+const windowShare = (delta: number) =>
+  delta === 0 ? "<1" : delta < 1 ? delta.toFixed(1) : String(Math.round(delta));
+
 /** What a reply took, small and to the right: so heavy ones stand out. */
 const ReplyUsage: FC<{ message: ClaudeStreamMessage }> = ({ message }) => {
   const r = message as ResultUsage;
@@ -533,6 +538,8 @@ const ReplyUsage: FC<{ message: ClaudeStreamMessage }> = ({ message }) => {
     >
       {model && `${shortModel(model)} · `}
       {k(read)} read · {k(e.output)} written
+      {typeof message.windowDelta === "number" &&
+        ` · ${windowShare(message.windowDelta)}% of ${message.window ?? "5h"}`}
       {e.costUsd !== null &&
         isBilled(e) &&
         ` · $${e.costUsd.toFixed(e.costUsd < 0.1 ? 3 : 2)}`}

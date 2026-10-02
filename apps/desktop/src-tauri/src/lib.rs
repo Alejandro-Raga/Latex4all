@@ -654,6 +654,7 @@ pub fn run() {
             skills_manager::skills_set,
             skills_manager::skills_set_group,
             agents::agent_status,
+            agents::codex_rate_limits,
             agents::agent_models,
             agents::agent_install,
             agents::agent_login,

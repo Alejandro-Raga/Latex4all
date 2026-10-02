@@ -96,6 +96,9 @@ export interface ClaudeStreamMessage {
   cost_usd?: number;
   /** How the request was paid, added when it's recorded. */
   billing?: Billing;
+  /** Share of the plan window it used, measured once it ended. */
+  windowDelta?: number;
+  window?: string;
   duration_ms?: number;
   duration_api_ms?: number;
   result?: string;
@@ -161,6 +164,12 @@ export interface TabState {
   answerOnly?: boolean;
   /** How Claude Code said its session is paid ("none": a plan sign-in). */
   apiKeySource?: string | null;
+  /** The plan window's use when the request went out, to measure its share. */
+  windowBefore?: {
+    service: "claude" | "codex";
+    used: number;
+    resetsAt: number;
+  } | null;
   /** What the last reply changed, to take back in one go. */
   lastTurn?: { changeIds: string[]; files: string[] } | null;
   /** Keys the last reply cites that the bibliography doesn't have. */
@@ -690,6 +699,11 @@ interface ClaudeChatState {
   sendWaitingNow: (tabId: string) => void;
   /** Updates one chat's state (from the event stream). */
   _patchTab: (tabId: string, patch: Partial<TabState>) => void;
+  /** Adds what a chat's last reply measured to its result message. */
+  _annotateLastResult: (
+    tabId: string,
+    patch: Partial<ClaudeStreamMessage>,
+  ) => void;
   cancelWaiting: (tabId: string) => void;
   /** Text for a chat's message box to take back (a cancelled request). */
   restoreInput: { tabId: string; text: string } | null;
@@ -746,6 +760,31 @@ const ENGINE_INSTRUCTIONS = [
   "Use proper LaTeX: \\section and friends, \\cite with the project's .bib keys, \\label and \\ref.",
   "If agent skills are installed (folders with a SKILL.md), follow the ones that fit the task.",
 ].join("\n");
+
+/** How full the plan window that a request to this service counts against
+ *  is now: Claude's 5 hours, or ChatGPT's main window. */
+export function planWindowNow(
+  providerCredentialId: string | null,
+): TabState["windowBefore"] {
+  const engine = engineOfProvider(providerCredentialId);
+  const usage = useAiUsage.getState();
+  if (engine === "codex") {
+    const w = usage.codexLimits?.primary;
+    return w
+      ? { service: "codex", used: w.usedPercent, resetsAt: w.resetsAt }
+      : null;
+  }
+  if (
+    engine ||
+    (providerCredentialId && providerCredentialId !== CLAUDE_CODE_PROVIDER_ID)
+  ) {
+    return null;
+  }
+  const w = usage.claudeLimits?.fiveHour;
+  return w
+    ? { service: "claude", used: w.utilization * 100, resetsAt: w.resetsAt }
+    : null;
+}
 
 /**
  * How a chat's requests are paid. Claude Code tells (apiKeySource "none" is
@@ -1177,6 +1216,7 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
       set((s) =>
         applyTabUpdate(s, activeTabId, {
           lastRequestAt: sentAt,
+          windowBefore: planWindowNow(providerCredentialId),
           answerOnly: Boolean(options?.answerOnly),
           lastTurn: null,
           citationWarning: null,
@@ -1842,6 +1882,7 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
             providerLabel(tab?.providerKey ?? null),
             billing,
           ),
+          tabId,
         );
     }
     set((state) => {
@@ -1940,6 +1981,18 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
 
   _patchTab: (tabId, patch) => {
     set((s) => applyTabUpdate(s, tabId, patch));
+  },
+
+  _annotateLastResult: (tabId, patch) => {
+    set((s) => {
+      const tab = s.tabs.find((t) => t.id === tabId);
+      if (!tab) return {};
+      const i = tab.messages.map((m) => m.type).lastIndexOf("result");
+      if (i < 0) return {};
+      const messages = [...tab.messages];
+      messages[i] = { ...messages[i], ...patch };
+      return applyTabUpdate(s, tabId, { messages });
+    });
   },
 
   sendWaitingNow: (tabId) => {

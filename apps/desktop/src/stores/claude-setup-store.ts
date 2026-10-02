@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { invoke } from "@tauri-apps/api/core";
 import {
   isChatModelOption,
+  newestModelsFirst,
   modelInfoId,
   type OpenAiCompatibleModelInfo,
   rememberModelListCapabilityMetadata,
@@ -512,15 +513,17 @@ export const useClaudeSetupStore = create<ClaudeSetupState>((set, get) => ({
       },
     );
     rememberModelListCapabilityMetadata(trimmedBaseUrl, models);
-    return models
-      .filter((model) =>
-        isChatModelOption({
-          baseUrl: trimmedBaseUrl,
-          model: modelInfoId(model),
-          metadata: typeof model === "string" ? undefined : model.metadata,
-        }),
-      )
-      .map(modelInfoId);
+    return newestModelsFirst(
+      models
+        .filter((model) =>
+          isChatModelOption({
+            baseUrl: trimmedBaseUrl,
+            model: modelInfoId(model),
+            metadata: typeof model === "string" ? undefined : model.metadata,
+          }),
+        )
+        .map(modelInfoId),
+    );
   },
 
   toggleInstallLogs: () => {

@@ -28,6 +28,12 @@ export interface AiUsageEntry {
   costUsd: number | null;
   turns: number;
   durationMs: number;
+  /** The chat it came from. */
+  tab?: string;
+  /** Share of the plan window it used, measured (percentage points). */
+  windowDelta?: number;
+  /** Which window: "5h", "week", "month"… */
+  window?: string;
 }
 
 /** What Claude Code's final "result" message carries about a request. */
@@ -267,6 +273,57 @@ export const claudeLimited = (l: ClaudeLimits | null, now = Date.now()) =>
     l && l.status === "rejected" && l.limitedUntil && l.limitedUntil > now,
   );
 
+/** One of ChatGPT's plan windows, as Codex records it. */
+export interface PlanWindow {
+  usedPercent: number;
+  /** Its length, in minutes (300: 5 hours; 10080: a week). */
+  minutes: number;
+  resetsAt: number;
+}
+
+/** ChatGPT's plan limits as Codex last recorded them. */
+export interface CodexLimits {
+  primary?: PlanWindow;
+  secondary?: PlanWindow;
+  plan: string | null;
+  observedAt: number;
+}
+
+/** "5h", "week", "month": a window's name from its length. */
+export function windowName(minutes: number): string {
+  if (minutes === 300) return "5h";
+  if (minutes === 10080) return "week";
+  if (minutes >= 40000 && minutes <= 45000) return "month";
+  return minutes % 1440 === 0
+    ? `${minutes / 1440}d`
+    : `${Math.round(minutes / 60)}h`;
+}
+
+/** Codex's rate_limits record, as the app keeps it. */
+export function codexLimitsFrom(
+  raw: unknown,
+  now = Date.now(),
+): CodexLimits | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const win = (w: unknown): PlanWindow | undefined => {
+    if (!w || typeof w !== "object") return undefined;
+    const x = w as Record<string, number>;
+    if (typeof x.used_percent !== "number") return undefined;
+    return {
+      usedPercent: x.used_percent,
+      minutes: x.window_minutes ?? 0,
+      resetsAt: (x.resets_at ?? 0) * 1000,
+    };
+  };
+  return {
+    primary: win(r.primary),
+    secondary: win(r.secondary),
+    plan: typeof r.plan_type === "string" ? r.plan_type : null,
+    observedAt: now,
+  };
+}
+
 interface AiUsageState {
   entries: AiUsageEntry[];
   /** A daily amount (at API prices) to be warned at; null: none. */
@@ -274,6 +331,10 @@ interface AiUsageState {
   /** The day the budget warning was last given, so it's given once. */
   warnedDay: number | null;
   claudeLimits: ClaudeLimits | null;
+  codexLimits: CodexLimits | null;
+  setCodexLimits: (limits: CodexLimits | null) => void;
+  /** A chat's last request: the share of the plan it used, measured. */
+  setWindowDelta: (tab: string, delta: number, window: string) => void;
   /** Prices for services that don't report a cost, by service name. */
   prices: Record<string, ServicePrice>;
   /** A daily amount per service to be warned at. */
@@ -286,7 +347,7 @@ interface AiUsageState {
   setFallbackService: (id: string | null) => void;
   setPrice: (service: string, price: ServicePrice | null) => void;
   setServiceBudget: (service: string, usd: number | null) => void;
-  record: (entry: AiUsageEntry) => void;
+  record: (entry: AiUsageEntry, tab?: string) => void;
   recordLimits: (info: RateLimitInfo) => void;
   setDailyBudget: (usd: number | null) => void;
   clear: () => void;
@@ -299,6 +360,16 @@ export const useAiUsage = create<AiUsageState>()(
       dailyBudgetUsd: null,
       warnedDay: null,
       claudeLimits: null,
+      codexLimits: null,
+      setCodexLimits: (limits) => set({ codexLimits: limits }),
+      setWindowDelta: (tab, delta, window) =>
+        set((s) => {
+          const i = s.entries.map((e) => e.tab).lastIndexOf(tab);
+          if (i < 0) return {};
+          const entries = [...s.entries];
+          entries[i] = { ...entries[i], windowDelta: delta, window };
+          return { entries };
+        }),
       prices: {},
       fallbackService: null,
       setFallbackService: (id) => set({ fallbackService: id }),
@@ -331,8 +402,9 @@ export const useAiUsage = create<AiUsageState>()(
           });
         }
       },
-      record: (entry) => {
-        set((s) => ({ entries: [...s.entries, entry].slice(-KEEP) }));
+      record: (entry, tab) => {
+        const kept = tab ? { ...entry, tab } : entry;
+        set((s) => ({ entries: [...s.entries, kept].slice(-KEEP) }));
         const { dailyBudgetUsd, warnedDay, entries, prices } = get();
         const today = startOfToday();
         // This service's own budget.

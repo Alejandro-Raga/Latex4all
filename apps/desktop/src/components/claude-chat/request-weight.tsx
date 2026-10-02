@@ -1,17 +1,32 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { resetsLabel } from "@/components/settings/ai-usage-settings";
 import { engineOfProvider } from "@/lib/agent-events";
-import { contextTokens, type ResultUsage, useAiUsage } from "@/lib/ai-usage";
-import { estimateRequest, type Weight } from "@/lib/request-estimate";
+import {
+  codexLimitsFrom,
+  contextTokens,
+  type ResultUsage,
+  useAiUsage,
+  windowName,
+} from "@/lib/ai-usage";
 import { cn } from "@/lib/utils";
 import {
-  billingOf,
   CLAUDE_CODE_PROVIDER_ID,
-  resolveClaudeModel,
   useClaudeChatStore,
 } from "@/stores/claude-chat-store";
 
-const STYLE: Record<Weight, { label: string; className: string }> = {
+type Weight = "light" | "medium" | "heavy";
+
+/**
+ * A chat's weight: what every message in it reads at the very least (the
+ * conversation so far). Real requests cost more, by how many steps they
+ * take, which can't be known beforehand; this part is certain.
+ */
+export function chatWeight(tokens: number): Weight {
+  return tokens < 20_000 ? "light" : tokens < 60_000 ? "medium" : "heavy";
+}
+
+const WEIGHT: Record<Weight, { label: string; className: string }> = {
   light: {
     label: "Light",
     className: "bg-green-500/15 text-green-700 dark:text-green-400",
@@ -27,86 +42,136 @@ const STYLE: Record<Weight, { label: string; className: string }> = {
 };
 
 const k = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
-const pct = (n: number) =>
-  n < 0.1 ? "<0.1" : n < 10 ? n.toFixed(1) : String(Math.round(n));
+const pct = (n: number) => (n < 1 ? n.toFixed(1) : String(Math.round(n)));
+const level = (used: number) =>
+  used >= 90
+    ? "text-red-600 dark:text-red-400"
+    : used >= 70
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-muted-foreground";
+
+interface Window {
+  name: string;
+  used: number;
+  resetsAt: number;
+}
 
 /**
- * Beside the send button: how heavy this message will be (light, medium,
- * heavy), and on a Claude plan, about what share of the 5-hour limit it
- * takes; the reasons on hover.
+ * Beside the send button, what's known before sending: how heavy the chat
+ * is, and how full the plan's window is (Claude, ChatGPT). What each reply
+ * used is measured after it, under the reply.
  */
 export function RequestWeight({ input }: { input: string }) {
   const tab = useClaudeChatStore((s) =>
     s.tabs.find((t) => t.id === s.activeTabId),
   );
-  const selectedModel = useClaudeChatStore((s) => s.selectedModel);
   const providerId = useClaudeChatStore((s) => s.selectedProviderCredentialId);
-  const entries = useAiUsage((s) => s.entries);
-  const limits = useAiUsage((s) => s.claudeLimits);
+  const claudeLimits = useAiUsage((s) => s.claudeLimits);
+  const codexLimits = useAiUsage((s) => s.codexLimits);
+  const engine = engineOfProvider(providerId);
+  const claude =
+    !engine && (!providerId || providerId === CLAUDE_CODE_PROVIDER_ID);
 
-  const est = useMemo(() => {
-    const results = (tab?.messages ?? [])
-      .filter((m) => m.type === "result")
-      .map((m) => m as ResultUsage);
-    const last = results[results.length - 1]?.usage;
-    const lastContext = last
+  // ChatGPT's windows, as Codex last recorded them, once it's picked.
+  useEffect(() => {
+    if (engine !== "codex") return;
+    void invoke("codex_rate_limits", { threadId: null })
+      .then((raw) => {
+        const limits = codexLimitsFrom(raw);
+        if (limits) useAiUsage.getState().setCodexLimits(limits);
+      })
+      .catch(() => {});
+  }, [engine]);
+
+  const { tokens, measured } = useMemo(() => {
+    const results = (tab?.messages ?? []).filter((m) => m.type === "result");
+    const last = (results[results.length - 1] as ResultUsage | undefined)
+      ?.usage;
+    const context = last
       ? contextTokens({
           input: last.input_tokens ?? 0,
           cacheRead: last.cache_read_input_tokens ?? 0,
           cacheWrite: last.cache_creation_input_tokens ?? 0,
         })
       : 0;
-    const claude =
-      (!providerId || providerId === CLAUDE_CODE_PROVIDER_ID) &&
-      !engineOfProvider(providerId);
-    return estimateRequest({
-      entries,
-      model: claude ? resolveClaudeModel(selectedModel, input) : "other",
-      claude,
-      lastContext,
-      lastOutput: last?.output_tokens ?? 0,
-      newTokens: Math.round(input.length / 4),
-      recentSteps: results.slice(-3).map((r) => r.num_turns ?? 1),
-      limits,
-    });
-  }, [tab?.messages, providerId, selectedModel, input, entries, limits]);
+    return {
+      tokens:
+        context + (last?.output_tokens ?? 0) + Math.round(input.length / 4),
+      measured: results
+        .map((m) => ({ delta: m.windowDelta, window: m.window }))
+        .filter(
+          (m): m is { delta: number; window: string } =>
+            typeof m.delta === "number",
+        ),
+    };
+  }, [tab?.messages, input]);
 
-  if (!tab || tab.isStreaming || (est.tokens === 0 && !input.trim())) {
+  const now = Date.now();
+  const windows: Window[] = [];
+  if (claude && claudeLimits) {
+    for (const [name, w] of [
+      ["5h", claudeLimits.fiveHour],
+      ["week", claudeLimits.sevenDay],
+    ] as const) {
+      if (w && w.resetsAt > now) {
+        windows.push({ name, used: w.utilization * 100, resetsAt: w.resetsAt });
+      }
+    }
+  }
+  if (engine === "codex" && codexLimits) {
+    for (const w of [codexLimits.primary, codexLimits.secondary]) {
+      if (w && w.resetsAt > now) {
+        windows.push({
+          name: windowName(w.minutes),
+          used: w.usedPercent,
+          resetsAt: w.resetsAt,
+        });
+      }
+    }
+  }
+
+  if (
+    !tab ||
+    tab.isStreaming ||
+    (tokens === 0 && !input.trim() && !windows.length)
+  ) {
     return null;
   }
-  const billing = billingOf(tab);
-  const style = STYLE[est.weight];
-  const detail =
-    est.windowPct !== null
-      ? `~${pct(est.windowPct)}% of 5h`
-      : est.costUsd !== null && billing !== "plan"
-        ? `~$${est.costUsd < 0.1 ? est.costUsd.toFixed(3) : est.costUsd.toFixed(2)}`
-        : `~${k(est.tokens)}`;
+  const weight = WEIGHT[chatWeight(tokens)];
+  const main = windows[0];
+  const chatTotal = measured.reduce((sum, m) => sum + m.delta, 0);
+  const deltas = measured.map((m) => m.delta).sort((a, b) => a - b);
   const why = [
-    `Reads about ${k(est.tokens)} tokens: the chat so far${est.steps > 1 ? `, again at each of the ~${est.steps} steps requests take here,` : ""} and your message.`,
-    est.windowPct !== null && est.windowUsed !== null && est.resetsAt
-      ? `About ${pct(est.windowPct)}% of your 5-hour Claude limit, which is ${est.windowUsed}% used and resets ${resetsLabel(est.resetsAt)}.`
+    `Every message here reads at least ~${k(tokens)} tokens (the chat so far). Requests that edit files read it again at each step, so they cost more; a new chat is lighter.`,
+    ...windows.map(
+      (w) =>
+        `${w.name} limit: ${pct(w.used)}% used, resets ${resetsLabel(w.resetsAt)}.`,
+    ),
+    measured.length
+      ? `This chat so far: ~${pct(chatTotal)}% of the ${measured[0].window} limit${
+          deltas.length > 1
+            ? `; its replies used ${pct(deltas[0])}–${pct(deltas[deltas.length - 1])}% each`
+            : ""
+        } (measured).`
       : null,
-    est.costUsd !== null && billing !== "plan"
-      ? `About $${est.costUsd.toFixed(3)}, billed.`
-      : null,
-    est.weight !== "light" && est.tokens > 30_000
-      ? "Most of it is the conversation: a new chat makes this much lighter."
-      : null,
-    "An estimate from your recent requests.",
+    engine === "gemini" ? "Gemini doesn't report its limits to apps." : null,
   ]
     .filter(Boolean)
     .join("\n");
 
   return (
     <span
-      className={cn(
-        "rounded-full px-2 py-0.5 text-[11px] tabular-nums",
-        style.className,
-      )}
+      className="flex items-center gap-1.5 text-[11px] tabular-nums"
       title={why}
     >
-      {style.label} · {detail}
+      <span className={cn("rounded-full px-2 py-0.5", weight.className)}>
+        {weight.label} · {k(tokens)}/msg
+      </span>
+      {main && (
+        <span className={level(main.used)}>
+          {main.name} {pct(main.used)}%
+        </span>
+      )}
     </span>
   );
 }

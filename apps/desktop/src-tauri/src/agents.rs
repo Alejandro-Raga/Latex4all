@@ -389,6 +389,66 @@ pub async fn agent_models(engine: String) -> Result<Vec<AgentModel>, String> {
     }
 }
 
+/// Codex's session files: ~/.codex/sessions/YYYY/MM/DD/rollout-…-<id>.jsonl.
+fn codex_session_files() -> Vec<PathBuf> {
+    let Some(root) = dirs::home_dir().map(|h| h.join(".codex").join("sessions")) else {
+        return Vec::new();
+    };
+    let mut files = Vec::new();
+    let mut stack = vec![(root, 0)];
+    while let Some((dir, depth)) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_dir() && depth < 4 {
+                stack.push((path, depth + 1));
+            } else if path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+                files.push(path);
+            }
+        }
+    }
+    files
+}
+
+/// How full the ChatGPT plan's windows are, as Codex last recorded them:
+/// for one session (its thread id), or the latest of all. Codex writes it
+/// with each turn's token count.
+#[tauri::command]
+pub async fn codex_rate_limits(
+    thread_id: Option<String>,
+) -> Result<Option<serde_json::Value>, String> {
+    let mut files = codex_session_files();
+    if let Some(id) = thread_id.filter(|id| !id.is_empty()) {
+        files.retain(|f| {
+            f.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.ends_with(&format!("{}.jsonl", id)))
+        });
+    }
+    files.sort_by_key(|f| std::fs::metadata(f).and_then(|m| m.modified()).ok());
+    for file in files.iter().rev().take(5) {
+        let Ok(text) = std::fs::read_to_string(file) else {
+            continue;
+        };
+        for line in text.lines().rev() {
+            if !line.contains("\"rate_limits\"") {
+                continue;
+            }
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
+            if let Some(limits) = value.pointer("/payload/rate_limits") {
+                if !limits.is_null() {
+                    return Ok(Some(limits.clone()));
+                }
+            }
+        }
+    }
+    Ok(None)
+}
+
 /// The command line for one request, the prompt going in on stdin.
 fn agent_args(
     engine: Engine,

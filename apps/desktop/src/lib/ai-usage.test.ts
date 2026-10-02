@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  codexLimitsFrom,
+  windowName,
   claudeLimited,
   entryCost,
   nextLimits,
@@ -155,5 +157,28 @@ describe("what costs money", () => {
   it("notes when Claude is on extra usage", () => {
     const l = nextLimits(null, { status: "allowed", isUsingOverage: true }, 0);
     expect(l.usingOverage).toBe(true);
+  });
+});
+
+describe("ChatGPT's plan windows", () => {
+  it("reads Codex's record and names its windows", () => {
+    const l = codexLimitsFrom(
+      {
+        primary: { used_percent: 12.5, window_minutes: 300, resets_at: 100 },
+        secondary: { used_percent: 3, window_minutes: 10080, resets_at: 200 },
+        plan_type: "plus",
+      },
+      0,
+    );
+    expect(l?.primary).toEqual({
+      usedPercent: 12.5,
+      minutes: 300,
+      resetsAt: 100000,
+    });
+    expect(l?.plan).toBe("plus");
+    expect(windowName(300)).toBe("5h");
+    expect(windowName(10080)).toBe("week");
+    expect(windowName(43200)).toBe("month");
+    expect(codexLimitsFrom(null)).toBeNull();
   });
 });

@@ -11,7 +11,13 @@ import {
   translateAgentLine,
 } from "@/lib/agent-events";
 import { fallBackIfLimited } from "@/lib/ai-fallback";
-import { claudeLimited, type RateLimitInfo, useAiUsage } from "@/lib/ai-usage";
+import {
+  claudeLimited,
+  codexLimitsFrom,
+  type RateLimitInfo,
+  useAiUsage,
+  windowName,
+} from "@/lib/ai-usage";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { remove } from "@tauri-apps/plugin-fs";
@@ -531,6 +537,42 @@ export function useClaudeEvents() {
             useClaudeChatStore.getState()._patchTab(tabId, {
               citationWarning: missing.length ? missing : null,
             });
+          })();
+        }
+        // What share of the plan window this request used, measured: the
+        // window's use now against when it went out (same window only).
+        const before = tab.windowBefore;
+        if (success && before) {
+          const threadId = tab.sessionId;
+          void (async () => {
+            let used: number | undefined;
+            let resetsAt: number | undefined;
+            let name = "5h";
+            if (before.service === "codex") {
+              const raw = await invoke("codex_rate_limits", {
+                threadId: threadId ?? null,
+              }).catch(() => null);
+              const limits = codexLimitsFrom(raw);
+              if (limits) useAiUsage.getState().setCodexLimits(limits);
+              const w = limits?.primary;
+              if (w) {
+                used = w.usedPercent;
+                resetsAt = w.resetsAt;
+                name = windowName(w.minutes);
+              }
+            } else {
+              const w = useAiUsage.getState().claudeLimits?.fiveHour;
+              if (w) {
+                used = w.utilization * 100;
+                resetsAt = w.resetsAt;
+              }
+            }
+            if (used === undefined || resetsAt !== before.resetsAt) return;
+            const delta = Math.max(0, used - before.used);
+            useAiUsage.getState().setWindowDelta(tabId, delta, name);
+            useClaudeChatStore
+              .getState()
+              ._annotateLastResult(tabId, { windowDelta: delta, window: name });
           })();
         }
         if (success || files.size) {

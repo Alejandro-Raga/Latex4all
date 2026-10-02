@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { suggestedReplacement } from "@/lib/model-capabilities";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   DownloadIcon,
@@ -565,13 +566,27 @@ export function ClaudeSetup({
       selectedProvider === "openai-compatible"
         ? openAiPresetIdForBaseUrl(savedBaseUrl)
         : "anthropic-direct";
-    const success = await saveApiKey(
+    let success = await saveApiKey(
       apiKey,
       savedBaseUrl,
       selectedProvider,
       model,
       credentialLabel,
     );
+    // A retired model, with the provider naming its successor: use that.
+    const replacement = success
+      ? null
+      : suggestedReplacement(useClaudeSetupStore.getState().error ?? "");
+    if (replacement && replacement !== model) {
+      setModel(replacement);
+      success = await saveApiKey(
+        apiKey,
+        savedBaseUrl,
+        selectedProvider,
+        replacement,
+        credentialLabel,
+      );
+    }
     if (success) {
       setApiKey("");
       setBaseUrl("");

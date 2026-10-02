@@ -244,8 +244,28 @@ function metadataChatCapability(
   return undefined;
 }
 
+/** Model families that can't take a chat request: live audio, images,
+ *  video, music, speech, embeddings, agents for other tools. */
+const nonChatModelMarkers = [
+  "-live",
+  "live-",
+  "native-audio",
+  "-image",
+  "imagen",
+  "veo-",
+  "lyria",
+  "-tts",
+  "aqa",
+  "computer-use",
+  "robotics",
+  "embedding",
+];
+
 function isNonChatModel(value: string) {
-  return Array.from(nonChatModeTokens).some((marker) => value.includes(marker));
+  return (
+    Array.from(nonChatModeTokens).some((marker) => value.includes(marker)) ||
+    nonChatModelMarkers.some((marker) => value.includes(marker))
+  );
 }
 
 function isQwenProvider(value: string) {
@@ -376,4 +396,33 @@ export function getModelCapabilities(
 
 export function isChatModelOption(input: ModelCapabilityInput) {
   return getModelCapabilities(input).chat;
+}
+
+/** Newest first: by the version in the name (gemini-3.8 before 2.5), and a
+ *  stable model before its preview or experimental ones. */
+export function newestModelsFirst(models: string[]): string[] {
+  const version = (m: string) => {
+    const v = m.match(/(\d+(?:\.\d+)?)/);
+    return v ? Number.parseFloat(v[1]) : -1;
+  };
+  const unstable = (m: string) => (/preview|exp|beta|alpha/i.test(m) ? 1 : 0);
+  return models
+    .map((m, i) => ({ m, i }))
+    .sort(
+      (a, b) =>
+        version(b.m) - version(a.m) ||
+        unstable(a.m) - unstable(b.m) ||
+        a.i - b.i,
+    )
+    .map(({ m }) => m);
+}
+
+/** The model a provider says to use instead of a retired one, if it says. */
+export function suggestedReplacement(error: string): string | null {
+  for (const m of error.matchAll(
+    /\buse (?:models\/)?([a-z][\w.-]*\d[\w.-]*)/gi,
+  )) {
+    return m[1].replace(/[.-]+$/, "");
+  }
+  return null;
 }
