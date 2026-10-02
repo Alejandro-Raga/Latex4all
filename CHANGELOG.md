@@ -236,6 +236,8 @@ tag.
   show in the chat.
 - A Gemini model that used its free requests for the day is no longer
   retried for minutes. The chat says which limit ran out, and moves on.
+- Gemma on a free Gemini key accepts 16,000 tokens a minute, less than one
+  message here sends. The chat now says so instead of retrying.
 - On Windows, ChatGPT couldn't edit project files. Its changes still go
   through review and Undo, and the chat says when a change fails.
 - Adding a Gemini key failed on retired models or ones that can't chat

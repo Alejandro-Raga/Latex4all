@@ -189,8 +189,10 @@ export function noteQuota(id: string, text: string): QuotaHit | null {
   const model = hit.model ?? currentModelOf(id);
   if (!model) return hit;
   const usage = useAiUsage.getState();
-  if (hit.period === "day") {
-    if (hit.limit) usage.learnDailyLimit(bareModel(model), hit.limit);
+  if (hit.period === "day" || hit.period === "tokens") {
+    if (hit.period === "day" && hit.limit) {
+      usage.learnDailyLimit(bareModel(model), hit.limit);
+    }
     usage.block(`${id}#${bareModel(model)}`, nextPacificDay());
   } else {
     usage.block(

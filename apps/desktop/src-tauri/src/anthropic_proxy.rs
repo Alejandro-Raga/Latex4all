@@ -358,10 +358,20 @@ fn failure_response(failure: &ProxyFailure) -> String {
 /// which quota ran out. A daily one isn't retried: it won't come back today.
 fn rate_limit_failure(response_text: &str, model: &str) -> ProxyFailure {
     let quota = google_quota(response_text);
-    let daily = quota
+    let id = quota
         .as_ref()
-        .is_some_and(|q| q.id.to_ascii_lowercase().contains("perday"));
-    let mut message = if daily {
+        .map(|q| q.id.to_ascii_lowercase())
+        .unwrap_or_default();
+    let daily = id.contains("perday");
+    // Tokens a minute: a request bigger than the limit never fits, however
+    // long it waits (Gemma's free tier takes 16k; a request here is ~20k).
+    let tokens = !daily && id.contains("inputtokens");
+    let mut message = if tokens {
+        format!(
+            "Rate limit: {} takes fewer tokens a minute than this request sends.",
+            model
+        )
+    } else if daily {
         format!("Rate limit: {} has used its requests for today.", model)
     } else {
         format!(
@@ -372,7 +382,13 @@ fn rate_limit_failure(response_text: &str, model: &str) -> ProxyFailure {
     if let Some(q) = &quota {
         message.push_str(&format!(
             " [quota {}={} model={}{}]",
-            if daily { "day" } else { "minute" },
+            if tokens {
+                "tokens"
+            } else if daily {
+                "day"
+            } else {
+                "minute"
+            },
             q.limit.map(|n| n.to_string()).unwrap_or_default(),
             q.model.clone().unwrap_or_else(|| model.to_string()),
             q.retry_secs
@@ -386,12 +402,12 @@ fn rate_limit_failure(response_text: &str, model: &str) -> ProxyFailure {
         status: 429,
         kind: "rate_limit_error",
         message,
-        retry_after: if daily {
+        retry_after: if daily || tokens {
             None
         } else {
             quota.as_ref().and_then(|q| q.retry_secs)
         },
-        retry: !daily,
+        retry: !daily && !tokens,
     }
 }
 
@@ -575,6 +591,16 @@ mod tests {
         let response = failure_response(&failure);
         assert!(response.starts_with("HTTP/1.1 429 Too Many Requests\r\n"));
         assert!(response.contains("x-should-retry: false\r\n"));
+    }
+
+    #[test]
+    fn a_request_too_big_for_the_token_limit_is_not_retried() {
+        let text = r#"[{"error":{"code":429,"details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaId":"GenerateContentInputTokensPerModelPerMinute-FreeTier","quotaDimensions":{"model":"gemma-4-31b"},"quotaValue":"16000"}]},{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"40s"}]}}]"#;
+        let failure = rate_limit_failure(text, "models/gemma-4-31b-it");
+        assert!(!failure.retry);
+        assert!(failure
+            .message
+            .contains("[quota tokens=16000 model=gemma-4-31b retry=40]"));
     }
 
     #[test]

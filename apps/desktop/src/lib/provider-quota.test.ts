@@ -27,6 +27,9 @@ describe("free-tier daily limits", () => {
       model: "x",
       retrySecs: null,
     });
+    expect(
+      parseQuota("[quota tokens=16000 model=gemma-4-31b retry=40]")?.period,
+    ).toBe("tokens");
     expect(parseQuota("429 Too Many Requests")).toBeNull();
   });
 

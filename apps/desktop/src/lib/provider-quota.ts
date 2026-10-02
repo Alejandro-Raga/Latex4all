@@ -8,7 +8,8 @@
 import type { AiUsageEntry } from "@/lib/ai-usage";
 
 export interface QuotaHit {
-  period: "day" | "minute";
+  /** "tokens": a request bigger than the model's tokens a minute. */
+  period: "day" | "minute" | "tokens";
   limit: number | null;
   model: string | null;
   retrySecs: number | null;
@@ -17,11 +18,11 @@ export interface QuotaHit {
 /** The quota the proxy says ran out: "[quota day=20 model=… retry=33]". */
 export function parseQuota(text: string | null | undefined): QuotaHit | null {
   const m = text?.match(
-    /\[quota (day|minute)=(\d*) model=([^\s\]]+)(?: retry=(\d+))?\]/,
+    /\[quota (day|minute|tokens)=(\d*) model=([^\s\]]+)(?: retry=(\d+))?\]/,
   );
   if (!m) return null;
   return {
-    period: m[1] as "day" | "minute",
+    period: m[1] as QuotaHit["period"],
     limit: m[2] ? Number(m[2]) : null,
     model: bareModel(m[3]),
     retrySecs: m[4] ? Number(m[4]) : null,
@@ -90,6 +91,11 @@ export function quotaMessage(who: string, hit: QuotaHit | null): string {
         : "";
     const count = hit.limit ? `its ${hit.limit} free requests` : "its requests";
     return `${who}${model} has used ${count} for today (one message can take several). They reset at midnight Pacific time.${lite}`;
+  }
+  if (hit?.period === "tokens") {
+    const model = hit.model ? ` (${hit.model})` : "";
+    const limit = hit.limit ? ` (${hit.limit} a minute)` : "";
+    return `${who}${model} accepts fewer tokens${limit} than one message here sends, so it can't work in this chat. Pick a Flash-Lite model.`;
   }
   if (hit?.period === "minute") {
     return `${who} got too many requests at once. Wait a minute or switch AI.`;
