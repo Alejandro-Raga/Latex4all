@@ -123,6 +123,9 @@ tag.
 
 ### AI
 
+- A Chats panel (the clock button in the chat) lists the chats open now,
+  with the service each uses, and earlier ones by day, with a search, a new
+  chat button, and delete.
 - Chat with ChatGPT or Gemini using your own account, no API key: Settings →
   Provider → "Sign in with an account" installs OpenAI's Codex (any ChatGPT
   account, free ones included) or Google's Gemini CLI (paid Gemini Code

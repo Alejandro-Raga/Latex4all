@@ -11,6 +11,7 @@ import { useClaudeChatStore } from "@/stores/claude-chat-store";
 import { useClaudeEvents } from "@/hooks/use-claude-events";
 import { ChatMessages } from "./chat-messages";
 import { ChatComposer } from "./chat-composer";
+import { ChatSessionsPanel } from "./chat-sessions-panel";
 import { ClaudeLimitNotice, LongChatNotice } from "./long-chat-notice";
 import { ChatTabBar } from "./chat-tab-bar";
 
@@ -215,6 +216,7 @@ export function ClaudeChatDrawer() {
         {/* Messages area */}
         <div className="relative min-h-0 flex-1 overflow-hidden">
           <ChatMessages />
+          <ChatSessionsPanel />
         </div>
 
         <ClaudeLimitNotice />

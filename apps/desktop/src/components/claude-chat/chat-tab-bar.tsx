@@ -1,8 +1,8 @@
 import { useCallback, useRef, useEffect } from "react";
-import { PlusIcon, XIcon } from "lucide-react";
+import { HistoryIcon, PlusIcon, XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useClaudeChatStore, type TabState } from "@/stores/claude-chat-store";
-import { SessionSelector } from "./session-selector";
+import { useChatSessionsPanel } from "./chat-sessions-panel";
 
 export function ChatTabBar() {
   const tabs = useClaudeChatStore((s) => s.tabs);
@@ -104,7 +104,16 @@ export function ChatTabBar() {
         >
           <PlusIcon className="size-3.5" />
         </button>
-        <SessionSelector />
+        <button
+          type="button"
+          onClick={() => useChatSessionsPanel.getState().toggle()}
+          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="Chats"
+          title="Chats"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <HistoryIcon className="size-4" />
+        </button>
       </div>
     </div>
   );
