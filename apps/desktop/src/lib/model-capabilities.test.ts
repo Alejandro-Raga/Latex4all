@@ -48,13 +48,13 @@ describe("Gemini's model list", () => {
         "https://generativelanguage.googleapis.com/v1beta/openai",
       ),
     ).toEqual(["models/gemini-3.8-flash", "models/gemini-3.1-pro"]);
-    // Gemma stays, after Gemini.
+    // No Gemma: it can't take a message from here on the free tier.
     expect(
       newestModelsFirst(
         ["models/gemma-4-31b-it", "models/gemini-3.8-flash"],
         "https://generativelanguage.googleapis.com/v1beta/openai",
       ),
-    ).toEqual(["models/gemini-3.8-flash", "models/gemma-4-31b-it"]);
+    ).toEqual(["models/gemini-3.8-flash"]);
     // Flash-Lite first: far more free requests a day.
     expect(
       newestModelsFirst(

@@ -140,7 +140,7 @@ tag.
 - Settings → Provider lists Claude and your API keys separately, each with
   its model and a Remove button, plus a clearer "Add an API key" button.
 - When you add an API key, the newest model is picked for you (you can
-  change it in the chat). Gemini models are listed first, then Gemma.
+  change it in the chat).
 - Shared project memory: AGENTS.md holds notes that every AI in the project
   reads. Edit it from Chats → Memory, or ask an AI to remember something.
   Each AI also sees what the others changed since its last turn. If two
@@ -236,8 +236,8 @@ tag.
   show in the chat.
 - A Gemini model that used its free requests for the day is no longer
   retried for minutes. The chat says which limit ran out, and moves on.
-- Gemma on a free Gemini key accepts 16,000 tokens a minute, less than one
-  message here sends. The chat now says so instead of retrying.
+- Gemma is no longer offered with a Gemini key: on the free tier it accepts
+  16,000 tokens a minute, less than one message here sends.
 - On Windows, ChatGPT couldn't edit project files. Its changes still go
   through review and Undo, and the chat says when a change fails.
 - Adding a Gemini key failed on retired models or ones that can't chat
