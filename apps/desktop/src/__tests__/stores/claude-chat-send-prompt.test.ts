@@ -295,6 +295,54 @@ describe("useClaudeChatStore.sendPrompt context assembly", () => {
   });
 });
 
+describe("useClaudeChatStore.sendPrompt with an account-login assistant", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetClaudeChatStore();
+    setMockDocumentState();
+  });
+
+  it("sends ChatGPT requests to Codex, with Latex4All's rules first", async () => {
+    useClaudeChatStore.setState({ selectedProviderCredentialId: "__codex__" });
+    useClaudeChatStore.setState((s) => ({
+      tabs: s.tabs.map((t) => ({
+        ...t,
+        providerKey: "openai-compatible:__codex__",
+      })),
+    }));
+    await useClaudeChatStore.getState().sendPrompt("Shorten the intro");
+    expect(invoke).toHaveBeenCalledWith(
+      "execute_agent",
+      expect.objectContaining({
+        engine: "codex",
+        projectPath: "/project",
+        tabId: "tab-default",
+        sessionId: null,
+        prompt: expect.stringContaining("Shorten the intro"),
+      }),
+    );
+    const prompt = (vi.mocked(invoke).mock.calls[0]?.[1] as any)?.prompt;
+    expect(prompt).toMatch(/^You are an assistant inside Latex4All/);
+  });
+
+  it("resumes the same Gemini session without repeating the rules", async () => {
+    useClaudeChatStore.setState((s) => ({
+      selectedProviderCredentialId: "__gemini__",
+      tabs: s.tabs.map((t) => ({
+        ...t,
+        providerKey: "openai-compatible:__gemini__",
+        sessionProviderKey: "openai-compatible:__gemini__",
+        sessionId: "S1",
+      })),
+    }));
+    await useClaudeChatStore.getState().sendPrompt("And the conclusion");
+    const args = vi.mocked(invoke).mock.calls[0]?.[1] as any;
+    expect(vi.mocked(invoke).mock.calls[0]?.[0]).toBe("execute_agent");
+    expect(args).toMatchObject({ engine: "gemini", sessionId: "S1" });
+    expect(args.prompt).not.toContain("You are an assistant inside Latex4All");
+  });
+});
+
 describe("useClaudeChatStore.resumeSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();

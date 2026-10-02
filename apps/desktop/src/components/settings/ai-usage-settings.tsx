@@ -1,4 +1,5 @@
 import { type ReactNode, useMemo, useState } from "react";
+import { useFallbackChoices } from "@/lib/fallback-choices";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,7 +19,6 @@ import {
 } from "@/lib/ai-usage";
 import { cn } from "@/lib/utils";
 import { useClaudeChatStore } from "@/stores/claude-chat-store";
-import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 
 const PERIODS = [
   { id: "today", label: "Today", since: () => startOfToday() },
@@ -156,7 +156,7 @@ function ClaudePlan({ entries }: { entries: AiUsageEntry[] }) {
 
 /** Which service takes over when Claude's limit is reached. */
 function Fallback() {
-  const services = useClaudeSetupStore((s) => s.openAiCredentials);
+  const services = useFallbackChoices();
   const fallback = useAiUsage((s) => s.fallbackService);
   const setFallback = useAiUsage((s) => s.setFallbackService);
   if (!services.length) return null;
@@ -225,7 +225,7 @@ function Services() {
   const budgets = useAiUsage((s) => s.serviceBudgets);
   const setPrice = useAiUsage((s) => s.setPrice);
   const setServiceBudget = useAiUsage((s) => s.setServiceBudget);
-  const configured = useClaudeSetupStore((s) => s.openAiCredentials);
+  const configured = useFallbackChoices();
   const services = useMemo(() => {
     const names = new Set<string>(["Claude"]);
     for (const c of configured) names.add(c.label);

@@ -7,7 +7,7 @@ import {
   useAiUsage,
 } from "@/lib/ai-usage";
 import { CLAUDE_CODE_PROVIDER_ID } from "@/stores/claude-chat-store";
-import { useClaudeSetupStore } from "@/stores/claude-setup-store";
+import { useFallbackChoices } from "@/lib/fallback-choices";
 import { useSettingsWindow } from "@/stores/settings-window-store";
 import { useClaudeChatStore } from "@/stores/claude-chat-store";
 
@@ -65,7 +65,7 @@ export function ClaudeLimitNotice() {
   const setProvider = useClaudeChatStore(
     (s) => s.setSelectedProviderCredentialId,
   );
-  const others = useClaudeSetupStore((s) => s.openAiCredentials);
+  const others = useFallbackChoices();
   const onClaude = !providerId || providerId === CLAUDE_CODE_PROVIDER_ID;
   if (!onClaude || !limits) return null;
 

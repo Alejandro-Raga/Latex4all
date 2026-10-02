@@ -1,5 +1,6 @@
 #![recursion_limit = "512"]
 
+mod agents;
 mod anthropic_proxy;
 mod claude;
 mod claude_process;
@@ -648,6 +649,11 @@ pub fn run() {
             latex::synctex_edit,
             latex::synctex_view,
             latex::detect_texlive,
+            agents::agent_status,
+            agents::agent_install,
+            agents::agent_login,
+            agents::agent_logout,
+            agents::execute_agent,
             claude::check_claude_status,
             claude::install_claude_cli,
             claude::login_claude,

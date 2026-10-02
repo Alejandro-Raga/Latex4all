@@ -29,6 +29,13 @@ export function engineOfProvider(
   return null;
 }
 
+/** The engine behind a chat's provider key ("openai-compatible:__codex__"). */
+export function engineOfProviderKey(
+  key: string | null | undefined,
+): AgentEngine | null {
+  return engineOfProvider(key?.replace(/^openai-compatible:/, ""));
+}
+
 export const providerOfEngine = (engine: AgentEngine) =>
   engine === "codex" ? CODEX_PROVIDER_ID : GEMINI_PROVIDER_ID;
 

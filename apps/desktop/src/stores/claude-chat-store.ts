@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { ENGINE_LABELS, engineOfProvider } from "@/lib/agent-events";
+import { useAgentAccounts } from "@/lib/agent-accounts";
 import { type ResultUsage, usageEntry, useAiUsage } from "@/lib/ai-usage";
 import { invoke } from "@tauri-apps/api/core";
 import { useDocumentStore } from "./document-store";
@@ -650,10 +652,20 @@ interface ClaudeChatState {
 
 // ─── Store ───
 
+/** What ChatGPT and Gemini are told first, as Claude is by its own prompt. */
+const ENGINE_INSTRUCTIONS = [
+  "You are an assistant inside Latex4All, a LaTeX editor; you are working in the user's project folder.",
+  "Make small, targeted edits to the existing files; never rewrite a whole file. Keep the preamble, packages and structure.",
+  "For small changes just make them; plan only for bigger tasks. Read only the part of a file you will change.",
+  "Use proper LaTeX: \\section and friends, \\cite with the project's .bib keys, \\label and \\ref.",
+].join("\n");
+
 /** The service a chat talks to, by the name it was given. */
 export function providerLabel(providerKey: string | null): string {
   const id = providerCredentialIdFromSessionKey(providerKey);
   if (!id || id === CLAUDE_CODE_PROVIDER_ID) return "Claude";
+  const engine = engineOfProvider(id);
+  if (engine) return ENGINE_LABELS[engine];
   return (
     useClaudeSetupStore.getState().openAiCredentials.find((c) => c.id === id)
       ?.label ?? "Other"
@@ -966,6 +978,39 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
       promptLength: prompt.length,
       mode: resumeSessionId ? "resume" : "new",
     });
+
+    // ChatGPT (Codex) or Gemini, signed in with the user's account.
+    const engine = engineOfProvider(providerCredentialId);
+    if (engine) {
+      const sameEngine = !providerChanged && Boolean(sessionId);
+      let enginePrompt = prompt;
+      if (!sameEngine) {
+        const prior = buildProviderSwitchContext(activeTab?.messages ?? []);
+        enginePrompt = [ENGINE_INSTRUCTIONS, prior, prompt]
+          .filter(Boolean)
+          .join("\n\n");
+      }
+      try {
+        await invoke("execute_agent", {
+          engine,
+          projectPath,
+          prompt: enginePrompt,
+          tabId: activeTabId,
+          model: useAgentAccounts.getState().models[engine] || null,
+          sessionId: sameEngine ? sessionId : null,
+          effortLevel,
+        });
+      } catch (err: any) {
+        set((s) =>
+          applyTabUpdate(s, activeTabId, {
+            isStreaming: false,
+            streamingStartedAt: null,
+            error: String(err),
+          }),
+        );
+      }
+      return;
+    }
 
     try {
       if (resumeSessionId) {

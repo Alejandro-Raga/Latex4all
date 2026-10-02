@@ -9,6 +9,12 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  ENGINE_LABELS,
+  engineOfProvider,
+  providerOfEngine,
+} from "@/lib/agent-events";
+import { readyEngines, useAgentAccounts } from "@/lib/agent-accounts";
 import { createPortal } from "react-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
@@ -313,10 +319,21 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
   const selectedProviderCredential =
     configuredOpenAiCredential ??
     (!showClaudeProvider ? fallbackProviderCredential : null);
+  // ChatGPT or Gemini, signed in with the user's account.
+  const selectedEngine = engineOfProvider(selectedProviderCredentialId);
+  const agentStatus = useAgentAccounts((s) => s.status);
+  const agentModels = useAgentAccounts((s) => s.models);
+  const setAgentModel = useAgentAccounts((s) => s.setModel);
+  const engines = readyEngines(agentStatus);
+  useEffect(() => {
+    const { refresh } = useAgentAccounts.getState();
+    void refresh("codex");
+    void refresh("gemini");
+  }, []);
   const claudeProviderActive =
-    showClaudeProvider && !selectedProviderCredential;
+    showClaudeProvider && !selectedProviderCredential && !selectedEngine;
   const providerSelectionReady =
-    claudeProviderActive || !!selectedProviderCredential;
+    claudeProviderActive || !!selectedProviderCredential || !!selectedEngine;
   const selectedProviderModel = selectedProviderCredential
     ? selectedProviderModels[selectedProviderCredential.id] ||
       selectedProviderCredential.model
@@ -415,6 +432,7 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
     const selectedOpenAiCredentialMissing =
       selectedProviderCredentialId &&
       selectedProviderCredentialId !== CLAUDE_CODE_PROVIDER_ID &&
+      !engineOfProvider(selectedProviderCredentialId) &&
       !openAiCredentials.some(
         (credential) => credential.id === selectedProviderCredentialId,
       );
@@ -1392,6 +1410,35 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                   </button>
                 )}
 
+                {engines.map((engine) => (
+                  <button
+                    key={engine}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors",
+                      selectedEngine === engine
+                        ? "bg-accent text-accent-foreground"
+                        : "hover:bg-muted",
+                    )}
+                    onClick={() =>
+                      setSelectedProviderCredentialId(providerOfEngine(engine))
+                    }
+                  >
+                    <BoxIcon className="size-3.5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-xs">
+                        {ENGINE_LABELS[engine]}
+                      </div>
+                      <div className="truncate text-muted-foreground text-xs">
+                        {agentModels[engine] || "Your account"}
+                      </div>
+                    </div>
+                    {selectedEngine === engine && (
+                      <CheckIcon className="size-3 shrink-0" />
+                    )}
+                  </button>
+                ))}
+
                 {openAiCredentials.map((credential) => {
                   const active =
                     selectedProviderCredential?.id === credential.id;
@@ -1501,7 +1548,24 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                   <div className="px-2 py-1 font-medium text-muted-foreground text-xs">
                     Model
                   </div>
-                  {claudeProviderActive ? (
+                  {selectedEngine ? (
+                    <div className="space-y-1 px-2 py-1">
+                      <input
+                        value={agentModels[selectedEngine] ?? ""}
+                        onChange={(e) =>
+                          setAgentModel(selectedEngine, e.target.value)
+                        }
+                        placeholder="Default model"
+                        aria-label="Model"
+                        className="h-7 w-full rounded-md border border-border bg-background px-2 text-xs"
+                      />
+                      <div className="px-1 text-muted-foreground text-xs">
+                        {selectedEngine === "codex"
+                          ? "e.g. gpt-5, or leave empty"
+                          : "e.g. gemini-2.5-pro, or leave empty"}
+                      </div>
+                    </div>
+                  ) : claudeProviderActive ? (
                     claudeModelOptions.map((m) => (
                       <button
                         key={m.id}
@@ -1578,7 +1642,9 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                     </div>
                   )}
                 </div>
-                {(claudeProviderActive || selectedProviderCredential) && (
+                {(claudeProviderActive ||
+                  selectedProviderCredential ||
+                  selectedEngine === "codex") && (
                   <div className="shrink-0">
                     <EffortControls
                       effortLevel={effortLevel}
@@ -1875,7 +1941,18 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
               title="Switch provider or model"
               className="flex h-7 items-center gap-1.5 rounded-full px-2 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground"
             >
-              {selectedProviderCredential ? (
+              {selectedEngine ? (
+                <>
+                  <BoxIcon className="size-3" />
+                  <span>{ENGINE_LABELS[selectedEngine]}</span>
+                  {agentModels[selectedEngine] && (
+                    <span className="max-w-32 truncate text-muted-foreground/60">
+                      {agentModels[selectedEngine]}
+                    </span>
+                  )}
+                  <ChevronDownIcon className="size-3" />
+                </>
+              ) : selectedProviderCredential ? (
                 <>
                   {selectedProviderIconSrc ? (
                     <img

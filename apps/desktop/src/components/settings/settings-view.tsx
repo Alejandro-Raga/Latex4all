@@ -45,6 +45,7 @@ import { useZoteroLibrary } from "@/lib/zotero-library";
 import { clearPdfCache, pdfCacheSize } from "@/lib/zotero-pdf-cache";
 import { NoteTypesSettings } from "./note-types-settings";
 import { AiUsageSettings } from "./ai-usage-settings";
+import { AgentAccounts } from "./agent-accounts";
 import { startOfToday, summarize, useAiUsage } from "@/lib/ai-usage";
 import { unlinkProject } from "@/lib/vault/note-changes";
 import {
@@ -506,7 +507,12 @@ export function SettingsView({
       label: "Provider",
       meta: isClaudeReady ? "Ready" : "Setup",
       icon: KeyRoundIcon,
-      body: <ClaudeSetup variant="embedded" />,
+      body: (
+        <>
+          <ClaudeSetup variant="embedded" />
+          <AgentAccounts />
+        </>
+      ),
       flush: true,
     },
     {

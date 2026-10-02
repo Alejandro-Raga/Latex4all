@@ -1,4 +1,10 @@
 import { useEffect, useRef } from "react";
+import {
+  engineOfProviderKey,
+  newTranslateState,
+  type TranslateState,
+  translateAgentLine,
+} from "@/lib/agent-events";
 import { fallBackIfLimited } from "@/lib/ai-fallback";
 import { claudeLimited, type RateLimitInfo, useAiUsage } from "@/lib/ai-usage";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -73,6 +79,8 @@ export function useClaudeEvents() {
   const directProviderTabRef = useRef(new Map<string, boolean>());
   const listenersRef = useRef<UnlistenFn[]>([]);
   const msgCountRef = useRef(new Map<string, number>());
+  // Per request (tab and start time), for ChatGPT and Gemini translation.
+  const translateStatesRef = useRef(new Map<string, TranslateState>());
   const streamStartTimeRef = useRef(new Map<string, number>());
   const lastMsgTimeRef = useRef(new Map<string, number>());
 
@@ -181,13 +189,36 @@ export function useClaudeEvents() {
     function handleStreamMessage(payload: ClaudeOutputPayload) {
       const { tab_id: tabId, data } = payload;
 
+      // ChatGPT and Gemini speak their own formats: translated first.
+      const tab = useClaudeChatStore
+        .getState()
+        .tabs.find((t) => t.id === tabId);
+      const engine = engineOfProviderKey(
+        tab?.sessionProviderKey ?? tab?.providerKey,
+      );
+      if (engine) {
+        const key = `${tabId}:${tab?.streamingStartedAt ?? 0}`;
+        let st = translateStatesRef.current.get(key);
+        if (!st) {
+          st = newTranslateState();
+          translateStatesRef.current.set(key, st);
+        }
+        for (const msg of translateAgentLine(engine, data, st)) {
+          handleParsed(tabId, msg);
+        }
+        return;
+      }
+
       let msg: ClaudeStreamMessage;
       try {
         msg = JSON.parse(data);
       } catch {
         return;
       }
+      handleParsed(tabId, msg);
+    }
 
+    function handleParsed(tabId: string, msg: ClaudeStreamMessage) {
       const chatStore = useClaudeChatStore.getState();
 
       // Only process messages if this tab is still streaming

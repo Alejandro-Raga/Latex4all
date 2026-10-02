@@ -123,6 +123,11 @@ tag.
 
 ### AI
 
+- Chat with ChatGPT or Gemini using your own account, no API key: Settings →
+  Provider → "Sign in with an account" installs OpenAI's Codex (for ChatGPT
+  plans) or Google's Gemini CLI (free with a Google account) and signs you
+  in through the browser. Pick it in the chat's provider menu; it edits the
+  project like Claude does, and its use shows in AI usage.
 - Settings → AI usage: requests, tokens and what they'd cost at API prices,
   today, this week or this month, by service, model and project, with a
   daily amount to be warned at. With a Claude plan, the 5-hour and weekly

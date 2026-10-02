@@ -4,7 +4,7 @@ import {
   CLAUDE_CODE_PROVIDER_ID,
   useClaudeChatStore,
 } from "@/stores/claude-chat-store";
-import { useClaudeSetupStore } from "@/stores/claude-setup-store";
+import { fallbackChoices } from "@/lib/fallback-choices";
 
 let backTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -19,9 +19,7 @@ export function fallBackIfLimited() {
   const chat = useClaudeChatStore.getState();
   const current = chat.selectedProviderCredentialId;
   if (current && current !== CLAUDE_CODE_PROVIDER_ID) return;
-  const service = useClaudeSetupStore
-    .getState()
-    .openAiCredentials.find((c) => c.id === fallbackService);
+  const service = fallbackChoices().find((c) => c.id === fallbackService);
   if (!service) return;
 
   chat.setSelectedProviderCredentialId(service.id);

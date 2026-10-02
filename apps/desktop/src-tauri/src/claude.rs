@@ -1514,7 +1514,7 @@ fn unix_claude_path_from_npm_prefix(prefix: impl Into<PathBuf>) -> PathBuf {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn run_login_shell_command(command: &str) -> Option<String> {
+pub(crate) fn run_login_shell_command(command: &str) -> Option<String> {
     let shell_env = std::env::var("SHELL").ok();
     let mut shells = Vec::new();
     if let Some(shell) = shell_env {
@@ -1810,7 +1810,7 @@ fn new_sync_command(program: &str) -> std::process::Command {
 }
 
 /// Create a tokio Command with appropriate environment variables.
-fn create_command(
+pub(crate) fn create_command(
     program: &str,
     args: Vec<String>,
     cwd: &str,
