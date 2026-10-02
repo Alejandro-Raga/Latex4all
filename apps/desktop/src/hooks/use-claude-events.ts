@@ -856,8 +856,18 @@ export function useClaudeEvents() {
                 errTab?.sessionProviderKey ?? errTab?.providerKey,
               )
             ) {
-              if (isEngineErrorLine(payload)) {
-                engineErrorRef.current.set(tabId, payload.trim());
+              // Lines come in blocks ("YOLO mode…" then the error): each
+              // read on its own, all the errors kept.
+              const errors = payload.split("\n").filter(isEngineErrorLine);
+              if (errors.length) {
+                const before = engineErrorRef.current.get(tabId);
+                engineErrorRef.current.set(
+                  tabId,
+                  [before, ...errors.map((l) => l.trim())]
+                    .filter(Boolean)
+                    .join("\n")
+                    .slice(-4000),
+                );
               }
               return;
             }

@@ -310,7 +310,14 @@ describe("engine errors", () => {
         "gemini",
         "An unexpected critical error occurred:IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals.",
       ),
-    ).toMatch(/Gemini API key/);
+    ).toMatch(/Only for paid Gemini plans/);
+    // Among the other errors before and after it, too.
+    expect(
+      engineErrorMessage(
+        "gemini",
+        "Error authenticating: IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals.\nAn unexpected critical error occurred: boom",
+      ),
+    ).toMatch(/Only for paid Gemini plans/);
   });
 
   it("picks error lines, not chatter", () => {

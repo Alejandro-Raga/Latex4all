@@ -125,8 +125,9 @@ tag.
 - Chat with ChatGPT or Gemini using your own account, no API key needed.
   Settings → Provider → "Sign in with an account" installs OpenAI's Codex
   (any ChatGPT account, including free) or Google's Gemini CLI and signs
-  you in through the browser. Gemini this way needs a paid Gemini Code
-  Assist plan, and says so; for free Gemini, use an API key. Pick one in
+  you in through the browser. Gemini this way needs a paid Gemini account:
+  a free one is told so when signing in, or in the chat. For free Gemini,
+  use an API key. Pick one in
   the chat's model menu and choose a model from its list. It can edit the
   project like Claude, and its use shows in AI usage.
 - GitHub Copilot, with your Copilot plan (the free one included): Settings

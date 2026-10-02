@@ -610,16 +610,21 @@ export function isEngineErrorLine(line: string): boolean {
   );
 }
 
+export const GEMINI_PAID_ONLY =
+  "Only for paid Gemini plans. For free Gemini, add a Gemini API key.";
+
 /** What to tell the user when an engine stops without answering. */
 export function engineErrorMessage(
   engine: AgentEngine,
   lastError: string | null,
 ): string {
   const label = ENGINE_LABELS[engine];
-  const raw = lastError?.trim() ?? "";
-  if (/IneligibleTier|no longer supported for Gemini Code Assist/i.test(raw)) {
-    return "Google no longer lets Gemini CLI sign in with a free personal account. Use a Gemini API key instead (free from Google AI Studio): Settings → Provider → Gemini.";
+  const all = lastError?.trim() ?? "";
+  if (/IneligibleTier|no longer supported for Gemini Code Assist/i.test(all)) {
+    return GEMINI_PAID_ONLY;
   }
+  // The last error says the most; the ones before led to it.
+  const raw = all.split("\n").pop() ?? "";
   if (/Model ".*" from --model flag is not available/i.test(raw)) {
     return `${label} can't use that model on your plan. Pick Auto, or another model in the menu.`;
   }

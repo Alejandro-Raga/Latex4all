@@ -163,10 +163,18 @@ async fn codex_login_status(program: &str) -> (bool, Option<String>) {
     }
 }
 
+/// Set when Google refused the signed-in account (a free one).
+fn gemini_refused_marker() -> Option<PathBuf> {
+    agents_dir().map(|dir| dir.join("gemini-not-paid"))
+}
+
 fn gemini_login_status() -> (bool, Option<String>) {
     let Some(dir) = gemini_dir() else {
         return (false, None);
     };
+    if gemini_refused_marker().is_some_and(|m| m.exists()) {
+        return (false, None);
+    }
     if !dir.join("oauth_creds.json").exists() {
         return (false, None);
     }
@@ -350,13 +358,34 @@ pub async fn agent_login(engine: String) -> Result<bool, String> {
             let mut cmd = create_command(&program, args, &home_string(), None);
             cmd.env("GOOGLE_GENAI_USE_GCA", "true");
             cmd.stdin(std::process::Stdio::piped());
+            cmd.kill_on_drop(true);
             let mut child = cmd.spawn().map_err(|e| e.to_string())?;
             if let Some(mut stdin) = child.stdin.take() {
                 let _ = stdin.write_all(b"y\n").await;
                 let _ = stdin.shutdown().await;
             }
-            let _ = tokio::time::timeout(Duration::from_secs(600), child.wait()).await;
-            let _ = child.kill().await;
+            let output =
+                tokio::time::timeout(Duration::from_secs(600), child.wait_with_output()).await;
+            // Signed in, but Google turns free accounts away: said now, not
+            // at the first message.
+            let refused = output
+                .ok()
+                .and_then(|o| o.ok())
+                .map(|o| String::from_utf8_lossy(&o.stderr).contains("IneligibleTier"))
+                .unwrap_or(false);
+            if let Some(marker) = gemini_refused_marker() {
+                if refused {
+                    let _ = std::fs::write(&marker, "");
+                } else {
+                    let _ = std::fs::remove_file(&marker);
+                }
+            }
+            if refused {
+                return Err(
+                    "Only for paid Gemini plans. For free Gemini, add a Gemini API key."
+                        .to_string(),
+                );
+            }
             Ok(gemini_login_status().0)
         }
     }
@@ -375,6 +404,9 @@ pub async fn agent_logout(engine: String) -> Result<(), String> {
         Engine::Gemini => {
             if let Some(dir) = gemini_dir() {
                 let _ = std::fs::remove_file(dir.join("oauth_creds.json"));
+            }
+            if let Some(marker) = gemini_refused_marker() {
+                let _ = std::fs::remove_file(marker);
             }
         }
         Engine::Copilot => {

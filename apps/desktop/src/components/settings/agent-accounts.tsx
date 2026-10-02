@@ -13,8 +13,7 @@ import { useClaudeChatStore } from "@/stores/claude-chat-store";
 
 const ABOUT: Record<AgentEngine, string> = {
   codex: "Your ChatGPT account, free or paid (paid plans get more use).",
-  gemini:
-    "Needs a paid Gemini Code Assist plan. Google refuses free accounts here; to use Gemini for free, add a Gemini API key instead.",
+  gemini: "Needs a paid Gemini account.",
   copilot:
     "Your GitHub Copilot plan, free included. Uses your GitHub CLI sign-in if you have one.",
 };
