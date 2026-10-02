@@ -343,6 +343,60 @@ describe("useClaudeChatStore.sendPrompt with an account-login assistant", () => 
   });
 });
 
+describe("two chats on one project", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetClaudeChatStore();
+    setMockDocumentState();
+  });
+
+  it("waits while another chat edits the project, then goes", async () => {
+    const base = useClaudeChatStore.getState().tabs[0];
+    useClaudeChatStore.setState({
+      tabs: [
+        { ...base, id: "busy", title: "Intro rewrite", isStreaming: true },
+        { ...base, id: "tab-default" },
+      ],
+      activeTabId: "tab-default",
+    });
+    await useClaudeChatStore.getState().sendPrompt("Fix the abstract");
+    expect(invoke).not.toHaveBeenCalled();
+    expect(
+      useClaudeChatStore.getState().tabs.find((t) => t.id === "tab-default")
+        ?.waitingFor,
+    ).toBe("Intro rewrite");
+
+    useClaudeChatStore.getState()._setStreaming("busy", false);
+    await vi.waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "execute_claude_code",
+        expect.objectContaining({
+          tabId: "tab-default",
+          prompt: expect.stringContaining("Fix the abstract"),
+        }),
+      ),
+    );
+  });
+
+  it("gives a cancelled waiting request back to the message box", async () => {
+    const base = useClaudeChatStore.getState().tabs[0];
+    useClaudeChatStore.setState({
+      tabs: [
+        { ...base, id: "busy", isStreaming: true },
+        { ...base, id: "tab-default" },
+      ],
+    });
+    await useClaudeChatStore.getState().sendPrompt("Fix the abstract");
+    useClaudeChatStore.getState().cancelWaiting("tab-default");
+    expect(useClaudeChatStore.getState().restoreInput).toEqual({
+      tabId: "tab-default",
+      text: "Fix the abstract",
+    });
+    useClaudeChatStore.getState()._setStreaming("busy", false);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+});
+
 describe("useClaudeChatStore.resumeSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();

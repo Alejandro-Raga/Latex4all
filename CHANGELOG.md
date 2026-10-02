@@ -126,6 +126,11 @@ tag.
 - "Add an AI" in the chat's model menu offers both ways in one place: sign
   in with an account you have (Claude, ChatGPT, Gemini), or add an API key,
   with the free options pointed out.
+- Every assistant in a project shares what it knows: AGENTS.md holds the
+  project's lasting notes (edit them from Chats → Memory, or let the
+  assistants add to it), and each one hears what the others changed since
+  its last turn. If two chats would edit the same project at once, the
+  second waits its turn (or "Send now").
 - A Chats panel (the clock button in the chat) lists the chats open now,
   with the service each uses, and earlier ones by day, with a search, a new
   chat button, and delete.

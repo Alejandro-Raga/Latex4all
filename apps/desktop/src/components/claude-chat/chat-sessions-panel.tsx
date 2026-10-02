@@ -22,6 +22,7 @@ import { createLogger } from "@/lib/debug/logger";
 import { cn } from "@/lib/utils";
 import { providerLabel, useClaudeChatStore } from "@/stores/claude-chat-store";
 import { useDocumentStore } from "@/stores/document-store";
+import { MemoryDialog } from "./memory-dialog";
 
 const log = createLogger("chat-sessions");
 
@@ -89,6 +90,7 @@ export function ChatSessionsPanel() {
   const [deleteTarget, setDeleteTarget] = useState<SessionInfo | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [memoryOpen, setMemoryOpen] = useState(false);
 
   const projectTabs = tabs.filter(
     (t) => !t.projectPath || t.projectPath === projectRoot,
@@ -169,6 +171,15 @@ export function ChatSessionsPanel() {
       <div className="absolute inset-y-0 left-0 z-20 flex w-72 max-w-full flex-col border-border border-r bg-background shadow-lg">
         <div className="flex items-center gap-1 px-3 pt-2.5 pb-1.5">
           <span className="flex-1 font-medium text-sm">Chats</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            onClick={() => setMemoryOpen(true)}
+            title="Notes every assistant here reads"
+          >
+            Memory
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -310,6 +321,7 @@ export function ChatSessionsPanel() {
         </div>
       </div>
 
+      <MemoryDialog open={memoryOpen} onOpenChange={setMemoryOpen} />
       <Dialog
         open={!!deleteTarget}
         onOpenChange={(o) => {

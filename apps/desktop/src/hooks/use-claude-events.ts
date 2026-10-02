@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { appendLog, shortAsk } from "@/lib/ai-memory";
 import {
   engineErrorMessage,
   engineOfProviderKey,
@@ -16,6 +17,7 @@ import {
   CLAUDE_CODE_PROVIDER_ID,
   useClaudeChatStore,
   type ClaudeStreamMessage,
+  providerLabel,
 } from "@/stores/claude-chat-store";
 import { useDocumentStore, withDiskContent } from "@/stores/document-store";
 import { useHistoryStore } from "@/stores/history-store";
@@ -445,7 +447,43 @@ export function useClaudeEvents() {
         }
       }
 
+      // For the project's other assistants: who did what, to which files.
+      if (tab.projectPath && !chatStore._cancelledByUser) {
+        const root = tab.projectPath;
+        const files = new Set<string>();
+        for (const use of pendingToolUsesRef.current.get(tabId)?.values() ??
+          []) {
+          const path = use.input?.file_path ?? use.input?.path;
+          if (
+            typeof path === "string" &&
+            /^(Write|Edit|MultiEdit)$/i.test(use.name)
+          ) {
+            files.add(
+              path.startsWith(root)
+                ? path.slice(root.length).replace(/^[\\/]/, "")
+                : path,
+            );
+          }
+        }
+        const lastUser = [...tab.messages]
+          .reverse()
+          .find((m) => m.type === "user" && m.message?.content?.[0]?.text);
+        const ask = shortAsk(lastUser?.message?.content?.[0]?.text ?? "");
+        if (success || files.size) {
+          void appendLog(root, {
+            at: Date.now(),
+            who: providerLabel(tab.sessionProviderKey ?? tab.providerKey),
+            tab: tabId,
+            ask,
+            files: [...files],
+          });
+        }
+      }
+
       // Clean up per-tab state
+      for (const key of translateStatesRef.current.keys()) {
+        if (key.startsWith(`${tabId}:`)) translateStatesRef.current.delete(key);
+      }
       pendingToolUsesRef.current.delete(tabId);
       hasTexChangesRef.current.delete(tabId);
       cancelledForAskRef.current.delete(tabId);

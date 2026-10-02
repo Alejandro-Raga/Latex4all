@@ -680,6 +680,14 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
   const pinnedContextsRef = useRef(pinnedContexts);
   pinnedContextsRef.current = pinnedContexts;
 
+  // A request given back (it was waiting for another chat, then cancelled).
+  const restoreInput = useClaudeChatStore((s) => s.restoreInput);
+  useEffect(() => {
+    if (!restoreInput || restoreInput.tabId !== activeTabId) return;
+    setInput(restoreInput.text);
+    useClaudeChatStore.setState({ restoreInput: null });
+  }, [restoreInput, activeTabId]);
+
   // Save draft to previous tab, restore draft from new tab
   const prevTabIdRef = useRef(activeTabId);
   useEffect(() => {

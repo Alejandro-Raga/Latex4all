@@ -118,3 +118,34 @@ export function ClaudeLimitNotice() {
     </div>
   );
 }
+
+/** A request waiting for another chat to stop editing the project. */
+export function WaitingNotice() {
+  const tab = useClaudeChatStore((s) =>
+    s.tabs.find((t) => t.id === s.activeTabId),
+  );
+  if (!tab?.waitingFor) return null;
+  const { sendWaitingNow, cancelWaiting } = useClaudeChatStore.getState();
+  return (
+    <div className="mx-3 mb-1 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-xs">
+      <span className="min-w-0 flex-1 text-muted-foreground">
+        Waiting for “{tab.waitingFor}” to finish with this project; yours goes
+        next.
+      </span>
+      <button
+        type="button"
+        onClick={() => sendWaitingNow(tab.id)}
+        className="shrink-0 font-medium text-primary hover:underline"
+      >
+        Send now
+      </button>
+      <button
+        type="button"
+        onClick={() => cancelWaiting(tab.id)}
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}

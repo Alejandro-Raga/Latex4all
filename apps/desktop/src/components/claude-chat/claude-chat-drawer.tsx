@@ -12,7 +12,11 @@ import { useClaudeEvents } from "@/hooks/use-claude-events";
 import { ChatMessages } from "./chat-messages";
 import { ChatComposer } from "./chat-composer";
 import { ChatSessionsPanel } from "./chat-sessions-panel";
-import { ClaudeLimitNotice, LongChatNotice } from "./long-chat-notice";
+import {
+  ClaudeLimitNotice,
+  LongChatNotice,
+  WaitingNotice,
+} from "./long-chat-notice";
 import { ChatTabBar } from "./chat-tab-bar";
 
 const MIN_HEIGHT = 260;
@@ -219,6 +223,7 @@ export function ClaudeChatDrawer() {
           <ChatSessionsPanel />
         </div>
 
+        <WaitingNotice />
         <ClaudeLimitNotice />
         <LongChatNotice />
         {/* Composer */}

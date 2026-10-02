@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { readLog, readMemory, sharedContext } from "@/lib/ai-memory";
 import { ENGINE_LABELS, engineOfProvider } from "@/lib/agent-events";
 import { useAgentAccounts } from "@/lib/agent-accounts";
 import { type ResultUsage, usageEntry, useAiUsage } from "@/lib/ai-usage";
@@ -139,6 +140,10 @@ export interface TabState {
   forceQueuedGuidanceOnComplete?: boolean;
   forcedQueuedGuidanceId?: string | null;
   pendingTemporaryFilePaths?: string[];
+  /** When this chat last sent a request: what others did since is news. */
+  lastRequestAt?: number;
+  /** Waiting for this chat (by title) to stop editing the same project. */
+  waitingFor?: string | null;
 }
 
 /** Fields that are projected from the active tab to top-level state */
@@ -607,7 +612,11 @@ interface ClaudeChatState {
   sendPrompt: (
     userPrompt: string,
     contextOverride?: PromptContextOverride,
-    options?: { tabId?: string; preserveTabProvider?: boolean },
+    options?: {
+      tabId?: string;
+      preserveTabProvider?: boolean;
+      evenIfBusy?: boolean;
+    },
   ) => Promise<void>;
   queueGuidance: (
     tabId: string,
@@ -646,11 +655,26 @@ interface ClaudeChatState {
   _setSessionId: (tabId: string, id: string) => void;
   _setSessionTitle: (sessionId: string, title: string) => void;
   _setStreaming: (tabId: string, streaming: boolean) => void;
+  /** A waiting request: sent now anyway, or given back to the composer. */
+  sendWaitingNow: (tabId: string) => void;
+  cancelWaiting: (tabId: string) => void;
+  /** Text for a chat's message box to take back (a cancelled request). */
+  restoreInput: { tabId: string; text: string } | null;
   _setError: (tabId: string, error: string | null) => void;
   _cancelledByUser: boolean;
 }
 
 // ─── Store ───
+
+/** Requests waiting for another chat to finish with the same project. */
+const waitingRequests = new Map<
+  string,
+  {
+    userPrompt: string;
+    contextOverride?: PromptContextOverride;
+    options?: { tabId?: string; preserveTabProvider?: boolean };
+  }
+>();
 
 /** What ChatGPT and Gemini are told first, as Claude is by its own prompt. */
 const ENGINE_INSTRUCTIONS = [
@@ -794,7 +818,12 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
   sendPrompt: async (
     userPrompt: string,
     contextOverride?: PromptContextOverride,
-    options?: { tabId?: string; preserveTabProvider?: boolean },
+    options?: {
+      tabId?: string;
+      preserveTabProvider?: boolean;
+      /** Send even while another chat edits the project. */
+      evenIfBusy?: boolean;
+    },
   ) => {
     let state = get();
     let activeTabId = options?.tabId ?? state.activeTabId;
@@ -814,6 +843,26 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
       activeTabId = state.activeTabId;
       activeTab = state.tabs.find((t) => t.id === activeTabId);
       if (!activeTab || activeTab.isStreaming) return;
+    }
+
+    // Another chat is editing this project: wait for it, rather than have
+    // two assistants change the same files at once.
+    const busy = state.tabs.find(
+      (t) =>
+        t.id !== activeTabId && t.isStreaming && t.projectPath === projectPath,
+    );
+    if (busy && !options?.evenIfBusy) {
+      waitingRequests.set(activeTabId, {
+        userPrompt,
+        contextOverride,
+        options,
+      });
+      set((s) =>
+        applyTabUpdate(s, activeTabId, {
+          waitingFor: busy.title || "another chat",
+        }),
+      );
+      return;
     }
 
     const { selectedModel, effortLevel, selectedProviderModels } = state;
@@ -966,6 +1015,33 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
         ctx += `\n[Selected text:\n${selectedText}\n]`;
       }
       prompt = `${ctx}\n\n${userPrompt}`;
+    }
+    // The project's shared memory when a chat starts, and what its other
+    // assistants did since this chat's last turn (see ai-memory.ts).
+    {
+      const startingChat = !sessionId || providerChanged;
+      const since = startingChat
+        ? Date.now() - 24 * 3600e3
+        : (activeTab.lastRequestAt ?? Date.now());
+      try {
+        const [memory, log] = await Promise.all([
+          readMemory(projectPath),
+          readLog(projectPath),
+        ]);
+        const shared = sharedContext({
+          memory,
+          log,
+          tab: activeTabId,
+          since,
+          startingChat,
+          readsMemoryItself: engineOfProvider(providerCredentialId) === "codex",
+        });
+        if (shared) prompt = `${shared}\n\n${prompt}`;
+      } catch {
+        // No memory to share: the request goes as it is.
+      }
+      const sentAt = Date.now();
+      set((s) => applyTabUpdate(s, activeTabId, { lastRequestAt: sentAt }));
     }
     if (switchingDirectProviderToClaudeCode) {
       const priorContext = buildProviderSwitchContext(
@@ -1690,6 +1766,38 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
           : null,
       });
     });
+    if (streaming) return;
+    // The project is free: the next chat waiting for it goes.
+    const { tabs } = get();
+    const project = tabs.find((t) => t.id === tabId)?.projectPath;
+    if (tabs.some((t) => t.isStreaming && t.projectPath === project)) return;
+    const next = [...waitingRequests.keys()].find(
+      (id) => tabs.find((t) => t.id === id)?.projectPath === project,
+    );
+    if (next) get().sendWaitingNow(next);
+  },
+
+  restoreInput: null,
+
+  sendWaitingNow: (tabId) => {
+    const request = waitingRequests.get(tabId);
+    waitingRequests.delete(tabId);
+    set((s) => applyTabUpdate(s, tabId, { waitingFor: null }));
+    if (!request) return;
+    void get().sendPrompt(request.userPrompt, request.contextOverride, {
+      ...request.options,
+      tabId,
+      evenIfBusy: true,
+    });
+  },
+
+  cancelWaiting: (tabId) => {
+    const request = waitingRequests.get(tabId);
+    waitingRequests.delete(tabId);
+    set((s) => ({
+      ...applyTabUpdate(s, tabId, { waitingFor: null }),
+      restoreInput: request ? { tabId, text: request.userPrompt } : null,
+    }));
   },
 
   _setError: (tabId: string, error: string | null) => {
