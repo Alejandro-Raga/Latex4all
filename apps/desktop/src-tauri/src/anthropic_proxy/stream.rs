@@ -5,6 +5,9 @@ use std::collections::HashMap;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
+/// How long a stream may go silent before it's taken for dead.
+const STALL: std::time::Duration = std::time::Duration::from_secs(120);
+
 #[derive(Default)]
 struct OpenAiStreamState {
     message_started: bool,
@@ -41,12 +44,22 @@ pub(super) async fn stream_openai_sse_to_anthropic(
 
     let mut state = OpenAiStreamState::default();
     let mut buffer = String::new();
-    while let Some(chunk) = match response.chunk().await {
-        Ok(chunk) => chunk,
-        Err(err) => {
+    while let Some(chunk) = match tokio::time::timeout(STALL, response.chunk()).await {
+        Ok(Ok(chunk)) => chunk,
+        Ok(Err(err)) => {
             let rendered =
                 anthropic_stream_error_sse(&format!("Provider stream ended unexpectedly: {}", err));
             let _ = write_stream_body(stream, &rendered, "provider stream error").await;
+            return Ok(());
+        }
+        // Silent mid-answer: it isn't coming.
+        Err(_) => {
+            let rendered = anthropic_stream_error_sse(&format!(
+                "Overloaded: {} stopped answering for {} s. Try again, or switch AI.",
+                credential.model,
+                STALL.as_secs()
+            ));
+            let _ = write_stream_body(stream, &rendered, "provider stream stalled").await;
             return Ok(());
         }
     } {

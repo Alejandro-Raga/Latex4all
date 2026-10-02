@@ -149,6 +149,9 @@ export function useClaudeEvents() {
         const hit = noteQuota(key.replace(/^openai-compatible:/, ""), message);
         message = quotaMessage(who, hit);
       }
+      // A provider too busy to answer: its own words, without the wrapping.
+      const busy = message.match(/Overloaded: ([^"]+?)(?:"|$)/);
+      if (busy) message = busy[1].trim();
       lastErrorRef.current.set(tabId, message);
       useClaudeChatStore.getState()._setError(tabId, message);
     }

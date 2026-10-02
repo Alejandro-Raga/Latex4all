@@ -241,10 +241,22 @@ async fn handle_messages_to_stream(
         .post(openai_chat_completions_url(&credential.base_url))
         .header("Content-Type", "application/json")
         .body(openai_request.to_string());
-    let response = with_optional_bearer_auth(request, &credential.api_key)
-        .send()
-        .await
-        .map_err(|err| format!("Provider request failed: {}", err))?;
+    // A provider that doesn't start answering (Gemini under "high demand"
+    // holds the connection for minutes): said plainly, not waited out.
+    let first_byte = if wants_stream {
+        FIRST_BYTE_STREAM
+    } else {
+        FIRST_BYTE_WHOLE
+    };
+    let response = match tokio::time::timeout(
+        first_byte,
+        with_optional_bearer_auth(request, &credential.api_key).send(),
+    )
+    .await
+    {
+        Ok(sent) => sent.map_err(|err| format!("Provider request failed: {}", err))?,
+        Err(_) => return Err(busy_failure(&credential.model, first_byte, false)),
+    };
 
     let status = response.status();
     if !status.is_success() {
@@ -254,6 +266,13 @@ async fn handle_messages_to_stream(
             .map_err(|err| format!("Failed to read provider error response: {}", err))?;
         if status.as_u16() == 429 {
             return Err(rate_limit_failure(&response_text, &credential.model));
+        }
+        if status.as_u16() == 503 {
+            return Err(busy_failure(
+                &credential.model,
+                std::time::Duration::ZERO,
+                true,
+            ));
         }
         return Err(format!(
             "Provider returned HTTP {}: {}",
@@ -304,6 +323,35 @@ async fn handle_messages_to_stream(
             .await
             .map_err(|err| format!("Failed to write proxy JSON response: {}", err))?;
         Ok(())
+    }
+}
+
+/// How long a provider may take to start answering a streamed request, and
+/// a whole one.
+const FIRST_BYTE_STREAM: std::time::Duration = std::time::Duration::from_secs(60);
+const FIRST_BYTE_WHOLE: std::time::Duration = std::time::Duration::from_secs(180);
+
+/// A provider too busy to answer: "overloaded", as Claude Code knows it. A
+/// 503 may pass in a moment (one retry); one that never started won't.
+fn busy_failure(model: &str, waited: std::time::Duration, retry: bool) -> ProxyFailure {
+    let message = if waited.is_zero() {
+        format!(
+            "Overloaded: {} is busy right now (the provider says so). Try again in a moment, or switch AI.",
+            model
+        )
+    } else {
+        format!(
+            "Overloaded: {} didn't start answering in {} s; it's probably busy. Try again in a moment, or switch AI.",
+            model,
+            waited.as_secs()
+        )
+    };
+    ProxyFailure {
+        status: 529,
+        kind: "overloaded_error",
+        message,
+        retry_after: None,
+        retry,
     }
 }
 
@@ -557,6 +605,7 @@ fn reason_phrase(status: u16) -> &'static str {
         400 => "Bad Request",
         404 => "Not Found",
         429 => "Too Many Requests",
+        529 => "Overloaded",
         502 => "Bad Gateway",
         _ => "Internal Server Error",
     }
@@ -601,6 +650,15 @@ mod tests {
         assert!(failure
             .message
             .contains("[quota tokens=16000 model=gemma-4-31b retry=40]"));
+    }
+
+    #[test]
+    fn a_provider_that_never_answers_is_overloaded_not_retried() {
+        let failure = busy_failure("gemini-3.6-flash", FIRST_BYTE_STREAM, false);
+        assert_eq!(failure.status, 529);
+        assert!(!failure.retry);
+        assert!(failure.message.contains("didn't start answering in 60 s"));
+        assert!(failure_response(&failure).starts_with("HTTP/1.1 529 Overloaded\r\n"));
     }
 
     #[test]

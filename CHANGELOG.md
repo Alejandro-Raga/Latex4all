@@ -229,6 +229,9 @@ tag.
 - Services added with an API key (Gemini, DeepSeek…) were labelled and
   priced as Claude Sonnet, and sometimes said they were Claude. They now
   show their real model and price.
+- A chat with Gemini could hang for many minutes when Google was busy. If
+  a service doesn't start answering within 60 seconds, or goes silent for
+  2 minutes mid-answer, the chat now says it's busy.
 - Usage limits from API services showed as connection errors. They now show
   as limits, and the chat moves to your next AI.
 - The "Heavy" label overstated chat size. It now measures what a single
