@@ -149,7 +149,13 @@ export function MarkdownNoteEditor({
     view.focus();
     // The pointer picks a suggestion too (CodeMirror only follows the keys),
     // so its full name shows beside whichever one it's on.
+    // Only a pointer that moved: the list appearing under a resting one
+    // mustn't change which suggestion Enter takes.
+    let last = { x: Number.NaN, y: Number.NaN };
     const hover = (e: MouseEvent) => {
+      const moved = e.clientX !== last.x || e.clientY !== last.y;
+      last = { x: e.clientX, y: e.clientY };
+      if (!moved) return;
       const li = (e.target as Element | null)?.closest?.(
         ".cm-tooltip-autocomplete li[id]",
       );
