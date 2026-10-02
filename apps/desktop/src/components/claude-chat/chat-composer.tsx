@@ -70,6 +70,7 @@ import {
 import {
   getModelCapabilities,
   isChatModelOption,
+  newestModelsFirst,
   modelInfoId,
   type OpenAiCompatibleModelInfo,
   rememberModelListCapabilityMetadata,
@@ -616,7 +617,10 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
             }),
           )
           .map(modelInfoId);
-        const options = Array.from(new Set(modelIds.filter(Boolean)));
+        const options = newestModelsFirst(
+          Array.from(new Set(modelIds.filter(Boolean))),
+          selectedProviderCredential.base_url,
+        );
         if (
           selectedProviderCredential.model &&
           !options.includes(selectedProviderCredential.model)

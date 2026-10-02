@@ -37,6 +37,19 @@ describe("Gemini's model list", () => {
     ]);
   });
 
+  it("offers only Google's newest generation", () => {
+    expect(
+      newestModelsFirst(
+        [
+          "models/gemini-2.5-flash",
+          "models/gemini-3.8-flash",
+          "models/gemini-3.1-pro",
+        ],
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+      ),
+    ).toEqual(["models/gemini-3.8-flash", "models/gemini-3.1-pro"]);
+  });
+
   it("reads the successor a retired model's error names", () => {
     expect(
       suggestedReplacement(

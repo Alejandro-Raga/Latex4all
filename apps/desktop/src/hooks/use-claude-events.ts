@@ -251,6 +251,12 @@ export function useClaudeEvents() {
 
     function handleParsed(tabId: string, msg: ClaudeStreamMessage) {
       const chatStore = useClaudeChatStore.getState();
+      if (
+        msg.type === "system" &&
+        /claude\.ai connectors are disabled/i.test(JSON.stringify(msg))
+      ) {
+        return;
+      }
 
       // Only process messages if this tab is still streaming
       const tab = chatStore.tabs.find((t) => t.id === tabId);
@@ -763,6 +769,9 @@ export function useClaudeEvents() {
           if (!cancelled) {
             const { tab_id: tabId, data: payload } = event.payload;
             log.warn(`[${tabId}] stderr: ${payload}`);
+            // Claude Code's notice when another provider's key is in use:
+            // true, and nothing for the user to do.
+            if (/claude\.ai connectors are disabled/i.test(payload)) return;
             const errTab = useClaudeChatStore
               .getState()
               .tabs.find((t) => t.id === tabId);

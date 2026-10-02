@@ -400,7 +400,15 @@ export function isChatModelOption(input: ModelCapabilityInput) {
 
 /** Newest first: by the version in the name (gemini-3.8 before 2.5), and a
  *  stable model before its preview or experimental ones. */
-export function newestModelsFirst(models: string[]): string[] {
+export function newestModelsFirst(models: string[], baseUrl = ""): string[] {
+  // Google retires a generation for new users once the next is out
+  // (gemini-2.5 → "no longer available"): offer the newest one only.
+  if (/generativelanguage\.googleapis\.com/i.test(baseUrl)) {
+    const major = (m: string) =>
+      Number.parseInt(m.match(/gemini-(\d+)/i)?.[1] ?? "-1", 10);
+    const newest = Math.max(...models.map(major));
+    if (newest > 0) models = models.filter((m) => major(m) === newest);
+  }
   const version = (m: string) => {
     const v = m.match(/(\d+(?:\.\d+)?)/);
     return v ? Number.parseFloat(v[1]) : -1;

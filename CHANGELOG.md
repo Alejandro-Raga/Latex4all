@@ -222,6 +222,11 @@ tag.
 
 ### Fixed
 
+- With a provider key added, Claude (signed in with a plan) dropped off the
+  chat's list; it's there again. Gemini's model lists, in the chat too,
+  offer only Google's current models, newest first. A model from another
+  provider no longer says it's Claude, and Claude Code's notice about
+  connectors no longer shows in the chat.
 - On Windows, ChatGPT couldn't change the project's files (its sandbox there
   needs a setup of its own). It now edits them as Claude does, every change
   still going through review and Undo; and a change that doesn't land is

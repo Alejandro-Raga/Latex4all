@@ -1258,6 +1258,19 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
           readsMemoryItself: engineOfProvider(providerCredentialId) === "codex",
         });
         if (shared) prompt = `${shared}\n\n${prompt}`;
+        // Another provider's model, through Claude Code's tools: it isn't
+        // Claude, whatever Claude Code's own instructions say.
+        if (
+          startingChat &&
+          providerCredentialId &&
+          !engineOfProvider(providerCredentialId)
+        ) {
+          const credential = useClaudeSetupStore
+            .getState()
+            .openAiCredentials.find((c) => c.id === providerCredentialId);
+          const name = providerModelOverride || credential?.model || "";
+          prompt = `[You are ${name || "a model"} from ${credential?.label ?? "another provider"}, not Claude; Latex4All runs you with Claude Code's tools. If asked, say which model you are.]\n\n${prompt}`;
+        }
       } catch {
         // No memory to share: the request goes as it is.
       }

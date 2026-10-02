@@ -2135,6 +2135,13 @@ pub async fn check_claude_status() -> Result<ClaudeStatus, String> {
     };
 
     if openai_credential.is_some() {
+        // A Claude plan sign-in still counts as Claude being set up, beside
+        // the other provider (else Claude drops off the chat's list).
+        let claude_signed_in = new_sync_command(&binary_path)
+            .args(["auth", "status"])
+            .output()
+            .map(|output| output.status.success())
+            .unwrap_or(false);
         return Ok(ClaudeStatus {
             installed: true,
             authenticated: true,
@@ -2144,7 +2151,7 @@ pub async fn check_claude_status() -> Result<ClaudeStatus, String> {
             account_email: None,
             provider_model,
             provider_base_url,
-            claude_provider_configured,
+            claude_provider_configured: claude_provider_configured || claude_signed_in,
             missing_git,
         });
     }

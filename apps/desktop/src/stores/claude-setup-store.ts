@@ -523,6 +523,7 @@ export const useClaudeSetupStore = create<ClaudeSetupState>((set, get) => ({
           }),
         )
         .map(modelInfoId),
+      trimmedBaseUrl,
     );
   },
 
