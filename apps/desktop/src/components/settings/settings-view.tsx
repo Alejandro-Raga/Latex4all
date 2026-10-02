@@ -495,7 +495,7 @@ export function SettingsView({
 
   const aiEntries = useAiUsage((s) => s.entries);
   const aiPrices = useAiUsage((s) => s.prices);
-  const aiToday = `$${summarize(aiEntries, startOfToday(), aiPrices).costUsd.toFixed(2)} today`;
+  const aiToday = `$${summarize(aiEntries, startOfToday(), aiPrices).costUsd.toFixed(2)} billed today`;
   const sections: {
     id: SettingsSection;
     label: string;

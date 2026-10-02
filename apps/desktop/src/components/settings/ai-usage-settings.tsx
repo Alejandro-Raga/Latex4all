@@ -186,6 +186,9 @@ function Fallback() {
   );
 }
 
+/** Services used through an account's plan: nothing to price. */
+const ACCOUNT_PLANS = ["ChatGPT", "Gemini"];
+
 /** A number box that keeps what's typed ("0.", "1.2") and saves a number. */
 function NumberField({
   value,
@@ -254,9 +257,13 @@ function Services() {
           return (
             <div key={name} className="contents">
               <span className="truncate text-sm">{name}</span>
-              {name === "Claude" ? (
+              {ACCOUNT_PLANS.includes(name) ? (
+                <span className="col-span-3 text-muted-foreground">
+                  Your account's plan: not billed per request
+                </span>
+              ) : name === "Claude" ? (
                 <span className="col-span-2 text-muted-foreground">
-                  Reported by Claude
+                  Plan, or priced by Claude
                 </span>
               ) : (
                 <>
@@ -274,12 +281,14 @@ function Services() {
                   />
                 </>
               )}
-              <NumberField
-                value={budgets[name]}
-                onChange={(n) => setServiceBudget(name, n)}
-                placeholder="No limit"
-                label={`${name} daily budget in dollars`}
-              />
+              {!ACCOUNT_PLANS.includes(name) && (
+                <NumberField
+                  value={budgets[name]}
+                  onChange={(n) => setServiceBudget(name, n)}
+                  placeholder="No limit"
+                  label={`${name} daily budget in dollars`}
+                />
+              )}
             </div>
           );
         })}
@@ -357,10 +366,18 @@ export function AiUsageSettings() {
       </div>
       <div className="grid grid-cols-2 gap-2 px-5 sm:grid-cols-4">
         <Stat label="Requests" value={String(summary.requests)} />
-        <Stat label="Cost (estimate)" value={usd(summary.costUsd)} />
+        <Stat label="Billed" value={usd(summary.costUsd)} />
         <Stat label="Tokens read" value={tokens(sent)} />
         <Stat label="Tokens written" value={tokens(summary.output)} />
       </div>
+      {summary.planRequests > 0 && (
+        <p className="px-5 pt-2 text-muted-foreground text-xs">
+          {summary.planRequests === summary.requests
+            ? "All within your plans, so nothing is billed per request."
+            : `${summary.planRequests} of ${summary.requests} within your plans, not billed per request.`}{" "}
+          Billed: API keys and Claude's extra usage.
+        </p>
+      )}
       {sent > 0 && (
         <p className="px-5 pt-2 text-muted-foreground text-xs">
           {Math.round((summary.cacheRead / sent) * 100)}% of what was read came

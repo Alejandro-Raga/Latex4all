@@ -1,5 +1,10 @@
 import { type FC, memo, useEffect, useMemo, useRef, useState } from "react";
-import { contextTokens, type ResultUsage, usageEntry } from "@/lib/ai-usage";
+import {
+  contextTokens,
+  isBilled,
+  type ResultUsage,
+  usageEntry,
+} from "@/lib/ai-usage";
 import {
   AlertCircleIcon,
   CheckIcon,
@@ -513,6 +518,7 @@ const ReplyUsage: FC<{ message: ClaudeStreamMessage }> = ({ message }) => {
     model,
     0,
     /^claude/i.test(model) ? "Claude" : "Other",
+    message.billing,
   );
   const read = contextTokens(e);
   const k = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
@@ -523,6 +529,7 @@ const ReplyUsage: FC<{ message: ClaudeStreamMessage }> = ({ message }) => {
     >
       {k(read)} read · {k(e.output)} written
       {e.costUsd !== null &&
+        isBilled(e) &&
         ` · $${e.costUsd.toFixed(e.costUsd < 0.1 ? 3 : 2)}`}
     </div>
   );

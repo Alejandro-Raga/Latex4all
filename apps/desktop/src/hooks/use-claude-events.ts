@@ -319,6 +319,11 @@ export function useClaudeEvents() {
       if (msg.type === "system" && msg.subtype === "init" && msg.session_id) {
         chatStore._setSessionId(tabId, msg.session_id);
       }
+      // How this session is paid: "none" is a Claude plan sign-in.
+      if (msg.type === "system" && msg.subtype === "init") {
+        const source = (msg as { apiKeySource?: string }).apiKeySource;
+        if (source) chatStore._patchTab(tabId, { apiKeySource: source });
+      }
 
       // Claude's plan limits: kept for the usage meter (and a switch to
       // another service when one is reached), never shown as chat.

@@ -2,7 +2,12 @@ import { create } from "zustand";
 import { readLog, readMemory, sharedContext } from "@/lib/ai-memory";
 import { ENGINE_LABELS, engineOfProvider } from "@/lib/agent-events";
 import { useAgentAccounts } from "@/lib/agent-accounts";
-import { type ResultUsage, usageEntry, useAiUsage } from "@/lib/ai-usage";
+import {
+  type Billing,
+  type ResultUsage,
+  usageEntry,
+  useAiUsage,
+} from "@/lib/ai-usage";
 import { invoke } from "@tauri-apps/api/core";
 import { useDocumentStore } from "./document-store";
 import { useHistoryStore } from "./history-store";
@@ -85,6 +90,8 @@ export interface ClaudeStreamMessage {
   };
   usage?: { input_tokens: number; output_tokens: number };
   cost_usd?: number;
+  /** How the request was paid, added when it's recorded. */
+  billing?: Billing;
   duration_ms?: number;
   duration_api_ms?: number;
   result?: string;
@@ -148,6 +155,8 @@ export interface TabState {
   waitingText?: string | null;
   /** Its current request only answers (changes no files). */
   answerOnly?: boolean;
+  /** How Claude Code said its session is paid ("none": a plan sign-in). */
+  apiKeySource?: string | null;
   /** What the last reply changed, to take back in one go. */
   lastTurn?: { changeIds: string[]; files: string[] } | null;
   /** Keys the last reply cites that the bibliography doesn't have. */
@@ -733,6 +742,31 @@ const ENGINE_INSTRUCTIONS = [
   "Use proper LaTeX: \\section and friends, \\cite with the project's .bib keys, \\label and \\ref.",
   "If agent skills are installed (folders with a SKILL.md), follow the ones that fit the task.",
 ].join("\n");
+
+/**
+ * How a chat's requests are paid. Claude Code tells (apiKeySource "none" is
+ * a Pro/Max sign-in; past the plan, Claude says it's on extra usage); a
+ * ChatGPT account and a Google account are plans; anything with a key, API.
+ */
+export function billingOf(tab: TabState | undefined): Billing {
+  const id = providerCredentialIdFromSessionKey(
+    tab?.sessionProviderKey ?? tab?.providerKey ?? null,
+  );
+  const engine = engineOfProvider(id);
+  if (engine === "gemini") return "plan";
+  if (engine === "codex") {
+    const account = useAgentAccounts.getState().status.codex?.account ?? "";
+    return /chatgpt/i.test(account) || !account ? "plan" : "api";
+  }
+  if (id && id !== CLAUDE_CODE_PROVIDER_ID) return "api";
+  const source = tab?.apiKeySource;
+  const onPlan =
+    source != null
+      ? source === "none"
+      : Boolean(useClaudeSetupStore.getState().accountEmail);
+  if (!onPlan) return "api";
+  return useAiUsage.getState().claudeLimits?.usingOverage ? "extra" : "plan";
+}
 
 /** The service a chat talks to, by the name it was given. */
 export function providerLabel(providerKey: string | null): string {
@@ -1786,9 +1820,11 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
 
   _appendMessage: (tabId: string, msg: ClaudeStreamMessage) => {
     if (msg.type === "result") {
-      // What the request took, for Settings → AI usage.
+      // What the request took, for Settings → AI usage, and how it's paid.
       const { tabs, selectedModel } = get();
       const tab = tabs.find((t) => t.id === tabId);
+      const billing = billingOf(tab);
+      msg = { ...msg, billing };
       useAiUsage
         .getState()
         .record(
@@ -1798,6 +1834,7 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
             selectedModel,
             Date.now(),
             providerLabel(tab?.providerKey ?? null),
+            billing,
           ),
         );
     }

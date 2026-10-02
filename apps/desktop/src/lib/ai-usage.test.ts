@@ -43,7 +43,7 @@ describe("AI usage", () => {
   });
 
   it("sums a period, by model and by project", () => {
-    const a = usageEntry(result, "/p/Thesis", "opus", 100);
+    const a = usageEntry(result, "/p/Thesis", "opus", 100, "Claude", "api");
     const b = { ...a, at: 200, model: "claude-sonnet-5", costUsd: 0.08 };
     const old = { ...a, at: 10 };
     const s = summarize([old, a, b], 50);
@@ -133,5 +133,27 @@ describe("prices for other services", () => {
     expect(s.byService).toEqual([
       { service: "OpenAI", requests: 1, costUsd: 7.5 },
     ]);
+  });
+});
+
+describe("what costs money", () => {
+  it("prices only requests outside a plan", () => {
+    const plan = usageEntry(result, null, "opus", 1, "Claude", "plan");
+    const extra = usageEntry(result, null, "opus", 2, "Claude", "extra");
+    const key = usageEntry(result, null, "opus", 3, "Claude", "api");
+    // Logged before billing was kept: a Claude sign-in, so a plan.
+    const old = usageEntry(result, null, "opus", 4, "Claude");
+    expect(entryCost(plan)).toBe(0);
+    expect(entryCost(old)).toBe(0);
+    expect(entryCost(extra)).toBeCloseTo(0.42);
+    expect(entryCost(key)).toBeCloseTo(0.42);
+    const s = summarize([plan, extra, key, old], 0);
+    expect(s.requests).toBe(4);
+    expect(s.costUsd).toBeCloseTo(0.84);
+  });
+
+  it("notes when Claude is on extra usage", () => {
+    const l = nextLimits(null, { status: "allowed", isUsingOverage: true }, 0);
+    expect(l.usingOverage).toBe(true);
   });
 });

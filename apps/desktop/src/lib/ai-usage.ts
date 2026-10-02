@@ -2,8 +2,17 @@ import { toast } from "sonner";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+/**
+ * How a request is paid: within a plan (Claude Pro/Max, a ChatGPT or Google
+ * account: no price per call), as Claude's extra usage past the plan, or by
+ * API key. Only the last two cost money per request.
+ */
+export type Billing = "plan" | "extra" | "api";
+
 /** One request to the AI, as its final message reports it. */
 export interface AiUsageEntry {
+  /** Absent in entries from before this was kept: Claude's count as plan. */
+  billing?: Billing;
   at: number;
   /** The service: "Claude", or the name given to another provider. */
   provider?: string;
@@ -46,6 +55,7 @@ export function usageEntry(
   fallbackModel: string,
   at = Date.now(),
   provider = "Claude",
+  billing?: Billing,
 ): AiUsageEntry {
   const u = msg.usage ?? {};
   // The model that did most of the work, by name, when it's listed.
@@ -54,6 +64,7 @@ export function usageEntry(
   const cost = msg.total_cost_usd ?? msg.cost_usd;
   return {
     at,
+    ...(billing ? { billing } : {}),
     provider,
     model,
     project,
@@ -74,11 +85,19 @@ export interface ServicePrice {
   output: number;
 }
 
-/** What a request cost: as reported for Claude, else from the prices set. */
+/** Whether a request was paid for by itself (not within a plan). */
+export const isBilled = (e: Pick<AiUsageEntry, "billing" | "provider">) =>
+  e.billing
+    ? e.billing !== "plan"
+    : e.provider !== "Claude" && Boolean(e.provider);
+
+/** What a request cost: nothing within a plan; else as Claude reported, or
+ *  from the prices set for the service. */
 export function entryCost(
   e: AiUsageEntry,
   prices: Record<string, ServicePrice> = {},
 ): number {
+  if (!isBilled(e)) return 0;
   if (e.costUsd !== null) return e.costUsd;
   const price = prices[e.provider ?? "Claude"];
   if (!price) return 0;
@@ -91,6 +110,8 @@ export function entryCost(
 
 export interface UsageSummary {
   requests: number;
+  /** Requests within a plan: counted, not priced. */
+  planRequests: number;
   input: number;
   output: number;
   cacheRead: number;
@@ -108,6 +129,7 @@ export function summarize(
 ): UsageSummary {
   const s: UsageSummary = {
     requests: 0,
+    planRequests: 0,
     input: 0,
     output: 0,
     cacheRead: 0,
@@ -123,6 +145,7 @@ export function summarize(
   for (const e of entries) {
     if (e.at < since) continue;
     s.requests++;
+    if (!isBilled(e)) s.planRequests++;
     s.input += e.input;
     s.output += e.output;
     s.cacheRead += e.cacheRead;
@@ -190,6 +213,8 @@ export interface ClaudeLimits {
   limitedUntil: number | null;
   /** Which window is the one that counts now ("five_hour", "seven_day"…). */
   limitType: string | null;
+  /** Past the plan, on extra usage (billed per request). */
+  usingOverage?: boolean;
   observedAt: number;
 }
 
@@ -199,6 +224,7 @@ export interface RateLimitInfo {
   resetsAt?: number;
   rateLimitType?: string;
   utilization?: number;
+  isUsingOverage?: boolean;
   unifiedWindows?: {
     five_hour?: { utilization: number; resetsAt: number };
     seven_day?: { utilization: number; resetsAt: number };
@@ -219,6 +245,9 @@ export function nextLimits(
     sevenDay: win(info.unifiedWindows?.seven_day) ?? fresh(prev?.sevenDay),
     status: info.status ?? prev?.status ?? "allowed",
     limitType: info.rateLimitType ?? prev?.limitType ?? null,
+    usingOverage:
+      info.isUsingOverage ??
+      (info.rateLimitType === "overage" ? true : prev?.usingOverage),
     limitedUntil:
       info.status === "rejected" && info.resetsAt ? info.resetsAt * 1000 : null,
     observedAt: now,

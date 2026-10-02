@@ -157,9 +157,10 @@ tag.
   skills add to every request.
 - Under each reply, the tokens it used are shown again (they were hidden
   when the reply's text was repeated in its summary).
-- Settings → AI usage: requests, tokens and what they'd cost at API prices,
-  today, this week or this month, by service, model and project, with a
-  daily amount to be warned at. With a Claude plan, the 5-hour and weekly
+- Settings → AI usage: requests and tokens today, this week or this month,
+  by service, model and project, and what was billed: only API-key use and
+  Claude's extra usage past your plan count, not requests within a Claude,
+  ChatGPT or Google plan. A daily amount to be warned at. With a Claude plan, the 5-hour and weekly
   limits as Claude counts them, and when each starts over.
 - When a Claude limit is nearly reached the chat shows how full it is; once
   it's reached, a button switches the chat to another AI service you've set
@@ -168,8 +169,8 @@ tag.
   their own, so their use shows as cost too; and Settings → AI usage can
   switch the chat to one by itself when Claude's limit is reached, and back
   once it resets.
-- Under each reply, how many tokens it read and wrote (and for Claude, its
-  cost), so heavy ones stand out.
+- Under each reply, how many tokens it read and wrote (and what it cost,
+  when it's billed), so heavy ones stand out.
 - OpenAI, Gemini, GLM and Ollama now count the tokens they read, not only
   the ones they write.
 - The chat remembers its model and thinking effort between launches, and
