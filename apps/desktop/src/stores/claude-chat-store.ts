@@ -144,6 +144,10 @@ export interface TabState {
   lastRequestAt?: number;
   /** Waiting for this chat (by title) to stop editing the same project. */
   waitingFor?: string | null;
+  /** The request that's waiting, as typed. */
+  waitingText?: string | null;
+  /** Its current request only answers (changes no files). */
+  answerOnly?: boolean;
   /** What the last reply changed, to take back in one go. */
   lastTurn?: { changeIds: string[]; files: string[] } | null;
   /** Keys the last reply cites that the bibliography doesn't have. */
@@ -607,7 +611,12 @@ interface ClaudeChatState {
   selectedModel: ClaudeModelChoice;
   setSelectedModel: (model: ClaudeModelChoice) => void;
   selectedProviderCredentialId: string | null;
-  setSelectedProviderCredentialId: (credentialId: string | null) => void;
+  /** `transient`: a switch made for you (a limit reached), not a choice
+   *  to remember for the project or the next launch. */
+  setSelectedProviderCredentialId: (
+    credentialId: string | null,
+    transient?: boolean,
+  ) => void;
   selectedProviderModels: Record<string, string>;
   setSelectedProviderModel: (credentialId: string, model: string) => void;
 
@@ -624,6 +633,7 @@ interface ClaudeChatState {
       preserveTabProvider?: boolean;
       evenIfBusy?: boolean;
       quick?: boolean;
+      answerOnly?: boolean;
     },
   ) => Promise<void>;
   queueGuidance: (
@@ -816,9 +826,11 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
   },
   selectedProviderCredentialId:
     loadSelectedProviderCredentialId() ?? CLAUDE_CODE_PROVIDER_ID,
-  setSelectedProviderCredentialId: (credentialId) => {
-    persistSelectedProviderCredentialId(credentialId);
-    rememberForProject({ provider: credentialId });
+  setSelectedProviderCredentialId: (credentialId, transient) => {
+    if (!transient) {
+      persistSelectedProviderCredentialId(credentialId);
+      rememberForProject({ provider: credentialId });
+    }
     const providerKey = providerKeyForSelectedCredential(
       credentialId ?? CLAUDE_CODE_PROVIDER_ID,
     );
@@ -898,6 +910,8 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
       evenIfBusy?: boolean;
       /** A quick action on a selection: light work. */
       quick?: boolean;
+      /** Only answers; changes no files. */
+      answerOnly?: boolean;
     },
   ) => {
     let state = get();
@@ -922,11 +936,15 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
 
     // Another chat is editing this project: wait for it, rather than have
     // two assistants change the same files at once.
+    // Requests that only answer neither wait nor make others wait.
     const busy = state.tabs.find(
       (t) =>
-        t.id !== activeTabId && t.isStreaming && t.projectPath === projectPath,
+        t.id !== activeTabId &&
+        t.isStreaming &&
+        !t.answerOnly &&
+        t.projectPath === projectPath,
     );
-    if (busy && !options?.evenIfBusy) {
+    if (busy && !options?.evenIfBusy && !options?.answerOnly) {
       waitingRequests.set(activeTabId, {
         userPrompt,
         contextOverride,
@@ -935,6 +953,7 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
       set((s) =>
         applyTabUpdate(s, activeTabId, {
           waitingFor: busy.title || "another chat",
+          waitingText: userPrompt,
         }),
       );
       return;
@@ -1120,6 +1139,7 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
       set((s) =>
         applyTabUpdate(s, activeTabId, {
           lastRequestAt: sentAt,
+          answerOnly: Boolean(options?.answerOnly),
           lastTurn: null,
           citationWarning: null,
         }),
@@ -1690,6 +1710,8 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
   },
 
   closeTab: (tabId: string) => {
+    // A request it had waiting goes with it.
+    waitingRequests.delete(tabId);
     const state = get();
     const tab = state.tabs.find((t) => t.id === tabId);
     // Prevent closing a streaming tab
@@ -1858,7 +1880,13 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
     // The project is free: the next chat waiting for it goes.
     const { tabs } = get();
     const project = tabs.find((t) => t.id === tabId)?.projectPath;
-    if (tabs.some((t) => t.isStreaming && t.projectPath === project)) return;
+    if (
+      tabs.some(
+        (t) => t.isStreaming && !t.answerOnly && t.projectPath === project,
+      )
+    ) {
+      return;
+    }
     const next = [...waitingRequests.keys()].find(
       (id) => tabs.find((t) => t.id === id)?.projectPath === project,
     );
@@ -1874,7 +1902,9 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
   sendWaitingNow: (tabId) => {
     const request = waitingRequests.get(tabId);
     waitingRequests.delete(tabId);
-    set((s) => applyTabUpdate(s, tabId, { waitingFor: null }));
+    set((s) =>
+      applyTabUpdate(s, tabId, { waitingFor: null, waitingText: null }),
+    );
     if (!request) return;
     void get().sendPrompt(request.userPrompt, request.contextOverride, {
       ...request.options,
@@ -1887,7 +1917,7 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
     const request = waitingRequests.get(tabId);
     waitingRequests.delete(tabId);
     set((s) => ({
-      ...applyTabUpdate(s, tabId, { waitingFor: null }),
+      ...applyTabUpdate(s, tabId, { waitingFor: null, waitingText: null }),
       restoreInput: request ? { tabId, text: request.userPrompt } : null,
     }));
   },

@@ -29,7 +29,7 @@ import { MarkdownRenderer } from "./markdown-renderer";
 
 /** Both answer; neither edits, so they can run side by side. */
 const ANSWER_ONLY =
-  "Answer only: do not change any files. Another assistant is answering the same question, for comparison.";
+  "Answer only: do not change any files, AGENTS.md included. Another assistant is answering the same question, for comparison.";
 
 export const useCompare = create<{
   /** Asking the question. */
@@ -48,12 +48,20 @@ export const useCompare = create<{
     const chat = useClaudeChatStore.getState();
     const a = chat.createTab();
     const b = chat.createTab();
-    chat._patchTab(b, { providerKey: providerKeyForSelectedCredential(other) });
+    const keyB = providerKeyForSelectedCredential(other);
+    chat._patchTab(b, {
+      providerKey: keyB,
+      title: `Compare · ${providerLabel(keyB)}`,
+    });
+    const keyA =
+      useClaudeChatStore.getState().tabs.find((t) => t.id === a)?.providerKey ??
+      null;
+    chat._patchTab(a, { title: `Compare · ${providerLabel(keyA)}` });
     chat.setActiveTab(a);
     for (const id of [a, b]) {
       void chat.sendPrompt(`${ANSWER_ONLY}\n\n${question}`, undefined, {
         tabId: id,
-        evenIfBusy: true,
+        answerOnly: true,
       });
     }
     set({ asking: false, tabs: [a, b] });
@@ -180,7 +188,11 @@ export function CompareView() {
                     variant="outline"
                     className="h-6 px-2 text-xs"
                     onClick={() => {
-                      useClaudeChatStore.getState().setActiveTab(tab.id);
+                      const chat = useClaudeChatStore.getState();
+                      chat.setActiveTab(tab.id);
+                      // The other answer's chat goes (it stays in the history).
+                      const other = ids.find((id) => id !== tab.id);
+                      if (other) chat.closeTab(other);
                       useCompare.getState().close();
                     }}
                   >

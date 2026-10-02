@@ -45,6 +45,11 @@ export function MemoryDialog({
 
   const save = async () => {
     if (!root) return;
+    // Nothing written and no memory yet: no empty file.
+    if (!text.trim() && !(await readMemory(root))) {
+      onOpenChange(false);
+      return;
+    }
     setSaving(true);
     try {
       await writeMemory(root, text.endsWith("\n") ? text : `${text}\n`);

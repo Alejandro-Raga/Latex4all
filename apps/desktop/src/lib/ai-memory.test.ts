@@ -40,6 +40,17 @@ describe("shared memory", () => {
       readsMemoryItself: true,
     });
     expect(codex).not.toContain("Use APA style.");
+    // No memory kept: no assistant is asked to start one.
+    expect(
+      sharedContext({
+        memory: null,
+        log: [],
+        tab: "t1",
+        since: 0,
+        startingChat: true,
+        readsMemoryItself: false,
+      }),
+    ).toBe("");
   });
 
   it("tells a chat what the others did since its last turn", () => {

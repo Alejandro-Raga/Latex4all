@@ -7,7 +7,7 @@
  * - .latex4all/ai-log.jsonl: who asked what and which files changed, so an
  *   assistant hears what the others did since its own last turn.
  */
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 
 export const MEMORY_FILE = "AGENTS.md";
 const LOG_FILE = ".latex4all/ai-log.jsonl";
@@ -62,20 +62,27 @@ export async function readLog(root: string): Promise<AiLogEntry[]> {
   }
 }
 
-export async function appendLog(root: string, entry: AiLogEntry) {
-  const entries = [...(await readLog(root)), entry].slice(-LOG_KEEP);
-  try {
-    await writeTextFile(
-      join(root, LOG_FILE),
-      `${entries.map((e) => JSON.stringify(e)).join("\n")}\n`,
-    );
-  } catch {
-    // The log is a help, not a must: a project we can't write to goes on.
-  }
+// One write at a time: two chats finishing together mustn't lose a line.
+let logQueue: Promise<void> = Promise.resolve();
+
+export function appendLog(root: string, entry: AiLogEntry): Promise<void> {
+  logQueue = logQueue.then(async () => {
+    try {
+      const entries = [...(await readLog(root)), entry].slice(-LOG_KEEP);
+      await mkdir(join(root, ".latex4all"), { recursive: true });
+      await writeTextFile(
+        join(root, LOG_FILE),
+        `${entries.map((e) => JSON.stringify(e)).join("\n")}\n`,
+      );
+    } catch {
+      // The log is a help, not a must: a project we can't write to goes on.
+    }
+  });
+  return logQueue;
 }
 
 const MEMORY_RULE =
-  "Lasting notes about this project live in AGENTS.md at its root, shared by every assistant used here. When something is settled that others should know (style, decisions, what's left to do), add a short line to it.";
+  "This project keeps lasting notes in AGENTS.md at its root, shared by every assistant used here. When something is settled that others should know (style, decisions, what's left to do), add a short line to it.";
 
 const time = (at: number) =>
   new Date(at).toLocaleString(undefined, {
@@ -99,9 +106,10 @@ export function sharedContext(input: {
   readsMemoryItself: boolean;
 }): string {
   const parts: string[] = [];
-  if (input.startingChat) {
+  // Only where the user keeps a memory: no assistant starts one unasked.
+  if (input.startingChat && input.memory) {
     parts.push(MEMORY_RULE);
-    if (input.memory && !input.readsMemoryItself) {
+    if (!input.readsMemoryItself) {
       parts.push(`[Project memory, AGENTS.md]\n${input.memory.trim()}`);
     }
   }

@@ -1,4 +1,6 @@
 import { useRef, useState, useCallback, useEffect } from "react";
+import { engineOfProvider } from "@/lib/agent-events";
+import { readyEngines, useAgentAccounts } from "@/lib/agent-accounts";
 import {
   ChevronDownIcon,
   Maximize2Icon,
@@ -44,11 +46,25 @@ export function ClaudeChatDrawer() {
     const saved = projectAiDefaults(projectRoot);
     if (!saved) return;
     const chat = useClaudeChatStore.getState();
-    if (saved.provider !== undefined) {
-      chat.setSelectedProviderCredentialId(saved.provider);
-    }
     if (saved.model) chat.setSelectedModel(saved.model as never);
     if (saved.effort) chat.setEffortLevel(saved.effort as never);
+    if (saved.provider === undefined) return;
+    // ChatGPT or Gemini only once signed in; else the choice stays as is.
+    const engine = engineOfProvider(saved.provider);
+    if (!engine) {
+      chat.setSelectedProviderCredentialId(saved.provider);
+      return;
+    }
+    void useAgentAccounts
+      .getState()
+      .refresh(engine)
+      .then(() => {
+        if (readyEngines(useAgentAccounts.getState().status).includes(engine)) {
+          useClaudeChatStore
+            .getState()
+            .setSelectedProviderCredentialId(saved.provider ?? null);
+        }
+      });
   }, [projectRoot]);
 
   const [isOpen, setIsOpen] = useState(false);

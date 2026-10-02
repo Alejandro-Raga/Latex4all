@@ -132,8 +132,9 @@ export function WaitingNotice() {
   return (
     <div className="mx-3 mb-1 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-xs">
       <span className="min-w-0 flex-1 text-muted-foreground">
-        Waiting for “{tab.waitingFor}” to finish with this project; yours goes
-        next.
+        Waiting for “{tab.waitingFor}” to finish with this project; “
+        {(tab.waitingText ?? "").slice(0, 60)}
+        {(tab.waitingText ?? "").length > 60 ? "…" : ""}” goes next.
       </span>
       <button
         type="button"

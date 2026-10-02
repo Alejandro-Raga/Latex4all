@@ -217,6 +217,7 @@ const QUICK_ACTIONS = [
     title: "In plain words; changes nothing",
     prompt:
       "Explain the selected text in plain words. Do not change any files.",
+    answerOnly: true,
   },
   {
     id: "argue",
@@ -224,6 +225,7 @@ const QUICK_ACTIONS = [
     title: "Gaps, unsupported claims, missing citations; changes nothing",
     prompt:
       "Check the argument in the selected text: point out gaps, unsupported claims and places that need a citation. Do not change any files.",
+    answerOnly: true,
   },
 ];
 
@@ -1511,17 +1513,17 @@ export function LatexEditor() {
     }, [selectionRange, selectionLabel, activeFile]);
 
   const sendToolbarPromptWithSelectionContext = useCallback(
-    (prompt: string, quick = false) => {
+    (prompt: string, quick = false, answerOnly = false) => {
       const context = buildSelectionContext();
       toolbarStickyRef.current = false;
       setSelectionCoords(null);
       setSelectionRange(null);
       const chat = useClaudeChatStore.getState();
       if (context) {
-        void chat.sendPrompt(prompt, context, { quick });
+        void chat.sendPrompt(prompt, context, { quick, answerOnly });
         chat.requestPinnedContextRemoval([context.label]);
       } else {
-        void chat.sendPrompt(prompt, undefined, { quick });
+        void chat.sendPrompt(prompt, undefined, { quick, answerOnly });
       }
     },
     [buildSelectionContext, setSelectionRange],
@@ -1946,6 +1948,7 @@ export function LatexEditor() {
                       sendToolbarPromptWithSelectionContext(
                         action.prompt,
                         true,
+                        Boolean(action.answerOnly),
                       );
                     }
                   }}

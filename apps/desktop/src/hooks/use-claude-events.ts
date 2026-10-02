@@ -489,11 +489,19 @@ export function useClaudeEvents() {
           .reverse()
           .find((m) => m.type === "user" && m.message?.content?.[0]?.text);
         const ask = shortAsk(lastUser?.message?.content?.[0]?.text ?? "");
-        // Citations the reply wrote that the bibliography lacks.
+        // Citations the reply added that the bibliography lacks. Only with a
+        // .bib to check against (not \\begin{thebibliography}), and only
+        // keys it newly cited, not ones already missing before.
         const texChanged = [...files].filter((f) => f.endsWith(".tex"));
-        if (success && texChanged.length) {
+        const bibFiles = useDocumentStore
+          .getState()
+          .files.filter((f) => f.name.toLowerCase().endsWith(".bib"));
+        if (success && texChanged.length && bibFiles.length) {
+          const before = useProposedChangesStore
+            .getState()
+            .changes.filter((c) => c.filePath.endsWith(".tex"))
+            .map((c) => c.oldContent);
           void (async () => {
-            const docs = useDocumentStore.getState();
             const tex = await Promise.all(
               texChanged.map((f) =>
                 readTexFileContent(
@@ -502,15 +510,14 @@ export function useClaudeEvents() {
               ),
             );
             const bibs = await Promise.all(
-              docs.files
-                .filter((f) => f.name.toLowerCase().endsWith(".bib"))
-                .map((f) =>
-                  readTexFileContent(f.absolutePath).catch(
-                    () => f.content ?? "",
-                  ),
-                ),
+              bibFiles.map((f) =>
+                readTexFileContent(f.absolutePath).catch(() => f.content ?? ""),
+              ),
             );
-            const missing = missingCitations(tex, bibs);
+            const already = new Set(missingCitations(before, bibs));
+            const missing = missingCitations(tex, bibs).filter(
+              (k) => !already.has(k),
+            );
             useClaudeChatStore.getState()._patchTab(tabId, {
               citationWarning: missing.length ? missing : null,
             });

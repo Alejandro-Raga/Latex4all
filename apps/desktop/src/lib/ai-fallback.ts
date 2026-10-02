@@ -22,7 +22,7 @@ export function fallBackIfLimited() {
   const service = fallbackChoices().find((c) => c.id === fallbackService);
   if (!service) return;
 
-  chat.setSelectedProviderCredentialId(service.id);
+  chat.setSelectedProviderCredentialId(service.id, true);
   const until = claudeLimits?.limitedUntil as number;
   toast.info(`Switched to ${service.label} while Claude's limit lasts`, {
     description: `Back to Claude at ${new Date(until).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}.`,
@@ -33,7 +33,7 @@ export function fallBackIfLimited() {
       backTimer = null;
       const now = useClaudeChatStore.getState();
       if (now.selectedProviderCredentialId !== service.id) return;
-      now.setSelectedProviderCredentialId(CLAUDE_CODE_PROVIDER_ID);
+      now.setSelectedProviderCredentialId(CLAUDE_CODE_PROVIDER_ID, true);
       toast.info("Back to Claude: its limit has reset");
     },
     Math.max(0, until - Date.now()) + 30_000,

@@ -253,11 +253,16 @@ pub fn apply_engine(ai: &str) {
     let (Some(home), Some((on, off))) = (dirs::home_dir(), claude_dirs()) else {
         return;
     };
-    let target = match ai {
-        "codex" => home.join(".codex").join("skills"),
-        "gemini" => home.join(".gemini").join("skills"),
+    let tool_home = match ai {
+        "codex" => home.join(".codex"),
+        "gemini" => home.join(".gemini"),
         _ => return,
     };
+    // Not for a tool never used here: no folders in an unused one's place.
+    if !tool_home.is_dir() {
+        return;
+    }
+    let target = tool_home.join("skills");
     let settings = load_settings();
     let wanted: Vec<(OsString, PathBuf)> = library()
         .into_iter()

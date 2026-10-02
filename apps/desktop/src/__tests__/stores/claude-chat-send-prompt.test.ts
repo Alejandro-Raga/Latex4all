@@ -397,6 +397,55 @@ describe("two chats on one project", () => {
   });
 });
 
+describe("answer-only requests", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetClaudeChatStore();
+    setMockDocumentState();
+  });
+
+  it("neither wait for an editing chat nor make others wait", async () => {
+    const base = useClaudeChatStore.getState().tabs[0];
+    useClaudeChatStore.setState({
+      tabs: [
+        { ...base, id: "editing", isStreaming: true },
+        { ...base, id: "tab-default" },
+        { ...base, id: "explainer", isStreaming: true, answerOnly: true },
+      ],
+    });
+    await useClaudeChatStore
+      .getState()
+      .sendPrompt("Explain this", undefined, { answerOnly: true });
+    expect(invoke).toHaveBeenCalledTimes(1);
+
+    // With only an answer-only chat running, an editing request goes at once.
+    vi.clearAllMocks();
+    useClaudeChatStore.setState((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.id === "editing" || t.id === "tab-default"
+          ? { ...t, isStreaming: false }
+          : t,
+      ),
+    }));
+    await useClaudeChatStore.getState().sendPrompt("Fix the intro");
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("an automatic switch isn't remembered as the choice", () => {
+    useClaudeChatStore.getState().setSelectedProviderCredentialId("chosen");
+    expect(
+      sessionStorage.getItem("latex4all:selected-provider-credential-id"),
+    ).toBe("chosen");
+    useClaudeChatStore.getState().setSelectedProviderCredentialId("ds", true);
+    expect(useClaudeChatStore.getState().selectedProviderCredentialId).toBe(
+      "ds",
+    );
+    expect(
+      sessionStorage.getItem("latex4all:selected-provider-credential-id"),
+    ).toBe("chosen");
+  });
+});
+
 describe("Auto model", () => {
   it("gives quick actions and small selection edits to Haiku", async () => {
     const { resolveClaudeModel } = await import("@/stores/claude-chat-store");
