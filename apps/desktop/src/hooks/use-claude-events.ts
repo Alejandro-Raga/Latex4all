@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { isLimitText, onLimitHit } from "@/lib/ai-continuity";
+import { isLimitText, noteQuota, onLimitHit } from "@/lib/ai-continuity";
+import { quotaMessage } from "@/lib/provider-quota";
 import { useAgentAccounts } from "@/lib/agent-accounts";
 import { missingCitations } from "@/lib/citations";
 import { appendLog, shortAsk } from "@/lib/ai-memory";
@@ -78,6 +79,12 @@ interface ClaudeErrorPayload {
  * Per-tab mutable state (pendingToolUses, hasTexChanges) is stored in Maps
  * keyed by tab_id so multiple tabs can stream concurrently.
  */
+/** Claude Code's notices when another provider's model is in use (its
+ *  connectors are off, it doesn't know the model's name): nothing for the
+ *  user to do. */
+const CLAUDE_CODE_NOTICE =
+  /claude\.ai connectors are disabled|\[claude-code:unrecognized_model\]/i;
+
 export function useClaudeEvents() {
   // Per-tab mutable state stored in refs so the long-lived listeners
   // always read the latest values without needing to be re-created.
@@ -137,7 +144,9 @@ export function useClaudeEvents() {
           tab?.sessionProviderKey ?? tab?.providerKey ?? null,
         );
         chat._patchTab(tabId, { limitHit: true });
-        message = `${who} hit a usage limit. Free tiers allow only a few requests per minute or day. Wait a moment or switch AI.`;
+        const key = tab?.sessionProviderKey ?? tab?.providerKey ?? "";
+        const hit = noteQuota(key.replace(/^openai-compatible:/, ""), message);
+        message = quotaMessage(who, hit);
       }
       lastErrorRef.current.set(tabId, message);
       useClaudeChatStore.getState()._setError(tabId, message);
@@ -265,7 +274,7 @@ export function useClaudeEvents() {
       const chatStore = useClaudeChatStore.getState();
       if (
         msg.type === "system" &&
-        /claude\.ai connectors are disabled/i.test(JSON.stringify(msg))
+        CLAUDE_CODE_NOTICE.test(JSON.stringify(msg))
       ) {
         return;
       }
@@ -781,9 +790,7 @@ export function useClaudeEvents() {
           if (!cancelled) {
             const { tab_id: tabId, data: payload } = event.payload;
             log.warn(`[${tabId}] stderr: ${payload}`);
-            // Claude Code's notice when another provider's key is in use:
-            // true, and nothing for the user to do.
-            if (/claude\.ai connectors are disabled/i.test(payload)) return;
+            if (CLAUDE_CODE_NOTICE.test(payload)) return;
             const errTab = useClaudeChatStore
               .getState()
               .tabs.find((t) => t.id === tabId);

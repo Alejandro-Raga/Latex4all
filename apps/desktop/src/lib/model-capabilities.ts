@@ -403,17 +403,23 @@ export function isChatModelOption(input: ModelCapabilityInput) {
 export function newestModelsFirst(models: string[], baseUrl = ""): string[] {
   // Google retires a Gemini generation for new users once the next is out
   // (gemini-2.5 → "no longer available"): only the newest Gemini one, then
-  // the rest (Gemma), which may not handle tool calls as well.
+  // the rest (Gemma), which may not handle tool calls as well. Flash-Lite
+  // first: on the free tier it allows ~500 requests a day, Flash ~20, and a
+  // chat message takes several.
   if (/generativelanguage\.googleapis\.com/i.test(baseUrl)) {
     const major = (m: string) =>
       Number.parseInt(m.match(/gemini-(\d+)/i)?.[1] ?? "-1", 10);
     const newest = Math.max(...models.map(major));
-    const gemini = models.filter((m) => major(m) >= 0);
+    const gemini = newestModelsFirst(
+      models.filter(
+        (m) => major(m) >= 0 && (newest <= 0 || major(m) === newest),
+      ),
+    );
+    const lite = (m: string) => /flash-lite/i.test(m);
     const others = models.filter((m) => major(m) < 0);
     return [
-      ...newestModelsFirst(
-        newest > 0 ? gemini.filter((m) => major(m) === newest) : gemini,
-      ),
+      ...gemini.filter(lite),
+      ...gemini.filter((m) => !lite(m)),
       ...newestModelsFirst(others),
     ];
   }

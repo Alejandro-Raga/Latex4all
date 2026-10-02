@@ -5,7 +5,7 @@ import {
   availableServices,
   fallbackOrder,
   nextService,
-  outUntil,
+  outNow,
   serviceLabel,
   serviceOf,
   switchBack,
@@ -67,6 +67,8 @@ export function ClaudeLimitNotice() {
   const claudeLimits = useAiUsage((s) => s.claudeLimits);
   const codexLimits = useAiUsage((s) => s.codexLimits);
   const blocked = useAiUsage((s) => s.blocked);
+  const entries = useAiUsage((s) => s.entries);
+  const models = useClaudeChatStore((s) => s.selectedProviderModels);
   const autoContinue = useAiUsage((s) => s.autoContinue);
   const providerId = useClaudeChatStore((s) => s.selectedProviderCredentialId);
   const handoff = useClaudeChatStore(
@@ -75,12 +77,14 @@ export function ClaudeLimitNotice() {
   if (handoff) return null;
   const current = serviceOf(providerId);
   const now = Date.now();
-  const out = outUntil(current, { claudeLimits, codexLimits, blocked }, now);
+  // Read again when any of these change: limits, blocks, today's requests.
+  void [claudeLimits, codexLimits, blocked, entries, models];
+  const out = outNow(current);
   const next = nextService(
     current,
     fallbackOrder(),
     availableServices(),
-    (id) => outUntil(id, { claudeLimits, codexLimits, blocked }, now) !== null,
+    (id) => outNow(id) !== null,
   );
   const switchNow = () => {
     if (next)

@@ -351,8 +351,12 @@ interface AiUsageState {
   /** Carry on by itself (else: offer it in the chat). */
   autoContinue: boolean;
   setAutoContinue: (on: boolean) => void;
-  /** Services that said they're out (429, quota…): id → until when. */
+  /** Services that said they're out (429, quota…): id → until when; a
+   *  single model of a service: "id#model". */
   blocked: Record<string, number>;
+  /** Free models' daily requests, as the provider said: model → limit. */
+  dailyLimits: Record<string, number>;
+  learnDailyLimit: (model: string, limit: number) => void;
   block: (id: string, until: number) => void;
   setPrice: (service: string, price: ServicePrice | null) => void;
   setServiceBudget: (service: string, usd: number | null) => void;
@@ -386,6 +390,9 @@ export const useAiUsage = create<AiUsageState>()(
       setFallbackOrder: (ids) => set({ fallbackOrder: ids }),
       autoContinue: true,
       setAutoContinue: (on) => set({ autoContinue: on }),
+      dailyLimits: {},
+      learnDailyLimit: (model, limit) =>
+        set((s) => ({ dailyLimits: { ...s.dailyLimits, [model]: limit } })),
       blocked: {},
       block: (id, until) =>
         set((s) => ({ blocked: { ...s.blocked, [id]: until } })),

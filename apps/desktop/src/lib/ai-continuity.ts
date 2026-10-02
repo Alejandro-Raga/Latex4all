@@ -29,6 +29,15 @@ import {
   useClaudeChatStore,
 } from "@/stores/claude-chat-store";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
+import {
+  bareModel,
+  dailyLimit,
+  isGoogleApi,
+  nextPacificDay,
+  parseQuota,
+  type QuotaHit,
+  requestsToday,
+} from "./provider-quota";
 
 /** How long a service that said "out" without saying until when is skipped. */
 const SOFT_BLOCK = 30 * 60e3;
@@ -56,6 +65,8 @@ export function outUntil(
     blocked: Record<string, number>;
   },
   now = Date.now(),
+  /** The model in use, for a limit on that model alone. */
+  model?: string | null,
 ): number | null {
   if (
     id === CLAUDE_CODE_PROVIDER_ID &&
@@ -67,8 +78,11 @@ export function outUntil(
     const w = state.codexLimits?.primary;
     if (w && w.resetsAt > now && w.usedPercent >= 100) return w.resetsAt;
   }
-  const until = state.blocked[id];
-  return until && until > now ? until : null;
+  const until = Math.max(
+    state.blocked[id] ?? 0,
+    model ? (state.blocked[`${id}#${bareModel(model)}`] ?? 0) : 0,
+  );
+  return until > now ? until : null;
 }
 
 /** The first service in the order, other than this one, that isn't out. */
@@ -125,7 +139,57 @@ export function fallbackOrder(): string[] {
   return fallbackService ? [CLAUDE_CODE_PROVIDER_ID, fallbackService] : [];
 }
 
-const isOutNow = (id: string) => outUntil(id, useAiUsage.getState()) !== null;
+/** The model a service with a key is on in the chat (null: not one). */
+export function currentModelOf(id: string): string | null {
+  const credential = useClaudeSetupStore
+    .getState()
+    .openAiCredentials.find((c) => c.id === id);
+  if (!credential) return null;
+  return (
+    useClaudeChatStore.getState().selectedProviderModels[id] || credential.model
+  );
+}
+
+/** When a service is back, if it's out now: as it said, or because its
+ *  model has used the daily requests Google told us it has. */
+export function outNow(id: string): number | null {
+  const usage = useAiUsage.getState();
+  const model = currentModelOf(id);
+  const said = outUntil(id, usage, Date.now(), model);
+  if (said !== null || !model) return said;
+  const credential = useClaudeSetupStore
+    .getState()
+    .openAiCredentials.find((c) => c.id === id);
+  if (!isGoogleApi(credential?.base_url)) return null;
+  const limit = dailyLimit(model, usage.dailyLimits);
+  return limit?.known && requestsToday(usage.entries, model) >= limit.limit
+    ? nextPacificDay()
+    : null;
+}
+
+const isOutNow = (id: string) => outNow(id) !== null;
+
+/**
+ * A provider's quota error: learn the model's daily limit and skip that
+ * model until it's back (the next Pacific day, or after the wait it asks).
+ */
+export function noteQuota(id: string, text: string): QuotaHit | null {
+  const hit = parseQuota(text);
+  if (!hit) return null;
+  const model = hit.model ?? currentModelOf(id);
+  if (!model) return hit;
+  const usage = useAiUsage.getState();
+  if (hit.period === "day") {
+    if (hit.limit) usage.learnDailyLimit(bareModel(model), hit.limit);
+    usage.block(`${id}#${bareModel(model)}`, nextPacificDay());
+  } else {
+    usage.block(
+      `${id}#${bareModel(model)}`,
+      Date.now() + Math.max(60, hit.retrySecs ?? 60) * 1000,
+    );
+  }
+  return hit;
+}
 
 const backTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -224,10 +288,9 @@ export function onLimitHit(tabId: string, request: string | null) {
   const fromId = serviceOf(
     providerIdOf(tab.sessionProviderKey ?? tab.providerKey),
   );
-  const usage = useAiUsage.getState();
-  if (outUntil(fromId, usage) === null)
-    usage.block(fromId, Date.now() + SOFT_BLOCK);
-  const backAt = outUntil(fromId, useAiUsage.getState());
+  if (outNow(fromId) === null)
+    useAiUsage.getState().block(fromId, Date.now() + SOFT_BLOCK);
+  const backAt = outNow(fromId);
   const toId = nextService(
     fromId,
     fallbackOrder(),
@@ -270,7 +333,7 @@ export function switchIfOut(tabId: string): boolean {
   const tab = useClaudeChatStore.getState().tabs.find((t) => t.id === tabId);
   if (!tab) return false;
   const fromId = serviceOf(providerIdOf(tab.providerKey));
-  const backAt = outUntil(fromId, useAiUsage.getState());
+  const backAt = outNow(fromId);
   if (backAt === null) return false;
   const toId = nextService(
     fromId,

@@ -8,7 +8,14 @@ import {
   useAiUsage,
   windowName,
 } from "@/lib/ai-usage";
+import {
+  dailyLimit,
+  isGoogleApi,
+  nextPacificDay,
+  requestsToday,
+} from "@/lib/provider-quota";
 import { cn } from "@/lib/utils";
+import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 import {
   CLAUDE_CODE_PROVIDER_ID,
   useClaudeChatStore,
@@ -68,6 +75,14 @@ export function RequestWeight({ input }: { input: string }) {
   const providerId = useClaudeChatStore((s) => s.selectedProviderCredentialId);
   const claudeLimits = useAiUsage((s) => s.claudeLimits);
   const codexLimits = useAiUsage((s) => s.codexLimits);
+  const entries = useAiUsage((s) => s.entries);
+  const learned = useAiUsage((s) => s.dailyLimits);
+  const credential = useClaudeSetupStore((s) =>
+    s.openAiCredentials.find((c) => c.id === providerId),
+  );
+  const credentialModel = useClaudeChatStore((s) =>
+    providerId ? s.selectedProviderModels[providerId] : undefined,
+  );
   const engine = engineOfProvider(providerId);
   const claude =
     !engine && (!providerId || providerId === CLAUDE_CODE_PROVIDER_ID);
@@ -123,10 +138,18 @@ export function RequestWeight({ input }: { input: string }) {
     }
   }
 
+  // A free Gemini model's requests today, against its daily limit.
+  const model = credentialModel || credential?.model;
+  const daily =
+    credential && model && isGoogleApi(credential.base_url)
+      ? dailyLimit(model, learned)
+      : null;
+  const today = daily && model ? requestsToday(entries, model, now) : 0;
+
   if (
     !tab ||
     tab.isStreaming ||
-    (tokens === 0 && !input.trim() && !windows.length)
+    (tokens === 0 && !input.trim() && !windows.length && !daily)
   ) {
     return null;
   }
@@ -148,6 +171,9 @@ export function RequestWeight({ input }: { input: string }) {
         } (measured).`
       : null,
     engine === "gemini" ? "Gemini doesn't report its limits to apps." : null,
+    daily
+      ? `Today: ${today} of ${daily.known ? "" : "about "}${daily.limit} free requests to ${model}${daily.known ? "" : " (Google confirms the number when it's reached)"}. One message takes a request per step. Resets ${resetsLabel(nextPacificDay(now))}.`
+      : null,
   ]
     .filter(Boolean)
     .join("\n");
@@ -163,6 +189,12 @@ export function RequestWeight({ input }: { input: string }) {
       {main && (
         <span className={level(main.used)}>
           {main.name} {pct(main.used)}%
+        </span>
+      )}
+      {daily && (
+        <span className={level((today / daily.limit) * 100)}>
+          Today {today}/{daily.known ? "" : "~"}
+          {daily.limit}
         </span>
       )}
     </span>

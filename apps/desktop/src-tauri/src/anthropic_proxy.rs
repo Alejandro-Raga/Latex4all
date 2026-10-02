@@ -63,17 +63,8 @@ async fn handle_connection(
                 let _ = stream.shutdown().await;
                 return Ok(());
             }
-            Err(err) => {
-                let response = json_response(
-                    502,
-                    &json!({
-                        "type": "error",
-                        "error": {
-                            "type": "api_error",
-                            "message": err,
-                        },
-                    }),
-                );
+            Err(failure) => {
+                let response = failure_response(&failure);
                 stream
                     .write_all(response.as_bytes())
                     .await
@@ -214,7 +205,7 @@ async fn handle_messages_to_stream(
     request: &HttpRequest,
     credential: &OpenAiProxyCredential,
     stream: &mut TcpStream,
-) -> Result<(), String> {
+) -> Result<(), ProxyFailure> {
     let anthropic_request: Value = serde_json::from_slice(&request.body)
         .map_err(|err| format!("Claude Code sent invalid Anthropic JSON: {}", err))?;
     let wants_stream = anthropic_request
@@ -238,7 +229,8 @@ async fn handle_messages_to_stream(
         return Err(format!(
             "{} does not accept OpenAI-style image_url message parts. Switch to Claude Code or a vision-capable OpenAI-compatible endpoint for image questions.",
             credential.model
-        ));
+        )
+        .into());
     }
 
     let client = reqwest::Client::builder()
@@ -260,11 +252,15 @@ async fn handle_messages_to_stream(
             .text()
             .await
             .map_err(|err| format!("Failed to read provider error response: {}", err))?;
+        if status.as_u16() == 429 {
+            return Err(rate_limit_failure(&response_text, &credential.model));
+        }
         return Err(format!(
             "Provider returned HTTP {}: {}",
             status,
             compact_error_text(&response_text)
-        ));
+        )
+        .into());
     }
 
     if wants_stream {
@@ -275,7 +271,10 @@ async fn handle_messages_to_stream(
             .unwrap_or_default()
             .to_ascii_lowercase();
         if content_type.contains("stream") {
-            stream_openai_sse_to_anthropic(stream, response, &anthropic_request, credential).await
+            Ok(
+                stream_openai_sse_to_anthropic(stream, response, &anthropic_request, credential)
+                    .await?,
+            )
         } else {
             let response_text = response
                 .text()
@@ -288,7 +287,8 @@ async fn handle_messages_to_stream(
             stream
                 .write_all(sse_response(&anthropic_response).as_bytes())
                 .await
-                .map_err(|err| format!("Failed to write proxy SSE response: {}", err))
+                .map_err(|err| format!("Failed to write proxy SSE response: {}", err))?;
+            Ok(())
         }
     } else {
         let response_text = response
@@ -302,8 +302,157 @@ async fn handle_messages_to_stream(
         stream
             .write_all(json_response(200, &anthropic_response).as_bytes())
             .await
-            .map_err(|err| format!("Failed to write proxy JSON response: {}", err))
+            .map_err(|err| format!("Failed to write proxy JSON response: {}", err))?;
+        Ok(())
     }
+}
+
+/// Why a request through the proxy failed, as Claude Code is told.
+struct ProxyFailure {
+    status: u16,
+    kind: &'static str,
+    message: String,
+    /// Seconds to wait before trying again, when the provider says.
+    retry_after: Option<u64>,
+    /// False when trying again can't help (a daily quota).
+    retry: bool,
+}
+
+impl From<String> for ProxyFailure {
+    fn from(message: String) -> Self {
+        Self {
+            status: 502,
+            kind: "api_error",
+            message,
+            retry_after: None,
+            retry: true,
+        }
+    }
+}
+
+fn failure_response(failure: &ProxyFailure) -> String {
+    let body = json!({
+        "type": "error",
+        "error": { "type": failure.kind, "message": failure.message },
+    })
+    .to_string();
+    let mut headers = format!(
+        "x-should-retry: {}\r\n",
+        if failure.retry { "true" } else { "false" }
+    );
+    if let Some(secs) = failure.retry_after {
+        headers.push_str(&format!("retry-after: {}\r\n", secs));
+    }
+    format!(
+        "HTTP/1.1 {} {}\r\nContent-Type: application/json; charset=utf-8\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+        failure.status,
+        reason_phrase(failure.status),
+        headers,
+        body.as_bytes().len(),
+        body
+    )
+}
+
+/// A provider's 429, passed on as a rate limit (not a connection error), in
+/// words the app reads: "[quota day=20 model=… retry=33]" when Google says
+/// which quota ran out. A daily one isn't retried: it won't come back today.
+fn rate_limit_failure(response_text: &str, model: &str) -> ProxyFailure {
+    let quota = google_quota(response_text);
+    let daily = quota
+        .as_ref()
+        .is_some_and(|q| q.id.to_ascii_lowercase().contains("perday"));
+    let mut message = if daily {
+        format!("Rate limit: {} has used its requests for today.", model)
+    } else {
+        format!(
+            "Rate limit: {} got too many requests; try again shortly.",
+            model
+        )
+    };
+    if let Some(q) = &quota {
+        message.push_str(&format!(
+            " [quota {}={} model={}{}]",
+            if daily { "day" } else { "minute" },
+            q.limit.map(|n| n.to_string()).unwrap_or_default(),
+            q.model.clone().unwrap_or_else(|| model.to_string()),
+            q.retry_secs
+                .map(|s| format!(" retry={}", s))
+                .unwrap_or_default()
+        ));
+    } else {
+        message.push_str(&format!(" {}", compact_error_text(response_text)));
+    }
+    ProxyFailure {
+        status: 429,
+        kind: "rate_limit_error",
+        message,
+        retry_after: if daily {
+            None
+        } else {
+            quota.as_ref().and_then(|q| q.retry_secs)
+        },
+        retry: !daily,
+    }
+}
+
+struct GoogleQuota {
+    id: String,
+    limit: Option<u64>,
+    model: Option<String>,
+    retry_secs: Option<u64>,
+}
+
+/// The quota a Gemini 429 names (QuotaFailure, RetryInfo), if it does.
+fn google_quota(text: &str) -> Option<GoogleQuota> {
+    let value: Value = serde_json::from_str(text).ok()?;
+    // Google answers with the error alone, or in a one-item list.
+    let error = value
+        .get("error")
+        .or_else(|| value.get(0).and_then(|v| v.get("error")))?;
+    let details = error.get("details")?.as_array()?;
+    let mut quota: Option<GoogleQuota> = None;
+    let mut retry_secs = None;
+    for detail in details {
+        let kind = detail.get("@type").and_then(Value::as_str).unwrap_or("");
+        if kind.ends_with("QuotaFailure") {
+            // The daily quota, if it's among those that ran out.
+            let violations = detail.get("violations")?.as_array()?;
+            let pick = violations
+                .iter()
+                .find(|v| {
+                    v.get("quotaId")
+                        .and_then(Value::as_str)
+                        .is_some_and(|id| id.to_ascii_lowercase().contains("perday"))
+                })
+                .or_else(|| violations.first())?;
+            quota = Some(GoogleQuota {
+                id: pick
+                    .get("quotaId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string(),
+                limit: pick.get("quotaValue").and_then(|v| {
+                    v.as_u64()
+                        .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+                }),
+                model: pick
+                    .get("quotaDimensions")
+                    .and_then(|d| d.get("model"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                retry_secs: None,
+            });
+        } else if kind.ends_with("RetryInfo") {
+            retry_secs = detail
+                .get("retryDelay")
+                .and_then(Value::as_str)
+                .and_then(|d| d.trim_end_matches('s').parse::<f64>().ok())
+                .map(|s| s.ceil() as u64);
+        }
+    }
+    let mut quota = quota?;
+    quota.retry_secs = retry_secs;
+    Some(quota)
 }
 
 fn openai_chat_completions_url(base_url: &str) -> String {
@@ -375,13 +524,7 @@ fn json_response(status: u16, value: &Value) -> String {
 }
 
 fn http_response(status: u16, content_type: &str, body: &str) -> String {
-    let reason = match status {
-        200 => "OK",
-        400 => "Bad Request",
-        404 => "Not Found",
-        502 => "Bad Gateway",
-        _ => "Internal Server Error",
-    };
+    let reason = reason_phrase(status);
     format!(
         "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
         status,
@@ -390,6 +533,17 @@ fn http_response(status: u16, content_type: &str, body: &str) -> String {
         body.as_bytes().len(),
         body
     )
+}
+
+fn reason_phrase(status: u16) -> &'static str {
+    match status {
+        200 => "OK",
+        400 => "Bad Request",
+        404 => "Not Found",
+        429 => "Too Many Requests",
+        502 => "Bad Gateway",
+        _ => "Internal Server Error",
+    }
 }
 
 fn compact_error_text(text: &str) -> String {
@@ -408,6 +562,31 @@ fn _assert_local_addr(_: SocketAddr) {}
 mod tests {
     use super::transformers::ProxyTransformerChain;
     use super::*;
+
+    #[test]
+    fn a_gemini_daily_quota_is_a_rate_limit_not_retried() {
+        let text = r#"[{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaId":"GenerateRequestsPerMinutePerProjectPerModel-FreeTier","quotaValue":"10"},{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier","quotaDimensions":{"model":"gemini-3.8-flash"},"quotaValue":"20"}]},{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"33.4s"}]}}]"#;
+        let failure = rate_limit_failure(text, "models/gemini-3.8-flash");
+        assert_eq!(failure.status, 429);
+        assert!(!failure.retry);
+        assert!(failure
+            .message
+            .contains("[quota day=20 model=gemini-3.8-flash retry=34]"));
+        let response = failure_response(&failure);
+        assert!(response.starts_with("HTTP/1.1 429 Too Many Requests\r\n"));
+        assert!(response.contains("x-should-retry: false\r\n"));
+    }
+
+    #[test]
+    fn a_per_minute_quota_says_when_to_retry() {
+        let text = r#"{"error":{"details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaId":"GenerateRequestsPerMinutePerProjectPerModel-FreeTier","quotaValue":10}]},{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"7s"}]}}"#;
+        let failure = rate_limit_failure(text, "gemini-x");
+        assert!(failure.retry);
+        assert_eq!(failure.retry_after, Some(7));
+        assert!(failure
+            .message
+            .contains("[quota minute=10 model=gemini-x retry=7]"));
+    }
 
     #[test]
     fn recognizes_anthropic_messages_paths_with_query_strings() {

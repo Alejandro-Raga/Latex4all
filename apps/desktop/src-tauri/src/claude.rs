@@ -2991,6 +2991,9 @@ async fn execute_openai_compatible_via_claude_proxy(
     // provider, using its quota (a free tier's few requests a minute).
     cmd.env("DISABLE_NON_ESSENTIAL_MODEL_CALLS", "1");
     cmd.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
+    // A free tier's per-minute limit: a few tries after the wait it asks,
+    // not ten (each one a request). A daily one isn't retried at all.
+    cmd.env("CLAUDE_CODE_MAX_RETRIES", "3");
     cmd.env_remove("CLAUDE_MODEL");
 
     spawn_claude_process(

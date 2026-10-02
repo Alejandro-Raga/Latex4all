@@ -55,6 +55,21 @@ describe("Gemini's model list", () => {
         "https://generativelanguage.googleapis.com/v1beta/openai",
       ),
     ).toEqual(["models/gemini-3.8-flash", "models/gemma-4-31b-it"]);
+    // Flash-Lite first: far more free requests a day.
+    expect(
+      newestModelsFirst(
+        [
+          "models/gemini-3.8-flash",
+          "models/gemini-3.5-flash-lite",
+          "models/gemini-3.1-pro",
+        ],
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+      ),
+    ).toEqual([
+      "models/gemini-3.5-flash-lite",
+      "models/gemini-3.8-flash",
+      "models/gemini-3.1-pro",
+    ]);
   });
 
   it("reads the successor a retired model's error names", () => {

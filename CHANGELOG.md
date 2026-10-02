@@ -167,6 +167,10 @@ tag.
   of your plan's limit is used. Under each reply: the model, tokens read and
   written, the share of your limit it used, and the cost when billed.
 - API services can have a price per million tokens and a daily warning.
+- Gemini API keys start on Flash-Lite, which allows far more free requests
+  a day than Flash (about 500 against 20). Next to the send button, "Today
+  12/20" shows how many of a free model's daily requests are used. The
+  limit is learned from Google once it's reached.
 - OpenAI, Gemini, GLM and Ollama now count input tokens too.
 - The chat remembers its model and thinking effort, and starts on Sonnet,
   which uses much less than Opus.
@@ -221,7 +225,10 @@ tag.
 - Asking an AI to remember something now creates AGENTS.md if it's missing.
   The memory window and the Chats panel have more room.
 - Claude disappeared from the model list after adding an API key.
-- Claude Code's notice about connectors no longer shows in the chat.
+- Claude Code's notices about connectors and unknown model names no longer
+  show in the chat.
+- A Gemini model that used its free requests for the day is no longer
+  retried for minutes. The chat says which limit ran out, and moves on.
 - On Windows, ChatGPT couldn't edit project files. Its changes still go
   through review and Undo, and the chat says when a change fails.
 - Adding a Gemini key failed on retired models or ones that can't chat
