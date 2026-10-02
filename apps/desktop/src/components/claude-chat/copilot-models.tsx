@@ -6,17 +6,31 @@ import type { AgentModel } from "@/lib/agent-accounts";
 import { copilotQuotaFrom, useAiUsage } from "@/lib/ai-usage";
 import { cn } from "@/lib/utils";
 
-const CATEGORY: Record<string, { label: string; className: string }> = {
-  light: { label: "Light", className: "text-green-700 dark:text-green-400" },
+const CATEGORY: Record<
+  string,
+  { label: string; hint: string; className: string }
+> = {
+  light: {
+    label: "Light",
+    hint: "Fast; uses the least of your month",
+    className: "text-green-700 dark:text-green-400",
+  },
   versatile: {
     label: "Versatile",
+    hint: "Good at most tasks",
     className: "text-sky-700 dark:text-sky-400",
   },
   powerful: {
     label: "Powerful",
+    hint: "Most capable; uses the most of your month",
     className: "text-violet-700 dark:text-violet-400",
   },
 };
+
+const hintOf = (m: AgentModel) =>
+  m.category && CATEGORY[m.category]
+    ? `${m.description} · ${CATEGORY[m.category].hint}`
+    : m.description;
 
 const SETTINGS_URL = "https://github.com/settings/copilot/features";
 const PLANS_URL = "https://github.com/features/copilot/plans";
@@ -86,6 +100,7 @@ export function CopilotModels({
               : "hover:bg-muted",
           )}
           onClick={() => onSelect(m.id === "auto" ? "" : m.id)}
+          title={hintOf(m)}
         >
           <div className="min-w-0 flex-1">
             <div className="font-medium text-xs">{m.name}</div>
@@ -126,6 +141,7 @@ export function CopilotModels({
               <div
                 key={m.id}
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-xs"
+                title={hintOf(m)}
               >
                 <div className="min-w-0 flex-1 text-muted-foreground">
                   <span>{m.name}</span>

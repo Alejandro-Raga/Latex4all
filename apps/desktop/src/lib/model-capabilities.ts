@@ -448,3 +448,23 @@ export function suggestedReplacement(error: string): string | null {
   }
   return null;
 }
+
+/** A few words on what a provider's model is for, by its name. */
+export function modelHint(model: string): string | null {
+  const m = model.toLowerCase().replace(/^models\//, "");
+  const rules: [RegExp, string][] = [
+    [/flash-lite/, "Fastest and lightest; the most free requests a day"],
+    [/flash/, "Fast and capable; few free requests a day"],
+    [/gemini.*pro/, "Google's most capable; slower, rarely free"],
+    [
+      /reasoner|r1\b/,
+      "Thinks before answering: better at hard problems, slower",
+    ],
+    [/deepseek-chat|deepseek-v/, "DeepSeek's general model: cheap and capable"],
+    [/coder|codex|code/, "Tuned for code"],
+    [/mini|nano|small|lite|haiku/, "Small and fast; for simple tasks"],
+    [/opus|pro\b|large|max/, "Large and capable; slower, costs more"],
+    [/qwen|kimi|glm|llama|mistral|gpt/, "General-purpose model"],
+  ];
+  return rules.find(([re]) => re.test(m))?.[1] ?? null;
+}

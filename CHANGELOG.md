@@ -162,6 +162,8 @@ tag.
 - "Undo" after a reply reverts every file it changed. The chat also warns
   when a reply cites keys missing from your bibliography.
 - Each project remembers its AI, model and effort.
+- Hover a model in the model menu for a few words on what it's for (OpusPlan:
+  Opus plans the work, Sonnet does it).
 - "Ask two AIs…" in the model menu: send one question to two AIs, compare
   the answers side by side, and continue with either.
 - A Chats panel (clock button) lists open chats and past ones by day, with

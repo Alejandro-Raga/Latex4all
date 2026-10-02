@@ -72,6 +72,7 @@ import {
 import {
   getModelCapabilities,
   isChatModelOption,
+  modelHint,
   newestModelsFirst,
   modelInfoId,
   type OpenAiCompatibleModelInfo,
@@ -268,6 +269,7 @@ function EngineModels({
               : "hover:bg-muted",
           )}
           onClick={() => onSelect(m.id)}
+          title={m.description || undefined}
         >
           <div className="min-w-0 flex-1">
             <div className="font-medium text-xs">{m.name}</div>
@@ -1360,19 +1362,22 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
     {
       id: "sonnet" as const,
       name: "Sonnet",
+      desc: "Good at most writing and editing",
     },
     {
       id: "opus" as const,
       name: "Opus",
+      desc: "Most capable; uses your limit fastest",
     },
     {
       id: "haiku" as const,
       name: "Haiku",
+      desc: "Fastest and lightest; for small edits",
     },
     {
       id: "opusplan" as const,
       name: "OpusPlan",
-      desc: "Opus for planning, Sonnet for execution",
+      desc: "Opus plans the work, Sonnet does it: Opus's thinking for less",
       icon: <LayersIcon className="size-3.5" />,
     },
   ];
@@ -1677,6 +1682,7 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                             : "hover:bg-muted",
                         )}
                         onClick={() => setSelectedModel(m.id)}
+                        title={m.desc}
                       >
                         <div className="min-w-0 flex-1">
                           <div className="font-medium text-xs">{m.name}</div>
@@ -1715,6 +1721,7 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                               modelId,
                             );
                           }}
+                          title={modelHint(modelId) ?? undefined}
                         >
                           <span className="flex min-w-0 flex-1 items-center gap-2">
                             <span className="min-w-0 truncate font-medium text-xs">

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isChatModelOption,
+  modelHint,
   newestModelsFirst,
   suggestedReplacement,
 } from "./model-capabilities";
@@ -85,5 +86,14 @@ describe("Gemini's model list", () => {
         "models/gemini-3.8-live only supports real-time bidirectional streaming via WebSocket (bidiGenerateContent). Please use the Gemini Live API instead of generateContent.",
       ),
     ).toBeNull();
+  });
+});
+
+describe("model hints", () => {
+  it("says what a model is for, by its name", () => {
+    expect(modelHint("models/gemini-3.5-flash-lite")).toMatch(/most free/);
+    expect(modelHint("models/gemini-3.8-flash")).toMatch(/few free/);
+    expect(modelHint("deepseek-reasoner")).toMatch(/Thinks/);
+    expect(modelHint("something-unknown")).toBeNull();
   });
 });
