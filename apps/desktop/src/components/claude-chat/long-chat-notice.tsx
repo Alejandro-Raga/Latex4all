@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { useCitationCheck } from "@/components/workspace/citation-check";
+import { useProposedChangesStore } from "@/stores/proposed-changes-store";
 import { LimitBar, resetsLabel } from "@/components/settings/ai-usage-settings";
 import {
   claudeLimited,
@@ -15,7 +18,7 @@ import { useClaudeChatStore } from "@/stores/claude-chat-store";
 export const LONG_CHAT_TOKENS = 120_000;
 
 /** How much the active chat's last request read, in tokens. */
-function useLastContext(): number {
+export function useLastContext(): number {
   return useClaudeChatStore((s) => {
     const tab = s.tabs.find((t) => t.id === s.activeTabId);
     const results = (tab?.messages ?? []).filter((m) => m.type === "result");
@@ -145,6 +148,81 @@ export function WaitingNotice() {
         className="shrink-0 text-muted-foreground hover:text-foreground"
       >
         Cancel
+      </button>
+    </div>
+  );
+}
+
+/** What the last reply changed, with one click to take it all back. */
+export function TurnNotice() {
+  const tab = useClaudeChatStore((s) =>
+    s.tabs.find((t) => t.id === s.activeTabId),
+  );
+  const pending = useProposedChangesStore((s) => s.changes);
+  const [undoing, setUndoing] = useState(false);
+  const turn = tab?.lastTurn;
+  if (!tab || tab.isStreaming || !turn) return null;
+  const ids = turn.changeIds.filter((id) => pending.some((c) => c.id === id));
+  if (!ids.length) return null;
+  const undo = async () => {
+    setUndoing(true);
+    try {
+      for (const id of ids) {
+        await useProposedChangesStore.getState().undoChange(id);
+      }
+      useClaudeChatStore.getState()._patchTab(tab.id, { lastTurn: null });
+    } finally {
+      setUndoing(false);
+    }
+  };
+  return (
+    <div className="mx-3 mb-1 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-xs">
+      <span className="min-w-0 flex-1 truncate text-muted-foreground">
+        This reply changed {turn.files.join(", ")}
+      </span>
+      <button
+        type="button"
+        disabled={undoing}
+        onClick={undo}
+        className="shrink-0 font-medium text-primary hover:underline disabled:opacity-50"
+      >
+        {undoing ? "Undoing…" : "Undo"}
+      </button>
+    </div>
+  );
+}
+
+/** Keys the last reply cites that aren't in the bibliography. */
+export function CitationNotice() {
+  const tab = useClaudeChatStore((s) =>
+    s.tabs.find((t) => t.id === s.activeTabId),
+  );
+  const keys = tab?.citationWarning;
+  if (!tab || tab.isStreaming || !keys?.length) return null;
+  return (
+    <div className="mx-3 mb-1 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs">
+      <span className="min-w-0 flex-1 truncate">
+        This reply cites {keys.length === 1 ? "a key" : `${keys.length} keys`}{" "}
+        not in your bibliography: {keys.join(", ")}
+      </span>
+      <button
+        type="button"
+        onClick={() => useCitationCheck.getState().show()}
+        className="shrink-0 font-medium text-primary hover:underline"
+      >
+        Check citations
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          useClaudeChatStore
+            .getState()
+            ._patchTab(tab.id, { citationWarning: null })
+        }
+        className="shrink-0 text-muted-foreground hover:text-foreground"
+        aria-label="Dismiss"
+      >
+        ✕
       </button>
     </div>
   );

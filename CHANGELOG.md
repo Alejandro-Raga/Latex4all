@@ -131,6 +131,16 @@ tag.
   assistants add to it), and each one hears what the others changed since
   its last turn. If two chats would edit the same project at once, the
   second waits its turn (or "Send now").
+- Quick AI actions on selected text, in the box that opens when you
+  select: Improve, Shorten, Formal, Translate, Explain, Check argument.
+- "Auto" model for Claude: Haiku for quick actions and small edits, Sonnet
+  for the rest, so light work uses less.
+- Beside the send button, about how many tokens the message will read.
+- After a reply that changed files, "Undo" takes back everything it did; and
+  if it cited keys your bibliography lacks, the chat says which.
+- Each project remembers its assistant: service, model and effort.
+- "Ask two AIs…" in the model menu: the same question to two services, the
+  answers side by side, and carry on with either.
 - A Chats panel (the clock button in the chat) lists the chats open now,
   with the service each uses, and earlier ones by day, with a search, a new
   chat button, and delete.

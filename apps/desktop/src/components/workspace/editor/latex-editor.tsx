@@ -180,6 +180,53 @@ export function clearEditorStateCache(): void {
   editorStateCache.clear();
 }
 
+/** One-click requests about the selected text: light work, so with "Auto"
+ *  they go to the quickest model. */
+const QUICK_ACTIONS = [
+  {
+    id: "improve",
+    label: "Improve",
+    title: "Clearer, more fluent wording",
+    prompt:
+      "Improve the wording of the selected text: clearer and more fluent, same meaning, register and LaTeX. Edit it in place and change nothing else.",
+  },
+  {
+    id: "shorten",
+    label: "Shorten",
+    title: "About a third shorter",
+    prompt:
+      "Make the selected text about a third shorter without losing content. Edit it in place and change nothing else.",
+  },
+  {
+    id: "formal",
+    label: "Formal",
+    title: "A more academic register",
+    prompt:
+      "Rewrite the selected text in a more formal academic register. Edit it in place and change nothing else.",
+  },
+  {
+    id: "translate",
+    label: "Translate",
+    title: "To English (or to Spanish if it's English)",
+    prompt:
+      "Translate the selected text into English, or into Spanish if it is already English. Keep the LaTeX commands. Edit it in place and change nothing else.",
+  },
+  {
+    id: "explain",
+    label: "Explain",
+    title: "In plain words; changes nothing",
+    prompt:
+      "Explain the selected text in plain words. Do not change any files.",
+  },
+  {
+    id: "argue",
+    label: "Check argument",
+    title: "Gaps, unsupported claims, missing citations; changes nothing",
+    prompt:
+      "Check the argument in the selected text: point out gaps, unsupported claims and places that need a citation. Do not change any files.",
+  },
+];
+
 export function LatexEditor() {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -1464,17 +1511,17 @@ export function LatexEditor() {
     }, [selectionRange, selectionLabel, activeFile]);
 
   const sendToolbarPromptWithSelectionContext = useCallback(
-    (prompt: string) => {
+    (prompt: string, quick = false) => {
       const context = buildSelectionContext();
       toolbarStickyRef.current = false;
       setSelectionCoords(null);
       setSelectionRange(null);
       const chat = useClaudeChatStore.getState();
       if (context) {
-        void chat.sendPrompt(prompt, context);
+        void chat.sendPrompt(prompt, context, { quick });
         chat.requestPinnedContextRemoval([context.label]);
       } else {
-        void chat.sendPrompt(prompt);
+        void chat.sendPrompt(prompt, undefined, { quick });
       }
     },
     [buildSelectionContext, setSelectionRange],
@@ -1892,6 +1939,16 @@ export function LatexEditor() {
                   actions={editorToolbarActions}
                   onSendPrompt={handleToolbarSendPrompt}
                   onAction={handleToolbarAction}
+                  quickActions={QUICK_ACTIONS}
+                  onQuickAction={(id) => {
+                    const action = QUICK_ACTIONS.find((a) => a.id === id);
+                    if (action) {
+                      sendToolbarPromptWithSelectionContext(
+                        action.prompt,
+                        true,
+                      );
+                    }
+                  }}
                   onDismiss={handleToolbarDismiss}
                   onHighlight={(color) => {
                     const range = useDocumentStore.getState().selectionRange;

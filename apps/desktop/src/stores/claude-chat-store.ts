@@ -144,6 +144,10 @@ export interface TabState {
   lastRequestAt?: number;
   /** Waiting for this chat (by title) to stop editing the same project. */
   waitingFor?: string | null;
+  /** What the last reply changed, to take back in one go. */
+  lastTurn?: { changeIds: string[]; files: string[] } | null;
+  /** Keys the last reply cites that the bibliography doesn't have. */
+  citationWarning?: string[] | null;
 }
 
 /** Fields that are projected from the active tab to top-level state */
@@ -190,7 +194,9 @@ function providerSessionKey(providerCredentialId: string | null): string {
     : CLAUDE_CODE_PROVIDER_ID;
 }
 
-function providerKeyForSelectedCredential(credentialId: string | null): string {
+export function providerKeyForSelectedCredential(
+  credentialId: string | null,
+): string {
   return credentialId && credentialId !== CLAUDE_CODE_PROVIDER_ID
     ? providerSessionKey(credentialId)
     : CLAUDE_CODE_PROVIDER_ID;
@@ -597,8 +603,9 @@ interface ClaudeChatState {
   consumePendingPinnedContextRemovals: () => string[];
 
   /** Currently selected model (passed per-prompt to Claude CLI) */
-  selectedModel: "sonnet" | "opus" | "haiku" | "opusplan";
-  setSelectedModel: (model: "sonnet" | "opus" | "haiku" | "opusplan") => void;
+  /** "auto": Haiku for quick actions and small edits, Sonnet otherwise. */
+  selectedModel: ClaudeModelChoice;
+  setSelectedModel: (model: ClaudeModelChoice) => void;
   selectedProviderCredentialId: string | null;
   setSelectedProviderCredentialId: (credentialId: string | null) => void;
   selectedProviderModels: Record<string, string>;
@@ -616,6 +623,7 @@ interface ClaudeChatState {
       tabId?: string;
       preserveTabProvider?: boolean;
       evenIfBusy?: boolean;
+      quick?: boolean;
     },
   ) => Promise<void>;
   queueGuidance: (
@@ -657,6 +665,8 @@ interface ClaudeChatState {
   _setStreaming: (tabId: string, streaming: boolean) => void;
   /** A waiting request: sent now anyway, or given back to the composer. */
   sendWaitingNow: (tabId: string) => void;
+  /** Updates one chat's state (from the event stream). */
+  _patchTab: (tabId: string, patch: Partial<TabState>) => void;
   cancelWaiting: (tabId: string) => void;
   /** Text for a chat's message box to take back (a cancelled request). */
   restoreInput: { tabId: string; text: string } | null;
@@ -675,6 +685,35 @@ const waitingRequests = new Map<
     options?: { tabId?: string; preserveTabProvider?: boolean };
   }
 >();
+
+export type ClaudeModelChoice =
+  | "auto"
+  | "sonnet"
+  | "opus"
+  | "haiku"
+  | "opusplan";
+
+/**
+ * The model for a request when "auto" is chosen: Haiku for a quick action
+ * or a short request about a selection, Sonnet for anything bigger. Opus is
+ * never picked for you.
+ */
+export function resolveClaudeModel(
+  choice: ClaudeModelChoice,
+  prompt: string,
+  context?: PromptContextOverride,
+  quick?: boolean,
+): Exclude<ClaudeModelChoice, "auto"> {
+  if (choice !== "auto") return choice;
+  if (quick) return "haiku";
+  const small =
+    prompt.length < 300 &&
+    (context?.selectedText.length ?? Number.POSITIVE_INFINITY) < 3000 &&
+    !/\b(whole|entire|all|every|chapter|restructure|rewrite|draft|write)\b/i.test(
+      prompt,
+    );
+  return small ? "haiku" : "sonnet";
+}
 
 /** What ChatGPT and Gemini are told first, as Claude is by its own prompt. */
 const ENGINE_INSTRUCTIONS = [
@@ -695,6 +734,37 @@ export function providerLabel(providerKey: string | null): string {
     useClaudeSetupStore.getState().openAiCredentials.find((c) => c.id === id)
       ?.label ?? "Other"
   );
+}
+
+/** Each project's assistant: service, model and effort, as last used there. */
+interface ProjectAi {
+  provider?: string | null;
+  model?: string;
+  effort?: string;
+}
+const PROJECT_AI_KEY = "latex4all-project-ai";
+
+function readProjectAi(): Record<string, ProjectAi> {
+  try {
+    return JSON.parse(localStorage.getItem(PROJECT_AI_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function rememberForProject(patch: ProjectAi) {
+  const root = useDocumentStore.getState().projectRoot;
+  if (!root) return;
+  try {
+    const all = readProjectAi();
+    all[root] = { ...all[root], ...patch };
+    localStorage.setItem(PROJECT_AI_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+/** What a project used last, to pick up where it left off. */
+export function projectAiDefaults(root: string): ProjectAi | undefined {
+  return readProjectAi()[root];
 }
 
 /** A chat setting kept between launches (an unknown value: the default). */
@@ -736,17 +806,19 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
   // does most writing as well as Opus for a fraction of the usage.
   selectedModel: remembered(
     "model",
-    ["sonnet", "opus", "haiku", "opusplan"],
+    ["auto", "sonnet", "opus", "haiku", "opusplan"],
     "sonnet",
   ),
   setSelectedModel: (model) => {
     remember("model", model);
+    rememberForProject({ model });
     set({ selectedModel: model });
   },
   selectedProviderCredentialId:
     loadSelectedProviderCredentialId() ?? CLAUDE_CODE_PROVIDER_ID,
   setSelectedProviderCredentialId: (credentialId) => {
     persistSelectedProviderCredentialId(credentialId);
+    rememberForProject({ provider: credentialId });
     const providerKey = providerKeyForSelectedCredential(
       credentialId ?? CLAUDE_CODE_PROVIDER_ID,
     );
@@ -769,6 +841,7 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
   effortLevel: remembered("effort", ["low", "medium", "high"], "medium"),
   setEffortLevel: (level) => {
     remember("effort", level);
+    rememberForProject({ effort: level });
     set({ effortLevel: level });
   },
 
@@ -823,6 +896,8 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
       preserveTabProvider?: boolean;
       /** Send even while another chat edits the project. */
       evenIfBusy?: boolean;
+      /** A quick action on a selection: light work. */
+      quick?: boolean;
     },
   ) => {
     let state = get();
@@ -1041,7 +1116,14 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
         // No memory to share: the request goes as it is.
       }
       const sentAt = Date.now();
-      set((s) => applyTabUpdate(s, activeTabId, { lastRequestAt: sentAt }));
+      // A new turn: the last one's undo and warnings no longer apply.
+      set((s) =>
+        applyTabUpdate(s, activeTabId, {
+          lastRequestAt: sentAt,
+          lastTurn: null,
+          citationWarning: null,
+        }),
+      );
     }
     if (switchingDirectProviderToClaudeCode) {
       const priorContext = buildProviderSwitchContext(
@@ -1051,6 +1133,12 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
         prompt = `${priorContext}\n\n${prompt}`;
       }
     }
+    const requestModel = resolveClaudeModel(
+      selectedModel,
+      userPrompt,
+      contextOverride,
+      options?.quick,
+    );
     log.info("invoking CLI", {
       promptLength: prompt.length,
       mode: resumeSessionId ? "resume" : "new",
@@ -1097,7 +1185,7 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
           sessionId: resumeSessionId,
           prompt,
           tabId: activeTabId,
-          model: selectedModel,
+          model: requestModel,
           effortLevel,
           providerCredentialId,
           providerModelOverride,
@@ -1108,7 +1196,7 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
           projectPath,
           prompt,
           tabId: activeTabId,
-          model: selectedModel,
+          model: requestModel,
           effortLevel,
           providerCredentialId,
           providerModelOverride,
@@ -1778,6 +1866,10 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
   },
 
   restoreInput: null,
+
+  _patchTab: (tabId, patch) => {
+    set((s) => applyTabUpdate(s, tabId, patch));
+  },
 
   sendWaitingNow: (tabId) => {
     const request = waitingRequests.get(tabId);

@@ -7,14 +7,21 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { useClaudeChatStore } from "@/stores/claude-chat-store";
+import {
+  projectAiDefaults,
+  useClaudeChatStore,
+} from "@/stores/claude-chat-store";
+import { useDocumentStore } from "@/stores/document-store";
 import { useClaudeEvents } from "@/hooks/use-claude-events";
 import { ChatMessages } from "./chat-messages";
 import { ChatComposer } from "./chat-composer";
 import { ChatSessionsPanel } from "./chat-sessions-panel";
+import { CompareDialog, CompareView } from "./compare-view";
 import {
+  CitationNotice,
   ClaudeLimitNotice,
   LongChatNotice,
+  TurnNotice,
   WaitingNotice,
 } from "./long-chat-notice";
 import { ChatTabBar } from "./chat-tab-bar";
@@ -30,6 +37,19 @@ export function ClaudeChatDrawer() {
     s.tabs.some((t) => t.isStreaming),
   );
   const error = useClaudeChatStore((s) => s.error);
+  // Each project picks up the assistant it used last.
+  const projectRoot = useDocumentStore((s) => s.projectRoot);
+  useEffect(() => {
+    if (!projectRoot) return;
+    const saved = projectAiDefaults(projectRoot);
+    if (!saved) return;
+    const chat = useClaudeChatStore.getState();
+    if (saved.provider !== undefined) {
+      chat.setSelectedProviderCredentialId(saved.provider);
+    }
+    if (saved.model) chat.setSelectedModel(saved.model as never);
+    if (saved.effort) chat.setEffortLevel(saved.effort as never);
+  }, [projectRoot]);
 
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -221,8 +241,12 @@ export function ClaudeChatDrawer() {
         <div className="relative min-h-0 flex-1 overflow-hidden">
           <ChatMessages />
           <ChatSessionsPanel />
+          <CompareView />
         </div>
 
+        <CompareDialog />
+        <TurnNotice />
+        <CitationNotice />
         <WaitingNotice />
         <ClaudeLimitNotice />
         <LongChatNotice />

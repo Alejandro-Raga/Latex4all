@@ -9,6 +9,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { useCompare } from "./compare-view";
+import { useLastContext } from "./long-chat-notice";
 import { AddAiContent } from "./add-ai-dialog";
 import {
   type AgentEngine,
@@ -209,6 +211,8 @@ function effortDisplayLabel(level: EffortLevel) {
 
 function claudeModelDisplayName(model: string) {
   switch (model) {
+    case "auto":
+      return "Auto";
     case "sonnet":
       return "Sonnet";
     case "opus":
@@ -449,6 +453,10 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
     null,
   );
   const [input, setInput] = useState("");
+  // What the next message will read, roughly: the chat so far (as its last
+  // reply read it) and what's typed.
+  const lastContext = useLastContext();
+  const estimate = lastContext + Math.round(input.length / 4);
   const hasInput = input.trim().length > 0;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hadStoredProviderSelectionRef = useRef(
@@ -1340,6 +1348,11 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
 
   const claudeModelOptions = [
     {
+      id: "auto" as const,
+      name: "Auto",
+      desc: "Haiku for quick edits, Sonnet for the rest",
+    },
+    {
       id: "sonnet" as const,
       name: "Sonnet",
     },
@@ -1599,6 +1612,22 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                     </div>
                   );
                 })}
+                <button
+                  type="button"
+                  className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground"
+                  onClick={() => {
+                    setModelPickerOpen(false);
+                    useCompare.getState().ask();
+                  }}
+                >
+                  <LayersIcon className="size-3.5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-xs">
+                      Ask two AIs…
+                    </div>
+                    <div className="truncate text-xs">Answers side by side</div>
+                  </div>
+                </button>
                 <button
                   className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground"
                   onClick={() => {
@@ -2074,6 +2103,22 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
           </div>
 
           <div className="flex items-center gap-1">
+            {!isStreaming && (lastContext > 0 || hasInput) && (
+              <span
+                className={cn(
+                  "px-1 text-[11px] tabular-nums",
+                  estimate > 100_000
+                    ? "text-amber-600 dark:text-amber-500"
+                    : "text-muted-foreground/70",
+                )}
+                title="About how many tokens this message will read: the chat so far and what you wrote"
+              >
+                ~
+                {estimate >= 1000
+                  ? `${Math.round(estimate / 1000)}k`
+                  : estimate}
+              </span>
+            )}
             <TooltipIconButton
               tooltip={
                 isStreaming && !hasInput

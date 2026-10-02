@@ -117,3 +117,13 @@ export function citekeySearch(key: string): {
     )[0];
   return { words: name ?? key, year };
 }
+
+/** Keys these LaTeX texts cite that none of the .bib texts has. */
+export function missingCitations(tex: string[], bib: string[]): string[] {
+  const known = new Set(
+    bib.flatMap((content) => bibEntries(content, "").map((e) => e.key)),
+  );
+  return citedKeys(tex.map((content) => ({ content }))).filter(
+    (key) => !known.has(key),
+  );
+}

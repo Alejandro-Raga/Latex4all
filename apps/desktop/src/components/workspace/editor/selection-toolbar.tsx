@@ -24,6 +24,9 @@ interface SelectionToolbarProps {
   onHighlight?: (color: AnnotationColor) => void;
   /** Takes highlights off the selection. */
   onClearHighlight?: () => void;
+  /** One-click AI requests about the selection ("Shorten", "Explain"…). */
+  quickActions?: { id: string; label: string; title: string }[];
+  onQuickAction?: (id: string) => void;
 }
 
 const TOOLBAR_WIDTH = 256;
@@ -37,6 +40,8 @@ export function SelectionToolbar({
   onDismiss,
   onHighlight,
   onClearHighlight,
+  quickActions,
+  onQuickAction,
 }: SelectionToolbarProps) {
   const [input, setInput] = useState("");
   const { ref: toolbarRef, coords } = useViewportAnchoredPosition(anchor);
@@ -117,6 +122,22 @@ export function SelectionToolbar({
           <ArrowUpIcon className="size-3.5" />
         </button>
       </div>
+
+      {quickActions && quickActions.length > 0 && (
+        <div className="flex flex-wrap gap-1 border-border border-b px-2 py-1.5">
+          {quickActions.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              title={a.title}
+              onClick={() => onQuickAction?.(a.id)}
+              className="rounded-md border border-border px-1.5 py-0.5 text-xs hover:bg-muted"
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {onHighlight && (
         <div className="flex items-center justify-between border-border border-b px-3 py-1.5">

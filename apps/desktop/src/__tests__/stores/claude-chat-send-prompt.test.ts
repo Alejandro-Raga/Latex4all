@@ -397,6 +397,47 @@ describe("two chats on one project", () => {
   });
 });
 
+describe("Auto model", () => {
+  it("gives quick actions and small selection edits to Haiku", async () => {
+    const { resolveClaudeModel } = await import("@/stores/claude-chat-store");
+    const sel = {
+      label: "@main.tex:1-2",
+      filePath: "main.tex",
+      selectedText: "A short paragraph.",
+    };
+    expect(resolveClaudeModel("auto", "Shorten this", sel, true)).toBe("haiku");
+    expect(resolveClaudeModel("auto", "Fix the typo here", sel)).toBe("haiku");
+    expect(
+      resolveClaudeModel("auto", "Restructure the whole chapter", sel),
+    ).toBe("sonnet");
+    expect(resolveClaudeModel("auto", "Fix the typo here")).toBe("sonnet");
+    expect(resolveClaudeModel("opus", "Shorten this", sel, true)).toBe("opus");
+  });
+});
+
+describe("asking two AIs", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetClaudeChatStore();
+    setMockDocumentState();
+  });
+
+  it("sends the question to both, each in its own chat", async () => {
+    const { useCompare } = await import(
+      "@/components/claude-chat/compare-view"
+    );
+    useCompare.getState().start("Is section 2 convincing?", "__codex__");
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+    const calls = vi.mocked(invoke).mock.calls.map((c) => c[0]);
+    expect(calls).toContain("execute_claude_code");
+    expect(calls).toContain("execute_agent");
+    for (const [, args] of vi.mocked(invoke).mock.calls) {
+      expect((args as any).prompt).toContain("do not change any files");
+    }
+    expect(useCompare.getState().tabs).toHaveLength(2);
+  });
+});
+
 describe("useClaudeChatStore.resumeSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();

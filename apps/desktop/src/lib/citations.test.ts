@@ -3,6 +3,7 @@ import {
   bibEntries,
   checkCitations,
   citekeySearch,
+  missingCitations,
   renameCiteKey,
 } from "./citations";
 
@@ -89,5 +90,16 @@ describe("citation check", () => {
       words: "horizon",
       year: "2025",
     });
+  });
+});
+
+describe("citations a reply adds", () => {
+  it("finds keys cited but in no bibliography", () => {
+    expect(
+      missingCitations(
+        [String.raw`As \citet{nelson_simple_1959} and \cite{made_up_2024}.`],
+        [BIB],
+      ),
+    ).toEqual(["made_up_2024"]);
   });
 });

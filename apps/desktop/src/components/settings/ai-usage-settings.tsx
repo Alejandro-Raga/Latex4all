@@ -27,6 +27,7 @@ const PERIODS = [
 ] as const;
 
 const MODELS = [
+  { id: "auto", label: "Auto", detail: "Haiku for quick edits" },
   { id: "sonnet", label: "Sonnet", detail: "Recommended" },
   { id: "opusplan", label: "Opus plan", detail: "Opus plans, Sonnet writes" },
   { id: "opus", label: "Opus", detail: "Heaviest" },

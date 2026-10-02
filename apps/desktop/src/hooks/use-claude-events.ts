@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { missingCitations } from "@/lib/citations";
 import { appendLog, shortAsk } from "@/lib/ai-memory";
 import {
   engineErrorMessage,
@@ -153,6 +154,7 @@ export function useClaudeEvents() {
       filePath: string,
       toolUseId: string,
       toolName: string,
+      tabId?: string,
     ) {
       const docState = useDocumentStore.getState();
       const projectRoot = docState.projectRoot;
@@ -180,6 +182,19 @@ export function useClaudeEvents() {
             newContent,
             toolName,
           });
+          // Part of this reply's work, to take back in one go.
+          if (tabId) {
+            const chat = useClaudeChatStore.getState();
+            const turn = chat.tabs.find((t) => t.id === tabId)?.lastTurn;
+            chat._patchTab(tabId, {
+              lastTurn: {
+                changeIds: [...(turn?.changeIds ?? []), toolUseId],
+                files: [
+                  ...new Set([...(turn?.files ?? []), file.relativePath]),
+                ],
+              },
+            });
+          }
         }
       } catch {
         // readTexFileContent failed — not critical
@@ -355,7 +370,12 @@ export function useClaudeEvents() {
             ) {
               const fp = toolUse.input?.file_path || toolUse.input?.path;
               if (fp) {
-                registerProposedChange(fp, block.tool_use_id!, toolUse.name);
+                registerProposedChange(
+                  fp,
+                  block.tool_use_id!,
+                  toolUse.name,
+                  tabId,
+                );
                 if (/\.(tex|bib|sty|cls|dtx)$/i.test(fp)) {
                   hasTexChangesRef.current.set(tabId, true);
                 }
@@ -469,6 +489,33 @@ export function useClaudeEvents() {
           .reverse()
           .find((m) => m.type === "user" && m.message?.content?.[0]?.text);
         const ask = shortAsk(lastUser?.message?.content?.[0]?.text ?? "");
+        // Citations the reply wrote that the bibliography lacks.
+        const texChanged = [...files].filter((f) => f.endsWith(".tex"));
+        if (success && texChanged.length) {
+          void (async () => {
+            const docs = useDocumentStore.getState();
+            const tex = await Promise.all(
+              texChanged.map((f) =>
+                readTexFileContent(
+                  /^([A-Za-z]:)?[\\/]/.test(f) ? f : `${root}/${f}`,
+                ).catch(() => ""),
+              ),
+            );
+            const bibs = await Promise.all(
+              docs.files
+                .filter((f) => f.name.toLowerCase().endsWith(".bib"))
+                .map((f) =>
+                  readTexFileContent(f.absolutePath).catch(
+                    () => f.content ?? "",
+                  ),
+                ),
+            );
+            const missing = missingCitations(tex, bibs);
+            useClaudeChatStore.getState()._patchTab(tabId, {
+              citationWarning: missing.length ? missing : null,
+            });
+          })();
+        }
         if (success || files.size) {
           void appendLog(root, {
             at: Date.now(),
