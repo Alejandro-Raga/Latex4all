@@ -14,6 +14,7 @@ const AIS = [
   },
   { id: "codex", label: "ChatGPT", hint: "Signed in with your account" },
   { id: "gemini", label: "Gemini", hint: "Signed in with your account" },
+  { id: "copilot", label: "Copilot", hint: "Signed in with your account" },
 ] as const;
 type Ai = (typeof AIS)[number]["id"];
 
@@ -127,6 +128,7 @@ export function SkillsSettings() {
       claude: { count: 0, tokens: 0 },
       codex: { count: 0, tokens: 0 },
       gemini: { count: 0, tokens: 0 },
+      copilot: { count: 0, tokens: 0 },
     };
     for (const s of skills ?? []) {
       for (const ai of AIS) {
@@ -189,7 +191,7 @@ export function SkillsSettings() {
 
   const groupNames = groups.map(([g]) => g);
   const cols =
-    "grid grid-cols-[minmax(0,1fr)_repeat(3,4.5rem)] items-center gap-x-2";
+    "grid grid-cols-[minmax(0,1fr)_repeat(4,4.5rem)] items-center gap-x-2";
 
   return (
     <div className="py-2">

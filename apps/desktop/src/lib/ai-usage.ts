@@ -324,6 +324,39 @@ export function codexLimitsFrom(
   };
 }
 
+/** Copilot's monthly premium requests, as GitHub counts them. */
+export interface CopilotQuota {
+  plan: string | null;
+  entitlement: number;
+  remaining: number;
+  unlimited: boolean;
+  resetsAt: number | null;
+  observedAt: number;
+}
+
+export function copilotQuotaFrom(
+  raw: unknown,
+  now = Date.now(),
+): CopilotQuota | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" ? v : 0);
+  return {
+    plan: typeof r.plan === "string" ? r.plan : null,
+    entitlement: num(r.entitlement),
+    remaining: num(r.remaining),
+    unlimited: r.unlimited === true,
+    resetsAt: typeof r.resets_at === "number" ? r.resets_at * 1000 : null,
+    observedAt: now,
+  };
+}
+
+/** Share of Copilot's month used (null: unlimited or not known). */
+export function copilotUsedPercent(q: CopilotQuota | null): number | null {
+  if (!q || q.unlimited || q.entitlement <= 0) return null;
+  return Math.min(100, ((q.entitlement - q.remaining) / q.entitlement) * 100);
+}
+
 interface AiUsageState {
   entries: AiUsageEntry[];
   /** A daily amount (at API prices) to be warned at; null: none. */
@@ -333,6 +366,10 @@ interface AiUsageState {
   claudeLimits: ClaudeLimits | null;
   codexLimits: CodexLimits | null;
   setCodexLimits: (limits: CodexLimits | null) => void;
+  copilotQuota: CopilotQuota | null;
+  setCopilotQuota: (quota: CopilotQuota | null) => void;
+  /** A chat's last request, completed after the fact (Copilot's tokens). */
+  patchLastEntry: (tab: string, patch: Partial<AiUsageEntry>) => void;
   /** A chat's last request: the share of the plan it used, measured. */
   setWindowDelta: (tab: string, delta: number, window: string) => void;
   /** Prices for services that don't report a cost, by service name. */
@@ -375,6 +412,16 @@ export const useAiUsage = create<AiUsageState>()(
       claudeLimits: null,
       codexLimits: null,
       setCodexLimits: (limits) => set({ codexLimits: limits }),
+      copilotQuota: null,
+      setCopilotQuota: (quota) => set({ copilotQuota: quota }),
+      patchLastEntry: (tab, patch) =>
+        set((s) => {
+          const i = s.entries.map((e) => e.tab).lastIndexOf(tab);
+          if (i < 0) return {};
+          const entries = [...s.entries];
+          entries[i] = { ...entries[i], ...patch };
+          return { entries };
+        }),
       setWindowDelta: (tab, delta, window) =>
         set((s) => {
           const i = s.entries.map((e) => e.tab).lastIndexOf(tab);

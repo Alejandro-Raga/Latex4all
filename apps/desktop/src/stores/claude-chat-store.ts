@@ -843,7 +843,7 @@ export function billingOf(tab: TabState | undefined): Billing {
     tab?.sessionProviderKey ?? tab?.providerKey ?? null,
   );
   const engine = engineOfProvider(id);
-  if (engine === "gemini") return "plan";
+  if (engine === "gemini" || engine === "copilot") return "plan";
   if (engine === "codex") {
     const account = useAgentAccounts.getState().status.codex?.account ?? "";
     return /chatgpt/i.test(account) || !account ? "plan" : "api";
@@ -1271,7 +1271,10 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
           tab: activeTabId,
           since,
           startingChat,
-          readsMemoryItself: engineOfProvider(providerCredentialId) === "codex",
+          // Codex and Copilot read AGENTS.md by themselves.
+          readsMemoryItself: ["codex", "copilot"].includes(
+            engineOfProvider(providerCredentialId) ?? "",
+          ),
         });
         if (shared) prompt = `${shared}\n\n${prompt}`;
         // Another provider's model, through Claude Code's tools: it isn't

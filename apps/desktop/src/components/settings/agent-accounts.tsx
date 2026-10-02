@@ -6,6 +6,7 @@ import { useAgentAccounts } from "@/lib/agent-accounts";
 import {
   type AgentEngine,
   ENGINE_LABELS,
+  ENGINES,
   providerOfEngine,
 } from "@/lib/agent-events";
 import { useClaudeChatStore } from "@/stores/claude-chat-store";
@@ -14,6 +15,8 @@ const ABOUT: Record<AgentEngine, string> = {
   codex: "Your ChatGPT account, free or paid (paid plans get more use).",
   gemini:
     "Paid Gemini Code Assist plans only: Google no longer accepts free accounts here. For free use, add a Gemini API key above.",
+  copilot:
+    "Your GitHub Copilot plan, free included. Uses your GitHub CLI sign-in if you have one.",
 };
 
 export function EngineRow({
@@ -93,20 +96,20 @@ export function EngineRow({
   );
 }
 
-/** ChatGPT and Gemini, signed in with your own account instead of a key. */
+/** ChatGPT, Gemini and Copilot, signed in with your own account. */
 export function AgentAccounts() {
   useEffect(() => {
     const { refresh } = useAgentAccounts.getState();
-    void refresh("codex");
-    void refresh("gemini");
+    for (const engine of ENGINES) void refresh(engine);
   }, []);
   return (
     <div className="border-border border-t py-2">
       <div className="px-5 pt-2 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
         Sign in with an account
       </div>
-      <EngineRow engine="codex" />
-      <EngineRow engine="gemini" />
+      {ENGINES.map((engine) => (
+        <EngineRow key={engine} engine={engine} />
+      ))}
     </div>
   );
 }

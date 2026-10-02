@@ -1,5 +1,5 @@
 /**
- * Codex (ChatGPT) and Gemini CLI report what they do in their own formats;
+ * Codex (ChatGPT), Gemini CLI and Copilot CLI report what they do in their own formats;
  * the chat speaks Claude Code's. These turn each of their events into the
  * messages the chat already shows: text, thinking, tool calls and their
  * results (which also feed file-change review), and a final result with
@@ -10,15 +10,19 @@ import type {
   ContentBlock,
 } from "@/stores/claude-chat-store";
 
-export type AgentEngine = "codex" | "gemini";
+export type AgentEngine = "codex" | "gemini" | "copilot";
+
+export const ENGINES: AgentEngine[] = ["codex", "gemini", "copilot"];
 
 /** Provider ids for the account-login engines, beside Claude Code's. */
 export const CODEX_PROVIDER_ID = "__codex__";
 export const GEMINI_PROVIDER_ID = "__gemini__";
+export const COPILOT_PROVIDER_ID = "__copilot__";
 
 export const ENGINE_LABELS: Record<AgentEngine, string> = {
   codex: "ChatGPT",
   gemini: "Gemini",
+  copilot: "Copilot",
 };
 
 export function engineOfProvider(
@@ -26,6 +30,7 @@ export function engineOfProvider(
 ): AgentEngine | null {
   if (id === CODEX_PROVIDER_ID) return "codex";
   if (id === GEMINI_PROVIDER_ID) return "gemini";
+  if (id === COPILOT_PROVIDER_ID) return "copilot";
   return null;
 }
 
@@ -37,7 +42,11 @@ export function engineOfProviderKey(
 }
 
 export const providerOfEngine = (engine: AgentEngine) =>
-  engine === "codex" ? CODEX_PROVIDER_ID : GEMINI_PROVIDER_ID;
+  engine === "codex"
+    ? CODEX_PROVIDER_ID
+    : engine === "gemini"
+      ? GEMINI_PROVIDER_ID
+      : COPILOT_PROVIDER_ID;
 
 /** What a translation remembers between events of one request. */
 export interface TranslateState {
@@ -48,6 +57,8 @@ export interface TranslateState {
   segment: string;
   /** Tool call id → the chat's name for it. */
   tools: Map<string, string>;
+  /** Tool calls not shown (Copilot's report_intent). */
+  hidden: Set<string>;
 }
 
 export const newTranslateState = (model = ""): TranslateState => ({
@@ -55,6 +66,7 @@ export const newTranslateState = (model = ""): TranslateState => ({
   lastText: "",
   segment: "",
   tools: new Map(),
+  hidden: new Set(),
 });
 
 const assistant = (content: ContentBlock[]): ClaudeStreamMessage => ({
@@ -424,6 +436,151 @@ export function translateGemini(
   }
 }
 
+// ─── Copilot (`copilot --output-format json`) ───
+
+interface CopilotEvent {
+  type: string;
+  sessionId?: string;
+  exitCode?: number;
+  data?: {
+    model?: string;
+    chosenModel?: string;
+    content?: string;
+    toolCallId?: string;
+    toolName?: string;
+    arguments?: unknown;
+    success?: boolean;
+    result?: { content?: string };
+    error?: string | { message?: string };
+    message?: string;
+    errorType?: string;
+  };
+}
+
+/** The files an apply_patch touches, as the patch names them. */
+function patchFiles(patch: string): { path: string; added: boolean }[] {
+  return [...patch.matchAll(/^\*\*\* (Add|Update|Delete) File: (.+)$/gm)].map(
+    (m) => ({ path: m[2].trim(), added: m[1] === "Add" }),
+  );
+}
+
+/** Copilot's tools by the chat's names, so their widgets and review work. */
+function copilotTool(
+  name: string,
+  args: unknown,
+): { name: string; input: Record<string, unknown> }[] {
+  const p = (args && typeof args === "object" ? args : {}) as Record<
+    string,
+    unknown
+  >;
+  const path = p.path ?? p.file_path;
+  switch (name) {
+    case "view":
+      return [{ name: "Read", input: { ...p, file_path: path } }];
+    case "create":
+      return [
+        {
+          name: "Write",
+          input: { file_path: path, content: p.file_text ?? p.content },
+        },
+      ];
+    case "edit":
+    case "str_replace":
+      return [
+        {
+          name: "Edit",
+          input: {
+            file_path: path,
+            old_string: p.old_str ?? p.old_string,
+            new_string: p.new_str ?? p.new_string,
+          },
+        },
+      ];
+    case "apply_patch":
+      return patchFiles(typeof args === "string" ? args : "").map((f) => ({
+        name: f.added ? "Write" : "Edit",
+        input: { file_path: f.path },
+      }));
+    case "bash":
+    case "shell":
+    case "powershell":
+      return [{ name: "Bash", input: p }];
+    case "glob":
+      return [{ name: "Glob", input: p }];
+    case "grep":
+    case "rg":
+      return [{ name: "Grep", input: p }];
+    case "web_fetch":
+      return [{ name: "WebFetch", input: p }];
+    default:
+      return [{ name, input: p }];
+  }
+}
+
+export function translateCopilot(
+  ev: CopilotEvent,
+  st: TranslateState,
+): ClaudeStreamMessage[] {
+  const d = ev.data ?? {};
+  switch (ev.type) {
+    case "session.auto_mode_resolved":
+      if (d.chosenModel) st.model = d.chosenModel;
+      return [];
+    case "model.call_start":
+      if (d.model) st.model = d.model;
+      return [];
+    case "assistant.message":
+      if (d.model) st.model = d.model;
+      if (!d.content?.trim()) return [];
+      st.lastText = d.content;
+      return [assistant([{ type: "text", text: d.content }])];
+    case "tool.execution_start": {
+      const id = d.toolCallId ?? d.toolName ?? "tool";
+      if (d.toolName === "report_intent") {
+        st.hidden.add(id);
+        return [];
+      }
+      const tools = copilotTool(d.toolName ?? "tool", d.arguments);
+      return tools.map((t, i) =>
+        toolUse(st, tools.length > 1 ? `${id}:${i}` : id, t.name, t.input),
+      );
+    }
+    case "tool.execution_complete": {
+      const id = d.toolCallId ?? "tool";
+      if (st.hidden.has(id)) return [];
+      const ids = st.tools.has(id)
+        ? [id]
+        : [...st.tools.keys()].filter((k) => k.startsWith(`${id}:`));
+      return ids.map((k) =>
+        toolResult(k, d.result?.content ?? "", d.success === false),
+      );
+    }
+    case "session.error": {
+      const message =
+        typeof d.error === "string"
+          ? d.error
+          : (d.error?.message ?? d.message ?? "Copilot stopped.");
+      return [result(st, null, message)];
+    }
+    case "result":
+      return [
+        {
+          type: "system",
+          subtype: "init",
+          session_id: ev.sessionId,
+          model: st.model || undefined,
+        },
+        result(
+          st,
+          null,
+          ev.exitCode && ev.exitCode !== 0 ? "Copilot stopped." : null,
+        ),
+      ];
+    default:
+      return [];
+  }
+}
+
 /** Turns one line of an engine's output into chat messages. */
 export function translateAgentLine(
   engine: AgentEngine,
@@ -437,9 +594,9 @@ export function translateAgentLine(
     return [];
   }
   if (!ev || typeof ev !== "object") return [];
-  return engine === "codex"
-    ? translateCodex(ev as CodexEvent, st)
-    : translateGemini(ev as GeminiEvent, st);
+  if (engine === "codex") return translateCodex(ev as CodexEvent, st);
+  if (engine === "copilot") return translateCopilot(ev as CopilotEvent, st);
+  return translateGemini(ev as GeminiEvent, st);
 }
 
 /** Whether a line on an engine's error output says something went wrong. */
@@ -453,7 +610,7 @@ export function isEngineErrorLine(line: string): boolean {
   );
 }
 
-/** What to tell the user when ChatGPT or Gemini stops without answering. */
+/** What to tell the user when an engine stops without answering. */
 export function engineErrorMessage(
   engine: AgentEngine,
   lastError: string | null,
@@ -462,6 +619,9 @@ export function engineErrorMessage(
   const raw = lastError?.trim() ?? "";
   if (/IneligibleTier|no longer supported for Gemini Code Assist/i.test(raw)) {
     return "Google no longer lets Gemini CLI sign in with a free personal account. Use a Gemini API key instead (free from Google AI Studio): Settings → Provider → Gemini.";
+  }
+  if (/Model ".*" from --model flag is not available/i.test(raw)) {
+    return `${label} can't use that model on your plan. Pick Auto, or another model in the menu.`;
   }
   if (/not logged in|login|auth|unauthori[sz]ed|401/i.test(raw)) {
     return `${label} isn't signed in. Sign in again in Settings → Provider.`;

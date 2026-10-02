@@ -14,6 +14,7 @@ import { useCitationCheck } from "@/components/workspace/citation-check";
 import { useProposedChangesStore } from "@/stores/proposed-changes-store";
 import { LimitBar, resetsLabel } from "@/components/settings/ai-usage-settings";
 import {
+  copilotUsedPercent,
   type LimitWindow,
   lastCallContext,
   useAiUsage,
@@ -67,6 +68,7 @@ export function ClaudeLimitNotice() {
   const claudeLimits = useAiUsage((s) => s.claudeLimits);
   const codexLimits = useAiUsage((s) => s.codexLimits);
   const blocked = useAiUsage((s) => s.blocked);
+  const copilotQuota = useAiUsage((s) => s.copilotQuota);
   const entries = useAiUsage((s) => s.entries);
   const models = useClaudeChatStore((s) => s.selectedProviderModels);
   const autoContinue = useAiUsage((s) => s.autoContinue);
@@ -78,7 +80,7 @@ export function ClaudeLimitNotice() {
   const current = serviceOf(providerId);
   const now = Date.now();
   // Read again when any of these change: limits, blocks, today's requests.
-  void [claudeLimits, codexLimits, blocked, entries, models];
+  void [claudeLimits, codexLimits, copilotQuota, blocked, entries, models];
   const out = outNow(current);
   const next = nextService(
     current,
@@ -129,6 +131,17 @@ export function ClaudeLimitNotice() {
       windows.push({ label: "5-hour", w: claudeLimits.fiveHour });
     if (claudeLimits.sevenDay)
       windows.push({ label: "Week", w: claudeLimits.sevenDay });
+  }
+  const copilotUsed = copilotUsedPercent(copilotQuota);
+  if (
+    engineOfProvider(current) === "copilot" &&
+    copilotUsed !== null &&
+    copilotQuota?.resetsAt
+  ) {
+    windows.push({
+      label: "Month",
+      w: { utilization: copilotUsed / 100, resetsAt: copilotQuota.resetsAt },
+    });
   }
   if (engineOfProvider(current) === "codex" && codexLimits) {
     for (const w of [codexLimits.primary, codexLimits.secondary]) {

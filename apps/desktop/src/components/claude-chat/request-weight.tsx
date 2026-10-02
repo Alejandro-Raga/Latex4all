@@ -4,6 +4,8 @@ import { resetsLabel } from "@/components/settings/ai-usage-settings";
 import { engineOfProvider } from "@/lib/agent-events";
 import {
   codexLimitsFrom,
+  copilotQuotaFrom,
+  copilotUsedPercent,
   lastCallContext,
   useAiUsage,
   windowName,
@@ -75,6 +77,7 @@ export function RequestWeight({ input }: { input: string }) {
   const providerId = useClaudeChatStore((s) => s.selectedProviderCredentialId);
   const claudeLimits = useAiUsage((s) => s.claudeLimits);
   const codexLimits = useAiUsage((s) => s.codexLimits);
+  const copilotQuota = useAiUsage((s) => s.copilotQuota);
   const entries = useAiUsage((s) => s.entries);
   const learned = useAiUsage((s) => s.dailyLimits);
   const credential = useClaudeSetupStore((s) =>
@@ -89,13 +92,23 @@ export function RequestWeight({ input }: { input: string }) {
 
   // ChatGPT's windows, as Codex last recorded them, once it's picked.
   useEffect(() => {
-    if (engine !== "codex") return;
-    void invoke("codex_rate_limits", { threadId: null })
-      .then((raw) => {
-        const limits = codexLimitsFrom(raw);
-        if (limits) useAiUsage.getState().setCodexLimits(limits);
-      })
-      .catch(() => {});
+    if (engine === "codex") {
+      void invoke("codex_rate_limits", { threadId: null })
+        .then((raw) => {
+          const limits = codexLimitsFrom(raw);
+          if (limits) useAiUsage.getState().setCodexLimits(limits);
+        })
+        .catch(() => {});
+    }
+    // Copilot's month, as GitHub counts it.
+    if (engine === "copilot") {
+      void invoke("copilot_quota")
+        .then((raw) => {
+          const quota = copilotQuotaFrom(raw);
+          if (quota) useAiUsage.getState().setCopilotQuota(quota);
+        })
+        .catch(() => {});
+    }
   }, [engine]);
 
   const { tokens, measured } = useMemo(() => {
@@ -138,6 +151,16 @@ export function RequestWeight({ input }: { input: string }) {
     }
   }
 
+  const copilotUsed =
+    engine === "copilot" ? copilotUsedPercent(copilotQuota) : null;
+  if (copilotUsed !== null && copilotQuota?.resetsAt) {
+    windows.push({
+      name: "month",
+      used: copilotUsed,
+      resetsAt: copilotQuota.resetsAt,
+    });
+  }
+
   // A free Gemini model's requests today, against its daily limit.
   const model = credentialModel || credential?.model;
   const daily =
@@ -171,6 +194,9 @@ export function RequestWeight({ input }: { input: string }) {
         } (measured).`
       : null,
     engine === "gemini" ? "Gemini doesn't report its limits to apps." : null,
+    copilotUsed !== null && copilotQuota
+      ? `Copilot: ${copilotQuota.remaining} of ${copilotQuota.entitlement} premium requests left this month. Each message uses at least one.`
+      : null,
     daily
       ? `Today: ${today} of ${daily.known ? "" : "about "}${daily.limit} free requests to ${model}${daily.known ? "" : " (Google confirms the number when it's reached)"}. One message takes a request per step. Resets ${resetsLabel(nextPacificDay(now))}.`
       : null,

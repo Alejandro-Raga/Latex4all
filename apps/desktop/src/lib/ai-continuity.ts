@@ -11,6 +11,7 @@
 import { toast } from "sonner";
 import { readyEngines, useAgentAccounts } from "@/lib/agent-accounts";
 import {
+  type AgentEngine,
   ENGINE_LABELS,
   engineOfProvider,
   providerOfEngine,
@@ -18,7 +19,9 @@ import {
 import {
   type ClaudeLimits,
   type CodexLimits,
+  type CopilotQuota,
   claudeLimited,
+  copilotUsedPercent,
   useAiUsage,
 } from "@/lib/ai-usage";
 import {
@@ -62,6 +65,7 @@ export function outUntil(
   state: {
     claudeLimits: ClaudeLimits | null;
     codexLimits: CodexLimits | null;
+    copilotQuota?: CopilotQuota | null;
     blocked: Record<string, number>;
   },
   now = Date.now(),
@@ -77,6 +81,12 @@ export function outUntil(
   if (engineOfProvider(id) === "codex") {
     const w = state.codexLimits?.primary;
     if (w && w.resetsAt > now && w.usedPercent >= 100) return w.resetsAt;
+  }
+  if (engineOfProvider(id) === "copilot") {
+    const q = state.copilotQuota;
+    if (q?.resetsAt && q.resetsAt > now && copilotUsedPercent(q) === 100) {
+      return q.resetsAt;
+    }
   }
   const until = Math.max(
     state.blocked[id] ?? 0,
@@ -129,7 +139,7 @@ export function availableServices(): string[] {
 
 export const serviceLabel = (id: string) =>
   engineOfProvider(id)
-    ? ENGINE_LABELS[engineOfProvider(id) as "codex" | "gemini"]
+    ? ENGINE_LABELS[engineOfProvider(id) as AgentEngine]
     : providerLabel(providerKeyForSelectedCredential(id));
 
 /** The order to use: as set, else the one fallback chosen earlier. */

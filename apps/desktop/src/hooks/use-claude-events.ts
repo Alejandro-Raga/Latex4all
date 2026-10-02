@@ -14,6 +14,7 @@ import {
 } from "@/lib/agent-events";
 import {
   codexLimitsFrom,
+  copilotQuotaFrom,
   type RateLimitInfo,
   useAiUsage,
   windowName,
@@ -585,6 +586,57 @@ export function useClaudeEvents() {
             useClaudeChatStore.getState()._patchTab(tabId, {
               citationWarning: missing.length ? missing : null,
             });
+          })();
+        }
+        // Copilot reports a reply's tokens and premium requests only in its
+        // session log: read them there, onto the reply and its usage entry.
+        if (
+          success &&
+          tab.sessionId &&
+          engineOfProviderKey(tab.sessionProviderKey ?? tab.providerKey) ===
+            "copilot"
+        ) {
+          const sessionId = tab.sessionId;
+          void (async () => {
+            const run = await invoke<{
+              input: number;
+              cache_read: number;
+              cache_write: number;
+              output: number;
+              premium_requests: number;
+              models: string[];
+            } | null>("copilot_run_usage", { sessionId }).catch(() => null);
+            const quota = copilotQuotaFrom(
+              await invoke("copilot_quota").catch(() => null),
+            );
+            const usage = useAiUsage.getState();
+            if (quota) usage.setCopilotQuota(quota);
+            if (!run) return;
+            const share =
+              quota && !quota.unlimited && quota.entitlement > 0
+                ? (run.premium_requests / quota.entitlement) * 100
+                : undefined;
+            usage.patchLastEntry(tabId, {
+              input: run.input,
+              cacheRead: run.cache_read,
+              cacheWrite: run.cache_write,
+              output: run.output,
+              ...(run.models[0] ? { model: run.models[0] } : {}),
+              ...(share !== undefined
+                ? { windowDelta: share, window: "month" }
+                : {}),
+            });
+            useClaudeChatStore.getState()._annotateLastResult(tabId, {
+              usage: {
+                input_tokens: run.input,
+                cache_read_input_tokens: run.cache_read,
+                cache_creation_input_tokens: run.cache_write,
+                output_tokens: run.output,
+              },
+              ...(share !== undefined
+                ? { windowDelta: share, window: "month" }
+                : {}),
+            } as Partial<ClaudeStreamMessage>);
           })();
         }
         // What share of the plan window this request used, measured: the

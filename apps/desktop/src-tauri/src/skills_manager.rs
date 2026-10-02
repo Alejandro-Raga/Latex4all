@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 /// The assistants skills are set for.
-pub const AIS: [&str; 3] = ["claude", "codex", "gemini"];
+pub const AIS: [&str; 4] = ["claude", "codex", "gemini", "copilot"];
 
 #[derive(Serialize, Deserialize, Default, Clone)]
 pub struct SkillSettings {
@@ -256,6 +256,7 @@ pub fn apply_engine(ai: &str) {
     let tool_home = match ai {
         "codex" => home.join(".codex"),
         "gemini" => home.join(".gemini"),
+        "copilot" => home.join(".copilot"),
         _ => return,
     };
     // Not for a tool never used here: no folders in an unused one's place.
@@ -276,6 +277,7 @@ fn apply_all(settings: &SkillSettings) {
     apply_claude(settings);
     apply_engine("codex");
     apply_engine("gemini");
+    apply_engine("copilot");
 }
 
 #[derive(Serialize)]

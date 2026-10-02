@@ -1,6 +1,7 @@
 import { Loader2Icon } from "lucide-react";
 import { ClaudeSetup } from "@/components/claude-setup";
 import { EngineRow } from "@/components/settings/agent-accounts";
+import { ENGINES } from "@/lib/agent-events";
 import { Button } from "@/components/ui/button";
 import {
   CLAUDE_CODE_PROVIDER_ID,
@@ -89,8 +90,9 @@ export function AddAiContent({
     <div className="-mx-6 min-w-0">
       <div className={heading}>Sign in with your account</div>
       <ClaudeRow onUse={onUse} />
-      <EngineRow engine="codex" onUse={onUse} />
-      <EngineRow engine="gemini" onUse={onUse} />
+      {ENGINES.map((engine) => (
+        <EngineRow key={engine} engine={engine} onUse={onUse} />
+      ))}
 
       <div className="mt-2 border-border border-t">
         <div className={heading}>Or use an API key</div>

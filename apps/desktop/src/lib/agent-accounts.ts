@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { type AgentEngine, ENGINE_LABELS } from "@/lib/agent-events";
+import { type AgentEngine, ENGINE_LABELS, ENGINES } from "@/lib/agent-events";
 
 export interface AgentStatus {
   installed: boolean;
@@ -122,7 +122,5 @@ export const useAgentAccounts = create<AgentAccountsState>()(
 export function readyEngines(
   status: Partial<Record<AgentEngine, AgentStatus>>,
 ): AgentEngine[] {
-  return (["codex", "gemini"] as const).filter(
-    (e) => status[e]?.installed && status[e]?.signed_in,
-  );
+  return ENGINES.filter((e) => status[e]?.installed && status[e]?.signed_in);
 }

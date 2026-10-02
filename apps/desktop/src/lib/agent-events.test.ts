@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  type AgentEngine,
   engineErrorMessage,
   isEngineErrorLine,
   newTranslateState,
   translateAgentLine,
 } from "./agent-events";
 
-const run = (engine: "codex" | "gemini", events: object[]) => {
+const run = (engine: AgentEngine, events: object[]) => {
   const st = newTranslateState();
   return events.flatMap((e) =>
     translateAgentLine(engine, JSON.stringify(e), st),
@@ -210,6 +211,92 @@ describe("Gemini events as chat messages", () => {
         newTranslateState(),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("Copilot events as chat messages", () => {
+  it("maps its tools, names the model Auto chose, and keeps the session", () => {
+    const out = run("copilot", [
+      {
+        type: "session.auto_mode_resolved",
+        data: { chosenModel: "gpt-6-luna" },
+      },
+      {
+        type: "tool.execution_start",
+        data: { toolCallId: "i", toolName: "report_intent", arguments: {} },
+      },
+      {
+        type: "tool.execution_complete",
+        data: { toolCallId: "i", success: true },
+      },
+      {
+        type: "tool.execution_start",
+        data: {
+          toolCallId: "v",
+          toolName: "view",
+          arguments: { path: "/p/a.tex" },
+        },
+      },
+      {
+        type: "tool.execution_complete",
+        data: { toolCallId: "v", success: true, result: { content: "hello" } },
+      },
+      {
+        type: "tool.execution_start",
+        data: {
+          toolCallId: "p",
+          toolName: "apply_patch",
+          arguments:
+            "*** Begin Patch\n*** Update File: /p/a.tex\n@@\n+x\n*** Add File: /p/b.tex\n+y\n*** End Patch\n",
+        },
+      },
+      {
+        type: "tool.execution_complete",
+        data: {
+          toolCallId: "p",
+          success: true,
+          result: { content: "Modified" },
+        },
+      },
+      {
+        type: "assistant.message",
+        data: { model: "gpt-6-luna", content: "Done." },
+      },
+      {
+        type: "result",
+        sessionId: "S1",
+        exitCode: 0,
+        usage: { premiumRequests: 1 },
+      },
+    ]);
+    const tools = out.flatMap((m) =>
+      (m.message?.content ?? []).filter((b) => b.type === "tool_use"),
+    );
+    expect(tools.map((t) => [t.name, t.input?.file_path])).toEqual([
+      ["Read", "/p/a.tex"],
+      ["Edit", "/p/a.tex"],
+      ["Write", "/p/b.tex"],
+    ]);
+    const results = out.flatMap((m) =>
+      (m.message?.content ?? []).filter((b) => b.type === "tool_result"),
+    );
+    expect(results.map((r) => r.tool_use_id)).toEqual(["v", "p:0", "p:1"]);
+    expect(out[out.length - 2]).toMatchObject({ type: "system", session_id: "S1" });
+    expect(out[out.length - 1]).toMatchObject({
+      type: "result",
+      is_error: false,
+      result: "Done.",
+      modelUsage: { "gpt-6-luna": {} },
+    });
+  });
+
+  it("explains a model the plan doesn't allow", () => {
+    expect(
+      engineErrorMessage(
+        "copilot",
+        'Error: Model "gpt-5-mini" from --model flag is not available.',
+      ),
+    ).toMatch(/Pick Auto/);
   });
 });
 

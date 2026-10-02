@@ -1,6 +1,6 @@
 //! Other AI assistants signed in with the user's own account rather than an
-//! API key: OpenAI's Codex CLI (ChatGPT plans) and Google's Gemini CLI
-//! (free with a Google account, or a Google AI plan). They are installed in
+//! API key: OpenAI's Codex CLI (ChatGPT plans), Google's Gemini CLI (Gemini
+//! Code Assist plans) and GitHub Copilot CLI (Copilot plans, free included). They are installed in
 //! Latex4All's own folder with npm, sign in through the browser, and run
 //! like Claude Code: one process per request, its JSON lines streamed to the
 //! chat (which translates them, see src/lib/agent-events.ts).
@@ -19,6 +19,7 @@ use crate::claude_process::spawn_claude_process;
 enum Engine {
     Codex,
     Gemini,
+    Copilot,
 }
 
 impl Engine {
@@ -26,6 +27,7 @@ impl Engine {
         match name {
             "codex" => Ok(Engine::Codex),
             "gemini" => Ok(Engine::Gemini),
+            "copilot" => Ok(Engine::Copilot),
             other => Err(format!("Unknown assistant: {}", other)),
         }
     }
@@ -34,6 +36,7 @@ impl Engine {
         match self {
             Engine::Codex => "codex",
             Engine::Gemini => "gemini",
+            Engine::Copilot => "copilot",
         }
     }
 
@@ -41,6 +44,7 @@ impl Engine {
         match self {
             Engine::Codex => "@openai/codex",
             Engine::Gemini => "@google/gemini-cli",
+            Engine::Copilot => "@github/copilot",
         }
     }
 }
@@ -178,6 +182,84 @@ fn gemini_login_status() -> (bool, Option<String>) {
     (true, account)
 }
 
+fn copilot_dir() -> Option<PathBuf> {
+    dirs::home_dir().map(|home| home.join(".copilot"))
+}
+
+/// Copilot's settings file: JSON with "//" comment lines on top.
+fn copilot_config() -> Option<serde_json::Value> {
+    let text = std::fs::read_to_string(copilot_dir()?.join("config.json")).ok()?;
+    let json: String = text
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    serde_json::from_str(&json).ok()
+}
+
+/// The GitHub token Copilot would use besides its own sign-in: one in the
+/// environment, or the GitHub CLI's (Copilot accepts both).
+async fn github_token() -> Option<String> {
+    for key in ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"] {
+        if let Ok(token) = std::env::var(key) {
+            if !token.trim().is_empty() {
+                return Some(token.trim().to_string());
+            }
+        }
+    }
+    let gh = which::which("gh")
+        .ok()
+        .map(|p| p.to_string_lossy().to_string())
+        .or_else(|| {
+            ["/opt/homebrew/bin/gh", "/usr/local/bin/gh"]
+                .iter()
+                .find(|p| PathBuf::from(p).exists())
+                .map(|p| p.to_string())
+        })?;
+    let mut cmd = create_command(
+        &gh,
+        vec!["auth".into(), "token".into()],
+        &home_string(),
+        None,
+    );
+    cmd.stdin(std::process::Stdio::null());
+    let output = tokio::time::timeout(Duration::from_secs(10), cmd.output())
+        .await
+        .ok()?
+        .ok()?;
+    let token = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (output.status.success() && !token.is_empty()).then_some(token)
+}
+
+/// Signed in to Copilot: with its own login (its config names the user),
+/// or through a GitHub token it picks up.
+async fn copilot_login_status() -> (bool, Option<String>) {
+    let config = copilot_config();
+    let user = config.as_ref().and_then(|c| {
+        c.get("lastLoggedInUser")
+            .or_else(|| c.get("last_logged_in_user"))
+            .and_then(|u| u.get("login"))
+            .and_then(|l| l.as_str())
+            .map(str::to_string)
+            .or_else(|| {
+                c.get("loggedInUsers")
+                    .or_else(|| c.get("logged_in_users"))
+                    .and_then(|u| u.as_array())
+                    .and_then(|u| u.first())
+                    .and_then(|u| u.get("login"))
+                    .and_then(|l| l.as_str())
+                    .map(str::to_string)
+            })
+    });
+    if let Some(user) = user {
+        return (true, Some(user));
+    }
+    if github_token().await.is_some() {
+        return (true, Some("Your GitHub account (GitHub CLI)".to_string()));
+    }
+    (false, None)
+}
+
 #[tauri::command]
 pub async fn agent_status(engine: String) -> Result<AgentStatus, String> {
     let engine = Engine::parse(&engine)?;
@@ -193,6 +275,7 @@ pub async fn agent_status(engine: String) -> Result<AgentStatus, String> {
     let (signed_in, account) = match engine {
         Engine::Codex => codex_login_status(&program).await,
         Engine::Gemini => gemini_login_status(),
+        Engine::Copilot => copilot_login_status().await,
     };
     Ok(AgentStatus {
         installed: true,
@@ -248,6 +331,12 @@ pub async fn agent_login(engine: String) -> Result<bool, String> {
             let _ = tokio::time::timeout(Duration::from_secs(600), cmd.output()).await;
             Ok(codex_login_status(&program).await.0)
         }
+        Engine::Copilot => {
+            let mut cmd = create_command(&program, vec!["login".into()], &home_string(), None);
+            cmd.stdin(std::process::Stdio::null());
+            let _ = tokio::time::timeout(Duration::from_secs(600), cmd.output()).await;
+            Ok(copilot_login_status().await.0)
+        }
         Engine::Gemini => {
             // A tiny request with "Login with Google" selected: Gemini asks
             // for consent on stdin, then opens the browser to sign in.
@@ -288,6 +377,18 @@ pub async fn agent_logout(engine: String) -> Result<(), String> {
                 let _ = std::fs::remove_file(dir.join("oauth_creds.json"));
             }
         }
+        Engine::Copilot => {
+            let program = find_binary(engine).ok_or("Not installed.")?;
+            let mut cmd = create_command(&program, vec!["logout".into()], &home_string(), None);
+            cmd.stdin(std::process::Stdio::null());
+            let _ = tokio::time::timeout(Duration::from_secs(30), cmd.output()).await;
+            if copilot_login_status().await.0 {
+                return Err(
+                    "Copilot is still signed in through the GitHub CLI. Run gh auth logout to disconnect it."
+                        .to_string(),
+                );
+            }
+        }
     }
     Ok(())
 }
@@ -302,6 +403,7 @@ fn share_claude_skills(engine: Engine, project_path: &str) {
     let target = match engine {
         Engine::Codex => project.join(".agents").join("skills"),
         Engine::Gemini => project.join(".gemini").join("skills"),
+        Engine::Copilot => project.join(".github").join("skills"),
     };
     if !source.is_dir() && !target.is_dir() {
         return;
@@ -326,7 +428,8 @@ pub struct AgentModel {
 }
 
 /// The models one can pick: Codex's own catalog (it changes with OpenAI's
-/// line-up), and for Gemini the CLI's aliases, which follow Google's.
+/// line-up), for Gemini the CLI's aliases, which follow Google's, and for
+/// Copilot the ones the account's plan lets it pick (a free plan: Auto).
 #[tauri::command]
 pub async fn agent_models(engine: String) -> Result<Vec<AgentModel>, String> {
     let engine = Engine::parse(&engine)?;
@@ -342,6 +445,17 @@ pub async fn agent_models(engine: String) -> Result<Vec<AgentModel>, String> {
             model("flash", "Flash", "Fast, uses less"),
             model("flash-lite", "Flash Lite", "Fastest, lightest"),
         ]),
+        Engine::Copilot => {
+            let mut models = vec![model(
+                "auto",
+                "Auto",
+                "Copilot picks a model for each request",
+            )];
+            if let Some(token) = github_token().await {
+                models.extend(copilot_models(&token).await.unwrap_or_default());
+            }
+            Ok(models)
+        }
         Engine::Codex => {
             let program = find_binary(engine).ok_or("Not installed.")?;
             let mut cmd = create_command(
@@ -387,6 +501,167 @@ pub async fn agent_models(engine: String) -> Result<Vec<AgentModel>, String> {
                 .collect())
         }
     }
+}
+
+/// Copilot's model catalog, as the account sees it: the ones its plan lets
+/// one pick (others are chosen by Auto only).
+async fn copilot_models(token: &str) -> Result<Vec<AgentModel>, String> {
+    let catalog: serde_json::Value = reqwest::Client::new()
+        .get("https://api.githubcopilot.com/models")
+        .bearer_auth(token)
+        .header("Copilot-Integration-Id", "copilot-developer-cli")
+        .timeout(Duration::from_secs(15))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .text()
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string()))?;
+    Ok(copilot_pickable(&catalog))
+}
+
+fn copilot_pickable(catalog: &serde_json::Value) -> Vec<AgentModel> {
+    let text = |m: &serde_json::Value, key: &str| {
+        m.get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string()
+    };
+    catalog
+        .get("data")
+        .and_then(|d| d.as_array())
+        .map(|models| {
+            models
+                .iter()
+                .filter(|m| m.get("model_picker_enabled").and_then(|v| v.as_bool()) == Some(true))
+                .filter(|m| m.pointer("/policy/state").and_then(|v| v.as_str()) != Some("disabled"))
+                .filter(|m| {
+                    m.pointer("/capabilities/type").and_then(|v| v.as_str()) == Some("chat")
+                })
+                .map(|m| {
+                    let id = text(m, "id");
+                    let name = text(m, "name");
+                    AgentModel {
+                        name: if name.is_empty() { id.clone() } else { name },
+                        description: [text(m, "vendor"), text(m, "model_picker_category")]
+                            .into_iter()
+                            .filter(|s| !s.is_empty())
+                            .collect::<Vec<_>>()
+                            .join(" · "),
+                        id,
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Copilot's monthly allowance of premium requests, as GitHub counts it.
+#[derive(Serialize)]
+pub struct CopilotQuota {
+    plan: Option<String>,
+    entitlement: f64,
+    remaining: f64,
+    unlimited: bool,
+    /// Seconds since the epoch.
+    resets_at: Option<i64>,
+}
+
+#[tauri::command]
+pub async fn copilot_quota() -> Result<Option<CopilotQuota>, String> {
+    let Some(token) = github_token().await else {
+        return Ok(None);
+    };
+    let user: serde_json::Value = reqwest::Client::new()
+        .get("https://api.github.com/copilot_internal/user")
+        .bearer_auth(token)
+        .header("User-Agent", "Latex4All")
+        .timeout(Duration::from_secs(15))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .text()
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|t| serde_json::from_str(&t).map_err(|e| e.to_string()))?;
+    Ok(copilot_quota_from(&user))
+}
+
+fn copilot_quota_from(user: &serde_json::Value) -> Option<CopilotQuota> {
+    let premium = user.pointer("/quota_snapshots/premium_interactions")?;
+    let number = |key: &str| premium.get(key).and_then(|v| v.as_f64());
+    let resets_at = user
+        .get("quota_reset_date_utc")
+        .and_then(|v| v.as_str())
+        .and_then(|d| chrono::DateTime::parse_from_rfc3339(d).ok())
+        .map(|d| d.timestamp());
+    Some(CopilotQuota {
+        plan: user
+            .get("copilot_plan")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        entitlement: number("entitlement").unwrap_or(0.0),
+        remaining: number("remaining")
+            .or_else(|| number("quota_remaining"))
+            .unwrap_or(0.0),
+        unlimited: premium.get("unlimited").and_then(|v| v.as_bool()) == Some(true),
+        resets_at,
+    })
+}
+
+/// The tokens a Copilot session's latest run used: its log totals them per
+/// session, so the last total less the one before.
+#[tauri::command]
+pub async fn copilot_run_usage(session_id: String) -> Result<Option<serde_json::Value>, String> {
+    if session_id.is_empty() || session_id.contains(['/', '\\', '.']) {
+        return Ok(None);
+    }
+    let Some(file) = copilot_dir().map(|d| {
+        d.join("session-state")
+            .join(&session_id)
+            .join("events.jsonl")
+    }) else {
+        return Ok(None);
+    };
+    let Ok(text) = std::fs::read_to_string(file) else {
+        return Ok(None);
+    };
+    Ok(copilot_run_usage_from(&text))
+}
+
+fn copilot_run_usage_from(text: &str) -> Option<serde_json::Value> {
+    let totals: Vec<serde_json::Value> = text
+        .lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .filter(|e| e.get("type").and_then(|t| t.as_str()) == Some("session.shutdown"))
+        .filter_map(|e| e.get("data").cloned())
+        .collect();
+    let last = totals.last()?;
+    let count = |d: Option<&serde_json::Value>, key: &str| {
+        d.and_then(|d| d.pointer(&format!("/tokenDetails/{}/tokenCount", key)))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0)
+    };
+    let premium = |d: Option<&serde_json::Value>| {
+        d.and_then(|d| d.get("totalPremiumRequests"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0)
+    };
+    let before = totals.len().checked_sub(2).and_then(|i| totals.get(i));
+    let delta = |key: &str| (count(Some(last), key) - count(before, key)).max(0.0);
+    Some(serde_json::json!({
+        "input": delta("input"),
+        "cache_read": delta("cache_read"),
+        "cache_write": delta("cache_write"),
+        "output": delta("output"),
+        "premium_requests": (premium(Some(last)) - premium(before)).max(0.0),
+        "models": last
+            .get("modelMetrics")
+            .and_then(|m| m.as_object())
+            .map(|m| m.keys().cloned().collect::<Vec<_>>())
+            .unwrap_or_default(),
+    }))
 }
 
 /// Codex's session files: ~/.codex/sessions/YYYY/MM/DD/rollout-…-<id>.jsonl.
@@ -499,6 +774,37 @@ fn agent_args(
             }
             args.push("-".into());
         }
+        Engine::Copilot => {
+            // The prompt on stdin, as for the others; every tool allowed
+            // (changes still go through the chat's review), no banner or
+            // update check.
+            args.extend(
+                [
+                    "--output-format",
+                    "json",
+                    "--allow-all-tools",
+                    "--no-auto-update",
+                    "--disable-builtin-mcps",
+                ]
+                .iter()
+                .map(|s| s.to_string()),
+            );
+            args.push("--model".into());
+            args.push(
+                model
+                    .filter(|m| !m.is_empty())
+                    .unwrap_or("auto")
+                    .to_string(),
+            );
+            if let Some(e) = effort_level.filter(|e| matches!(*e, "low" | "medium" | "high")) {
+                args.push("--reasoning-effort".into());
+                args.push(e.to_string());
+            }
+            if let Some(id) = session_id.filter(|id| !id.is_empty()) {
+                args.push("--resume".into());
+                args.push(id.to_string());
+            }
+        }
         Engine::Gemini => {
             args.extend(
                 [
@@ -580,5 +886,63 @@ mod tests {
         let resume = args.iter().position(|a| a == "--resume").unwrap();
         assert_eq!(args[resume + 1], "S1");
         assert!(!args.contains(&"-m".to_string()));
+    }
+
+    #[test]
+    fn copilot_runs_on_auto_unless_told_and_resumes() {
+        let args = agent_args(Engine::Copilot, "/p", None, Some("S1"), Some("high"));
+        let model = args.iter().position(|a| a == "--model").unwrap();
+        assert_eq!(args[model + 1], "auto");
+        assert!(args.contains(&"--allow-all-tools".to_string()));
+        let resume = args.iter().position(|a| a == "--resume").unwrap();
+        assert_eq!(args[resume + 1], "S1");
+        let effort = args.iter().position(|a| a == "--reasoning-effort").unwrap();
+        assert_eq!(args[effort + 1], "high");
+    }
+
+    #[test]
+    fn copilot_lists_only_the_models_its_plan_can_pick() {
+        let catalog = serde_json::json!({"data": [
+            {"id": "gpt-6-luna", "name": "GPT-6 Luna", "vendor": "OpenAI", "model_picker_enabled": true,
+             "model_picker_category": "lightweight", "policy": {"state": "enabled"}, "capabilities": {"type": "chat"}},
+            {"id": "claude-sonnet-5", "name": "Claude Sonnet 5", "model_picker_enabled": true,
+             "policy": {"state": "disabled"}, "capabilities": {"type": "chat"}},
+            {"id": "gpt-5-mini", "model_picker_enabled": false, "policy": {"state": "enabled"},
+             "capabilities": {"type": "chat"}},
+            {"id": "text-embedding-3-small", "model_picker_enabled": true, "capabilities": {"type": "embeddings"}}
+        ]});
+        let models = copilot_pickable(&catalog);
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].id, "gpt-6-luna");
+        assert_eq!(models[0].description, "OpenAI · lightweight");
+    }
+
+    #[test]
+    fn copilot_run_usage_is_the_latest_run_alone() {
+        let log = [
+            r#"{"type":"session.shutdown","data":{"totalPremiumRequests":1,"tokenDetails":{"input":{"tokenCount":9},"cache_read":{"tokenCount":26386},"cache_write":{"tokenCount":13369},"output":{"tokenCount":173}},"modelMetrics":{"gpt-5.6-luna":{}}}}"#,
+            r#"{"type":"user.message","data":{}}"#,
+            r#"{"type":"session.shutdown","data":{"totalPremiumRequests":2,"tokenDetails":{"input":{"tokenCount":12},"cache_read":{"tokenCount":39533},"cache_write":{"tokenCount":13622},"output":{"tokenCount":178}},"modelMetrics":{"gpt-5.6-luna":{}}}}"#,
+        ]
+        .join("\n");
+        let usage = copilot_run_usage_from(&log).unwrap();
+        assert_eq!(usage["input"], 3.0);
+        assert_eq!(usage["cache_read"], 13147.0);
+        assert_eq!(usage["output"], 5.0);
+        assert_eq!(usage["premium_requests"], 1.0);
+        assert_eq!(usage["models"][0], "gpt-5.6-luna");
+    }
+
+    #[test]
+    fn copilot_quota_reads_premium_requests() {
+        let user = serde_json::json!({
+            "copilot_plan": "individual",
+            "quota_reset_date_utc": "2026-11-01T00:00:00.000Z",
+            "quota_snapshots": {"premium_interactions": {"entitlement": 200, "remaining": 150, "unlimited": false}}
+        });
+        let q = copilot_quota_from(&user).unwrap();
+        assert_eq!(q.entitlement, 200.0);
+        assert_eq!(q.remaining, 150.0);
+        assert_eq!(q.resets_at, Some(1793491200));
     }
 }

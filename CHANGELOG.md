@@ -128,8 +128,15 @@ tag.
   Code Assist plans only) and signs you in through the browser. Pick one in
   the chat's model menu and choose a model from its list. It can edit the
   project like Claude, and its use shows in AI usage.
+- GitHub Copilot, with your Copilot plan (the free one included): Settings
+  → Provider → "Sign in with an account". It uses your GitHub CLI sign-in if
+  you have one. The model menu lists the models your plan lets you pick,
+  with Auto first (free plans get Auto only). Next to the send button, how
+  much of the month's premium requests is used; under each reply, its
+  tokens and share of the month. When the month runs out, the chat moves to
+  your next AI.
 - "Add an AI" in the chat's model menu: sign in with an account (Claude,
-  ChatGPT, Gemini) or add an API key. Free options are marked.
+  ChatGPT, Gemini, Copilot) or add an API key. Free options are marked.
 - Settings → Provider lists Claude and your API keys separately, each with
   its model and a Remove button, plus a clearer "Add an API key" button.
 - When you add an API key, the newest model is picked for you (you can

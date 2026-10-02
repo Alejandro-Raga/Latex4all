@@ -15,6 +15,7 @@ import { AddAiContent } from "./add-ai-dialog";
 import {
   type AgentEngine,
   ENGINE_LABELS,
+  ENGINES,
   engineOfProvider,
   providerOfEngine,
 } from "@/lib/agent-events";
@@ -227,7 +228,8 @@ function claudeModelDisplayName(model: string) {
   }
 }
 
-/** The models ChatGPT or Gemini offer, and the service's own default. */
+/** The models ChatGPT, Gemini or Copilot offer, and the service's own
+ *  default. */
 function EngineModels({
   engine,
   models,
@@ -239,14 +241,20 @@ function EngineModels({
   selected: string;
   onSelect: (id: string) => void;
 }) {
-  const options = [
-    {
-      id: "",
-      name: "Default",
-      description: engine === "codex" ? "Default for your plan" : "Default",
-    },
-    ...models,
-  ];
+  // Copilot's own default is Auto, which its list has first.
+  const options =
+    engine === "copilot"
+      ? models
+      : [
+          {
+            id: "",
+            name: "Default",
+            description:
+              engine === "codex" ? "Default for your plan" : "Default",
+          },
+          ...models,
+        ];
+  if (engine === "copilot" && !selected) selected = "auto";
   return (
     <>
       {options.map((m) => (
@@ -392,8 +400,7 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
   const engines = readyEngines(agentStatus);
   useEffect(() => {
     const { refresh } = useAgentAccounts.getState();
-    void refresh("codex");
-    void refresh("gemini");
+    for (const engine of ENGINES) void refresh(engine);
   }, []);
   useEffect(() => {
     if (selectedEngine) {
@@ -1737,7 +1744,8 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                 </div>
                 {(claudeProviderActive ||
                   selectedProviderCredential ||
-                  selectedEngine === "codex") && (
+                  selectedEngine === "codex" ||
+                  selectedEngine === "copilot") && (
                   <div className="shrink-0">
                     <EffortControls
                       effortLevel={effortLevel}
