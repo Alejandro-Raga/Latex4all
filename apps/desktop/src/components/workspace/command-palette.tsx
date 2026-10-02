@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Command } from "cmdk";
 import {
+  BrainIcon,
   FileIcon,
   FileTextIcon,
   LibraryIcon,
@@ -28,6 +29,7 @@ import {
 } from "@/stores/settings-window-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useCitationCheck } from "./citation-check";
+import { useMemoryDialog } from "@/components/claude-chat/memory-dialog";
 import { syncProjectNote } from "./project-note-sync";
 
 export const useCommandPalette = create<{
@@ -231,6 +233,14 @@ export function CommandPalette() {
                   label="Check citations"
                   value="Check citations bibliography bib missing unused"
                   onSelect={() => run(() => useCitationCheck.getState().show())}
+                />
+              )}
+              {projectRoot && (
+                <Item
+                  icon={BrainIcon}
+                  label="Project memory"
+                  value="Project memory AGENTS.md notes assistants AI shared"
+                  onSelect={() => run(() => useMemoryDialog.getState().show())}
                 />
               )}
               {projectLinked && (

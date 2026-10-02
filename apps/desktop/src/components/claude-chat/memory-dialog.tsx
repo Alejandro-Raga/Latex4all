@@ -1,3 +1,4 @@
+import { create } from "zustand";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -25,13 +26,14 @@ const PLACEHOLDER = `- Citations in APA style; the bibliography is references.bi
  * The project's shared memory (AGENTS.md), read by every assistant, and
  * what they've done lately.
  */
-export function MemoryDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
+/** Whether the project memory is open (from the chat, ⌘K or Settings). */
+export const useMemoryDialog = create<{ open: boolean; show: () => void }>(
+  (set) => ({ open: false, show: () => set({ open: true }) }),
+);
+
+export function MemoryDialog() {
+  const open = useMemoryDialog((s) => s.open);
+  const onOpenChange = (o: boolean) => useMemoryDialog.setState({ open: o });
   const root = useDocumentStore((s) => s.projectRoot);
   const [text, setText] = useState("");
   const [log, setLog] = useState<AiLogEntry[]>([]);

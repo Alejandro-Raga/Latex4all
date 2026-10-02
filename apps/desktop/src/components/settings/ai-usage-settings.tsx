@@ -1,4 +1,5 @@
 import { type ReactNode, useMemo, useState } from "react";
+import { useMemoryDialog } from "@/components/claude-chat/memory-dialog";
 import { useFallbackChoices } from "@/lib/fallback-choices";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -528,6 +529,15 @@ export function AiUsageSettings() {
           />
         </Row>
         <Services />
+        <Row label="Project memory (shared by every assistant)">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => useMemoryDialog.getState().show()}
+          >
+            Open
+          </Button>
+        </Row>
         <Row label="Usage history">
           <Button
             variant="ghost"
