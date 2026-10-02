@@ -941,8 +941,7 @@ export function ClaudeSetup({
                 </p>
               )}
               <p className="text-[11px] text-muted-foreground">
-                Picked for you once the key is in: it checks the key works. You
-                can switch model any time in the chat.
+                Used to check the key. You can change the model in the chat.
               </p>
             </div>
           )}

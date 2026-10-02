@@ -135,7 +135,7 @@ export function RequestWeight({ input }: { input: string }) {
   const chatTotal = measured.reduce((sum, m) => sum + m.delta, 0);
   const deltas = measured.map((m) => m.delta).sort((a, b) => a - b);
   const why = [
-    `Every message here reads at least ~${k(tokens)} tokens (the chat so far). Requests that edit files read it again at each step, so they cost more; a new chat is lighter.`,
+    `Each message sends at least ~${k(tokens)} tokens (the conversation so far). Edits send it again at each step. A new chat starts lighter.`,
     ...windows.map(
       (w) =>
         `${w.name} limit: ${pct(w.used)}% used, resets ${resetsLabel(w.resetsAt)}.`,

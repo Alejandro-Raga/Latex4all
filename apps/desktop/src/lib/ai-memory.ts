@@ -85,7 +85,7 @@ const MEMORY_RULE =
   "This project keeps lasting notes in AGENTS.md at its root, shared by every assistant used here. When something is settled that others should know (style, decisions, what's left to do), add a short line to it.";
 
 const START_RULE =
-  "If the user asks you to remember something for this project, write it in AGENTS.md at the project root (create the file); every assistant used here reads it.";
+  "If the user asks you to remember something for this project, write it in AGENTS.md at the project root (create it if needed). Every AI used here reads it.";
 
 const time = (at: number) =>
   new Date(at).toLocaleString(undefined, {

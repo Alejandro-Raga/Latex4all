@@ -22,7 +22,9 @@ function ClaudeRow({ onUse }: { onUse: () => void }) {
   if (installing || loggingIn || status === "checking") {
     detail = loggingIn
       ? "Finish signing in in your browser…"
-      : "Getting ready…";
+      : installing
+        ? "Installing…"
+        : "Checking…";
     action = (
       <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
     );

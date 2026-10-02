@@ -243,10 +243,7 @@ function EngineModels({
     {
       id: "",
       name: "Default",
-      description:
-        engine === "codex"
-          ? "OpenAI's choice for your plan"
-          : "Google's choice",
+      description: engine === "codex" ? "Default for your plan" : "Default",
     },
     ...models,
   ];

@@ -92,7 +92,7 @@ export function resumePrompt(input: {
   files: string[];
 }): string {
   return [
-    `[Carrying on] ${input.from} reached its usage limit while working on this request:`,
+    `[Continuing] ${input.from} reached its usage limit while working on this request:`,
     `"${input.request}"`,
     input.files.length
       ? `It had already changed: ${input.files.join(", ")}. Check their current state first.`
@@ -237,7 +237,7 @@ export function onLimitHit(tabId: string, request: string | null) {
   if (!toId) {
     chat._setError(
       tabId,
-      `${serviceLabel(fromId)} reached its usage limit, and no other AI is set to carry on. Add one in the model menu → Add an AI, or set the order in Settings → AI usage.`,
+      `${serviceLabel(fromId)} reached its usage limit and no other AI is set up to continue. Add one from the model menu → Add an AI, or set the order in Settings → AI usage.`,
     );
     return;
   }

@@ -96,12 +96,11 @@ tag.
 
 ### Zotero and reading papers
 
-- Papers a collaborator cited that aren't in your Zotero library go into it
-  from the project's bibliography, with their details and the same citation
-  key, in the collection you pick (remembered for the project) and tagged
-  "from: <project>": "Not in Zotero" in Check citations, or "add" beside the count in the
-  Reference panel's cited view. Adding such a paper to the vault now puts it
-  in Zotero first instead of failing.
+- Add papers a collaborator cited to your Zotero library, using the
+  details and citation key from the project's .bib. Pick a collection
+  (remembered per project); they're tagged "from: <project>". Use "Not in
+  Zotero" in Check citations, or "add" next to the count in the Reference
+  panel. Adding such a paper to the vault now adds it to Zotero first.
 - Tabs in the PDF pane, to read several papers at full size beside your
   editor, each keeping its page and zoom.
 - Highlight papers as you read them, and the highlights are saved in Zotero
@@ -123,76 +122,57 @@ tag.
 
 ### AI
 
-- Adding an API key picks the model for you once the key is in (the newest
-  one; you switch models in the chat anyway). Google's list offers its
-  current Gemini models first, then Gemma.
-- Settings → Provider sets out Claude (your plan, or an Anthropic key) and
-  your API keys apart, each key with its model, what it can do and its own
-  Remove, and a clear "Add an API key" button.
-- "Add an AI" in the chat's model menu offers both ways in one place: sign
-  in with an account you have (Claude, ChatGPT, Gemini), or add an API key,
-  with the free options pointed out.
-- Every assistant in a project shares what it knows: AGENTS.md holds the
-  project's lasting notes (edit them from Chats → Memory, or let the
-  assistants add to it), and each one hears what the others changed since
-  its last turn. If two chats would edit the same project at once, the
-  second waits its turn (or "Send now").
-- Quick AI actions on selected text, in the box that opens when you
-  select: Improve, Shorten, Formal, Translate, Explain, Check argument.
+- Chat with ChatGPT or Gemini using your own account, no API key needed.
+  Settings → Provider → "Sign in with an account" installs OpenAI's Codex
+  (any ChatGPT account, including free) or Google's Gemini CLI (paid Gemini
+  Code Assist plans only) and signs you in through the browser. Pick one in
+  the chat's model menu and choose a model from its list. It can edit the
+  project like Claude, and its use shows in AI usage.
+- "Add an AI" in the chat's model menu: sign in with an account (Claude,
+  ChatGPT, Gemini) or add an API key. Free options are marked.
+- Settings → Provider lists Claude and your API keys separately, each with
+  its model and a Remove button, plus a clearer "Add an API key" button.
+- When you add an API key, the newest model is picked for you (you can
+  change it in the chat). Gemini models are listed first, then Gemma.
+- Shared project memory: AGENTS.md holds notes that every AI in the project
+  reads. Edit it from Chats → Memory, or ask an AI to remember something.
+  Each AI also sees what the others changed since its last turn. If two
+  chats try to edit the same project at once, the second one waits (or use
+  "Send now").
+- When an AI hits its usage limit, the chat switches to the next one in
+  your list (Settings → AI usage), automatically or after asking. The new AI
+  finishes the interrupted request, knowing what was already changed, and
+  the chat switches back once the limit resets. At 95% the chat offers to
+  switch early.
+- Quick AI actions on selected text: Improve, Shorten, Formal, Translate,
+  Explain, Check argument.
 - "Auto" model for Claude: Haiku for quick actions and small edits, Sonnet
-  for the rest, so light work uses less.
-- After a reply that changed files, "Undo" takes back everything it did; and
-  if it cited keys your bibliography lacks, the chat says which.
-- Each project remembers its assistant: service, model and effort.
-- "Ask two AIs…" in the model menu: the same question to two services, the
-  answers side by side, and carry on with either.
-- A Chats panel (the clock button in the chat) lists the chats open now,
-  with the service each uses, and earlier ones by day, with a search, a new
-  chat button, and delete.
-- Chat with ChatGPT or Gemini using your own account, no API key: Settings →
-  Provider → "Sign in with an account" installs OpenAI's Codex (any ChatGPT
-  account, free ones included) or Google's Gemini CLI (paid Gemini Code
-  Assist plans; Google no longer accepts free accounts there) and signs you
-  in through the browser. Pick it in the chat's provider menu, with its
-  models listed to choose from; it edits the project like Claude does, and
-  its use shows in AI usage. If it stops, the chat says why.
-- Settings → Skills: turn each skill on or off for Claude Code, ChatGPT and
-  Gemini separately, one by one or a group at a time, and move skills into
-  groups of your own. Each assistant's column shows how many tokens its
-  skills add to every request.
-- Under each reply, the tokens it used are shown again (they were hidden
-  when the reply's text was repeated in its summary).
-- Settings → AI usage: requests and tokens today, this week or this month,
-  by service, model and project, and what was billed: only API-key use and
-  Claude's extra usage past your plan count, not requests within a Claude,
-  ChatGPT or Google plan. A daily amount to be warned at. With a Claude plan, the 5-hour and weekly
-  limits as Claude counts them, and when each starts over.
-- When a Claude limit is nearly reached the chat shows how full it is; once
-  it's reached, a button switches the chat to another AI service you've set
-  up (DeepSeek, say), conversation and all.
-- Other AI services get a price per million tokens and a daily warning of
-  their own, so their use shows as cost too.
-- When an AI runs out of usage, the chat carries on with the next one in
-  your order (Settings → AI usage), by itself or after asking: it finishes
-  the request that was cut short, told what's already been changed and
-  what's left, and goes back when the first one's limit resets. Works for
-  Claude, ChatGPT and services with a key; from 95% the chat offers to
-  switch before a task is cut off.
-- Under each reply, the model that answered and how many tokens it read and
-  wrote (and what it cost, when it's billed), so heavy ones stand out.
-- Beside the send button: how heavy the chat is (every message reads at
-  least the conversation so far) and how full your plan's limit is, for
-  Claude and ChatGPT alike. Under each reply, what it actually used of that
-  limit, measured; Settings → AI usage shows ChatGPT's plan beside Claude's
-  and what replies typically use.
-- OpenAI, Gemini, GLM and Ollama now count the tokens they read, not only
-  the ones they write.
-- The chat remembers its model and thinking effort between launches, and
-  starts on Sonnet, which uses far less than Opus.
-- A long chat says so, with a button for a new one: each message re-reads
-  the whole conversation.
-- Claude plans with a to-do list only for bigger tasks, and reads just the
-  part of a file it's changing, so small edits take fewer steps.
+  for everything else.
+- "Undo" after a reply reverts every file it changed. The chat also warns
+  when a reply cites keys missing from your bibliography.
+- Each project remembers its AI, model and effort.
+- "Ask two AIs…" in the model menu: send one question to two AIs, compare
+  the answers side by side, and continue with either.
+- A Chats panel (clock button) lists open chats and past ones by day, with
+  search, new chat and delete.
+- Settings → Skills: turn each skill on or off for Claude, ChatGPT and
+  Gemini, one at a time or by group, and make your own groups. Each column
+  shows how many tokens the enabled skills add to every request.
+- Settings → AI usage: requests and tokens by day, week or month, by
+  service, model and project. Only API-key use and Claude's extra usage are
+  billed; requests covered by a plan are not. Set a daily amount to be
+  warned at. With a Claude or ChatGPT plan, see the 5-hour and weekly limits
+  and when they reset.
+- Next to the send button: how many tokens each message sends and how much
+  of your plan's limit is used. Under each reply: the model, tokens read and
+  written, the share of your limit it used, and the cost when billed.
+- API services can have a price per million tokens and a daily warning.
+- OpenAI, Gemini, GLM and Ollama now count input tokens too.
+- The chat remembers its model and thinking effort, and starts on Sonnet,
+  which uses much less than Opus.
+- Long chats show a notice with a button to start a new one.
+- Claude only makes a to-do list for bigger tasks and reads just the part
+  of a file it's changing, so small edits take fewer steps.
 
 ### Look and feel
 
@@ -228,34 +208,25 @@ tag.
 
 ### Fixed
 
-- Switching a chat between ChatGPT and a service with a key broke it ("No
-  conversation found", the chat emptied): each AI now starts afresh with
-  the conversation handed over, its words only.
-- A service added with a key (Gemini…) is run under its own model name, so
-  it no longer believes it's Claude Sonnet, and Claude Code's side requests
-  no longer use up its quota. Its usage limits show as limits, not as
-  connection errors, and the chat moves on to your next AI.
-- The chat's "Heavy" mark counted a request's total over all its steps;
-  it now weighs what one message reads (Light up to 50k, Heavy from 120k).
-- Asking an assistant to remember something now starts the project memory
-  (AGENTS.md) when there isn't one; the memory window is roomier, with the
-  recent work listed clearly. The Chats panel uses the whole chat area.
-- A reply from a service added with a key (Gemini, DeepSeek…) was labelled
-  as Claude Sonnet and priced at Sonnet's rates, though that service's model
-  answered. It now shows the real model, priced by the service's own rates.
-- With a provider key added, Claude (signed in with a plan) dropped off the
-  chat's list; it's there again. Gemini's model lists, in the chat too,
-  offer only Google's current models, newest first. A model from another
-  provider no longer says it's Claude, and Claude Code's notice about
-  connectors no longer shows in the chat.
-- On Windows, ChatGPT couldn't change the project's files (its sandbox there
-  needs a setup of its own). It now edits them as Claude does, every change
-  still going through review and Undo; and a change that doesn't land is
-  said so in the chat.
-- Adding a Gemini key failed on models Google has retired or that can't
-  chat (live audio, images, speech). The model list now offers only chat
-  models, newest first, and a retired model is swapped for the one Google
-  names.
+- Switching a chat between AIs (for example ChatGPT and Gemini) could fail
+  with "No conversation found" or empty the chat. The new AI now gets the
+  conversation so far.
+- Services added with an API key (Gemini, DeepSeek…) were labelled and
+  priced as Claude Sonnet, and sometimes said they were Claude. They now
+  show their real model and price.
+- Usage limits from API services showed as connection errors. They now show
+  as limits, and the chat moves to your next AI.
+- The "Heavy" label overstated chat size. It now measures what a single
+  message sends (Light under 50k tokens, Heavy from 120k).
+- Asking an AI to remember something now creates AGENTS.md if it's missing.
+  The memory window and the Chats panel have more room.
+- Claude disappeared from the model list after adding an API key.
+- Claude Code's notice about connectors no longer shows in the chat.
+- On Windows, ChatGPT couldn't edit project files. Its changes still go
+  through review and Undo, and the chat says when a change fails.
+- Adding a Gemini key failed on retired models or ones that can't chat
+  (audio, images, speech). Only chat models are listed now, and a retired
+  model is replaced with the one Google suggests.
 - Syncing a Zotero collection with a .bib file deleted the entries that
   weren't in your library, such as a collaborator's, and could change a
   paper's citation key when its details changed in Zotero, breaking the

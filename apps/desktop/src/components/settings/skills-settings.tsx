@@ -214,7 +214,7 @@ export function SkillsSettings() {
         ))}
       </div>
       <p className="px-5 pb-2 text-muted-foreground text-xs">
-        Tokens are what each request carries for the skills that are on.
+        Tokens: what the enabled skills add to each request.
       </p>
 
       <div className="border-border border-t">
@@ -360,7 +360,7 @@ function SkillDetail({
             className="h-7"
             onClick={() => onMove("")}
           >
-            Back to its category
+            Reset category
           </Button>
         )}
       </div>

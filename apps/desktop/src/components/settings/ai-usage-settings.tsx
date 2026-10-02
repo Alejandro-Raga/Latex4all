@@ -331,11 +331,11 @@ function Services() {
               <span className="truncate text-sm">{name}</span>
               {ACCOUNT_PLANS.includes(name) ? (
                 <span className="col-span-3 text-muted-foreground">
-                  Your account's plan: not billed per request
+                  Included in your plan
                 </span>
               ) : name === "Claude" ? (
                 <span className="col-span-2 text-muted-foreground">
-                  Plan, or priced by Claude
+                  Plan, or Claude's price
                 </span>
               ) : (
                 <>
@@ -519,7 +519,7 @@ export function AiUsageSettings() {
         <p className="px-5 pt-2 text-muted-foreground text-xs">
           {summary.planRequests === summary.requests
             ? "All within your plans, so nothing is billed per request."
-            : `${summary.planRequests} of ${summary.requests} within your plans, not billed per request.`}{" "}
+            : `${summary.planRequests} of ${summary.requests} were covered by your plans.`}{" "}
           Billed: API keys and Claude's extra usage.
         </p>
       )}

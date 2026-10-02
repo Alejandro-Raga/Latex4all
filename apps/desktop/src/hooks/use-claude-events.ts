@@ -137,7 +137,7 @@ export function useClaudeEvents() {
           tab?.sessionProviderKey ?? tab?.providerKey ?? null,
         );
         chat._patchTab(tabId, { limitHit: true });
-        message = `${who} is out of usage for now (it answered with a rate or quota limit). Free tiers allow only a few requests a minute or a day: wait a moment, or switch AI.`;
+        message = `${who} hit a usage limit. Free tiers allow only a few requests per minute or day. Wait a moment or switch AI.`;
       }
       lastErrorRef.current.set(tabId, message);
       useClaudeChatStore.getState()._setError(tabId, message);

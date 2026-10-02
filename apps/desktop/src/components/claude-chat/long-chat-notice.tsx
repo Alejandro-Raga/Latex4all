@@ -91,7 +91,8 @@ export function ClaudeLimitNotice() {
     return (
       <div className="mx-3 mb-1 flex flex-wrap items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs">
         <span className="min-w-0 flex-1">
-          {serviceLabel(current)} is out of usage; back {resetsLabel(out, now)}.
+          {serviceLabel(current)} hit its limit. It resets{" "}
+          {resetsLabel(out, now)}.
           {next &&
             autoContinue &&
             ` Your next message goes to ${serviceLabel(next)}.`}
@@ -150,7 +151,7 @@ export function ClaudeLimitNotice() {
           type="button"
           onClick={switchNow}
           className="shrink-0 font-medium text-primary text-xs hover:underline"
-          title="Before it runs out mid-task"
+          title="Switch before the limit is reached"
         >
           Switch to {serviceLabel(next)}
         </button>
@@ -178,7 +179,7 @@ export function HandoffNotice() {
           onClick={() => acceptHandoff(tab.id)}
           className="shrink-0 rounded-md border border-border bg-background px-2 py-0.5 font-medium hover:bg-muted"
         >
-          {h.resume ? `Carry on with ${h.to}` : `Use ${h.to}`}
+          {h.resume ? `Continue with ${h.to}` : `Use ${h.to}`}
         </button>
       </div>
     );

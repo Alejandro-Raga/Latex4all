@@ -214,7 +214,7 @@ const QUICK_ACTIONS = [
   {
     id: "explain",
     label: "Explain",
-    title: "In plain words; changes nothing",
+    title: "In plain words, without editing",
     prompt:
       "Explain the selected text in plain words. Do not change any files.",
     answerOnly: true,
@@ -222,7 +222,8 @@ const QUICK_ACTIONS = [
   {
     id: "argue",
     label: "Check argument",
-    title: "Gaps, unsupported claims, missing citations; changes nothing",
+    title:
+      "Finds gaps, unsupported claims and missing citations, without editing",
     prompt:
       "Check the argument in the selected text: point out gaps, unsupported claims and places that need a citation. Do not change any files.",
     answerOnly: true,

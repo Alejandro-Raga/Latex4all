@@ -158,11 +158,11 @@ describe("carrying on when the AI runs out", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it("says so when no other AI can carry on", () => {
+  it("says so when no other AI can continue", () => {
     useAiUsage.setState({ fallbackOrder: [CLAUDE_CODE_PROVIDER_ID] });
     onLimitHit("t1", "Add a results table");
     const tab = useClaudeChatStore.getState().tabs.find((t) => t.id === "t1");
     expect(tab?.handoff ?? null).toBeNull();
-    expect(tab?.error).toMatch(/no other AI is set to carry on/);
+    expect(tab?.error).toMatch(/no other AI is set up to continue/);
   });
 });

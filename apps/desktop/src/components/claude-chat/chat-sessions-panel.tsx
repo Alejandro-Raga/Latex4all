@@ -176,7 +176,7 @@ export function ChatSessionsPanel() {
               variant="ghost"
               className="h-7 px-2 text-xs"
               onClick={() => useMemoryDialog.getState().show()}
-              title="Notes every assistant here reads"
+              title="Notes shared by all AIs"
             >
               Memory
             </Button>
@@ -255,7 +255,7 @@ export function ChatSessionsPanel() {
                         }}
                         className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-hover:opacity-100"
                         aria-label={`Close ${t.title}`}
-                        title="Close (it stays in the history)"
+                        title="Close (kept in history)"
                       >
                         <XIcon className="size-3.5" />
                       </button>
