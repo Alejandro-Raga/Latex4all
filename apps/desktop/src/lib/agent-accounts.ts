@@ -11,7 +11,16 @@ export interface AgentStatus {
   can_install: boolean;
 }
 
+export interface AgentModel {
+  id: string;
+  name: string;
+  description: string;
+}
+
 interface AgentAccountsState {
+  /** The models each engine offers, once asked. */
+  modelLists: Partial<Record<AgentEngine, AgentModel[]>>;
+  loadModels: (engine: AgentEngine) => Promise<void>;
   status: Partial<Record<AgentEngine, AgentStatus>>;
   /** Installing or signing in right now. */
   busy: Partial<Record<AgentEngine, "install" | "login" | "logout">>;
@@ -35,6 +44,18 @@ export const useAgentAccounts = create<AgentAccountsState>()(
       return {
         status: {},
         busy: {},
+        modelLists: {},
+        loadModels: async (engine) => {
+          if (get().modelLists[engine]?.length) return;
+          try {
+            const list = await invoke<AgentModel[]>("agent_models", {
+              engine,
+            });
+            set((s) => ({ modelLists: { ...s.modelLists, [engine]: list } }));
+          } catch {
+            // Not installed yet, or offline: the menu offers the default.
+          }
+        },
         models: {},
         refresh: async (engine) => {
           try {

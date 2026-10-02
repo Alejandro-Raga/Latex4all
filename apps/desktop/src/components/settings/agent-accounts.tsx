@@ -11,8 +11,9 @@ import {
 import { useClaudeChatStore } from "@/stores/claude-chat-store";
 
 const ABOUT: Record<AgentEngine, string> = {
-  codex: "With a ChatGPT plan (Plus, Pro, Business), through OpenAI's Codex.",
-  gemini: "Free with a Google account, more with a Google AI plan.",
+  codex: "Your ChatGPT account, free or paid (paid plans get more use).",
+  gemini:
+    "Paid Gemini Code Assist plans only: Google no longer accepts free accounts here. For free use, add a Gemini API key above.",
 };
 
 function EngineRow({ engine }: { engine: AgentEngine }) {

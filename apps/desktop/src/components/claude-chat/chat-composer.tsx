@@ -10,11 +10,16 @@ import {
   useState,
 } from "react";
 import {
+  type AgentEngine,
   ENGINE_LABELS,
   engineOfProvider,
   providerOfEngine,
 } from "@/lib/agent-events";
-import { readyEngines, useAgentAccounts } from "@/lib/agent-accounts";
+import {
+  type AgentModel,
+  readyEngines,
+  useAgentAccounts,
+} from "@/lib/agent-accounts";
 import { createPortal } from "react-dom";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
@@ -217,6 +222,63 @@ function claudeModelDisplayName(model: string) {
   }
 }
 
+/** The models ChatGPT or Gemini offer, and the service's own default. */
+function EngineModels({
+  engine,
+  models,
+  selected,
+  onSelect,
+}: {
+  engine: AgentEngine;
+  models: AgentModel[];
+  selected: string;
+  onSelect: (id: string) => void;
+}) {
+  const options = [
+    {
+      id: "",
+      name: "Default",
+      description:
+        engine === "codex"
+          ? "OpenAI's choice for your plan"
+          : "Google's choice",
+    },
+    ...models,
+  ];
+  return (
+    <>
+      {options.map((m) => (
+        <button
+          key={m.id || "default"}
+          type="button"
+          className={cn(
+            "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors",
+            selected === m.id
+              ? "bg-accent text-accent-foreground"
+              : "hover:bg-muted",
+          )}
+          onClick={() => onSelect(m.id)}
+        >
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-xs">{m.name}</div>
+            {m.description && (
+              <div className="truncate text-muted-foreground text-xs">
+                {m.description}
+              </div>
+            )}
+          </div>
+          {selected === m.id && <CheckIcon className="size-3 shrink-0" />}
+        </button>
+      ))}
+      {models.length === 0 && (
+        <div className="px-3 py-1.5 text-muted-foreground text-xs">
+          Loading models…
+        </div>
+      )}
+    </>
+  );
+}
+
 function EffortControls({
   effortLevel,
   setEffortLevel,
@@ -324,12 +386,18 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
   const agentStatus = useAgentAccounts((s) => s.status);
   const agentModels = useAgentAccounts((s) => s.models);
   const setAgentModel = useAgentAccounts((s) => s.setModel);
+  const agentModelLists = useAgentAccounts((s) => s.modelLists);
   const engines = readyEngines(agentStatus);
   useEffect(() => {
     const { refresh } = useAgentAccounts.getState();
     void refresh("codex");
     void refresh("gemini");
   }, []);
+  useEffect(() => {
+    if (selectedEngine) {
+      void useAgentAccounts.getState().loadModels(selectedEngine);
+    }
+  }, [selectedEngine]);
   const claudeProviderActive =
     showClaudeProvider && !selectedProviderCredential && !selectedEngine;
   const providerSelectionReady =
@@ -1549,22 +1617,12 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                     Model
                   </div>
                   {selectedEngine ? (
-                    <div className="space-y-1 px-2 py-1">
-                      <input
-                        value={agentModels[selectedEngine] ?? ""}
-                        onChange={(e) =>
-                          setAgentModel(selectedEngine, e.target.value)
-                        }
-                        placeholder="Default model"
-                        aria-label="Model"
-                        className="h-7 w-full rounded-md border border-border bg-background px-2 text-xs"
-                      />
-                      <div className="px-1 text-muted-foreground text-xs">
-                        {selectedEngine === "codex"
-                          ? "e.g. gpt-5, or leave empty"
-                          : "e.g. gemini-2.5-pro, or leave empty"}
-                      </div>
-                    </div>
+                    <EngineModels
+                      engine={selectedEngine}
+                      models={agentModelLists[selectedEngine] ?? []}
+                      selected={agentModels[selectedEngine] ?? ""}
+                      onSelect={(id) => setAgentModel(selectedEngine, id)}
+                    />
                   ) : claudeProviderActive ? (
                     claudeModelOptions.map((m) => (
                       <button

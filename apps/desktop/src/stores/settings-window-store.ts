@@ -3,6 +3,7 @@ import { create } from "zustand";
 export type SettingsSection =
   | "provider"
   | "ai-usage"
+  | "skills"
   | "appearance"
   | "editor"
   | "pdf"

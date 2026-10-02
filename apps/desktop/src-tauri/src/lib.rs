@@ -13,6 +13,7 @@ mod languagetool;
 mod latex;
 mod projects;
 mod skills;
+mod skills_manager;
 mod slash_commands;
 mod spellcheck;
 mod synctex;
@@ -649,7 +650,11 @@ pub fn run() {
             latex::synctex_edit,
             latex::synctex_view,
             latex::detect_texlive,
+            skills_manager::skills_library,
+            skills_manager::skills_set,
+            skills_manager::skills_set_group,
             agents::agent_status,
+            agents::agent_models,
             agents::agent_install,
             agents::agent_login,
             agents::agent_logout,

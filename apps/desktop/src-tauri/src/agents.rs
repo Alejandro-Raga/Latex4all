@@ -292,123 +292,100 @@ pub async fn agent_logout(engine: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Latex4All's mark on a skill folder it copied (Windows, where linking
-/// needs admin rights), so it knows it may refresh or remove it.
-const COPY_MARK: &str = ".latex4all-skill";
-
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-fn copy_dir(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(to)?;
-    for entry in std::fs::read_dir(from)? {
-        let entry = entry?;
-        let target = to.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            copy_dir(&entry.path(), &target)?;
-        } else {
-            std::fs::copy(entry.path(), target)?;
-        }
-    }
-    Ok(())
-}
-
-#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
-fn modified(path: &std::path::Path) -> Option<std::time::SystemTime> {
-    std::fs::metadata(path).and_then(|m| m.modified()).ok()
-}
-
-/// Makes the skills in `source` (folders with a SKILL.md) available in
-/// `target` too: linked where possible, copied otherwise. Skills gone from
-/// `source` go from `target`; folders that aren't ours are left alone.
-fn mirror_skills(source: &std::path::Path, target: &std::path::Path) {
-    let skills: Vec<(std::ffi::OsString, PathBuf)> = std::fs::read_dir(source)
-        .map(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .map(|e| (e.file_name(), e.path()))
-                .filter(|(_, path)| path.join("SKILL.md").is_file())
-                .collect()
-        })
-        .unwrap_or_default();
-
-    // Remove what we made for skills that are no longer there.
-    if let Ok(entries) = std::fs::read_dir(target) {
-        for entry in entries.filter_map(|e| e.ok()) {
-            let path = entry.path();
-            let ours_link = std::fs::read_link(&path)
-                .map(|dest| dest.starts_with(source))
-                .unwrap_or(false);
-            let ours_copy = path.join(COPY_MARK).exists();
-            let wanted = skills.iter().any(|(name, _)| *name == entry.file_name());
-            if (ours_link || ours_copy) && !wanted {
-                if ours_link {
-                    let _ = std::fs::remove_file(&path);
-                } else {
-                    let _ = std::fs::remove_dir_all(&path);
-                }
-            }
-        }
-    }
-    if skills.is_empty() {
-        return;
-    }
-    if std::fs::create_dir_all(target).is_err() {
-        return;
-    }
-    for (name, path) in skills {
-        let dest = target.join(&name);
-        let exists = dest.exists() || std::fs::symlink_metadata(&dest).is_ok();
-        #[cfg(not(target_os = "windows"))]
-        {
-            if !exists {
-                let _ = std::os::unix::fs::symlink(&path, &dest);
-            }
-        }
-        #[cfg(target_os = "windows")]
-        {
-            let ours = dest.join(COPY_MARK).exists();
-            if exists && !ours {
-                continue;
-            }
-            let stale =
-                !exists || modified(&path.join("SKILL.md")) != modified(&dest.join("SKILL.md"));
-            if stale {
-                let _ = std::fs::remove_dir_all(&dest);
-                if copy_dir(&path, &dest).is_ok() {
-                    let _ = std::fs::write(dest.join(COPY_MARK), "");
-                    // Same time as the source, to tell when it changes.
-                    if let (Some(time), Ok(file)) = (
-                        modified(&path.join("SKILL.md")),
-                        std::fs::File::options()
-                            .write(true)
-                            .open(dest.join("SKILL.md")),
-                    ) {
-                        let _ = file.set_modified(time);
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Claude's skills, for Codex and Gemini: yours (~/.claude/skills) and the
-/// project's (.claude/skills), where each of them looks for skills.
+/// Claude's skills, for Codex and Gemini: yours, as set for each in
+/// Settings → Skills (see skills_manager.rs), and the project's
+/// (.claude/skills), where each of them looks for skills.
 fn share_claude_skills(engine: Engine, project_path: &str) {
-    if let Some(home) = dirs::home_dir() {
-        let own = home.join(".claude").join("skills");
-        let target = match engine {
-            Engine::Codex => home.join(".codex").join("skills"),
-            Engine::Gemini => home.join(".gemini").join("skills"),
-        };
-        mirror_skills(&own, &target);
-    }
+    crate::skills_manager::apply_engine(engine.binary());
     let project = PathBuf::from(project_path);
     let source = project.join(".claude").join("skills");
     let target = match engine {
         Engine::Codex => project.join(".agents").join("skills"),
         Engine::Gemini => project.join(".gemini").join("skills"),
     };
-    if source.is_dir() || target.is_dir() {
-        mirror_skills(&source, &target);
+    if !source.is_dir() && !target.is_dir() {
+        return;
+    }
+    let wanted: Vec<(std::ffi::OsString, PathBuf)> = std::fs::read_dir(&source)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().join("SKILL.md").is_file())
+                .map(|e| (e.file_name(), e.path()))
+                .collect()
+        })
+        .unwrap_or_default();
+    crate::skills_manager::mirror_skill_list(&wanted, &[source], &target);
+}
+
+#[derive(Serialize)]
+pub struct AgentModel {
+    id: String,
+    name: String,
+    description: String,
+}
+
+/// The models one can pick: Codex's own catalog (it changes with OpenAI's
+/// line-up), and for Gemini the CLI's aliases, which follow Google's.
+#[tauri::command]
+pub async fn agent_models(engine: String) -> Result<Vec<AgentModel>, String> {
+    let engine = Engine::parse(&engine)?;
+    let model = |id: &str, name: &str, description: &str| AgentModel {
+        id: id.to_string(),
+        name: name.to_string(),
+        description: description.to_string(),
+    };
+    match engine {
+        Engine::Gemini => Ok(vec![
+            model("auto", "Auto", "Picks Pro or Flash for each request"),
+            model("pro", "Pro", "Most capable"),
+            model("flash", "Flash", "Fast, uses less"),
+            model("flash-lite", "Flash Lite", "Fastest, lightest"),
+        ]),
+        Engine::Codex => {
+            let program = find_binary(engine).ok_or("Not installed.")?;
+            let mut cmd = create_command(
+                &program,
+                vec!["debug".into(), "models".into()],
+                &home_string(),
+                None,
+            );
+            cmd.stdin(std::process::Stdio::null());
+            let output = tokio::time::timeout(Duration::from_secs(30), cmd.output())
+                .await
+                .map_err(|_| "Codex took too long to list its models.".to_string())?
+                .map_err(|e| e.to_string())?;
+            let catalog: serde_json::Value =
+                serde_json::from_slice(&output.stdout).map_err(|e| e.to_string())?;
+            let models = catalog
+                .get("models")
+                .and_then(|m| m.as_array())
+                .cloned()
+                .unwrap_or_default();
+            Ok(models
+                .iter()
+                .filter(|m| m.get("visibility").and_then(|v| v.as_str()) == Some("list"))
+                .filter_map(|m| {
+                    let id = m.get("slug")?.as_str()?;
+                    let text = |key: &str| {
+                        m.get(key)
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default()
+                            .to_string()
+                    };
+                    let name = text("display_name");
+                    Some(AgentModel {
+                        id: id.to_string(),
+                        name: if name.is_empty() {
+                            id.to_string()
+                        } else {
+                            name
+                        },
+                        description: text("description"),
+                    })
+                })
+                .collect())
+        }
     }
 }
 
@@ -523,32 +500,6 @@ mod tests {
         assert_eq!(args[resume + 1], "T1");
         assert_eq!(args.last().unwrap(), "-");
         assert!(args.contains(&"model_reasoning_effort=\"low\"".to_string()));
-    }
-
-    #[test]
-    fn mirrors_skills_and_forgets_removed_ones() {
-        let root = std::env::temp_dir().join(format!("l4a-skills-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&root);
-        let source = root.join("claude");
-        let target = root.join("codex");
-        std::fs::create_dir_all(source.join("stats")).unwrap();
-        std::fs::write(
-            source.join("stats").join("SKILL.md"),
-            "---\nname: stats\n---",
-        )
-        .unwrap();
-        std::fs::create_dir_all(source.join("notes")).unwrap(); // no SKILL.md
-        std::fs::create_dir_all(target.join("mine")).unwrap(); // the user's own
-
-        mirror_skills(&source, &target);
-        assert!(target.join("stats").join("SKILL.md").exists());
-        assert!(!target.join("notes").exists());
-
-        std::fs::remove_dir_all(source.join("stats")).unwrap();
-        mirror_skills(&source, &target);
-        assert!(std::fs::symlink_metadata(target.join("stats")).is_err());
-        assert!(target.join("mine").exists());
-        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

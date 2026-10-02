@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { newTranslateState, translateAgentLine } from "./agent-events";
+import {
+  engineErrorMessage,
+  isEngineErrorLine,
+  newTranslateState,
+  translateAgentLine,
+} from "./agent-events";
 
 const run = (engine: "codex" | "gemini", events: object[]) => {
   const st = newTranslateState();
@@ -186,5 +191,22 @@ describe("Gemini events as chat messages", () => {
         newTranslateState(),
       ),
     ).toEqual([]);
+  });
+});
+
+describe("engine errors", () => {
+  it("explains Google's refusal of free Gemini CLI sign-ins", () => {
+    expect(
+      engineErrorMessage(
+        "gemini",
+        "An unexpected critical error occurred:IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals.",
+      ),
+    ).toMatch(/Gemini API key/);
+  });
+
+  it("picks error lines, not chatter", () => {
+    expect(isEngineErrorLine("YOLO mode is enabled.")).toBe(false);
+    expect(isEngineErrorLine("    at throwIneligible (x.js:1)")).toBe(false);
+    expect(isEngineErrorLine("Error authenticating: boom")).toBe(true);
   });
 });

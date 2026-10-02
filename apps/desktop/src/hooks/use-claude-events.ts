@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import {
+  engineErrorMessage,
   engineOfProviderKey,
+  isEngineErrorLine,
   newTranslateState,
   type TranslateState,
   translateAgentLine,
@@ -81,6 +83,8 @@ export function useClaudeEvents() {
   const msgCountRef = useRef(new Map<string, number>());
   // Per request (tab and start time), for ChatGPT and Gemini translation.
   const translateStatesRef = useRef(new Map<string, TranslateState>());
+  // ChatGPT's and Gemini's last error line, for when they stop silently.
+  const engineErrorRef = useRef(new Map<string, string>());
   const streamStartTimeRef = useRef(new Map<string, number>());
   const lastMsgTimeRef = useRef(new Map<string, number>());
 
@@ -406,7 +410,14 @@ export function useClaudeEvents() {
         return;
       }
 
-      if (
+      const engine = engineOfProviderKey(
+        tab.sessionProviderKey ?? tab.providerKey,
+      );
+      const engineError = engineErrorRef.current.get(tabId) ?? null;
+      engineErrorRef.current.delete(tabId);
+      if (engine && !success && !tab.error && !chatStore._cancelledByUser) {
+        chatStore._setError(tabId, engineErrorMessage(engine, engineError));
+      } else if (
         !success &&
         !tab.error &&
         !lastErrorRef.current.get(tabId) &&
@@ -587,6 +598,21 @@ export function useClaudeEvents() {
           if (!cancelled) {
             const { tab_id: tabId, data: payload } = event.payload;
             log.warn(`[${tabId}] stderr: ${payload}`);
+            const errTab = useClaudeChatStore
+              .getState()
+              .tabs.find((t) => t.id === tabId);
+            // ChatGPT and Gemini: only real errors, kept for when they stop;
+            // their other chatter (colour support, YOLO mode…) isn't news.
+            if (
+              engineOfProviderKey(
+                errTab?.sessionProviderKey ?? errTab?.providerKey,
+              )
+            ) {
+              if (isEngineErrorLine(payload)) {
+                engineErrorRef.current.set(tabId, payload.trim());
+              }
+              return;
+            }
             if (
               payload.includes("Error") ||
               payload.includes("error") ||

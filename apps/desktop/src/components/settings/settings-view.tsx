@@ -8,6 +8,7 @@ import {
   FileTextIcon,
   FolderOpenIcon,
   GaugeIcon,
+  SparklesIcon,
   KeyRoundIcon,
   LanguagesIcon,
   NotebookTextIcon,
@@ -46,6 +47,7 @@ import { clearPdfCache, pdfCacheSize } from "@/lib/zotero-pdf-cache";
 import { NoteTypesSettings } from "./note-types-settings";
 import { AiUsageSettings } from "./ai-usage-settings";
 import { AgentAccounts } from "./agent-accounts";
+import { SkillsSettings } from "./skills-settings";
 import { startOfToday, summarize, useAiUsage } from "@/lib/ai-usage";
 import { unlinkProject } from "@/lib/vault/note-changes";
 import {
@@ -521,6 +523,14 @@ export function SettingsView({
       meta: aiToday,
       icon: GaugeIcon,
       body: <AiUsageSettings />,
+      flush: true,
+    },
+    {
+      id: "skills",
+      label: "Skills",
+      meta: "Per assistant",
+      icon: SparklesIcon,
+      body: <SkillsSettings />,
       flush: true,
     },
     {

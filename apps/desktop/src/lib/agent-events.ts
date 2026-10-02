@@ -425,3 +425,35 @@ export function translateAgentLine(
     ? translateCodex(ev as CodexEvent, st)
     : translateGemini(ev as GeminiEvent, st);
 }
+
+/** Whether a line on an engine's error output says something went wrong. */
+export function isEngineErrorLine(line: string): boolean {
+  const l = line.trim();
+  if (!l || /^(YOLO mode|Ripgrep|Loaded cached|Warning|at )/.test(l)) {
+    return false;
+  }
+  return /error|failed|not supported|unauthori[sz]ed|limit|denied|invalid/i.test(
+    l,
+  );
+}
+
+/** What to tell the user when ChatGPT or Gemini stops without answering. */
+export function engineErrorMessage(
+  engine: AgentEngine,
+  lastError: string | null,
+): string {
+  const label = ENGINE_LABELS[engine];
+  const raw = lastError?.trim() ?? "";
+  if (/IneligibleTier|no longer supported for Gemini Code Assist/i.test(raw)) {
+    return "Google no longer lets Gemini CLI sign in with a free personal account. Use a Gemini API key instead (free from Google AI Studio): Settings → Provider → Gemini.";
+  }
+  if (/not logged in|login|auth|unauthori[sz]ed|401/i.test(raw)) {
+    return `${label} isn't signed in. Sign in again in Settings → Provider.`;
+  }
+  if (/usage limit|rate limit|quota|429/i.test(raw)) {
+    return `${label}'s usage limit is reached. ${raw}`;
+  }
+  return raw
+    ? `${label} stopped: ${raw.replace(/^.*?Error:\s*/, "")}`
+    : `${label} stopped without answering.`;
+}

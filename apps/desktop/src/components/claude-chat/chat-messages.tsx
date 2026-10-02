@@ -154,26 +154,30 @@ export const ChatMessages: FC = () => {
       }
     }
 
-    return messages.filter((msg) => {
-      if (msg.type === "system" && msg.subtype === "init") return false;
+    return messages.flatMap((msg) => {
+      const keep = (m: ClaudeStreamMessage) => [m];
+      if (msg.type === "system" && msg.subtype === "init") return [];
       if (
         msg.type !== "user" &&
         msg.type !== "assistant" &&
         msg.type !== "result"
       )
-        return false;
+        return [];
       if (msg.type === "user" && msg.message?.content) {
         if (Array.isArray(msg.message.content)) {
           const hasOnlyToolResults = msg.message.content.every(
             (b: any) => b.type === "tool_result",
           );
-          if (hasOnlyToolResults) return false;
+          if (hasOnlyToolResults) return [];
         }
       }
       if (msg.type === "result" && msg.result) {
-        if (assistantTexts.has(msg.result.trim())) return false;
+        // Its text repeats the reply: only what it took (the usage line).
+        if (assistantTexts.has(msg.result.trim())) {
+          return keep({ ...msg, result: "" });
+        }
       }
-      return true;
+      return keep(msg);
     });
   }, [messages]);
 
@@ -528,7 +532,7 @@ const ResultMessage: FC<{ message: ClaudeStreamMessage }> = ({ message }) => {
   const isError = message.is_error || message.subtype === "error";
   const resultText = message.result;
 
-  if (!resultText) return null;
+  if (!resultText) return <ReplyUsage message={message} />;
 
   return (
     <div className="fade-in slide-in-from-bottom-1 relative mx-auto w-full animate-in py-3 duration-150">
