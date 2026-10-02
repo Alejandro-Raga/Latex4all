@@ -555,10 +555,12 @@ describe("a provider's model through Claude Code", () => {
       modelUsage: { "claude-sonnet-5-5": {} },
       total_cost_usd: 0.038,
     } as any);
-    const msg = useClaudeChatStore.getState().tabs[0].messages.at(-1) as any;
+    const msgs = useClaudeChatStore.getState().tabs[0].messages;
+    const msg = msgs[msgs.length - 1] as any;
     expect(Object.keys(msg.modelUsage)).toEqual(["models/gemini-3.8-flash"]);
     expect(msg.total_cost_usd).toBeUndefined();
-    const entry = useAiUsage.getState().entries.at(-1);
+    const all = useAiUsage.getState().entries;
+    const entry = all[all.length - 1];
     expect(entry?.model).toBe("models/gemini-3.8-flash");
     expect(entry?.costUsd).toBeNull();
   });
