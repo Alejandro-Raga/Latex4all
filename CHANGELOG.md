@@ -162,6 +162,8 @@ tag.
 - "Undo" after a reply reverts every file it changed. The chat also warns
   when a reply cites keys missing from your bibliography.
 - Each project remembers its AI, model and effort.
+- Rename a chat: double-click its tab, or the pencil in the Chats panel
+  (for earlier chats too). The name is kept with the chat.
 - Hover a model in the model menu for a few words on what it's for (OpusPlan:
   Opus plans the work, Sonnet does it).
 - "Ask two AIs…" in the model menu: send one question to two AIs, compare
@@ -181,9 +183,9 @@ tag.
   it resets (the week joins it from 70%). It refreshes by itself when it's
   old, and on a click; Settings → AI usage has a refresh button too. The
   refresh asks Claude Code, without using any of your limit.
-- Next to the send button: how many tokens each message sends and how much
-  of your plan's limit is used. Under each reply: the model, tokens read and
-  written, the share of your limit it used, and the cost when billed.
+- Under each reply: the model, how many steps it took (each one re-reads the
+  chat, so steps decide most of the cost), tokens read and written, the
+  share of your limit it used, and the cost when billed.
 - API services can have a price per million tokens and a daily warning.
 - Gemini API keys start on Flash-Lite, which allows far more free requests
   a day than Flash (about 500 against 20). Next to the send button, "Today
@@ -245,8 +247,6 @@ tag.
   2 minutes mid-answer, the chat now says it's busy.
 - Usage limits from API services showed as connection errors. They now show
   as limits, and the chat moves to your next AI.
-- The "Heavy" label overstated chat size. It now measures what a single
-  message sends (Light under 50k tokens, Heavy from 120k).
 - Asking an AI to remember something now creates AGENTS.md if it's missing.
   The memory window and the Chats panel have more room.
 - Claude disappeared from the model list after adding an API key.

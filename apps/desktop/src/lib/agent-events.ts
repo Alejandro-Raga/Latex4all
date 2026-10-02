@@ -107,7 +107,6 @@ const result = (
     subtype: error ? "error" : "success",
     is_error: Boolean(error),
     result: error ?? st.lastText,
-    num_turns: 1,
     ...(usage
       ? {
           usage: {

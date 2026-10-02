@@ -2140,7 +2140,7 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
           </div>
 
           <div className="flex shrink-0 items-center gap-1">
-            <RequestWeight input={input} />
+            <RequestWeight />
             <TooltipIconButton
               tooltip={
                 isStreaming && !hasInput

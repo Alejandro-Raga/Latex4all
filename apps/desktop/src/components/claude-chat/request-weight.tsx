@@ -5,7 +5,6 @@ import {
   codexLimitsFrom,
   copilotQuotaFrom,
   copilotUsedPercent,
-  lastCallContext,
   useAiUsage,
   windowName,
 } from "@/lib/ai-usage";
@@ -22,34 +21,6 @@ import {
   useClaudeChatStore,
 } from "@/stores/claude-chat-store";
 
-type Weight = "light" | "medium" | "heavy";
-
-/**
- * A chat's weight: what every message in it reads at the very least (the
- * conversation so far). Real requests cost more, by how many steps they
- * take, which can't be known beforehand; this part is certain.
- */
-export function chatWeight(tokens: number): Weight {
-  // Claude Code's instructions and tools alone are ~20k: that's light.
-  return tokens < 50_000 ? "light" : tokens < 120_000 ? "medium" : "heavy";
-}
-
-const WEIGHT: Record<Weight, { label: string; className: string }> = {
-  light: {
-    label: "Light",
-    className: "bg-green-500/15 text-green-700 dark:text-green-400",
-  },
-  medium: {
-    label: "Medium",
-    className: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  },
-  heavy: {
-    label: "Heavy",
-    className: "bg-red-500/15 text-red-700 dark:text-red-400",
-  },
-};
-
-const k = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 /** "5h" → "5-hour limit", "week" → "Weekly limit". */
 const limitName = (name: string) =>
   name === "5h"
@@ -99,11 +70,11 @@ interface Window {
 }
 
 /**
- * Beside the send button, what's known before sending: how heavy the chat
- * is, and how full the plan's window is (Claude, ChatGPT). What each reply
- * used is measured after it, under the reply.
+ * Beside the send button: how full the plan's limits are (Claude's 5 hours,
+ * ChatGPT's and Copilot's windows, a free Gemini model's day). What each
+ * reply used is measured after it, under the reply.
  */
-export function RequestWeight({ input }: { input: string }) {
+export function RequestWeight() {
   const tab = useClaudeChatStore((s) =>
     s.tabs.find((t) => t.id === s.activeTabId),
   );
@@ -154,13 +125,9 @@ export function RequestWeight({ input }: { input: string }) {
     }
   }, [engine]);
 
-  const { tokens, measured } = useMemo(() => {
-    const messages = tab?.messages ?? [];
-    const results = messages.filter((m) => m.type === "result");
-    // One call's size; a request's total adds up all its steps.
-    const last = lastCallContext(messages);
+  const { measured } = useMemo(() => {
+    const results = (tab?.messages ?? []).filter((m) => m.type === "result");
     return {
-      tokens: last.context + last.output + Math.round(input.length / 4),
       measured: results
         .map((m) => ({ delta: m.windowDelta, window: m.window }))
         .filter(
@@ -168,7 +135,7 @@ export function RequestWeight({ input }: { input: string }) {
             typeof m.delta === "number",
         ),
     };
-  }, [tab?.messages, input]);
+  }, [tab?.messages]);
 
   const now = Date.now();
   const windows: Window[] = [];
@@ -214,9 +181,7 @@ export function RequestWeight({ input }: { input: string }) {
 
   // The weight is about the next message: not while one is running. The
   // limits stay in view throughout.
-  const showWeight = !tab?.isStreaming && (tokens > 0 || input.trim() !== "");
-  if (!tab || (!showWeight && !windows.length && !daily)) return null;
-  const weight = WEIGHT[chatWeight(tokens)];
+  if (!tab || (!windows.length && !daily)) return null;
   // The first window always (Claude's 5 hours), the others once filling up.
   const shown = windows.filter((w, i) => i === 0 || w.used >= 70);
   const chatTotal = measured.reduce((sum, m) => sum + m.delta, 0);
@@ -234,24 +199,12 @@ export function RequestWeight({ input }: { input: string }) {
     ]
       .filter(Boolean)
       .join(" ");
-  const weightHint = `Each message sends about ${k(tokens)} tokens.`;
   const dailyHint = daily
     ? `${today} of ${daily.known ? "" : "about "}${daily.limit} free requests used today. Each step of a reply counts as one. Resets ${resetAt(nextPacificDay(now), now)}.`
     : "";
 
   return (
     <span className="flex items-center gap-1.5 whitespace-nowrap text-[11px] tabular-nums">
-      {showWeight && (
-        <span
-          className={cn(
-            "@[26rem]/bar:inline hidden rounded-full px-2 py-0.5",
-            weight.className,
-          )}
-          title={weightHint}
-        >
-          {weight.label} · {k(tokens)}/msg
-        </span>
-      )}
       {shown.map((w, i) => (
         <button
           type="button"

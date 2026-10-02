@@ -1,8 +1,9 @@
-import { useCallback, useRef, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { HistoryIcon, PlusIcon, XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useClaudeChatStore, type TabState } from "@/stores/claude-chat-store";
 import { useChatSessionsPanel } from "./chat-sessions-panel";
+import { RenameInput } from "./rename-input";
 
 export function ChatTabBar() {
   const tabs = useClaudeChatStore((s) => s.tabs);
@@ -136,11 +137,14 @@ function TabButton({
   onClick: () => void;
   onClose: (e: React.MouseEvent) => void;
 }) {
+  const [renaming, setRenaming] = useState(false);
   return (
     <button
       type="button"
       data-tab-id={tab.id}
       onClick={onClick}
+      onDoubleClick={() => setRenaming(true)}
+      title={renaming ? undefined : "Double-click to rename"}
       className={cn(
         "group relative flex min-w-0 max-w-[160px] items-center gap-1.5 border-b-2 px-3 py-1.5 text-xs transition-colors",
         isActive
@@ -155,7 +159,19 @@ function TabButton({
           <span className="relative inline-flex size-2 rounded-full bg-primary" />
         </span>
       )}
-      <span className="truncate">{tab.title}</span>
+      {renaming ? (
+        <RenameInput
+          value={tab.title}
+          className="w-28"
+          onDone={(name) => {
+            setRenaming(false);
+            if (name !== null)
+              useClaudeChatStore.getState().renameTab(tab.id, name);
+          }}
+        />
+      ) : (
+        <span className="truncate">{tab.title}</span>
+      )}
       {/* Close button: not on a lone empty chat, nor while it's answering */}
       {!isLastTab && !isStreaming && (
         <span

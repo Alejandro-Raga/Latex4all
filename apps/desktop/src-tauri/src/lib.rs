@@ -656,6 +656,7 @@ pub fn run() {
             agents::agent_status,
             agents::codex_rate_limits,
             claude::claude_usage,
+            claude::rename_claude_session,
             agents::copilot_quota,
             agents::copilot_run_usage,
             agents::agent_models,

@@ -568,9 +568,12 @@ const ReplyUsage: FC<{ message: ClaudeStreamMessage }> = ({ message }) => {
   return (
     <div
       className="mt-1 px-1 text-right text-[11px] text-muted-foreground/70 tabular-nums"
-      title="Tokens this reply read (including the conversation so far) and wrote"
+      title="Steps: each time the AI read, edited or answered. Each one re-reads the whole chat, so steps decide most of what a reply uses."
     >
       {model && `${shortModel(model)} · `}
+      {typeof r.num_turns === "number" &&
+        r.num_turns > 0 &&
+        `${r.num_turns} ${r.num_turns === 1 ? "step" : "steps"} · `}
       {k(read)} read · {k(e.output)} written
       {typeof message.windowDelta === "number" &&
         ` · ${windowShare(message.windowDelta)}% of ${message.window ?? "5h"}`}

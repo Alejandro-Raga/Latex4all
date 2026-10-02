@@ -4059,6 +4059,35 @@ pub async fn generate_claude_session_title(
     Ok(Some(title))
 }
 
+/// Names a chat as the user chose: kept with it, so its history shows the
+/// name and no title is generated over it.
+#[tauri::command]
+pub async fn rename_claude_session(
+    project_path: String,
+    session_id: String,
+    title: String,
+) -> Result<(), String> {
+    if !is_valid_session_id(&session_id) {
+        return Err("Invalid session id".to_string());
+    }
+    let sessions_dir = get_sessions_dir(&project_path)?;
+    let session_path = sessions_dir.join(format!("{}.jsonl", session_id));
+    // Not one of Claude Code's (ChatGPT, Gemini…): the open chat has it.
+    if !session_path.exists() {
+        return Ok(());
+    }
+    let modified = std::fs::metadata(&session_path)
+        .ok()
+        .and_then(|m| m.modified().ok())
+        .map(|t| {
+            t.duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64
+        })
+        .unwrap_or(0);
+    write_session_title_cache(&session_path, modified, &title)
+}
+
 /// Load the full JSONL history for a specific session.
 #[tauri::command]
 pub async fn load_session_history(

@@ -138,6 +138,8 @@ export interface QueuedGuidance {
 export interface TabState {
   id: string;
   title: string;
+  /** Named by the user: no generated title replaces it. */
+  titleLocked?: boolean;
   projectPath: string | null;
   sessionId: string | null;
   /** Provider currently selected in the tab UI. */
@@ -741,6 +743,8 @@ interface ClaudeChatState {
   _appendMessage: (tabId: string, msg: ClaudeStreamMessage) => void;
   _setSessionId: (tabId: string, id: string) => void;
   _setSessionTitle: (sessionId: string, title: string) => void;
+  /** The user's name for a chat, kept with its history. */
+  renameTab: (tabId: string, title: string) => void;
   _setStreaming: (tabId: string, streaming: boolean) => void;
   /** A waiting request: sent now anyway, or given back to the composer. */
   sendWaitingNow: (tabId: string) => void;
@@ -2053,13 +2057,32 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
     set((state) => applyTabUpdate(state, tabId, { sessionId: id }));
   },
 
+  renameTab: (tabId, title) => {
+    const clean = title.trim().replace(/\s+/g, " ").slice(0, 72);
+    const tab = get().tabs.find((t) => t.id === tabId);
+    if (!tab || !clean || clean === tab.title) return;
+    set((state) => ({
+      tabs: state.tabs.map((t) =>
+        t.id === tabId ? { ...t, title: clean, titleLocked: true } : t,
+      ),
+    }));
+    if (tab.sessionId && tab.projectPath) {
+      void invoke("rename_claude_session", {
+        projectPath: tab.projectPath,
+        sessionId: tab.sessionId,
+        title: clean,
+      }).catch(() => {});
+    }
+  },
+
   _setSessionTitle: (sessionId: string, title: string) => {
     const cleanTitle = title.trim();
     if (!cleanTitle) return;
     set((state) => ({
       tabs: state.tabs.map((tab) =>
         tab.sessionId === sessionId &&
-        tab.projectPath === state.activeProjectPath
+        tab.projectPath === state.activeProjectPath &&
+        !tab.titleLocked
           ? { ...tab, title: cleanTitle }
           : tab,
       ),

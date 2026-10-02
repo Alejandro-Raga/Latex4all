@@ -44,7 +44,7 @@ export function LongChatNotice() {
   return (
     <div className="mx-3 mb-1 flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-muted-foreground text-xs">
       <span className="min-w-0 flex-1">
-        Long chat: each message re-reads {Math.round(context / 1000)}k tokens.
+        Long chat: every step re-reads {Math.round(context / 1000)}k tokens.
       </span>
       <button
         type="button"

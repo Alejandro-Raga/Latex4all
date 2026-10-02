@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Loader2Icon,
+  PencilIcon,
   PlusIcon,
   SearchIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
 import { create } from "zustand";
+import { RenameInput } from "./rename-input";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -90,6 +92,41 @@ export function ChatSessionsPanel() {
   const [deleteTarget, setDeleteTarget] = useState<SessionInfo | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  /** The row whose name is being edited: "tab:<id>" or "session:<id>". */
+  const [renaming, setRenaming] = useState<string | null>(null);
+
+  const renameSession = (s: SessionInfo, name: string | null) => {
+    setRenaming(null);
+    const clean = name?.trim().replace(/\s+/g, " ").slice(0, 72);
+    if (!clean || clean === s.title || !projectRoot) return;
+    setSessions((prev) =>
+      prev.map((x) =>
+        x.session_id === s.session_id ? { ...x, title: clean } : x,
+      ),
+    );
+    void invoke("rename_claude_session", {
+      projectPath: projectRoot,
+      sessionId: s.session_id,
+      title: clean,
+    }).catch((err) =>
+      log.error("Failed to rename chat", { error: String(err) }),
+    );
+  };
+
+  const renameButton = (key: string, label: string) => (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        setRenaming(key);
+      }}
+      className="flex size-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 hover:bg-background hover:text-foreground group-hover:opacity-100"
+      aria-label={`Rename ${label}`}
+      title="Rename"
+    >
+      <PencilIcon className="size-3.5" />
+    </button>
+  );
 
   const projectTabs = tabs.filter(
     (t) => !t.projectPath || t.projectPath === projectRoot,
@@ -251,15 +288,29 @@ export function ChatSessionsPanel() {
                   className={cn(row, t.id === activeTabId && "bg-muted")}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">
-                      {t.title || "New chat"}
-                    </span>
+                    {renaming === `tab:${t.id}` ? (
+                      <RenameInput
+                        value={t.title}
+                        className="w-full text-sm"
+                        onDone={(name) => {
+                          setRenaming(null);
+                          if (name !== null)
+                            useClaudeChatStore.getState().renameTab(t.id, name);
+                        }}
+                      />
+                    ) : (
+                      <span className="block truncate text-sm">
+                        {t.title || "New chat"}
+                      </span>
+                    )}
                     <span className="block truncate text-muted-foreground text-xs">
                       {providerLabel(t.providerKey)}
                       {t.messages.length > 0 &&
                         ` · ${t.messages.filter((m) => m.type === "user").length} messages`}
                     </span>
                   </span>
+                  {renaming !== `tab:${t.id}` &&
+                    renameButton(`tab:${t.id}`, t.title)}
                   {t.isStreaming ? (
                     <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
                   ) : (
@@ -307,11 +358,23 @@ export function ChatSessionsPanel() {
                     className={row}
                   >
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm">{s.title}</span>
+                      {renaming === `session:${s.session_id}` ? (
+                        <RenameInput
+                          value={s.title}
+                          className="w-full text-sm"
+                          onDone={(name) => renameSession(s, name)}
+                        />
+                      ) : (
+                        <span className="block truncate text-sm">
+                          {s.title}
+                        </span>
+                      )}
                       <span className="block text-muted-foreground text-xs">
                         {when(s.last_modified)}
                       </span>
                     </span>
+                    {renaming !== `session:${s.session_id}` &&
+                      renameButton(`session:${s.session_id}`, s.title)}
                     <button
                       type="button"
                       disabled={running.has(s.session_id)}

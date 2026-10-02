@@ -722,7 +722,14 @@ export function useClaudeEvents() {
 
       // Snapshot after Claude edit
       const projectPath = useDocumentStore.getState().projectRoot;
-      if (projectPath && completedSessionId) {
+      // Named by the user: kept with the chat, nothing generated.
+      if (projectPath && completedSessionId && tab.titleLocked) {
+        void invoke("rename_claude_session", {
+          projectPath,
+          sessionId: completedSessionId,
+          title: tab.title,
+        }).catch(() => {});
+      } else if (projectPath && completedSessionId) {
         void (async () => {
           try {
             const title = await invoke<string | null>(
