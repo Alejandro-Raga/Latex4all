@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { suggestedReplacement } from "@/lib/model-capabilities";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import {
+  PlusIcon,
   DownloadIcon,
   LogInIcon,
   LoaderIcon,
@@ -512,6 +513,10 @@ export function ClaudeSetup({
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [modelFetchError, setModelFetchError] = useState<string | null>(null);
   const [isEditingProvider, setIsEditingProvider] = useState(false);
+  /** Adding a new API key (not editing what's there). */
+  const [addingKey, setAddingKey] = useState(false);
+  /** The key asking "Remove?" before it goes. */
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
   const status = useClaudeSetupStore((s) => s.status);
   const isInstalling = useClaudeSetupStore((s) => s.isInstalling);
   const isLoggingIn = useClaudeSetupStore((s) => s.isLoggingIn);
@@ -532,6 +537,7 @@ export function ClaudeSetup({
   const saveApiKey = useClaudeSetupStore((s) => s.saveApiKey);
   const clearApiKey = useClaudeSetupStore((s) => s.clearApiKey);
   const fetchProviderModels = useClaudeSetupStore((s) => s.fetchProviderModels);
+  const deleteApiCredential = useClaudeSetupStore((s) => s.deleteApiCredential);
   const checkStatus = useClaudeSetupStore((s) => s.checkStatus);
   const installSteps = useClaudeSetupStore((s) => s.installSteps);
   const loginSteps = useClaudeSetupStore((s) => s.loginSteps);
@@ -595,36 +601,20 @@ export function ClaudeSetup({
       setModelFetchError(null);
       setProviderPreset(savedPreset);
       setIsEditingProvider(false);
+      setAddingKey(false);
       onSaved?.();
     }
   };
 
   const resetProviderForm = () => {
     setIsEditingProvider(false);
+    setAddingKey(false);
     setApiKey("");
     setBaseUrl("");
     setModel("");
     setModelOptions([]);
     setModelFetchError(null);
     setProviderPreset("anthropic-direct");
-  };
-
-  const beginProviderEdit = (isDirectProvider: boolean) => {
-    const nextBaseUrl = isDirectProvider
-      ? canonicalOpenAiCompatibleBaseUrl(providerBaseUrl || "")
-      : "";
-    setProvider(isDirectProvider ? "openai-compatible" : "claude-code");
-    setProviderPreset(
-      isDirectProvider
-        ? openAiPresetIdForBaseUrl(nextBaseUrl)
-        : "anthropic-direct",
-    );
-    setApiKey("");
-    setBaseUrl(nextBaseUrl);
-    setModel(isDirectProvider ? providerModel || "" : "");
-    setModelOptions([]);
-    setModelFetchError(null);
-    setIsEditingProvider(true);
   };
 
   const handleClearApiKey = async () => {
@@ -1124,7 +1114,11 @@ export function ClaudeSetup({
             <CheckCircle2Icon className="size-5 shrink-0 text-green-600" />
             <div className="min-w-0 flex-1">
               <p className="font-medium text-sm">
-                {isDirectProvider ? "Update AI Provider" : "Update Claude Code"}
+                {addingKey
+                  ? "Add an API key"
+                  : isDirectProvider
+                    ? "Update AI Provider"
+                    : "Update Claude Code"}
               </p>
               <p className="truncate text-muted-foreground text-xs">
                 {readyDetail}
@@ -1166,6 +1160,27 @@ export function ClaudeSetup({
       );
     }
 
+    const startAdding = () => {
+      setProvider("openai-compatible");
+      setProviderPreset(OPENAI_DEFAULT_PRESET_ID);
+      setBaseUrl(
+        OPENAI_PROVIDER_CARDS.find((c) => c.id === OPENAI_DEFAULT_PRESET_ID)
+          ?.baseUrl ?? "",
+      );
+      setApiKey("");
+      setModel("");
+      setModelOptions([]);
+      setModelFetchError(null);
+      setAddingKey(true);
+      setIsEditingProvider(true);
+    };
+    const anthropicKey = claudeProviderConfigured && !accountEmail;
+    const heading =
+      "px-4 pt-3 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide";
+    const row =
+      "flex min-h-10 min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors hover:bg-muted/50";
+    const tag =
+      "shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground";
     return (
       <div
         className={cn(
@@ -1173,54 +1188,11 @@ export function ClaudeSetup({
           isEmbedded ? "" : "rounded-xl border border-border bg-muted/30",
         )}
       >
-        <div className="flex min-w-0 items-center gap-3 px-4 py-3.5">
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg border border-green-500/20 bg-green-500/10 text-green-600">
-            <CheckCircle2Icon className="size-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-semibold text-sm">
-                AI Providers
-              </span>
-              <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                {configuredProviderCount}
-              </span>
-            </div>
-            <p className="mt-0.5 truncate text-muted-foreground text-xs">
-              {readyDetail}
-            </p>
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-8 shrink-0 gap-1.5 rounded-md px-2.5 text-xs"
-            onClick={() => beginProviderEdit(isDirectProvider)}
-          >
-            <RefreshCwIcon className="size-3" />
-            Add
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-8 shrink-0 gap-1.5 rounded-md px-2.5 text-destructive text-xs hover:text-destructive"
-            onClick={handleClearApiKey}
-            disabled={isClearingApiKey}
-          >
-            {isClearingApiKey ? (
-              <LoaderIcon className="size-3 animate-spin" />
-            ) : (
-              <Trash2Icon className="size-3" />
-            )}
-            Clear
-          </Button>
-        </div>
-
-        {(includesClaudeProvider || openAiCredentials.length > 0) && (
-          <div className="space-y-1.5 border-border/60 border-t px-4 py-3">
-            {includesClaudeProvider && (
-              <div className="flex min-h-9 min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors hover:bg-muted/50">
+        {includesClaudeProvider && (
+          <>
+            <div className={heading}>Claude</div>
+            <div className="px-2 pb-1">
+              <div className={row}>
                 {claudeProviderIconSrc ? (
                   <img
                     src={claudeProviderIconSrc}
@@ -1231,65 +1203,127 @@ export function ClaudeSetup({
                   <KeyRoundIcon className="size-3.5 shrink-0 text-muted-foreground" />
                 )}
                 <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="shrink-0 font-medium">
-                      Anthropic / Claude Code
-                    </span>
-                    <span className="min-w-0 truncate text-muted-foreground">
-                      {accountEmail || "Claude Code"}
-                    </span>
+                  <div className="font-medium">Claude</div>
+                  <div className="truncate text-muted-foreground">
+                    {accountEmail
+                      ? `Signed in as ${accountEmail}`
+                      : anthropicKey
+                        ? "Anthropic API key"
+                        : `Claude Code${version ? ` ${version}` : ""}`}
                   </div>
                 </div>
+                <span className={tag}>
+                  {anthropicKey ? "Pay per use" : "Plan"}
+                </span>
+                {anthropicKey && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 shrink-0 px-2 text-destructive text-xs hover:text-destructive"
+                    onClick={handleClearApiKey}
+                    disabled={isClearingApiKey}
+                  >
+                    {isClearingApiKey ? (
+                      <LoaderIcon className="size-3 animate-spin" />
+                    ) : (
+                      "Remove key"
+                    )}
+                  </Button>
+                )}
               </div>
-            )}
-            {openAiCredentials.map((credential) => {
-              const displayName = getProviderDisplayName({
-                label: credential.label,
-                baseUrl: credential.base_url,
-                model: credential.model,
-              });
-              const iconSrc = getProviderIconSrc({
-                label: credential.label,
-                baseUrl: credential.base_url,
-                model: credential.model,
-              });
+            </div>
+          </>
+        )}
 
-              return (
-                <div
-                  key={credential.id}
-                  className="flex min-h-9 min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors hover:bg-muted/50"
-                >
-                  {iconSrc ? (
-                    <img
-                      src={iconSrc}
-                      alt=""
-                      className="size-4 shrink-0 object-contain"
-                    />
-                  ) : (
-                    <CircleIcon className="size-3 shrink-0 text-muted-foreground/50" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="shrink-0 font-medium">
-                        {displayName}
-                      </span>
-                      <span className="min-w-0 truncate text-muted-foreground">
-                        {credential.model}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="shrink-0">
-                    <ModelCapabilityBadges
-                      label={credential.label}
-                      baseUrl={credential.base_url}
-                      model={credential.model}
-                    />
+        <div className={heading}>API keys</div>
+        <p className="px-4 pb-1.5 text-muted-foreground text-xs">
+          Paid by use, billed by each provider.
+        </p>
+        <div className="space-y-0.5 px-2">
+          {openAiCredentials.length === 0 && (
+            <p className="px-2.5 py-2 text-muted-foreground text-xs">
+              None yet. Free to start: a Gemini key from Google AI Studio, or
+              Ollama on your own computer.
+            </p>
+          )}
+          {openAiCredentials.map((credential) => {
+            const displayName = getProviderDisplayName({
+              label: credential.label,
+              baseUrl: credential.base_url,
+              model: credential.model,
+            });
+            const iconSrc = getProviderIconSrc({
+              label: credential.label,
+              baseUrl: credential.base_url,
+              model: credential.model,
+            });
+            const confirming = confirmRemove === credential.id;
+            return (
+              <div key={credential.id} className={row}>
+                {iconSrc ? (
+                  <img
+                    src={iconSrc}
+                    alt=""
+                    className="size-4 shrink-0 object-contain"
+                  />
+                ) : (
+                  <CircleIcon className="size-3 shrink-0 text-muted-foreground/50" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium">{displayName}</div>
+                  <div className="truncate text-muted-foreground">
+                    {credential.model || "Default model"}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                <div className="hidden shrink-0 sm:block">
+                  <ModelCapabilityBadges
+                    label={credential.label}
+                    baseUrl={credential.base_url}
+                    model={credential.model}
+                  />
+                </div>
+                <span className={tag}>Pay per use</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className={cn(
+                    "h-7 shrink-0 px-2 text-xs",
+                    confirming
+                      ? "text-destructive hover:text-destructive"
+                      : "text-muted-foreground",
+                  )}
+                  onClick={async () => {
+                    if (!confirming) {
+                      setConfirmRemove(credential.id);
+                      return;
+                    }
+                    setConfirmRemove(null);
+                    await deleteApiCredential(credential.id);
+                  }}
+                  onBlur={() => confirming && setConfirmRemove(null)}
+                  aria-label={`Remove ${displayName}`}
+                >
+                  {confirming ? "Remove?" : <Trash2Icon className="size-3.5" />}
+                </Button>
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={startAdding}
+            className="mt-1 mb-3 flex w-full items-center gap-2.5 rounded-lg border border-border border-dashed px-3 py-2.5 text-left transition-colors hover:border-primary/50 hover:bg-muted/50"
+          >
+            <PlusIcon className="size-4 shrink-0 text-primary" />
+            <span className="min-w-0">
+              <span className="block font-medium text-sm">Add an API key</span>
+              <span className="block truncate text-muted-foreground text-xs">
+                DeepSeek, OpenAI, Gemini, Qwen, Kimi, GLM, Ollama…
+              </span>
+            </span>
+          </button>
+        </div>
       </div>
     );
   }

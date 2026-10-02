@@ -123,6 +123,9 @@ tag.
 
 ### AI
 
+- Settings → Provider sets out Claude (your plan, or an Anthropic key) and
+  your API keys apart, each key with its model, what it can do and its own
+  Remove, and a clear "Add an API key" button.
 - "Add an AI" in the chat's model menu offers both ways in one place: sign
   in with an account you have (Claude, ChatGPT, Gemini), or add an API key,
   with the free options pointed out.
