@@ -48,6 +48,13 @@ describe("Gemini's model list", () => {
         "https://generativelanguage.googleapis.com/v1beta/openai",
       ),
     ).toEqual(["models/gemini-3.8-flash", "models/gemini-3.1-pro"]);
+    // Gemma stays, after Gemini.
+    expect(
+      newestModelsFirst(
+        ["models/gemma-4-31b-it", "models/gemini-3.8-flash"],
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+      ),
+    ).toEqual(["models/gemini-3.8-flash", "models/gemma-4-31b-it"]);
   });
 
   it("reads the successor a retired model's error names", () => {

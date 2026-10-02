@@ -123,6 +123,9 @@ tag.
 
 ### AI
 
+- Adding an API key picks the model for you once the key is in (the newest
+  one; you switch models in the chat anyway). Google's list offers its
+  current Gemini models first, then Gemma.
 - Settings → Provider sets out Claude (your plan, or an Anthropic key) and
   your API keys apart, each key with its model, what it can do and its own
   Remove, and a clear "Add an API key" button.

@@ -639,6 +639,23 @@ export function ClaudeSetup({
     setModelFetchError(null);
   };
 
+  // The models load by themselves once there's a key, the newest picked.
+  useEffect(() => {
+    if (provider !== "openai-compatible" || !baseUrl.trim()) return;
+    if (
+      !apiKey.trim() &&
+      !OPENAI_PROVIDER_CARDS.find((c) => c.id === providerPreset)
+        ?.apiKeyOptional
+    ) {
+      return;
+    }
+    if (modelOptions.length || isFetchingModels) return;
+    const timer = setTimeout(() => void handleFetchModels(), 600);
+    return () => clearTimeout(timer);
+    // Only when the key, provider or address change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiKey, baseUrl, providerPreset, provider]);
+
   const handleFetchModels = async () => {
     setIsFetchingModels(true);
     setModelFetchError(null);
@@ -856,7 +873,7 @@ export function ClaudeSetup({
             <div className="min-w-0 space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <Label htmlFor="provider-model" className="text-xs">
-                  Model
+                  Starting model
                 </Label>
                 <Button
                   type="button"
@@ -924,13 +941,8 @@ export function ClaudeSetup({
                 </p>
               )}
               <p className="text-[11px] text-muted-foreground">
-                {activeCardId === "deepseek"
-                  ? "Fetches DeepSeek models from the matching provider model endpoint."
-                  : activeCardId === "qwen"
-                    ? "Fetches Qwen models from the matching DashScope model endpoint."
-                    : activeCardId === "moonshot"
-                      ? "Fetches Kimi models from the matching Moonshot model endpoint."
-                      : "Fetches the provider's real /models list when available."}
+                Picked for you once the key is in: it checks the key works. You
+                can switch model any time in the chat.
               </p>
             </div>
           )}
