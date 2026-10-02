@@ -1,4 +1,11 @@
-import { type ReactNode, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { RefreshCwIcon } from "lucide-react";
 import { fallbackOrder } from "@/lib/ai-continuity";
 import { CLAUDE_CODE_PROVIDER_ID } from "@/stores/claude-chat-store";
 import { useMemoryDialog } from "@/components/claude-chat/memory-dialog";
@@ -125,6 +132,16 @@ export function LimitBar({
 /** Claude's own 5-hour and weekly windows, and what this app sent in them. */
 function ClaudePlan({ entries }: { entries: AiUsageEntry[] }) {
   const limits = useAiUsage((s) => s.claudeLimits);
+  const [checking, setChecking] = useState(false);
+  const refresh = useCallback(async () => {
+    setChecking(true);
+    await useAiUsage.getState().refreshClaudeUsage();
+    setChecking(false);
+  }, []);
+  // Fresh figures on opening: otherwise they're as of the last request.
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
   if (!limits || (!limits.fiveHour && !limits.sevenDay)) return null;
   const sentSince = (from: number) =>
     summarize(
@@ -141,10 +158,22 @@ function ClaudePlan({ entries }: { entries: AiUsageEntry[] }) {
     <div className="mx-5 mb-4 space-y-3 rounded-lg border border-border p-3">
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-medium text-sm">Claude plan</span>
-        <span className="text-muted-foreground text-xs">
+        <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
           {claudeLimited(limits)
             ? "Limit reached"
             : `as of ${new Date(limits.observedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={checking}
+            className="rounded p-0.5 hover:bg-muted hover:text-foreground"
+            aria-label="Refresh"
+            title="Refresh"
+          >
+            <RefreshCwIcon
+              className={cn("size-3", checking && "animate-spin")}
+            />
+          </button>
         </span>
       </div>
       {windows.map(({ label, w, span }) => (

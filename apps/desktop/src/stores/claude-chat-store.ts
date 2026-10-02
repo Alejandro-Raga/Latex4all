@@ -1877,8 +1877,14 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
     const tab = state.tabs.find((t) => t.id === tabId);
     // Prevent closing a streaming tab
     if (tab?.isStreaming) return;
-    // Prevent closing the last tab
-    if (state.tabs.length <= 1) return;
+    // The last one: an empty chat takes its place (one is always there),
+    // and the closed one stays in the history.
+    if (state.tabs.length <= 1) {
+      if (!tab || (tab.messages.length === 0 && !tab.sessionId)) return;
+      get().createTab();
+      get().closeTab(tabId);
+      return;
+    }
 
     const idx = state.tabs.findIndex((t) => t.id === tabId);
     if (idx === -1) return;

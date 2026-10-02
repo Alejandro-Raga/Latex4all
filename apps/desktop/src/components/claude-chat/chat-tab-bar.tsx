@@ -89,7 +89,9 @@ export function ChatTabBar() {
             tab={tab}
             isActive={tab.id === activeTabId}
             isStreaming={tab.isStreaming}
-            isLastTab={tabs.length <= 1}
+            isLastTab={
+              tabs.length <= 1 && tab.messages.length === 0 && !tab.sessionId
+            }
             onClick={() => setActiveTab(tab.id)}
             onClose={(e) => handleClose(e, tab.id)}
           />
@@ -154,7 +156,7 @@ function TabButton({
         </span>
       )}
       <span className="truncate">{tab.title}</span>
-      {/* Close button — hidden for the last remaining tab or when streaming on this tab */}
+      {/* Close button: not on a lone empty chat, nor while it's answering */}
       {!isLastTab && !isStreaming && (
         <span
           role="button"

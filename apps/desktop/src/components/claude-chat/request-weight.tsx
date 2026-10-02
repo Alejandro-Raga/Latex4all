@@ -51,6 +51,17 @@ const WEIGHT: Record<Weight, { label: string; className: string }> = {
 };
 
 const k = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+/** Until a window resets, short: "45m", "2h 10m", "3d". */
+export function timeLeft(at: number, now = Date.now()): string {
+  const mins = Math.max(0, Math.round((at - now) / 60000));
+  if (mins < 60) return `${mins}m`;
+  if (mins < 24 * 60) {
+    const m = mins % 60;
+    return m ? `${Math.floor(mins / 60)}h ${m}m` : `${mins / 60}h`;
+  }
+  return `${Math.round(mins / (24 * 60))}d`;
+}
+
 const pct = (n: number) => (n < 1 ? n.toFixed(1) : String(Math.round(n)));
 const level = (used: number) =>
   used >= 90
@@ -89,6 +100,16 @@ export function RequestWeight({ input }: { input: string }) {
   const engine = engineOfProvider(providerId);
   const claude =
     !engine && (!providerId || providerId === CLAUDE_CODE_PROVIDER_ID);
+
+  // Claude's limits move with use elsewhere too (claude.ai, other
+  // devices): looked up again when they're old, for free.
+  useEffect(() => {
+    if (!claude) return;
+    const seen = useAiUsage.getState().claudeLimits?.observedAt ?? 0;
+    if (Date.now() - seen > 10 * 60e3) {
+      void useAiUsage.getState().refreshClaudeUsage();
+    }
+  }, [claude]);
 
   // ChatGPT's windows, as Codex last recorded them, once it's picked.
   useEffect(() => {
@@ -169,15 +190,13 @@ export function RequestWeight({ input }: { input: string }) {
       : null;
   const today = daily && model ? requestsToday(entries, model, now) : 0;
 
-  if (
-    !tab ||
-    tab.isStreaming ||
-    (tokens === 0 && !input.trim() && !windows.length && !daily)
-  ) {
-    return null;
-  }
+  // The weight is about the next message: not while one is running. The
+  // limits stay in view throughout.
+  const showWeight = !tab?.isStreaming && (tokens > 0 || input.trim() !== "");
+  if (!tab || (!showWeight && !windows.length && !daily)) return null;
   const weight = WEIGHT[chatWeight(tokens)];
-  const main = windows[0];
+  // The first window always (Claude's 5 hours), the others once filling up.
+  const shown = windows.filter((w, i) => i === 0 || w.used >= 70);
   const chatTotal = measured.reduce((sum, m) => sum + m.delta, 0);
   const deltas = measured.map((m) => m.delta).sort((a, b) => a - b);
   const why = [
@@ -194,6 +213,7 @@ export function RequestWeight({ input }: { input: string }) {
         } (measured).`
       : null,
     engine === "gemini" ? "Gemini doesn't report its limits to apps." : null,
+    claude && windows.length ? "Click the meter to refresh it." : null,
     copilotUsed !== null && copilotQuota
       ? `Copilot: ${copilotQuota.remaining} of ${copilotQuota.entitlement} premium requests left this month. Each message uses at least one.`
       : null,
@@ -209,14 +229,43 @@ export function RequestWeight({ input }: { input: string }) {
       className="flex items-center gap-1.5 text-[11px] tabular-nums"
       title={why}
     >
-      <span className={cn("rounded-full px-2 py-0.5", weight.className)}>
-        {weight.label} · {k(tokens)}/msg
-      </span>
-      {main && (
-        <span className={level(main.used)}>
-          {main.name} {pct(main.used)}%
+      {showWeight && (
+        <span className={cn("rounded-full px-2 py-0.5", weight.className)}>
+          {weight.label} · {k(tokens)}/msg
         </span>
       )}
+      {shown.map((w) => (
+        <button
+          type="button"
+          key={w.name}
+          onClick={() => {
+            if (claude) void useAiUsage.getState().refreshClaudeUsage();
+          }}
+          className={cn(
+            "flex items-center gap-1",
+            claude && "cursor-pointer hover:underline",
+            level(w.used),
+          )}
+        >
+          <span className="relative h-1.5 w-8 overflow-hidden rounded-full bg-muted">
+            <span
+              className={cn(
+                "absolute inset-y-0 left-0 rounded-full",
+                w.used >= 90
+                  ? "bg-red-500"
+                  : w.used >= 70
+                    ? "bg-amber-500"
+                    : "bg-muted-foreground/50",
+              )}
+              style={{ width: `${Math.min(100, Math.max(2, w.used))}%` }}
+            />
+          </span>
+          {w.name} {pct(w.used)}%
+          <span className="text-muted-foreground/70">
+            · {timeLeft(w.resetsAt, now)} left
+          </span>
+        </button>
+      ))}
       {daily && (
         <span className={level((today / daily.limit) * 100)}>
           Today {today}/{daily.known ? "" : "~"}

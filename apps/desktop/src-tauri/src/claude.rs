@@ -1963,6 +1963,37 @@ pub(crate) fn create_command(
     cmd
 }
 
+/// Claude's plan limits as `/usage` reports them ("Current session: 3%
+/// used · resets …"): it answers without asking the model, so it's free.
+#[tauri::command]
+pub async fn claude_usage() -> Result<String, String> {
+    let claude_path = find_claude_binary()?;
+    let home = dirs::home_dir()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|| ".".to_string());
+    let args = vec![
+        "-p".to_string(),
+        "/usage".to_string(),
+        "--output-format".to_string(),
+        "json".to_string(),
+    ];
+    let mut cmd = create_command(&claude_path, args, &home, None);
+    // The plan's limits, whatever key the app keeps for other providers.
+    clear_anthropic_provider_env(&mut cmd);
+    cmd.stdin(std::process::Stdio::null());
+    let output = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output())
+        .await
+        .map_err(|_| "Claude Code took too long to report its usage.".to_string())?
+        .map_err(|e| e.to_string())?;
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .map_err(|_| "Claude Code didn't report its usage.".to_string())?;
+    Ok(value
+        .get("result")
+        .and_then(|r| r.as_str())
+        .unwrap_or_default()
+        .to_string())
+}
+
 fn clear_anthropic_provider_env(cmd: &mut Command) {
     for key in [
         "ANTHROPIC_API_KEY",

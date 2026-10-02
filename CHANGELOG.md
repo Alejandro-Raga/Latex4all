@@ -124,8 +124,9 @@ tag.
 
 - Chat with ChatGPT or Gemini using your own account, no API key needed.
   Settings → Provider → "Sign in with an account" installs OpenAI's Codex
-  (any ChatGPT account, including free) or Google's Gemini CLI (paid Gemini
-  Code Assist plans only) and signs you in through the browser. Pick one in
+  (any ChatGPT account, including free) or Google's Gemini CLI and signs
+  you in through the browser. Gemini this way needs a paid Gemini Code
+  Assist plan, and says so; for free Gemini, use an API key. Pick one in
   the chat's model menu and choose a model from its list. It can edit the
   project like Claude, and its use shows in AI usage.
 - GitHub Copilot, with your Copilot plan (the free one included): Settings
@@ -172,6 +173,11 @@ tag.
   billed; requests covered by a plan are not. Set a daily amount to be
   warned at. With a Claude or ChatGPT plan, see the 5-hour and weekly limits
   and when they reset.
+- Claude's 5-hour limit is always in view next to the send button, even
+  while a reply runs: a small bar, the share used and the time left until
+  it resets (the week joins it from 70%). It refreshes by itself when it's
+  old, and on a click; Settings → AI usage has a refresh button too. The
+  refresh asks Claude Code, without using any of your limit.
 - Next to the send button: how many tokens each message sends and how much
   of your plan's limit is used. Under each reply: the model, tokens read and
   written, the share of your limit it used, and the cost when billed.
@@ -184,6 +190,8 @@ tag.
 - The chat remembers its model and thinking effort, and starts on Sonnet,
   which uses much less than Opus.
 - Long chats show a notice with a button to start a new one.
+- Every chat can be closed, the last one included (it stays in the
+  history), and the Chats panel has "Close all".
 - A Stop button next to "Thinking…", so a request that hangs can always be
   stopped, even with text in the message box.
 - Claude only makes a to-do list for bigger tasks and reads just the part

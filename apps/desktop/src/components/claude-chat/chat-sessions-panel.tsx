@@ -213,8 +213,25 @@ export function ChatSessionsPanel() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-3">
-            <div className="px-2 pt-1 pb-0.5 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
-              Open
+            <div className="flex items-center justify-between px-2 pt-1 pb-0.5">
+              <span className="font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
+                Open
+              </span>
+              {projectTabs.some((t) => t.messages.length > 0) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const { closeTab } = useClaudeChatStore.getState();
+                    for (const t of projectTabs) {
+                      if (!t.isStreaming) closeTab(t.id);
+                    }
+                  }}
+                  className="text-[11px] text-muted-foreground hover:text-foreground"
+                  title="Close (kept in history)"
+                >
+                  Close all
+                </button>
+              )}
             </div>
             {projectTabs
               .filter((t) => matches(t.title))
@@ -246,7 +263,7 @@ export function ChatSessionsPanel() {
                   {t.isStreaming ? (
                     <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
                   ) : (
-                    projectTabs.length > 1 && (
+                    (projectTabs.length > 1 || t.messages.length > 0) && (
                       <button
                         type="button"
                         onClick={(e) => {

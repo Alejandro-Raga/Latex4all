@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  parseClaudeUsage,
+  parseResetTime,
   lastCallContext,
   codexLimitsFrom,
   windowName,
@@ -221,5 +223,37 @@ describe("a chat's size", () => {
       { type: "result", usage: { input_tokens: 60_000, output_tokens: 10 } },
     ];
     expect(lastCallContext(messages).context).toBe(30_000);
+  });
+});
+
+describe("Claude Code's /usage", () => {
+  const text =
+    "You are currently using your subscription to power your Claude Code usage\n\nCurrent session: 3% used · resets Oct 3 at 2am (Europe/Madrid)\nCurrent week (all models): 29% used · resets Oct 8 at 7pm (Europe/Madrid)\n\nWhat's contributing…";
+
+  it("reads both windows and when they reset", () => {
+    const now = new Date(2026, 9, 2, 21, 30);
+    const usage = parseClaudeUsage(text, now);
+    expect(usage?.fiveHour?.utilization).toBeCloseTo(0.03);
+    expect(new Date(usage?.fiveHour?.resetsAt ?? 0)).toEqual(
+      new Date(2026, 9, 3, 2, 0),
+    );
+    expect(usage?.sevenDay?.utilization).toBeCloseTo(0.29);
+    expect(new Date(usage?.sevenDay?.resetsAt ?? 0)).toEqual(
+      new Date(2026, 9, 8, 19, 0),
+    );
+  });
+
+  it("reads a time alone as the next one, and a date into next year", () => {
+    const now = new Date(2026, 11, 31, 22, 0);
+    expect(new Date(parseResetTime("7:30pm", now) ?? 0)).toEqual(
+      new Date(2027, 0, 1, 19, 30),
+    );
+    expect(new Date(parseResetTime("Jan 2 at 1am", now) ?? 0)).toEqual(
+      new Date(2027, 0, 2, 1, 0),
+    );
+  });
+
+  it("is null without plan limits", () => {
+    expect(parseClaudeUsage("You are using an API key")).toBeNull();
   });
 });

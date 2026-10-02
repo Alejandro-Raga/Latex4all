@@ -14,7 +14,7 @@ import { useClaudeChatStore } from "@/stores/claude-chat-store";
 const ABOUT: Record<AgentEngine, string> = {
   codex: "Your ChatGPT account, free or paid (paid plans get more use).",
   gemini:
-    "Paid Gemini Code Assist plans only: Google no longer accepts free accounts here. For free use, add a Gemini API key above.",
+    "Needs a paid Gemini Code Assist plan. Google refuses free accounts here; to use Gemini for free, add a Gemini API key instead.",
   copilot:
     "Your GitHub Copilot plan, free included. Uses your GitHub CLI sign-in if you have one.",
 };
@@ -88,7 +88,14 @@ export function EngineRow({
   return (
     <div className="flex items-center justify-between gap-4 px-5 py-3">
       <div className="min-w-0">
-        <div className="text-sm">{ENGINE_LABELS[engine]}</div>
+        <div className="flex items-center gap-1.5 text-sm">
+          {ENGINE_LABELS[engine]}
+          {engine === "gemini" && (
+            <span className="rounded bg-amber-500/15 px-1.5 py-px text-[10px] text-amber-700 dark:text-amber-400">
+              Paid plan only
+            </span>
+          )}
+        </div>
         <div className="truncate text-muted-foreground text-xs">{detail}</div>
       </div>
       <div className="flex shrink-0 items-center gap-2">{action}</div>

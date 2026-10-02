@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -267,6 +268,61 @@ export function nextLimits(
   return out;
 }
 
+const MONTHS = "jan feb mar apr may jun jul aug sep oct nov dec".split(" ");
+
+/** "Oct 3 at 2am (Europe/Madrid)", "7:30pm": when, in local time. */
+export function parseResetTime(text: string, now = new Date()): number | null {
+  const m = text.match(
+    /(?:([A-Za-z]{3})[a-z]* (\d{1,2})(?:,? \d{4})? at )?(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i,
+  );
+  if (!m) return null;
+  let hour = Number(m[3]) % 12;
+  if (m[5].toLowerCase() === "pm") hour += 12;
+  const at = new Date(now);
+  at.setHours(hour, Number(m[4] ?? 0), 0, 0);
+  if (m[1]) {
+    const month = MONTHS.indexOf(m[1].toLowerCase());
+    if (month < 0) return null;
+    at.setMonth(month, Number(m[2]));
+    // "Jan 2", seen in late December, is next year's.
+    if (at.getTime() < now.getTime() - 24 * 3600e3) {
+      at.setFullYear(at.getFullYear() + 1);
+    }
+  } else if (at.getTime() < now.getTime()) {
+    at.setDate(at.getDate() + 1);
+  }
+  return at.getTime();
+}
+
+/**
+ * Claude Code's /usage text: "Current session: 3% used · resets Oct 3 at
+ * 2am", and the same for the week. Null when it shows no plan limits (an
+ * API key).
+ */
+export function parseClaudeUsage(
+  text: string,
+  now = new Date(),
+): { fiveHour?: LimitWindow; sevenDay?: LimitWindow } | null {
+  const window = (label: RegExp, length: number): LimitWindow | undefined => {
+    const m = text.match(label);
+    if (!m) return undefined;
+    return {
+      utilization: Number(m[1]) / 100,
+      resetsAt:
+        (m[2] ? parseResetTime(m[2], now) : null) ?? now.getTime() + length,
+    };
+  };
+  const fiveHour = window(
+    /Current session:\s*([\d.]+)% used(?:\s*·\s*resets ([^\n]+))?/i,
+    5 * 3600e3,
+  );
+  const sevenDay = window(
+    /Current week \(all models\):\s*([\d.]+)% used(?:\s*·\s*resets ([^\n]+))?/i,
+    7 * 24 * 3600e3,
+  );
+  return fiveHour || sevenDay ? { fiveHour, sevenDay } : null;
+}
+
 /** Whether Claude is refusing requests right now. */
 export const claudeLimited = (l: ClaudeLimits | null, now = Date.now()) =>
   Boolean(
@@ -402,6 +458,8 @@ interface AiUsageState {
   setServiceBudget: (service: string, usd: number | null) => void;
   record: (entry: AiUsageEntry, tab?: string) => void;
   recordLimits: (info: RateLimitInfo) => void;
+  /** Asks Claude Code for its plan limits now (free: no model involved). */
+  refreshClaudeUsage: () => Promise<boolean>;
   setDailyBudget: (usd: number | null) => void;
   clear: () => void;
 }
@@ -506,6 +564,25 @@ export const useAiUsage = create<AiUsageState>()(
             description: `About $${spent.toFixed(2)}. Settings → AI usage has the details.`,
           });
         }
+      },
+      refreshClaudeUsage: async () => {
+        const text = await invoke<string>("claude_usage").catch(() => "");
+        const windows = parseClaudeUsage(text);
+        if (!windows) return false;
+        const prev = get().claudeLimits;
+        set({
+          claudeLimits: {
+            status: prev?.status ?? "allowed",
+            limitedUntil: prev?.limitedUntil ?? null,
+            limitType: prev?.limitType ?? null,
+            usingOverage: prev?.usingOverage,
+            ...prev,
+            ...(windows.fiveHour ? { fiveHour: windows.fiveHour } : {}),
+            ...(windows.sevenDay ? { sevenDay: windows.sevenDay } : {}),
+            observedAt: Date.now(),
+          },
+        });
+        return true;
       },
       setDailyBudget: (usd) => set({ dailyBudgetUsd: usd, warnedDay: null }),
       clear: () => set({ entries: [], warnedDay: null }),
