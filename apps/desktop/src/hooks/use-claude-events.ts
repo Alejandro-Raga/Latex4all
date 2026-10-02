@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useAgentAccounts } from "@/lib/agent-accounts";
 import { missingCitations } from "@/lib/citations";
 import { appendLog, shortAsk } from "@/lib/ai-memory";
 import {
@@ -221,7 +222,11 @@ export function useClaudeEvents() {
         const key = `${tabId}:${tab?.streamingStartedAt ?? 0}`;
         let st = translateStatesRef.current.get(key);
         if (!st) {
-          st = newTranslateState();
+          // The model asked for, so the reply and usage name it (Codex's
+          // events don't; Gemini's do, and override it).
+          st = newTranslateState(
+            useAgentAccounts.getState().models[engine] || "",
+          );
           translateStatesRef.current.set(key, st);
         }
         for (const msg of translateAgentLine(engine, data, st)) {

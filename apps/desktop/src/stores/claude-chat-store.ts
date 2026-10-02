@@ -1,6 +1,10 @@
 import { create } from "zustand";
 import { readLog, readMemory, sharedContext } from "@/lib/ai-memory";
-import { ENGINE_LABELS, engineOfProvider } from "@/lib/agent-events";
+import {
+  ENGINE_LABELS,
+  engineOfProvider,
+  engineOfProviderKey,
+} from "@/lib/agent-events";
 import { useAgentAccounts } from "@/lib/agent-accounts";
 import {
   type Billing,
@@ -1831,7 +1835,9 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
           usageEntry(
             msg as ResultUsage,
             tab?.projectPath ?? null,
-            selectedModel,
+            engineOfProviderKey(tab?.sessionProviderKey ?? tab?.providerKey)
+              ? `${providerLabel(tab?.sessionProviderKey ?? tab?.providerKey ?? null)} default`
+              : selectedModel,
             Date.now(),
             providerLabel(tab?.providerKey ?? null),
             billing,

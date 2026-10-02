@@ -135,7 +135,6 @@ tag.
   select: Improve, Shorten, Formal, Translate, Explain, Check argument.
 - "Auto" model for Claude: Haiku for quick actions and small edits, Sonnet
   for the rest, so light work uses less.
-- Beside the send button, about how many tokens the message will read.
 - After a reply that changed files, "Undo" takes back everything it did; and
   if it cited keys your bibliography lacks, the chat says which.
 - Each project remembers its assistant: service, model and effort.
@@ -169,8 +168,11 @@ tag.
   their own, so their use shows as cost too; and Settings → AI usage can
   switch the chat to one by itself when Claude's limit is reached, and back
   once it resets.
-- Under each reply, how many tokens it read and wrote (and what it cost,
-  when it's billed), so heavy ones stand out.
+- Under each reply, the model that answered and how many tokens it read and
+  wrote (and what it cost, when it's billed), so heavy ones stand out.
+- Beside the send button, how heavy the message will be (Light, Medium,
+  Heavy) and, on a Claude plan, about what share of your 5-hour limit it
+  takes, learned from your own requests; hover for why.
 - OpenAI, Gemini, GLM and Ollama now count the tokens they read, not only
   the ones they write.
 - The chat remembers its model and thinking effort between launches, and

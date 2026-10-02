@@ -507,6 +507,10 @@ const AssistantMessage: FC<{
 
 // ─── Result Message ───
 
+/** "claude-sonnet-5-20260101" → "sonnet-5"; others as they are. */
+const shortModel = (model: string) =>
+  model.replace(/^claude-/, "").replace(/-\d{8}$/, "");
+
 /** What a reply took, small and to the right: so heavy ones stand out. */
 const ReplyUsage: FC<{ message: ClaudeStreamMessage }> = ({ message }) => {
   const r = message as ResultUsage;
@@ -527,6 +531,7 @@ const ReplyUsage: FC<{ message: ClaudeStreamMessage }> = ({ message }) => {
       className="mt-1 px-1 text-right text-[11px] text-muted-foreground/70 tabular-nums"
       title="Tokens this reply read (including the conversation so far) and wrote"
     >
+      {model && `${shortModel(model)} · `}
       {k(read)} read · {k(e.output)} written
       {e.costUsd !== null &&
         isBilled(e) &&

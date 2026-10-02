@@ -10,7 +10,7 @@ import {
   useState,
 } from "react";
 import { useCompare } from "./compare-view";
-import { useLastContext } from "./long-chat-notice";
+import { RequestWeight } from "./request-weight";
 import { AddAiContent } from "./add-ai-dialog";
 import {
   type AgentEngine,
@@ -453,10 +453,7 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
     null,
   );
   const [input, setInput] = useState("");
-  // What the next message will read, roughly: the chat so far (as its last
-  // reply read it) and what's typed.
-  const lastContext = useLastContext();
-  const estimate = lastContext + Math.round(input.length / 4);
+
   const hasInput = input.trim().length > 0;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hadStoredProviderSelectionRef = useRef(
@@ -2103,22 +2100,7 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
           </div>
 
           <div className="flex items-center gap-1">
-            {!isStreaming && (lastContext > 0 || hasInput) && (
-              <span
-                className={cn(
-                  "px-1 text-[11px] tabular-nums",
-                  estimate > 100_000
-                    ? "text-amber-600 dark:text-amber-500"
-                    : "text-muted-foreground/70",
-                )}
-                title="About how many tokens this message will read: the chat so far and what you wrote"
-              >
-                ~
-                {estimate >= 1000
-                  ? `${Math.round(estimate / 1000)}k`
-                  : estimate}
-              </span>
-            )}
+            <RequestWeight input={input} />
             <TooltipIconButton
               tooltip={
                 isStreaming && !hasInput
