@@ -20,6 +20,10 @@ test("typing [[ in a note suggests notes, found by title as well as name", async
     hasText: "A human capability approach",
   });
   await expect(option).toBeVisible();
+  await expect(option).toHaveAttribute("aria-selected", "true");
+  // CodeMirror ignores Enter for a moment after the list opens, so a key
+  // already on its way doesn't pick an option by accident.
+  await page.waitForTimeout(200);
   await page.keyboard.press("Enter");
   await expect(editor).toContainText("See [[A human capability approach]]");
 });
