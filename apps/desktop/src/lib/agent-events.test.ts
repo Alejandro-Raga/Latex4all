@@ -281,7 +281,10 @@ describe("Copilot events as chat messages", () => {
       (m.message?.content ?? []).filter((b) => b.type === "tool_result"),
     );
     expect(results.map((r) => r.tool_use_id)).toEqual(["v", "p:0", "p:1"]);
-    expect(out[out.length - 2]).toMatchObject({ type: "system", session_id: "S1" });
+    expect(out[out.length - 2]).toMatchObject({
+      type: "system",
+      session_id: "S1",
+    });
     expect(out[out.length - 1]).toMatchObject({
       type: "result",
       is_error: false,
