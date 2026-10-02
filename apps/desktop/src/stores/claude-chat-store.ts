@@ -403,7 +403,12 @@ function buildProviderSwitchContext(
   const entries = messages
     .filter((msg) => msg.type === "user" || msg.type === "assistant")
     .map((msg) => {
-      const text = messageContentText(msg);
+      // The words only: tool calls and their output are noise here.
+      const text = (msg.message?.content ?? [])
+        .filter((b) => b.type === "text" && b.text)
+        .map((b) => b.text)
+        .join("\n")
+        .trim();
       if (!text) return null;
       return `${msg.type === "user" ? "User" : "Assistant"}:\n${text}`;
     })
@@ -1117,13 +1122,24 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
       !!sessionId &&
       !!previousProviderKey &&
       previousProviderKey !== requestProviderKey;
-    const switchingDirectProviderToClaudeCode =
+    // A session belongs to what ran it: Claude Code (Claude, and services
+    // with a key), or an account's own tool (Codex, Gemini CLI). One can't
+    // resume another's (Claude Code: "No conversation found"), so moving
+    // between them starts afresh, with the conversation handed over.
+    const crossRunner =
       providerChanged &&
-      requestProviderKey === CLAUDE_CODE_PROVIDER_ID &&
-      previousProviderKey !== CLAUDE_CODE_PROVIDER_ID;
-    const resumeSessionId = switchingDirectProviderToClaudeCode
-      ? null
-      : (sessionId ?? null);
+      engineOfProviderKey(previousProviderKey) !==
+        engineOfProvider(providerCredentialId);
+    const switchingDirectProviderToClaudeCode =
+      !engineOfProvider(providerCredentialId) &&
+      (crossRunner ||
+        (providerChanged &&
+          requestProviderKey === CLAUDE_CODE_PROVIDER_ID &&
+          previousProviderKey !== CLAUDE_CODE_PROVIDER_ID));
+    const resumeSessionId =
+      switchingDirectProviderToClaudeCode || crossRunner
+        ? null
+        : (sessionId ?? null);
 
     const sendStart = performance.now();
     const streamingStartedAt = Date.now();

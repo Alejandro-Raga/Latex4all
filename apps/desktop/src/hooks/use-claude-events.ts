@@ -127,6 +127,18 @@ export function useClaudeEvents() {
   // ── One-time listener setup (mount only) ──
   useEffect(() => {
     function setUserVisibleError(tabId: string, message: string) {
+      // A usage limit, however the provider words it (a 429 through the
+      // proxy reads like a connection or model error): say so, and let the
+      // chat carry on with the next AI when the request ends.
+      if (isLimitText(message)) {
+        const chat = useClaudeChatStore.getState();
+        const tab = chat.tabs.find((t) => t.id === tabId);
+        const who = providerLabel(
+          tab?.sessionProviderKey ?? tab?.providerKey ?? null,
+        );
+        chat._patchTab(tabId, { limitHit: true });
+        message = `${who} is out of usage for now (it answered with a rate or quota limit). Free tiers allow only a few requests a minute or a day: wait a moment, or switch AI.`;
+      }
       lastErrorRef.current.set(tabId, message);
       useClaudeChatStore.getState()._setError(tabId, message);
     }

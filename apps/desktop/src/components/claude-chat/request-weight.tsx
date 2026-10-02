@@ -4,8 +4,7 @@ import { resetsLabel } from "@/components/settings/ai-usage-settings";
 import { engineOfProvider } from "@/lib/agent-events";
 import {
   codexLimitsFrom,
-  contextTokens,
-  type ResultUsage,
+  lastCallContext,
   useAiUsage,
   windowName,
 } from "@/lib/ai-usage";
@@ -23,7 +22,8 @@ type Weight = "light" | "medium" | "heavy";
  * take, which can't be known beforehand; this part is certain.
  */
 export function chatWeight(tokens: number): Weight {
-  return tokens < 20_000 ? "light" : tokens < 60_000 ? "medium" : "heavy";
+  // Claude Code's instructions and tools alone are ~20k: that's light.
+  return tokens < 50_000 ? "light" : tokens < 120_000 ? "medium" : "heavy";
 }
 
 const WEIGHT: Record<Weight, { label: string; className: string }> = {
@@ -84,19 +84,12 @@ export function RequestWeight({ input }: { input: string }) {
   }, [engine]);
 
   const { tokens, measured } = useMemo(() => {
-    const results = (tab?.messages ?? []).filter((m) => m.type === "result");
-    const last = (results[results.length - 1] as ResultUsage | undefined)
-      ?.usage;
-    const context = last
-      ? contextTokens({
-          input: last.input_tokens ?? 0,
-          cacheRead: last.cache_read_input_tokens ?? 0,
-          cacheWrite: last.cache_creation_input_tokens ?? 0,
-        })
-      : 0;
+    const messages = tab?.messages ?? [];
+    const results = messages.filter((m) => m.type === "result");
+    // One call's size; a request's total adds up all its steps.
+    const last = lastCallContext(messages);
     return {
-      tokens:
-        context + (last?.output_tokens ?? 0) + Math.round(input.length / 4),
+      tokens: last.context + last.output + Math.round(input.length / 4),
       measured: results
         .map((m) => ({ delta: m.windowDelta, window: m.window }))
         .filter(

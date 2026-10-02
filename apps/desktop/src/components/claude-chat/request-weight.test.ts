@@ -5,9 +5,9 @@ import { chatWeight } from "./request-weight";
 
 describe("what's known before sending", () => {
   it("weighs a chat by what every message reads at least", () => {
-    expect(chatWeight(5_000)).toBe("light");
-    expect(chatWeight(40_000)).toBe("medium");
-    expect(chatWeight(120_000)).toBe("heavy");
+    expect(chatWeight(25_000)).toBe("light");
+    expect(chatWeight(80_000)).toBe("medium");
+    expect(chatWeight(150_000)).toBe("heavy");
   });
 
   it("notes the plan window a request counts against", () => {

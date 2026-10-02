@@ -225,6 +225,18 @@ tag.
 
 ### Fixed
 
+- Switching a chat between ChatGPT and a service with a key broke it ("No
+  conversation found", the chat emptied): each AI now starts afresh with
+  the conversation handed over, its words only.
+- A service added with a key (Gemini…) is run under its own model name, so
+  it no longer believes it's Claude Sonnet, and Claude Code's side requests
+  no longer use up its quota. Its usage limits show as limits, not as
+  connection errors, and the chat moves on to your next AI.
+- The chat's "Heavy" mark counted a request's total over all its steps;
+  it now weighs what one message reads (Light up to 50k, Heavy from 120k).
+- Asking an assistant to remember something now starts the project memory
+  (AGENTS.md) when there isn't one; the memory window is roomier, with the
+  recent work listed clearly. The Chats panel uses the whole chat area.
 - A reply from a service added with a key (Gemini, DeepSeek…) was labelled
   as Claude Sonnet and priced at Sonnet's rates, though that service's model
   answered. It now shows the real model, priced by the service's own rates.

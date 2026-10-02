@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  lastCallContext,
   codexLimitsFrom,
   windowName,
   claudeLimited,
@@ -180,5 +181,45 @@ describe("ChatGPT's plan windows", () => {
     expect(windowName(10080)).toBe("week");
     expect(windowName(43200)).toBe("month");
     expect(codexLimitsFrom(null)).toBeNull();
+  });
+});
+
+describe("a chat's size", () => {
+  it("is what one call reads, not the request's total over its steps", () => {
+    const step = (cacheRead: number) => ({
+      type: "assistant",
+      message: {
+        usage: {
+          input_tokens: 500,
+          cache_read_input_tokens: cacheRead,
+          output_tokens: 100,
+        },
+      },
+    });
+    const messages = [
+      { type: "user", message: { content: [{ type: "text" }] } },
+      step(30_000),
+      { type: "user", message: { content: [{ type: "tool_result" }] } },
+      step(32_000),
+      {
+        type: "result",
+        usage: {
+          input_tokens: 1000,
+          cache_read_input_tokens: 262_000,
+          output_tokens: 200,
+        },
+      },
+    ];
+    expect(lastCallContext(messages).context).toBe(32_500);
+  });
+
+  it("divides a total by the steps when calls don't say", () => {
+    const messages = [
+      { type: "user", message: { content: [{ type: "text" }] } },
+      { type: "assistant", message: { content: [{ type: "tool_use" }] } },
+      { type: "assistant", message: { content: [{ type: "text" }] } },
+      { type: "result", usage: { input_tokens: 60_000, output_tokens: 10 } },
+    ];
+    expect(lastCallContext(messages).context).toBe(30_000);
   });
 });

@@ -2967,14 +2967,30 @@ async fn execute_openai_compatible_via_claude_proxy(
     let claude_path = find_claude_binary()?;
 
     let (mut args, stdin_payload) = with_prompt_transport(args_prefix, prompt);
+    // The provider's own model name, not a Claude one: Claude Code tells the
+    // model which model it is from this, and names its replies after it.
     args.push("--model".to_string());
-    args.push("sonnet".to_string());
+    args.push(credential.model.clone());
     args.extend(common_claude_args());
 
     let mut cmd = create_command(&claude_path, args, &project_path, effort_level.as_deref());
     clear_anthropic_provider_env(&mut cmd);
     cmd.env("ANTHROPIC_API_KEY", "latex4all-local-proxy");
     cmd.env("ANTHROPIC_BASE_URL", proxy_url);
+    for key in [
+        "ANTHROPIC_MODEL",
+        "ANTHROPIC_SMALL_FAST_MODEL",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        "CLAUDE_CODE_SUBAGENT_MODEL",
+    ] {
+        cmd.env(key, credential.model.as_str());
+    }
+    // Claude Code's side requests (titles, summaries) would also go to the
+    // provider, using its quota (a free tier's few requests a minute).
+    cmd.env("DISABLE_NON_ESSENTIAL_MODEL_CALLS", "1");
+    cmd.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
     cmd.env_remove("CLAUDE_MODEL");
 
     spawn_claude_process(

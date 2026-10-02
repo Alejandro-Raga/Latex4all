@@ -36,19 +36,23 @@ export function MemoryDialog() {
   const onOpenChange = (o: boolean) => useMemoryDialog.setState({ open: o });
   const root = useDocumentStore((s) => s.projectRoot);
   const [text, setText] = useState("");
+  const [exists, setExists] = useState(false);
   const [log, setLog] = useState<AiLogEntry[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open || !root) return;
-    void readMemory(root).then((m) => setText(m ?? ""));
-    void readLog(root).then((l) => setLog(l.slice(-8).reverse()));
+    void readMemory(root).then((m) => {
+      setText(m ?? "");
+      setExists(m !== null);
+    });
+    void readLog(root).then((l) => setLog(l.slice(-12).reverse()));
   }, [open, root]);
 
   const save = async () => {
     if (!root) return;
     // Nothing written and no memory yet: no empty file.
-    if (!text.trim() && !(await readMemory(root))) {
+    if (!text.trim() && !exists) {
       onOpenChange(false);
       return;
     }
@@ -66,44 +70,67 @@ export function MemoryDialog() {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="flex max-h-[85vh] flex-col gap-4 sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Project memory</DialogTitle>
           <DialogDescription>
-            Every assistant here reads this (AGENTS.md), and can add to it.
+            Notes every assistant here reads: Claude, ChatGPT, Gemini and the
+            rest. Ask any of them to remember something and they add it here.
           </DialogDescription>
         </DialogHeader>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={PLACEHOLDER}
-          className="h-48 w-full resize-y rounded-md border border-border bg-background p-2 font-mono text-xs"
-          aria-label="Project memory"
-        />
+
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+          <div className="flex items-baseline justify-between text-xs">
+            <span className="font-medium">AGENTS.md</span>
+            <span className="text-muted-foreground">
+              {exists ? "In the project folder" : "Created when you save"}
+            </span>
+          </div>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={PLACEHOLDER}
+            className="min-h-56 w-full flex-1 resize-y rounded-md border border-border bg-background p-3 text-sm leading-relaxed"
+            aria-label="Project memory"
+          />
+        </div>
+
         {log.length > 0 && (
-          <div className="space-y-1">
-            <div className="text-muted-foreground text-xs">Recent work</div>
-            {log.map((e) => (
-              <div key={`${e.at}-${e.tab}`} className="truncate text-xs">
-                <span className="text-muted-foreground">
-                  {new Date(e.at).toLocaleString(undefined, {
-                    weekday: "short",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}{" "}
-                  · {e.who}:{" "}
-                </span>
-                {e.ask || "—"}
-                {e.files.length > 0 && (
-                  <span className="text-muted-foreground">
-                    {" "}
-                    → {e.files.join(", ")}
+          <div className="min-h-0">
+            <div className="pb-1.5 font-medium text-xs">Recent work</div>
+            <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
+              {log.map((e) => (
+                <div
+                  key={`${e.at}-${e.tab}`}
+                  className="flex items-baseline gap-2 text-xs"
+                >
+                  <span className="w-20 shrink-0 text-muted-foreground tabular-nums">
+                    {new Date(e.at).toLocaleString(undefined, {
+                      weekday: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </span>
-                )}
-              </div>
-            ))}
+                  <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px]">
+                    {e.who}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate" title={e.ask}>
+                    {e.ask || "—"}
+                  </span>
+                  {e.files.length > 0 && (
+                    <span
+                      className="max-w-40 shrink-0 truncate text-muted-foreground"
+                      title={e.files.join(", ")}
+                    >
+                      {e.files.join(", ")}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
+
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel

@@ -566,6 +566,41 @@ describe("a provider's model through Claude Code", () => {
   });
 });
 
+describe("switching between ChatGPT and a service with a key", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetClaudeChatStore();
+    setMockDocumentState();
+  });
+
+  it("starts afresh with the conversation, not resuming ChatGPT's session", async () => {
+    useClaudeChatStore.setState((s) => ({
+      selectedProviderCredentialId: "gem",
+      tabs: s.tabs.map((t) => ({
+        ...t,
+        providerKey: "openai-compatible:gem",
+        sessionProviderKey: "openai-compatible:__codex__",
+        sessionId: "01a0fca9-fa1c-7c52-a0a2-1efd6f4340c2",
+        messages: [
+          {
+            type: "user",
+            message: { content: [{ type: "text", text: "Fix the intro" }] },
+          },
+          {
+            type: "assistant",
+            message: { content: [{ type: "text", text: "Done." }] },
+          },
+        ],
+      })),
+    }));
+    await useClaudeChatStore.getState().sendPrompt("And the conclusion");
+    const [command, args] = vi.mocked(invoke).mock.calls[0] as [string, any];
+    expect(command).toBe("execute_claude_code");
+    expect(args.prompt).toContain("[Handoff");
+    expect(args.prompt).toContain("Fix the intro");
+  });
+});
+
 describe("useClaudeChatStore.resumeSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();

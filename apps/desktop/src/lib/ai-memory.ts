@@ -84,6 +84,9 @@ export function appendLog(root: string, entry: AiLogEntry): Promise<void> {
 const MEMORY_RULE =
   "This project keeps lasting notes in AGENTS.md at its root, shared by every assistant used here. When something is settled that others should know (style, decisions, what's left to do), add a short line to it.";
 
+const START_RULE =
+  "If the user asks you to remember something for this project, write it in AGENTS.md at the project root (create the file); every assistant used here reads it.";
+
 const time = (at: number) =>
   new Date(at).toLocaleString(undefined, {
     weekday: "short",
@@ -106,12 +109,14 @@ export function sharedContext(input: {
   readsMemoryItself: boolean;
 }): string {
   const parts: string[] = [];
-  // Only where the user keeps a memory: no assistant starts one unasked.
   if (input.startingChat && input.memory) {
     parts.push(MEMORY_RULE);
     if (!input.readsMemoryItself) {
       parts.push(`[Project memory, AGENTS.md]\n${input.memory.trim()}`);
     }
+  } else if (input.startingChat) {
+    // No memory yet: started only when the user asks for one.
+    parts.push(START_RULE);
   }
   const others = input.log
     .filter((e) => e.tab !== input.tab && e.at > input.since)

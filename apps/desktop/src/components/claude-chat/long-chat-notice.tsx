@@ -14,9 +14,8 @@ import { useCitationCheck } from "@/components/workspace/citation-check";
 import { useProposedChangesStore } from "@/stores/proposed-changes-store";
 import { LimitBar, resetsLabel } from "@/components/settings/ai-usage-settings";
 import {
-  contextTokens,
   type LimitWindow,
-  type ResultUsage,
+  lastCallContext,
   useAiUsage,
   windowName,
 } from "@/lib/ai-usage";
@@ -31,15 +30,7 @@ export const LONG_CHAT_TOKENS = 120_000;
 export function useLastContext(): number {
   return useClaudeChatStore((s) => {
     const tab = s.tabs.find((t) => t.id === s.activeTabId);
-    const results = (tab?.messages ?? []).filter((m) => m.type === "result");
-    const last = results[results.length - 1] as ResultUsage | undefined;
-    const u = last?.usage;
-    if (!u) return 0;
-    return contextTokens({
-      input: u.input_tokens ?? 0,
-      cacheRead: u.cache_read_input_tokens ?? 0,
-      cacheWrite: u.cache_creation_input_tokens ?? 0,
-    });
+    return lastCallContext(tab?.messages ?? []).context;
   });
 }
 

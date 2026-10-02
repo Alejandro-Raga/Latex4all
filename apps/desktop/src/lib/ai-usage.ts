@@ -456,3 +456,71 @@ export const useAiUsage = create<AiUsageState>()(
     { name: "latex4all-ai-usage" },
   ),
 );
+
+interface CallUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+}
+
+/**
+ * What one model call in this chat reads now: the conversation's size.
+ * From the last call's own usage when the stream gives it (Claude Code);
+ * else the last request's total over its steps (a request's total adds up
+ * every step, so it isn't the size).
+ */
+export function lastCallContext(
+  messages: {
+    type: string;
+    message?: { usage?: CallUsage; content?: { type: string }[] };
+    usage?: CallUsage;
+  }[],
+): { context: number; output: number } {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (
+      m.type === "user" &&
+      !m.message?.content?.some((b) => b.type === "tool_result")
+    ) {
+      break;
+    }
+    const u = m.type === "assistant" ? m.message?.usage : undefined;
+    if (u && (u.input_tokens || u.cache_read_input_tokens)) {
+      return {
+        context:
+          (u.input_tokens ?? 0) +
+          (u.cache_read_input_tokens ?? 0) +
+          (u.cache_creation_input_tokens ?? 0),
+        output: u.output_tokens ?? 0,
+      };
+    }
+  }
+  // No per-call usage: the last request's total, over its steps.
+  let steps = 1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.type === "result" && m.usage) {
+      for (let j = i - 1; j >= 0; j--) {
+        const b = messages[j];
+        if (
+          b.type === "user" &&
+          !b.message?.content?.some((c) => c.type === "tool_result")
+        ) {
+          break;
+        }
+        if (b.message?.content?.some((c) => c.type === "tool_use")) steps++;
+      }
+      const u = m.usage;
+      const total =
+        (u.input_tokens ?? 0) +
+        (u.cache_read_input_tokens ?? 0) +
+        (u.cache_creation_input_tokens ?? 0);
+      return {
+        context: Math.round(total / steps),
+        output: u.output_tokens ?? 0,
+      };
+    }
+  }
+  return { context: 0, output: 0 };
+}
