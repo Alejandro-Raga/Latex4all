@@ -80,7 +80,7 @@ const OPENAI_COMPATIBLE_PRESETS: OpenAICompatiblePreset[] = [
     label: "OpenAI",
     baseUrl: "https://api.openai.com",
     model: "",
-    note: "OpenAI chat completions endpoint.",
+    note: "Pay-as-you-go key from platform.openai.com (not a ChatGPT plan).",
   },
   {
     id: "qwen",
@@ -115,15 +115,15 @@ const OPENAI_COMPATIBLE_PRESETS: OpenAICompatiblePreset[] = [
     label: "Ollama",
     baseUrl: "http://localhost:11434/v1",
     model: "",
-    note: "Local Ollama OpenAI-compatible endpoint.",
+    note: "Free: open models running on your own computer.",
     apiKeyOptional: true,
   },
   {
     id: "gemini",
-    label: "Gemini OpenAI",
+    label: "Gemini (API key)",
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
     model: "",
-    note: "Google Gemini OpenAI-compatible endpoint.",
+    note: "Free tier with a key from Google AI Studio.",
   },
 ];
 

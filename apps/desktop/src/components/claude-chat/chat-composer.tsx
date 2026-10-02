@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AddAiContent } from "./add-ai-dialog";
 import {
   type AgentEngine,
   ENGINE_LABELS,
@@ -73,7 +74,6 @@ import {
 } from "@/lib/model-capabilities";
 import { ModelCapabilityBadges } from "@/components/model-capability-badges";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
-import { ClaudeSetup } from "@/components/claude-setup";
 import {
   Dialog,
   DialogContent,
@@ -1601,9 +1601,9 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
                   <PlusIcon className="size-3.5 shrink-0" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-medium text-xs">
-                      Add Provider
+                      Add an AI
                     </div>
-                    <div className="truncate text-xs">Save another API key</div>
+                    <div className="truncate text-xs">Account or API key</div>
                   </div>
                 </button>
               </div>
@@ -1719,13 +1719,13 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
       <Dialog open={providerSetupOpen} onOpenChange={setProviderSetupOpen}>
         <DialogContent className="max-h-[85vh] w-[min(42rem,calc(100vw-2rem))] overflow-y-auto overflow-x-hidden sm:max-w-none">
           <DialogHeader>
-            <DialogTitle>Add AI Provider</DialogTitle>
+            <DialogTitle>Add an AI</DialogTitle>
             <DialogDescription>
-              Configure Anthropic or another model provider for this project.
+              With an account you already have, or an API key.
             </DialogDescription>
           </DialogHeader>
-          <ClaudeSetup
-            variant="provider-dialog"
+          <AddAiContent
+            onUse={() => setProviderSetupOpen(false)}
             onCancel={() => setProviderSetupOpen(false)}
             onSaved={() => {
               setProviderSetupOpen(false);

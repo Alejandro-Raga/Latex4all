@@ -123,6 +123,9 @@ tag.
 
 ### AI
 
+- "Add an AI" in the chat's model menu offers both ways in one place: sign
+  in with an account you have (Claude, ChatGPT, Gemini), or add an API key,
+  with the free options pointed out.
 - A Chats panel (the clock button in the chat) lists the chats open now,
   with the service each uses, and earlier ones by day, with a search, a new
   chat button, and delete.

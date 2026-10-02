@@ -16,14 +16,23 @@ const ABOUT: Record<AgentEngine, string> = {
     "Paid Gemini Code Assist plans only: Google no longer accepts free accounts here. For free use, add a Gemini API key above.",
 };
 
-function EngineRow({ engine }: { engine: AgentEngine }) {
+export function EngineRow({
+  engine,
+  onUse,
+}: {
+  engine: AgentEngine;
+  /** After switching the chat to it (the dialog closes, say). */
+  onUse?: () => void;
+}) {
   const status = useAgentAccounts((s) => s.status[engine]);
   const busy = useAgentAccounts((s) => s.busy[engine]);
   const { install, login, logout } = useAgentAccounts.getState();
-  const useIt = () =>
+  const useIt = () => {
     useClaudeChatStore
       .getState()
       .setSelectedProviderCredentialId(providerOfEngine(engine));
+    onUse?.();
+  };
 
   let detail: string = ABOUT[engine];
   let action: React.ReactNode = null;
