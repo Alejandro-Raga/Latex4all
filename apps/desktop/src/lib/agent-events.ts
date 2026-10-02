@@ -195,8 +195,8 @@ export function translateCodex(
                 (item.exit_code !== undefined && item.exit_code !== 0),
             ),
           ];
-        case "file_change":
-          return (item.changes ?? []).flatMap((change, i) => {
+        case "file_change": {
+          const edits = (item.changes ?? []).flatMap((change, i) => {
             const id = `${item.id}:${i}`;
             return [
               toolUse(st, id, change.kind === "add" ? "Write" : "Edit", {
@@ -205,6 +205,22 @@ export function translateCodex(
               toolResult(id, change.kind, item.status === "failed"),
             ];
           });
+          // Said plainly: an edit that didn't land isn't left to the reply.
+          if (item.status === "failed") {
+            const files = (item.changes ?? [])
+              .map((c) => c.path.split(/[\\/]/).pop())
+              .join(", ");
+            edits.push(
+              assistant([
+                {
+                  type: "text",
+                  text: `⚠ ChatGPT couldn't write ${files || "the file"}.`,
+                },
+              ]),
+            );
+          }
+          return edits;
+        }
         case "mcp_tool_call":
           return [
             toolResult(

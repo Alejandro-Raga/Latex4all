@@ -218,6 +218,10 @@ tag.
 
 ### Fixed
 
+- On Windows, ChatGPT couldn't change the project's files (its sandbox there
+  needs a setup of its own). It now edits them as Claude does, every change
+  still going through review and Undo; and a change that doesn't land is
+  said so in the chat.
 - Adding a Gemini key failed on models Google has retired or that can't
   chat (live audio, images, speech). The model list now offers only chat
   models, newest first, and a retired model is swapped for the one Google

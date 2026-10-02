@@ -449,6 +449,16 @@ pub async fn codex_rate_limits(
     Ok(None)
 }
 
+/// Codex's sandbox: on macOS and Linux it lets Codex write in the project
+/// and nowhere else. On Windows that sandbox needs a setup of its own (an
+/// elevated one, or it falls back) and without it Codex can't write the
+/// project at all, so there it runs as Claude Code does here: with full
+/// access, every edit still going through the app's review and Undo.
+#[cfg(target_os = "windows")]
+const CODEX_SANDBOX: &str = "danger-full-access";
+#[cfg(not(target_os = "windows"))]
+const CODEX_SANDBOX: &str = "workspace-write";
+
 /// The command line for one request, the prompt going in on stdin.
 fn agent_args(
     engine: Engine,
@@ -466,7 +476,7 @@ fn agent_args(
                     "--json",
                     "--skip-git-repo-check",
                     "--sandbox",
-                    "workspace-write",
+                    CODEX_SANDBOX,
                     "-c",
                     "approval_policy=\"never\"",
                     "--cd",

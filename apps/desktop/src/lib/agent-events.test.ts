@@ -103,6 +103,25 @@ describe("Codex events as chat messages", () => {
     });
   });
 
+  it("says so when an edit didn't land", () => {
+    const out = run("codex", [
+      {
+        type: "item.completed",
+        item: {
+          id: "f1",
+          type: "file_change",
+          changes: [{ path: "C:\\p\\main.tex", kind: "update" }],
+          status: "failed",
+        },
+      },
+    ]);
+    expect(out[1].message?.content?.[0]).toMatchObject({ is_error: true });
+    expect(out[2].message?.content?.[0]).toEqual({
+      type: "text",
+      text: "⚠ ChatGPT couldn't write main.tex.",
+    });
+  });
+
   it("reports a failed turn as an error result", () => {
     const out = run("codex", [
       {
