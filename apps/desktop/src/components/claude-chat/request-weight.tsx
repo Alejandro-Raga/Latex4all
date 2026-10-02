@@ -1,6 +1,5 @@
 import { useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { resetsLabel } from "@/components/settings/ai-usage-settings";
 import { engineOfProvider } from "@/lib/agent-events";
 import {
   codexLimitsFrom,
@@ -51,6 +50,29 @@ const WEIGHT: Record<Weight, { label: string; className: string }> = {
 };
 
 const k = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+/** "5h" → "5-hour limit", "week" → "Weekly limit". */
+const limitName = (name: string) =>
+  name === "5h"
+    ? "5-hour limit"
+    : name === "week"
+      ? "Weekly limit"
+      : name === "month"
+        ? "Monthly limit"
+        : `${name} limit`;
+
+/** "at 18:30", or "Thu at 18:30" past today. */
+function resetAt(at: number, now = Date.now()): string {
+  const time = new Date(at).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  if (new Date(at).toDateString() === new Date(now).toDateString()) {
+    return `at ${time}`;
+  }
+  const day = new Date(at).toLocaleDateString(undefined, { weekday: "short" });
+  return `${day} at ${time}`;
+}
+
 /** Until a window resets, short: "45m", "2h 10m", "3d". */
 export function timeLeft(at: number, now = Date.now()): string {
   const mins = Math.max(0, Math.round((at - now) / 60000));
@@ -198,39 +220,32 @@ export function RequestWeight({ input }: { input: string }) {
   // The first window always (Claude's 5 hours), the others once filling up.
   const shown = windows.filter((w, i) => i === 0 || w.used >= 70);
   const chatTotal = measured.reduce((sum, m) => sum + m.delta, 0);
-  const deltas = measured.map((m) => m.delta).sort((a, b) => a - b);
-  const why = [
-    `Each message sends at least ~${k(tokens)} tokens (the conversation so far). Edits send it again at each step. A new chat starts lighter.`,
-    ...windows.map(
-      (w) =>
-        `${w.name} limit: ${pct(w.used)}% used, resets ${resetsLabel(w.resetsAt)}.`,
-    ),
-    measured.length
-      ? `This chat so far: ~${pct(chatTotal)}% of the ${measured[0].window} limit${
-          deltas.length > 1
-            ? `; its replies used ${pct(deltas[0])}–${pct(deltas[deltas.length - 1])}% each`
-            : ""
-        } (measured).`
-      : null,
-    engine === "gemini" ? "Gemini doesn't report its limits to apps." : null,
-    claude && windows.length ? "Click the meter to refresh it." : null,
-    copilotUsed !== null && copilotQuota
-      ? `Copilot: ${copilotQuota.remaining} of ${copilotQuota.entitlement} premium requests left this month. Each message uses at least one.`
-      : null,
-    daily
-      ? `Today: ${today} of ${daily.known ? "" : "about "}${daily.limit} free requests to ${model}${daily.known ? "" : " (Google confirms the number when it's reached)"}. One message takes a request per step. Resets ${resetsLabel(nextPacificDay(now))}.`
-      : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const chatShare = (w: Window) =>
+    measured.length && measured[0].window === w.name
+      ? ` This chat has used about ${pct(chatTotal)}% of it.`
+      : "";
+  const windowHint = (w: Window) =>
+    [
+      `${limitName(w.name)}: ${pct(w.used)}% used. Resets ${resetAt(w.resetsAt, now)}.${chatShare(w)}`,
+      engine === "copilot" && copilotQuota
+        ? `${copilotQuota.remaining} of ${copilotQuota.entitlement} premium requests left.`
+        : null,
+      claude ? "Click to refresh." : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  const weightHint = `Each message sends about ${k(tokens)} tokens: the chat so far. A new chat sends less.`;
+  const dailyHint = daily
+    ? `${today} of ${daily.known ? "" : "about "}${daily.limit} free requests used today. Each step of a reply counts as one. Resets ${resetAt(nextPacificDay(now), now)}.`
+    : "";
 
   return (
-    <span
-      className="flex items-center gap-1.5 text-[11px] tabular-nums"
-      title={why}
-    >
+    <span className="flex items-center gap-1.5 text-[11px] tabular-nums">
       {showWeight && (
-        <span className={cn("rounded-full px-2 py-0.5", weight.className)}>
+        <span
+          className={cn("rounded-full px-2 py-0.5", weight.className)}
+          title={weightHint}
+        >
           {weight.label} · {k(tokens)}/msg
         </span>
       )}
@@ -238,6 +253,7 @@ export function RequestWeight({ input }: { input: string }) {
         <button
           type="button"
           key={w.name}
+          title={windowHint(w)}
           onClick={() => {
             if (claude) void useAiUsage.getState().refreshClaudeUsage();
           }}
@@ -267,7 +283,7 @@ export function RequestWeight({ input }: { input: string }) {
         </button>
       ))}
       {daily && (
-        <span className={level((today / daily.limit) * 100)}>
+        <span className={level((today / daily.limit) * 100)} title={dailyHint}>
           Today {today}/{daily.known ? "" : "~"}
           {daily.limit}
         </span>
