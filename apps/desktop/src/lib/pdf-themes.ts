@@ -47,11 +47,12 @@ export const PDF_THEMES: PdfThemeInfo[] = [
     label: "Sepia",
     // Black is lifted a little first (invert), or no tint can reach it and
     // the text stays black; then darkened so white paper takes the tint
-    // instead of clipping. Ink comes out dark brown, paper parchment.
+    // instead of clipping. Ink comes out dark brown, paper a muted
+    // parchment (less orange than full saturation, a touch dimmer).
     filter:
-      "invert(0.15) brightness(0.9) sepia(1) hue-rotate(-16deg) saturate(1.4)",
-    paper: "#ffe5ad",
-    ink: "#34281f",
+      "invert(0.16) brightness(0.89) sepia(1) hue-rotate(-12deg) saturate(0.75)",
+    paper: "#f8e2c4",
+    ink: "#312b25",
     dark: false,
   },
   {
