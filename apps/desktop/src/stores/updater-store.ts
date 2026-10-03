@@ -40,6 +40,10 @@ interface UpdaterState {
   /** True once the automatic launch check has run, so mounting another
    *  consumer (e.g. opening Settings → Updates) doesn't re-check. */
   launchCheckDone: boolean;
+  /** The update prompt was closed ("Not now"): not shown again unless the
+   *  user asks for a check. */
+  promptDismissed: boolean;
+  dismissPrompt: () => void;
   setStatus: (status: UpdateStatus) => void;
   markLaunchChecked: () => void;
   /**
@@ -75,6 +79,8 @@ interface UpdaterState {
 export const useUpdaterStore = create<UpdaterState>()((set, get) => ({
   status: { state: "idle" },
   launchCheckDone: false,
+  promptDismissed: false,
+  dismissPrompt: () => set({ promptDismissed: true }),
 
   setStatus: (status) => set({ status }),
   markLaunchChecked: () => set({ launchCheckDone: true }),
@@ -112,6 +118,8 @@ export const useUpdaterStore = create<UpdaterState>()((set, get) => ({
   },
 
   checkRequested: async (channel) => {
+    // Asked for: what it finds is shown, even after "Not now".
+    set({ promptDismissed: false });
     await get().check(channel);
 
     // Only the release channel can be stranded this way, and only when the

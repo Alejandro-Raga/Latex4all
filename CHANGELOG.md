@@ -250,6 +250,17 @@ tag.
 - Asking an AI to remember something now creates AGENTS.md if it's missing.
   The memory window and the Chats panel have more room.
 - Claude disappeared from the model list after adding an API key.
+- The VIM button sat at the end of the ribbon, easy to hit by accident; with
+  it on, a click shows a block cursor and typing doesn't write. It's now
+  only in Settings ("Vim keys"), and when on, the editor shows "Vim on ×" to
+  turn it off.
+- Selecting a single letter (a click that moved a little) no longer opens
+  the selection toolbar.
+- The Projects page showed no preview for a project whose main file isn't
+  called main.tex: it now finds the compiled PDF whatever its name.
+- After closing the update notice with "Not now", Check now found the
+  update but showed nothing. It shows the notice again, and Settings names
+  the version available.
 - In a narrow chat, the bar under the message box wrapped onto two lines.
   It stays on one now, dropping the less needed details first.
 - Claude Code's notices about connectors and unknown model names no longer

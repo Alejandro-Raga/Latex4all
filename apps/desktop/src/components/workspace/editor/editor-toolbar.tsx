@@ -382,15 +382,20 @@ export function EditorToolbar({
       <div className="scrollbar-none flex min-w-0 items-center gap-1 overflow-x-auto pr-5 [mask-image:linear-gradient(to_right,black_calc(100%-20px),transparent)] [&>*]:shrink-0">
         <LatexRibbon editorView={editorView} />
         <div className="mx-2 h-4 w-px bg-border" />
-        <Button
-          variant={vimMode ? "default" : "ghost"}
-          size="sm"
-          className="h-6 px-2 font-mono text-xs"
-          onClick={() => setVimMode(!vimMode)}
-          title="Toggle Vim mode"
-        >
-          VIM
-        </Button>
+        {/* Vim keys change what a click and typing do, so they're switched
+            on in Settings, not by a button beside the ribbon's; when on,
+            this says so, and turns them off. */}
+        {vimMode && (
+          <Button
+            variant="default"
+            size="sm"
+            className="h-6 gap-1 px-2 font-mono text-xs"
+            onClick={() => setVimMode(false)}
+            title="Vim keys are on: click to turn them off"
+          >
+            Vim on ×
+          </Button>
+        )}
         <Button
           variant={grammarCheckEnabled ? "default" : "ghost"}
           size="sm"

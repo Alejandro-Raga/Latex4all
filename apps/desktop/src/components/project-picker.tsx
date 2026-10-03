@@ -9,7 +9,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
-import { readFile, readTextFile, stat } from "@tauri-apps/plugin-fs";
+import { readDir, readFile, readTextFile, stat } from "@tauri-apps/plugin-fs";
 import { groupProjects, type ProjectSort } from "@/lib/project-grouping";
 import { syncProjectTypes } from "@/lib/project-type-sync";
 import {
@@ -787,6 +787,39 @@ async function firstExistingPath(
   );
 }
 
+/**
+ * The project's compiled PDF, whatever its main file is called: the build
+ * folder's newest .pdf named after a .tex at the project's root (a figure
+ * PDF copied there has no .tex of its name).
+ */
+async function builtPdf(projectPath: string): Promise<string | null> {
+  const sep = projectPath.includes("\\") ? "\\" : "/";
+  const buildDir = [projectPath, ".prism", "build"].join(sep);
+  try {
+    const texNames = new Set(
+      (await readDir(projectPath))
+        .filter((e) => e.isFile && /\.tex$/i.test(e.name))
+        .map((e) => e.name.replace(/\.tex$/i, "").toLowerCase()),
+    );
+    const pdfs = (await readDir(buildDir)).filter(
+      (e) =>
+        e.isFile &&
+        /\.pdf$/i.test(e.name) &&
+        texNames.has(e.name.replace(/\.pdf$/i, "").toLowerCase()),
+    );
+    let newest: { path: string; at: number } | null = null;
+    for (const pdf of pdfs) {
+      const path = `${buildDir}${sep}${pdf.name}`;
+      const info = (await stat(path)) as { mtime?: unknown };
+      const at = statDateToMs(info.mtime) ?? 0;
+      if (!newest || at > newest.at) newest = { path, at };
+    }
+    return newest?.path ?? null;
+  } catch {
+    return null;
+  }
+}
+
 type RenderedThumbnail = { url: string; aspectRatio: number };
 
 async function renderPdfThumbnailFromBytes(
@@ -934,12 +967,9 @@ async function computeProjectPreview(
 ): Promise<ProjectPreviewData> {
   {
     const createdAt = await getProjectCreatedAt(project.path);
-    const pdfPath = await firstExistingPath(project.path, [
-      [".prism", "build", "main.pdf"],
-      [".prism", "build", "document.pdf"],
-      ["main.pdf"],
-      ["document.pdf"],
-    ]);
+    const pdfPath =
+      (await builtPdf(project.path)) ??
+      (await firstExistingPath(project.path, [["main.pdf"], ["document.pdf"]]));
 
     if (pdfPath) {
       try {

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   TriangleAlertIcon,
   DownloadIcon,
@@ -18,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useSettingsStore, type UpdateChannel } from "@/stores/settings-store";
 import { useUpdater } from "@/hooks/use-updater";
+import { useUpdaterStore } from "@/stores/updater-store";
 
 /**
  * First-run channel picker + update prompt.
@@ -31,7 +31,8 @@ export function UpdateManager() {
   const setChannel = useSettingsStore((s) => s.setUpdateChannel);
 
   const { status, installUpdate, restart, setStatus } = useUpdater();
-  const [dismissed, setDismissed] = useState(false);
+  const dismissed = useUpdaterStore((s) => s.promptDismissed);
+  const dismissPrompt = useUpdaterStore((s) => s.dismissPrompt);
 
   // ── First run: no channel chosen yet ──
   if (!channel) {
@@ -55,8 +56,7 @@ export function UpdateManager() {
         // Only dismissable before the download starts; closing mid-install
         // would hide progress while the installer keeps running.
         if (!open && status.state === "available") {
-          setDismissed(true);
-          setStatus({ state: "idle" });
+          dismissPrompt();
         }
       }}
     >
@@ -89,7 +89,7 @@ export function UpdateManager() {
               </div>
             )}
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setDismissed(true)}>
+              <Button variant="ghost" onClick={dismissPrompt}>
                 Not now
               </Button>
               <Button onClick={installUpdate} className="gap-1.5">
@@ -146,7 +146,7 @@ export function UpdateManager() {
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setDismissed(true)}>
+              <Button variant="ghost" onClick={dismissPrompt}>
                 Later
               </Button>
               <Button onClick={restart} className="gap-1.5">

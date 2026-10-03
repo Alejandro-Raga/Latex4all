@@ -91,6 +91,7 @@ export function UpdateSettings({ appVersion }: { appVersion?: string }) {
         <span className="text-muted-foreground text-xs">
           {appVersion ? `Current version ${appVersion}` : null}
           {status.state === "up-to-date" && " — up to date"}
+          {status.state === "available" && ` — ${status.version} available`}
           {status.state === "error" && " — check failed"}
         </span>
       </div>

@@ -868,7 +868,9 @@ export function LatexEditor() {
         const isSelectAll = from === 0 && to === update.state.doc.length;
         const isMultiClickSelection = lastMouseDownDetailRef.current >= 2;
         lastMouseDownDetailRef.current = 1; // one-shot: only applies to this update
-        if (from !== to && !isSelectAll && !isMultiClickSelection) {
+        // A single letter is a click that moved a little, not a selection
+        // to act on: no toolbar for it.
+        if (to - from >= 2 && !isSelectAll && !isMultiClickSelection) {
           setSelectionRange({ start: from, end: to });
           const startCoords = update.view.coordsAtPos(from);
           const endCoords = update.view.coordsAtPos(to);
