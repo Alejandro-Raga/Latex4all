@@ -39,7 +39,7 @@ interface Attachment extends LibraryPdf {
 }
 
 export interface LibraryMirror {
-  format: 1;
+  format: 2;
   userID: string;
   /** Zotero's library version this copy is up to date with. */
   version: number;
@@ -50,7 +50,7 @@ export interface LibraryMirror {
 
 export function emptyMirror(userID: string): LibraryMirror {
   return {
-    format: 1,
+    format: 2,
     userID,
     version: 0,
     items: {},
@@ -110,6 +110,7 @@ export function applyItems(mirror: LibraryMirror, changed: ApiItem[]) {
         .join(", "),
       year: year === null ? "" : String(year),
       date,
+      itemType: data.itemType,
       collections: data.collections ?? [],
     };
   }
@@ -227,7 +228,8 @@ export async function loadMirror(userID: string): Promise<LibraryMirror> {
     const path = await mirrorPath(userID);
     if (!(await exists(path))) return emptyMirror(userID);
     const mirror = JSON.parse(await readTextFile(path)) as LibraryMirror;
-    return mirror.format === 1 && mirror.userID === userID
+    // An older copy (without item types) is fetched again in full.
+    return mirror.format === 2 && mirror.userID === userID
       ? mirror
       : emptyMirror(userID);
   } catch {

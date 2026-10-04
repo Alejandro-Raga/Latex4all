@@ -27,6 +27,10 @@ tag.
   from the menu next to the search. Papers, ideas and topics keep their own
   sections. The same menu orders a note's links, and Zotero references can
   now be sorted by first author too.
+- The Zotero library gets a filter too (the sliders button by its search):
+  a range of years and an item type (journal article, book…). These can also
+  be typed: `year:1990-2005`, `year:>2010`, `type:book`. The first time the
+  library opens after updating, it is read from Zotero again in full.
 - Vault search like Zotero's: a filter row (the sliders button by the search)
   for a range of years, a type and a topic. Conditions can also be typed:
   `author:nelson`, `year:1990-2005`, `year:>2010`, `topic:"open science"`,

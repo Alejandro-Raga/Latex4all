@@ -350,6 +350,8 @@ export interface ZoteroItemSummary {
   /** Zotero's raw `date` field, kept verbatim for sorting — it is free text
    * ("2020-05-12", "May 2020", "in press"), so it is not safe to display. */
   date: string;
+  /** Zotero's item type ("journalArticle", "book"…). */
+  itemType?: string;
 }
 
 /**
@@ -419,6 +421,7 @@ export async function fetchLibraryItems(
         creators,
         year: year === null ? "" : String(year),
         date,
+        itemType: item.data.itemType,
       });
     }
 

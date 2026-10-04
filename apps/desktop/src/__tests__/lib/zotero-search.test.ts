@@ -6,6 +6,7 @@ import {
   parseQuery,
   searchReferences,
   sortReferences,
+  splitConditions,
 } from "@/lib/zotero-search";
 
 const item = (
@@ -173,6 +174,37 @@ describe("searchReferences", () => {
     expect(keys(searchReferences(library, "climate", "newest"))).toEqual([
       "c",
       "a",
+    ]);
+  });
+});
+
+describe("library conditions", () => {
+  const typed = [
+    { ...library[0], itemType: "journalArticle" },
+    { ...library[1], itemType: "book" },
+    { ...library[2], itemType: "journalArticle" },
+    { ...library[3], itemType: "book" },
+  ];
+
+  it("reads year: and type: out of the words", () => {
+    const { filter, words } = splitConditions("climate year:>2019 type:book");
+    expect(filter).toEqual({ yearFrom: 2020, yearTo: null, type: "book" });
+    expect(words).toBe("climate");
+    expect(splitConditions("year:2000-2010").filter.yearTo).toBe(2010);
+  });
+
+  it("narrows by a typed or picked year range and type", () => {
+    expect(keys(searchReferences(typed, "year:2010-2025", "oldest"))).toEqual([
+      "a",
+      "c",
+    ]);
+    const picked = { yearFrom: 2000, yearTo: null, type: "book" };
+    expect(keys(searchReferences(typed, "", "relevance", picked))).toEqual([
+      "b",
+    ]);
+    expect(keys(searchReferences(typed, "type:journal", "title"))).toEqual([
+      "a",
+      "c",
     ]);
   });
 });

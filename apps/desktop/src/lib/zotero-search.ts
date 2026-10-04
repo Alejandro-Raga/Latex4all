@@ -146,11 +146,108 @@ export function sortReferences(
   }
 }
 
-/** Filter then order, the pair every caller actually wants. */
+/** Conditions that narrow the library, picked or typed (`year:`, `type:`). */
+export interface ReferenceFilter {
+  yearFrom: number | null;
+  yearTo: number | null;
+  /** A Zotero item type, or "" for any. */
+  type: string;
+}
+
+export const NO_REFERENCE_FILTER: ReferenceFilter = {
+  yearFrom: null,
+  yearTo: null,
+  type: "",
+};
+
+export const referenceFilterActive = (f: ReferenceFilter) =>
+  f.yearFrom !== null || f.yearTo !== null || f.type !== "";
+
+/** "journalArticle" → "Journal article". */
+export function referenceTypeLabel(type: string): string {
+  const words = type.replace(/([A-Z])/g, " $1").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+const CONDITION = /(?:^|\s)(year|y|type):(?:"([^"]*)"|(\S+))/gi;
+
+/**
+ * The `year:` and `type:` conditions typed in a search, and the words left:
+ * `year:2005`, `year:1990-2005`, `year:>2010`, `type:book`.
+ */
+export function splitConditions(query: string): {
+  filter: ReferenceFilter;
+  words: string;
+} {
+  const filter = { ...NO_REFERENCE_FILTER };
+  const words = query.replace(CONDITION, (_m, field, quoted, bare) => {
+    const value = String(quoted ?? bare ?? "").trim();
+    if (field.toLowerCase() === "type") {
+      filter.type = normalize(value).replace(/\s+/g, "");
+      return " ";
+    }
+    const range = value.match(/^(\d{4})?\s*-\s*(\d{4})?$/);
+    const cmp = value.match(/^([<>]=?)(\d{4})$/);
+    if (range) {
+      if (range[1]) filter.yearFrom = Number(range[1]);
+      if (range[2]) filter.yearTo = Number(range[2]);
+    } else if (cmp) {
+      const y = Number(cmp[2]);
+      if (cmp[1] === ">") filter.yearFrom = y + 1;
+      if (cmp[1] === ">=") filter.yearFrom = y;
+      if (cmp[1] === "<") filter.yearTo = y - 1;
+      if (cmp[1] === "<=") filter.yearTo = y;
+    } else if (/^\d{4}$/.test(value)) {
+      filter.yearFrom = filter.yearTo = Number(value);
+    }
+    return " ";
+  });
+  return { filter, words: words.trim() };
+}
+
+/** The items that meet the conditions (undated ones fail a year range). */
+export function filterByConditions(
+  items: ZoteroItemSummary[],
+  f: ReferenceFilter,
+): ZoteroItemSummary[] {
+  if (!referenceFilterActive(f)) return items;
+  return items.filter((item) => {
+    if (f.yearFrom !== null || f.yearTo !== null) {
+      const y = parsePublicationYear(item.date);
+      if (y === null) return false;
+      if (f.yearFrom !== null && y < f.yearFrom) return false;
+      if (f.yearTo !== null && y > f.yearTo) return false;
+    }
+    if (f.type) {
+      // Picked exactly, or typed as the start of the type ("journal").
+      const type = (item.itemType ?? "").toLowerCase();
+      if (!type.startsWith(f.type.toLowerCase())) return false;
+    }
+    return true;
+  });
+}
+
+/** Filter then order, the pair every caller actually wants. Conditions typed
+ *  in the query add to those picked (`picked`). */
 export function searchReferences(
   items: ZoteroItemSummary[],
   query: string,
   sort: ReferenceSort,
+  picked: ReferenceFilter = NO_REFERENCE_FILTER,
 ): ZoteroItemSummary[] {
-  return sortReferences(filterReferences(items, query), sort, query);
+  const { filter: typed, words } = splitConditions(query);
+  const max = (a: number | null, b: number | null) =>
+    a === null ? b : b === null ? a : Math.max(a, b);
+  const min = (a: number | null, b: number | null) =>
+    a === null ? b : b === null ? a : Math.min(a, b);
+  const both: ReferenceFilter = {
+    yearFrom: max(typed.yearFrom, picked.yearFrom),
+    yearTo: min(typed.yearTo, picked.yearTo),
+    type: typed.type || picked.type,
+  };
+  return sortReferences(
+    filterReferences(filterByConditions(items, both), words),
+    sort,
+    words,
+  );
 }

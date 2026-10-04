@@ -349,7 +349,7 @@ if (scenario === "workspace") {
   if (params.get("dialog") === "zotero-target") {
     useZoteroLibrary.setState({
       mirror: {
-        format: 1,
+        format: 2,
         userID: "1",
         version: 1,
         items: {},

@@ -58,7 +58,11 @@ import {
   type ZoteroItemSummary,
 } from "@/lib/zotero-api";
 import {
+  filterByConditions,
+  NO_REFERENCE_FILTER,
   REFERENCE_SORTS,
+  type ReferenceFilter,
+  referenceFilterActive,
   searchReferences,
   sortReferences,
   type ReferenceSort,
@@ -105,6 +109,8 @@ import {
   addCitekeysToZoteroWithToast,
 } from "./citation-check";
 import { TopicMenu } from "./topic-menu";
+import { LibraryFilterRow } from "./library-filter";
+import { FilterToggle } from "./vault-filter";
 import { createLogger } from "@/lib/debug/logger";
 import { DockHeaderBar, DockWideButton } from "./dock/dock-section";
 
@@ -298,6 +304,9 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   );
   const [zoteroQuery, setZoteroQuery] = useState("");
   const [zoteroSort, setZoteroSort] = useState<ReferenceSort>("relevance");
+  const [zoteroFilter, setZoteroFilter] =
+    useState<ReferenceFilter>(NO_REFERENCE_FILTER);
+  const [showZoteroFilters, setShowZoteroFilters] = useState(false);
   const [citedOnly, setCitedOnly] = useState(false);
   const [citedOrder, setCitedOrder] = useState<CitedOrder>("text");
   const cited = useCitedItems(citedOnly);
@@ -550,14 +559,22 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
     [zoteroCollections],
   );
 
-  const searching = zoteroQuery.trim().length > 0;
+  // A search or a picked condition lists the whole library's matches.
+  const searching =
+    zoteroQuery.trim().length > 0 || referenceFilterActive(zoteroFilter);
 
   const searchResults = useMemo(() => {
     if (!searching) return [];
     const items = zoteroItemsByCollection.get(MY_LIBRARY_KEY);
     if (!items) return [];
-    return searchReferences(items, zoteroQuery, zoteroSort);
-  }, [searching, zoteroItemsByCollection, zoteroQuery, zoteroSort]);
+    return searchReferences(items, zoteroQuery, zoteroSort, zoteroFilter);
+  }, [
+    searching,
+    zoteroItemsByCollection,
+    zoteroQuery,
+    zoteroSort,
+    zoteroFilter,
+  ]);
   const selectedZoteroItemKey =
     selectedFile?.source === "zotero" ? selectedFile.itemKey : null;
 
@@ -689,6 +706,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
                           onChange={(e) => setZoteroQuery(e.target.value)}
                           placeholder="Search title or author…"
                           aria-label="Search references by title or author"
+                          title="Also: author:nelson, year:1990-2005, year:>2010, type:book"
                           className="h-7 pr-7 pl-7 text-xs"
                         />
                         {zoteroQuery && (
@@ -719,15 +737,32 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
                         <SelectContent>
                           {REFERENCE_SORTS.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
-                              {option.label}
+                              {option.value === "relevance" &&
+                              !zoteroQuery.trim()
+                                ? "Default"
+                                : option.label}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      <FilterToggle
+                        open={showZoteroFilters}
+                        active={referenceFilterActive(zoteroFilter)}
+                        onToggle={() => setShowZoteroFilters((v) => !v)}
+                      />
                       {currentProjectRoot && (
                         <CitedToggle on={citedOnly} onChange={setCitedOnly} />
                       )}
                     </div>
+                    {showZoteroFilters && (
+                      <LibraryFilterRow
+                        items={
+                          zoteroItemsByCollection.get(MY_LIBRARY_KEY) ?? []
+                        }
+                        filter={zoteroFilter}
+                        onChange={setZoteroFilter}
+                      />
+                    )}
                     {citedOnly && currentProjectRoot ? (
                       <>
                         <CitedHeader order={citedOrder} onOrder={setCitedOrder}>
@@ -774,7 +809,14 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
                           )}
                         </CitedHeader>
                         {orderCited(
-                          matchingQuery(cited.items, zoteroQuery),
+                          matchingQuery(
+                            cited.items.filter(
+                              (c) =>
+                                filterByConditions([c.item], zoteroFilter)
+                                  .length > 0,
+                            ),
+                            zoteroQuery,
+                          ),
                           (c) => c.places,
                           (c) => cited.items.indexOf(c),
                           citedOrder,
@@ -1430,8 +1472,7 @@ function ZoteroSearchResults({
   if (results.length === 0) {
     return (
       <p className="px-2 py-1 text-muted-foreground text-xs">
-        No references match. Try fewer words, or scope one with{" "}
-        <code>author:</code> or <code>title:</code>.
+        No references match. Try fewer words or a wider year range.
       </p>
     );
   }
