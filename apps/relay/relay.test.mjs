@@ -560,7 +560,9 @@ test("bug reports are kept with their screenshots, and capped", async () => {
   assert.equal(res.status, 201);
   const id = await res.text();
   const dir = path.join(relay.dataDir, "reports", id);
-  const saved = JSON.parse(fs.readFileSync(path.join(dir, "report.json"), "utf8"));
+  const saved = JSON.parse(
+    fs.readFileSync(path.join(dir, "report.json"), "utf8"),
+  );
   assert.equal(saved.text, "The map shrinks");
   assert.equal(saved.app.version, "1.2.120");
   assert.deepEqual(saved.images, ["image-1.png"]);
