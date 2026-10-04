@@ -21,6 +21,8 @@ tag.
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-10-04
+
 ### Fixed
 
 - A reply from ChatGPT, Gemini or Copilot could keep showing "Thinking…"
