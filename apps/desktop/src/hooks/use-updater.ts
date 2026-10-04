@@ -2,6 +2,12 @@ import { useCallback, useEffect } from "react";
 import { useSettingsStore, type UpdateChannel } from "@/stores/settings-store";
 import { useUpdaterStore, type UpdateStatus } from "@/stores/updater-store";
 
+/** How often an open app looks for a new version. */
+const RECHECK_EVERY = 4 * 60 * 60e3;
+/** Back to the window after this long away: look again. */
+const RECHECK_ON_RETURN = 60 * 60e3;
+let rechecking = false;
+
 export type { UpdateStatus };
 
 /**
@@ -58,6 +64,33 @@ export function useUpdater() {
     markLaunchChecked();
     void storeCheck(channel);
   }, [channel, autoCheck, launchCheckDone, markLaunchChecked, storeCheck]);
+
+  // An app left open for days still hears of new versions: checked again
+  // every few hours, and on coming back to it after a while away. Never
+  // while an update is on offer or being installed.
+  useEffect(() => {
+    // Several components use this hook; one timer is enough.
+    if (!channel || !autoCheck || rechecking) return;
+    rechecking = true;
+    let last = Date.now();
+    const recheck = (minimum: number) => {
+      if (Date.now() - last < minimum) return;
+      const { state } = useUpdaterStore.getState().status;
+      if (state !== "idle" && state !== "up-to-date" && state !== "error") {
+        return;
+      }
+      last = Date.now();
+      void storeCheck(channel);
+    };
+    const timer = setInterval(() => recheck(RECHECK_EVERY), 10 * 60e3);
+    const onFocus = () => recheck(RECHECK_ON_RETURN);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      rechecking = false;
+      clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [channel, autoCheck, storeCheck]);
 
   return {
     status,

@@ -21,6 +21,12 @@ tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- An app left open only looked for updates when it started, so a version
+  released meanwhile went unnoticed. It now looks again every few hours,
+  and when you come back to it after an hour away.
+
 ## [1.2.3] - 2026-10-04
 
 ### Fixed
