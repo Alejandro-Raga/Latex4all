@@ -33,6 +33,7 @@ import {
   XIcon,
   type LucideIcon,
   NotebookTextIcon,
+  RefreshCwIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useProjectStore } from "@/stores/project-store";
@@ -665,7 +666,11 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
                 />
               </FoldSection>
 
-              <FoldSection id="zotero" title="Zotero">
+              <FoldSection
+                id="zotero"
+                title="Zotero"
+                action={zoteroAuthenticated ? <ZoteroRefresh /> : undefined}
+              >
                 {!zoteroAuthenticated ? (
                   <button
                     type="button"
@@ -1128,6 +1133,30 @@ function ZoteroTreeRow({
         <CollectionToBibItems collectionKey={collectionKey} name={label} />
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+/** Fetches what changed in Zotero since the library was last read. */
+function ZoteroRefresh() {
+  const syncing = useZoteroLibrary((s) => s.syncing);
+  const error = useZoteroLibrary((s) => s.error);
+  const refresh = () => {
+    const { apiKey, userID } = useZoteroStore.getState();
+    if (apiKey && userID) void useZoteroLibrary.getState().sync(apiKey, userID);
+  };
+  return (
+    <button
+      type="button"
+      onClick={refresh}
+      disabled={syncing}
+      className="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
+      title={
+        error ? `Refresh (last try failed: ${error})` : "Refresh from Zotero"
+      }
+      aria-label="Refresh from Zotero"
+    >
+      <RefreshCwIcon className={cn("size-3.5", syncing && "animate-spin")} />
+    </button>
   );
 }
 

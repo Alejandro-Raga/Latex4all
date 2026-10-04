@@ -391,6 +391,35 @@ describe("shared projects", () => {
     expect(b.errors).toEqual([]);
   });
 
+  it("tries a file again after the relay was briefly down", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const relay = new FakeRelay();
+    const workspace = new FakeWorkspace(relay, {
+      "main.tex": "\\documentclass{article}",
+      "attachments/paper.pdf": "PDFDATA",
+    });
+    // The first upload meets a 502 (Cloudflare between us and the relay).
+    const upload = workspace.upload.bind(workspace);
+    let failures = 1;
+    workspace.upload = async (path: string) => {
+      if (path.endsWith(".pdf") && failures-- > 0) {
+        throw new Error("The relay answered 502.");
+      }
+      return upload(path);
+    };
+    const a = new Device(relay, workspace);
+    await a.open({ name: "Thesis" });
+    expect(a.errors.join()).toMatch(/Couldn't share attachments\/paper\.pdf/);
+
+    // Nothing changes on disk, yet it goes on its own a minute later.
+    await vi.advanceTimersByTimeAsync(61_000);
+    await a.settle();
+    const b = new Device(relay, new FakeWorkspace(relay));
+    await b.open();
+    await settleAll(a, b);
+    expect(b.workspace.snapshot()["attachments/paper.pdf"]).toBe("PDFDATA");
+  });
+
   it("applies others' latest text without waiting on slow downloads", async () => {
     const relay = new FakeRelay();
     const a = new Device(

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { mergeLineRects } from "@/lib/pdf-line-rects";
 import {
   BookOpenIcon,
   CopyIcon,
@@ -51,6 +52,8 @@ async function saveHighlight(
     return;
   }
   const hex = ZOTERO_COLOR[color];
+  // Saved as one band per line, as Zotero makes them, not a piece per word.
+  const rects = mergeLineRects(selection.rects);
   try {
     await createZoteroHighlight(
       apiKey,
@@ -58,7 +61,7 @@ async function saveHighlight(
       paper.zotero.attachmentKey,
       {
         pageIndex: selection.pageNumber - 1,
-        rects: selection.rects,
+        rects,
         text: selection.text,
         comment,
         color: hex,
@@ -67,7 +70,7 @@ async function saveHighlight(
     );
     useReadingStore.getState().addAnnotation(paper.id, {
       pageIndex: selection.pageNumber - 1,
-      rects: selection.rects,
+      rects,
       color: hex,
       type: "highlight",
     });

@@ -31,6 +31,31 @@ fn history_path(project_root: &str) -> PathBuf {
         .join("history.git")
 }
 
+/// Whether a history repo's working folder is this project (one made on
+/// another computer has that computer's path).
+fn repo_points_here(repo: &Repository, project_root: &str) -> bool {
+    let Some(workdir) = repo.workdir() else {
+        return false;
+    };
+    match (
+        workdir.canonicalize(),
+        Path::new(project_root).canonicalize(),
+    ) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
+}
+
+/// Moves a broken history repo out of the way, keeping it in case.
+fn set_aside(git_dir: &Path) -> Result<(), String> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let aside = git_dir.with_file_name(format!("history.git.broken-{}", stamp));
+    fs::rename(git_dir, &aside).map_err(|e| format!("Couldn't set the broken history aside: {}", e))
+}
+
 fn open_repo(project_root: &str) -> Result<Repository, String> {
     let git_dir = history_path(project_root);
     Repository::open(&git_dir).map_err(|e| format!("Failed to open history repo: {}", e))
@@ -118,10 +143,17 @@ pub fn history_init(project_root: String) -> Result<(), String> {
 
     if git_dir.exists() {
         // Already initialized — verify and ensure excludes
-        let repo =
-            Repository::open(&git_dir).map_err(|e| format!("Corrupt history repo: {}", e))?;
-        ensure_excludes(&project_root, &repo);
-        return Ok(());
+        match Repository::open(&git_dir) {
+            Ok(repo) if repo_points_here(&repo, &project_root) => {
+                ensure_excludes(&project_root, &repo);
+                return Ok(());
+            }
+            // Unusable: a sync service copied the folder without its
+            // contents, or brought one made on another computer that points
+            // at that computer's paths (D:/…). Set aside, not deleted, and
+            // history starts again here.
+            _ => set_aside(&git_dir)?,
+        }
     }
 
     // Create .latex4all/ dir
@@ -561,6 +593,45 @@ mod tests {
         let head = repo.head().unwrap();
         let commit = head.peel_to_commit().unwrap();
         assert!(commit.message().unwrap().contains("[init]"));
+    }
+
+    #[test]
+    fn test_history_init_sets_aside_an_empty_repo_folder() {
+        // What a sync service leaves: the folder, without its contents.
+        let dir = setup_project(&[("main.tex", "hello")]);
+        fs::create_dir_all(dir.path().join(".latex4all").join("history.git")).unwrap();
+        history_init(root(&dir)).unwrap();
+        let repo = Repository::open(dir.path().join(".latex4all").join("history.git")).unwrap();
+        assert!(repo.head().is_ok());
+        let aside = fs::read_dir(dir.path().join(".latex4all"))
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .any(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with("history.git.broken-")
+            });
+        assert!(aside, "the broken one is kept aside");
+    }
+
+    #[test]
+    fn test_history_init_sets_aside_a_repo_from_another_computer() {
+        // Made for another folder (on Windows, D:/…): its working folder isn't this one.
+        let elsewhere = setup_project(&[("main.tex", "elsewhere")]);
+        history_init(root(&elsewhere)).unwrap();
+        let dir = setup_project(&[("main.tex", "here")]);
+        fs::create_dir_all(dir.path().join(".latex4all")).unwrap();
+        fs::rename(
+            elsewhere.path().join(".latex4all").join("history.git"),
+            dir.path().join(".latex4all").join("history.git"),
+        )
+        .unwrap();
+        history_init(root(&dir)).unwrap();
+        let repo = Repository::open(dir.path().join(".latex4all").join("history.git")).unwrap();
+        assert_eq!(
+            repo.workdir().unwrap().canonicalize().unwrap(),
+            dir.path().canonicalize().unwrap()
+        );
     }
 
     #[test]

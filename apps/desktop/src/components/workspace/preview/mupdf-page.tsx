@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, memo } from "react";
+import { mergeLineRects } from "@/lib/pdf-line-rects";
 import { getMupdfClient } from "@/lib/mupdf/mupdf-client";
 import { createLogger } from "@/lib/debug/logger";
 import { APP_VISIBILITY_RESTORED } from "@/lib/debug/log-store";
@@ -238,7 +239,8 @@ export const MupdfPage = memo(function MupdfPage({
             return null;
           })()}
           {annotations.map((ann, ai) =>
-            ann.rects.map((rect, ri) => {
+            // One band per line, as Zotero draws them.
+            mergeLineRects(ann.rects).map((rect, ri) => {
               const x1 = Math.min(rect[0], rect[2]);
               const x2 = Math.max(rect[0], rect[2]);
               const y1 = Math.min(rect[1], rect[3]);

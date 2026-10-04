@@ -92,8 +92,13 @@ export class ProjectSync {
   private seen = new Map<string, LocalFile>();
   private lastFilesSignature = "";
   private lastLayoutSignature = "";
-  /** Files that failed to upload; retried once they change. */
-  private failedUploads = new Set<string>();
+  /**
+   * Uploads that failed, by path and size: when to try again. A file too
+   * large or a full project stay failed until the file changes; anything
+   * else (the relay or the connection briefly down) is tried again later,
+   * waiting longer each time.
+   */
+  private failedUploads = new Map<string, { retryAt: number; wait: number }>();
   /**
    * Images and other binary files left to download when opening: fetched
    * after, so what others wrote is applied without waiting on them.
@@ -222,6 +227,31 @@ export class ProjectSync {
 
   private localFiles() {
     return new Map(this.workspace.files().map((f) => [f.path, f]));
+  }
+
+  private mayRetry(attempt: string): boolean {
+    const failed = this.failedUploads.get(attempt);
+    return !failed || Date.now() >= failed.retryAt;
+  }
+
+  private uploadFailed(attempt: string, err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    const lasting = /too-large|quota/.test(message);
+    const wait = Math.min(
+      30 * 60e3,
+      (this.failedUploads.get(attempt)?.wait ?? 30e3) * 2,
+    );
+    this.failedUploads.set(attempt, {
+      retryAt: lasting ? Number.POSITIVE_INFINITY : Date.now() + wait,
+      wait,
+    });
+    // Nothing else may change meanwhile to set it going again.
+    if (!lasting) {
+      const timer = setTimeout(() => {
+        if (!this.stopped) this.schedule();
+      }, wait + 50);
+      this.cleanup.push(() => clearTimeout(timer));
+    }
   }
 
   private entry(fileId: string) {
@@ -398,7 +428,7 @@ export class ProjectSync {
         continue;
       }
       const attempt = `${file.path}|${file.size}`;
-      if (this.failedUploads.has(attempt)) continue;
+      if (!this.mayRetry(attempt)) continue;
       try {
         const { blobId, size } = await this.workspace.upload(file.path);
         if (this.stopped) return;
@@ -408,7 +438,7 @@ export class ProjectSync {
         }, LOCAL);
         this.known.set(fileId, { path: file.path, blobId, size });
       } catch (err) {
-        this.failedUploads.add(attempt);
+        this.uploadFailed(attempt, err);
         this.hooks.onError?.(
           `Couldn't share ${file.path}: ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -429,7 +459,7 @@ export class ProjectSync {
         mine.size !== known.size
       ) {
         const attempt = `${mine.path}|${mine.size}`;
-        if (this.failedUploads.has(attempt)) continue;
+        if (!this.mayRetry(attempt)) continue;
         try {
           const { blobId, size } = await this.workspace.upload(mine.path);
           if (this.stopped) return;
@@ -440,7 +470,7 @@ export class ProjectSync {
           known.blobId = blobId;
           known.size = size;
         } catch (err) {
-          this.failedUploads.add(attempt);
+          this.uploadFailed(attempt, err);
           this.hooks.onError?.(
             `Couldn't share ${mine.path}: ${err instanceof Error ? err.message : String(err)}`,
           );

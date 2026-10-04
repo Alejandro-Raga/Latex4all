@@ -34,6 +34,16 @@ tag.
 
 ### Fixed
 
+- A refresh button on the Zotero section of the Reference panel fetches
+  what changed in Zotero since the library was last read.
+- Highlights from Zotero, and new ones made here, show as one band per line,
+  as in Zotero, not a patchwork of words (most visible in scanned PDFs).
+- In a shared project, a file that couldn't be sent because the server was
+  briefly unreachable is tried again a minute later, then less often, instead
+  of only once it changed.
+- A project's history that a sync service had copied badly (an empty folder,
+  or one made on another computer) stopped history from working. It's now
+  set aside and history starts again.
 - An app left open only looked for updates when it started, so a version
   released meanwhile went unnoticed. It now looks again every few hours,
   and when you come back to it after an hour away.
