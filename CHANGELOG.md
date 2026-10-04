@@ -31,11 +31,17 @@ tag.
 - A note's links (Both ways, Links to, Linked from) can be filtered and
   sorted the same way once there are more than a few, and each paper there
   shows its first author and year.
+- File a passage under an idea or a topic while reading a paper: select text
+  and choose "Add to idea…" or "Add to topic…", or right-click a highlight
+  you already have. Pick one of your notes or type a new name. The passage
+  goes into that note word for word, under its paper, with links back to the
+  paper note and to the spot in the PDF. Works without any Zotero sync
+  running elsewhere, and matches the notes such a sync writes.
+- A refresh button on the Zotero section of the Reference panel fetches
+  what changed in Zotero since the library was last read.
 
 ### Fixed
 
-- A refresh button on the Zotero section of the Reference panel fetches
-  what changed in Zotero since the library was last read.
 - Highlights from Zotero, and new ones made here, show as one band per line,
   as in Zotero, not a patchwork of words (most visible in scanned PDFs).
 - In a shared project, a file that couldn't be sent because the server was

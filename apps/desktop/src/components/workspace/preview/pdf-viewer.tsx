@@ -237,6 +237,10 @@ export interface CaptureResult {
 export interface PdfAnnotationRect {
   /** Zotero's key for it, so a link can bring it into view. */
   key?: string;
+  /** What it covers, the note on it and its page label (from Zotero). */
+  text?: string;
+  comment?: string;
+  pageLabel?: string;
   pageIndex: number;
   rects: [number, number, number, number][];
   color: string;
@@ -275,6 +279,11 @@ interface PdfViewerProps {
   /** Brings an annotation (by key) to the middle of the view and flashes
    *  it; false while its page isn't laid out yet, or if there's no such. */
   focusAnnotationRef?: React.RefObject<((key: string) => boolean) | null>;
+  /** A right-click on one of `annotations` (one with a key). */
+  onAnnotationContextMenu?: (
+    annotation: PdfAnnotationRect,
+    at: { left: number; top: number },
+  ) => void;
   captureMode?: boolean;
   onCapture?: (result: CaptureResult) => void;
   onCancelCapture?: () => void;
@@ -302,6 +311,7 @@ export function PdfViewer({
   onCurrentPageChange,
   scrollToPageRef,
   focusAnnotationRef,
+  onAnnotationContextMenu,
   captureMode = false,
   onCapture,
   onCancelCapture,
@@ -946,6 +956,48 @@ export function PdfViewer({
       cancelAnimationFrame(rafId);
     };
   }, [pageSizes, isActive]);
+
+  // Right-click on a highlight: which one, for its menu (filing it under an
+  // idea, say). Elsewhere the page's own menu stands.
+  const annotationMenuRef = useRef(onAnnotationContextMenu);
+  annotationMenuRef.current = onAnnotationContextMenu;
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const onMenu = (e: MouseEvent) => {
+      const handler = annotationMenuRef.current;
+      if (!handler || !annotations?.length) return;
+      const pageEl = (e.target as Element | null)?.closest?.(
+        "[data-page-number]",
+      ) as HTMLElement | null;
+      if (!pageEl) return;
+      const pageIndex = Number(pageEl.dataset.pageNumber) - 1;
+      const size = pageSizes[pageIndex];
+      if (!size) return;
+      const box = pageEl.getBoundingClientRect();
+      const x = ((e.clientX - box.left) / box.width) * size.width;
+      const y =
+        size.height - ((e.clientY - box.top) / box.height) * size.height;
+      const hit = annotations.find(
+        (a) =>
+          a.key &&
+          a.pageIndex === pageIndex &&
+          a.rects.some(
+            (r) =>
+              x >= Math.min(r[0], r[2]) - 1 &&
+              x <= Math.max(r[0], r[2]) + 1 &&
+              y >= Math.min(r[1], r[3]) - 1 &&
+              y <= Math.max(r[1], r[3]) + 1,
+          ),
+      );
+      if (!hit) return;
+      e.preventDefault();
+      e.stopPropagation();
+      handler(hit, { left: e.clientX, top: e.clientY });
+    };
+    container.addEventListener("contextmenu", onMenu, true);
+    return () => container.removeEventListener("contextmenu", onMenu, true);
+  }, [annotations, pageSizes]);
 
   // Expose focusing an annotation via ref: its top a third down the view,
   // with the passage around it, and a flash to find it by.
