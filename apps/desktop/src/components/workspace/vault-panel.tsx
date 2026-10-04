@@ -113,6 +113,7 @@ import {
   FilterRowControls,
   FilterToggle,
   rowActive,
+  SortSelect,
   rowFilter,
 } from "./vault-filter";
 import {
@@ -713,14 +714,15 @@ function NoteList({
   const [citedOrder, setCitedOrder] = useState<CitedOrder>("text");
   const cited = useCitedNotes(citedOnly);
   const results = useMemo(() => {
-    const found = filtering
-      ? filterNotes(
-          index,
-          index.list,
-          mergeFilters(parseNoteQuery(query), rowFilter(row)),
-          row.sort,
-        )
-      : index.list;
+    const found =
+      filtering || row.sort !== "relevance"
+        ? filterNotes(
+            index,
+            index.list,
+            mergeFilters(parseNoteQuery(query), rowFilter(row)),
+            row.sort,
+          )
+        : index.list;
     if (!citedOnly) return found;
     const first = [...cited.byNote.keys()];
     return orderCited(
@@ -730,6 +732,7 @@ function NoteList({
       citedOrder,
     );
   }, [index, query, row, filtering, citedOnly, cited, citedOrder]);
+  // Ordered without a search, the sections stay: papers by year, say.
   const groups = useMemo(() => {
     if (filtering || citedOnly) return [{ group: null, notes: results }];
     const byGroup = new Map<string, VaultNote[]>();
@@ -757,6 +760,13 @@ function NoteList({
           active={rowActive(row)}
           onToggle={() => setShowFilters((v) => !v)}
         />
+        {!citedOnly && (
+          <SortSelect
+            value={row.sort}
+            onChange={(sort) => setRow({ ...row, sort })}
+            searching={query.trim() !== ""}
+          />
+        )}
         {projectOpen && <CitedToggle on={citedOnly} onChange={setCitedOnly} />}
         <Button
           variant="ghost"
@@ -1592,7 +1602,7 @@ function Connections({
   const [linkFilters, setLinkFilters] = useState(false);
   const linkFiltering = linkQuery.trim() !== "" || rowActive(linkRow);
   const narrow = (names: string[]) => {
-    if (!linkFiltering) return names;
+    if (!linkFiltering && linkRow.sort === "relevance") return names;
     const notes = names
       .map((n) => findNote(index, n))
       .filter((n): n is VaultNote => Boolean(n));
@@ -1722,6 +1732,12 @@ function Connections({
               open={linkFilters}
               active={rowActive(linkRow)}
               onToggle={() => setLinkFilters((v) => !v)}
+            />
+            <SortSelect
+              value={linkRow.sort}
+              onChange={(sort) => setLinkRow({ ...linkRow, sort })}
+              searching={linkQuery.trim() !== ""}
+              className="h-6!"
             />
           </div>
           {linkFilters && (

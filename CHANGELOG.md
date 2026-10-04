@@ -23,13 +23,16 @@ tag.
 
 ### Added
 
+- Sort the vault's notes by title, first author or year (newest or oldest),
+  from the menu next to the search. Papers, ideas and topics keep their own
+  sections. The same menu orders a note's links, and Zotero references can
+  now be sorted by first author too.
 - Vault search like Zotero's: a filter row (the sliders button by the search)
-  for a range of years, a type, a topic and the order (best match, newest,
-  oldest, title, first author). Conditions can also be typed:
+  for a range of years, a type and a topic. Conditions can also be typed:
   `author:nelson`, `year:1990-2005`, `year:>2010`, `topic:"open science"`,
   `type:paper`, `tag:name`, alongside ordinary words.
-- A note's links (Both ways, Links to, Linked from) can be filtered and
-  sorted the same way once there are more than a few, and each paper there
+- A note's links (Both ways, Links to, Linked from) can be filtered the
+  same way once there are more than a few, and each paper there
   shows its first author and year.
 - File a passage under an idea or a topic while reading a paper: select text
   and choose "Add to idea…" or "Add to topic…", or right-click a highlight

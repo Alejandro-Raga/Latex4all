@@ -1,13 +1,19 @@
 import { parsePublicationYear, type ZoteroItemSummary } from "@/lib/zotero-api";
 
 /** How a list of references is ordered. */
-export type ReferenceSort = "relevance" | "newest" | "oldest" | "title";
+export type ReferenceSort =
+  | "relevance"
+  | "newest"
+  | "oldest"
+  | "title"
+  | "author";
 
 export const REFERENCE_SORTS: { value: ReferenceSort; label: string }[] = [
   { value: "relevance", label: "Best match" },
   { value: "newest", label: "Newest first" },
   { value: "oldest", label: "Oldest first" },
   { value: "title", label: "Title A–Z" },
+  { value: "author", label: "First author" },
 ];
 
 /**
@@ -116,6 +122,17 @@ export function sortReferences(
       return sorted.sort((a, b) => byYear(a, b, false));
     case "title":
       return sorted.sort(byTitle);
+    case "author": {
+      // `creators` is surnames in Zotero's order: the first is the one cited.
+      const first = (i: ZoteroItemSummary) =>
+        normalize(i.creators.split(",")[0]?.trim() ?? "");
+      return sorted.sort((a, b) => {
+        const fa = first(a);
+        const fb = first(b);
+        if (!fa !== !fb) return fa ? -1 : 1;
+        return fa.localeCompare(fb) || byYear(a, b, false);
+      });
+    }
     default: {
       const terms = parseQuery(query);
       // With nothing typed there is no "best match" to speak of, so leave the

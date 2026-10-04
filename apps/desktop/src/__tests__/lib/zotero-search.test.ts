@@ -131,6 +131,17 @@ describe("sortReferences", () => {
     ]);
   });
 
+  it("orders by first author, accents aside, no author last", () => {
+    const anonymous = item("e", "Anonymous pamphlet", "", "1990");
+    expect(keys(sortReferences([...library, anonymous], "author"))).toEqual([
+      "a",
+      "d",
+      "b",
+      "c",
+      "e",
+    ]);
+  });
+
   it("leaves the library alone when there is nothing to rank it by", () => {
     expect(keys(sortReferences(library, "relevance"))).toEqual([
       "a",

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { SlidersHorizontalIcon, XIcon } from "lucide-react";
+import { ArrowUpDownIcon, SlidersHorizontalIcon, XIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -48,18 +48,52 @@ export function rowFilter(row: FilterRow): NoteFilter {
   };
 }
 
-/** Anything picked besides the default order. */
+/** Any condition picked (the order isn't one: it keeps everything). */
 export const rowActive = (row: FilterRow) =>
-  Boolean(row.yearFrom || row.yearTo || row.kind || row.topic) ||
-  row.sort !== "relevance";
+  Boolean(row.yearFrom || row.yearTo || row.kind || row.topic);
 
 const SORTS: [NoteSort, string][] = [
   ["relevance", "Best match"],
+  ["title", "Title A–Z"],
+  ["author", "First author"],
   ["year-desc", "Newest first"],
   ["year-asc", "Oldest first"],
-  ["title", "Title"],
-  ["author", "First author"],
 ];
+
+/** The list's order, always at hand next to the search. */
+export function SortSelect({
+  value,
+  onChange,
+  searching,
+  className,
+}: {
+  value: NoteSort;
+  onChange: (sort: NoteSort) => void;
+  /** With nothing searched, the first order is the list's own. */
+  searching: boolean;
+  className?: string;
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as NoteSort)}>
+      <SelectTrigger
+        size="sm"
+        className={cn("h-7! w-auto shrink-0 gap-1 px-2 text-xs", className)}
+        aria-label="Order"
+        title="Order"
+      >
+        <ArrowUpDownIcon className="size-3 text-muted-foreground" />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {SORTS.map(([v, label]) => (
+          <SelectItem key={v} value={v}>
+            {v === "relevance" && !searching ? "Default" : label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 /** Opens the filter row; dotted while a filter is on. */
 export function FilterToggle({
@@ -79,8 +113,8 @@ export function FilterToggle({
         "relative flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
         open && "bg-muted text-foreground",
       )}
-      title="Filter and sort"
-      aria-label="Filter and sort"
+      title="Filter"
+      aria-label="Filter"
       aria-expanded={open}
     >
       <SlidersHorizontalIcon className="size-3.5" />
@@ -92,7 +126,7 @@ export function FilterToggle({
 }
 
 /**
- * Year range, type, topic and order, as in Zotero's search. Field
+ * Year range, type and topic, as in Zotero's search. Field
  * conditions can also be typed in the search: `author:nelson`,
  * `year:1990-2005`, `topic:"open science"`, `type:paper`, `tag:x`.
  */
@@ -182,28 +216,10 @@ export function FilterRowControls({
           </SelectContent>
         </Select>
       )}
-      <Select
-        value={row.sort}
-        onValueChange={(v) => set({ sort: v as NoteSort })}
-      >
-        <SelectTrigger
-          className="h-7 w-auto gap-1 px-2 text-xs"
-          aria-label="Sort"
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {SORTS.map(([value, label]) => (
-            <SelectItem key={value} value={value}>
-              {label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
       {rowActive(row) && (
         <button
           type="button"
-          onClick={() => onChange(EMPTY_ROW)}
+          onClick={() => onChange({ ...EMPTY_ROW, sort: row.sort })}
           className="flex items-center gap-0.5 text-muted-foreground hover:text-foreground"
         >
           <XIcon className="size-3" />

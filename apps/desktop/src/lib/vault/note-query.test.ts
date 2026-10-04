@@ -99,6 +99,22 @@ describe("vault search, Zotero-like", () => {
     ]);
   });
 
+  it("puts notes with no author after the papers", () => {
+    const all = names("", "author");
+    expect(all.slice(0, 5)).toEqual([
+      "Undated",
+      "Arora2018",
+      "Arrow1962",
+      "Cohen1990",
+      "Nelson1959",
+    ]);
+    expect(all.slice(5).sort()).toEqual([
+      "Absorptive capacity",
+      "Corporate science",
+      "Science is harder",
+    ]);
+  });
+
   it("combines what's typed with the filter row", () => {
     const row = { ...EMPTY_FILTER, yearFrom: 1960 };
     const merged = mergeFilters(parseNoteQuery("year:1950-1995"), row);

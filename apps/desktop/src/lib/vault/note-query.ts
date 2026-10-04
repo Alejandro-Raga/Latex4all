@@ -206,9 +206,17 @@ export function filterNotes(
     "year-asc": byYear(1),
     title: (a: (typeof scored)[0], b: (typeof scored)[0]) =>
       a.note.title.localeCompare(b.note.title),
-    author: (a: (typeof scored)[0], b: (typeof scored)[0]) =>
-      firstAuthor(a.note).localeCompare(firstAuthor(b.note)) ||
-      (yearOf(a.note) ?? 0) - (yearOf(b.note) ?? 0),
+    author: (a: (typeof scored)[0], b: (typeof scored)[0]) => {
+      const fa = firstAuthor(a.note);
+      const fb = firstAuthor(b.note);
+      // Notes with no author (ideas, topics) after the papers.
+      if (!fa !== !fb) return fa ? -1 : 1;
+      return (
+        fa.localeCompare(fb) ||
+        (yearOf(a.note) ?? 0) - (yearOf(b.note) ?? 0) ||
+        a.note.title.localeCompare(b.note.title)
+      );
+    },
   }[sort];
   return scored.sort(compare).map((x) => x.note);
 }
