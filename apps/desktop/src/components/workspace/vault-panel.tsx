@@ -81,7 +81,6 @@ import {
   neighbourhood,
   PAPERS_GROUP,
   type NoteKind,
-  searchNotes,
   type VaultIndex,
   type VaultNote,
 } from "@/lib/vault/vault-index";
@@ -108,6 +107,19 @@ import {
   useDockSection,
 } from "./dock/dock-section";
 import { useVaultStandalone } from "./vault-standalone";
+import {
+  EMPTY_ROW,
+  type FilterRow,
+  FilterRowControls,
+  FilterToggle,
+  rowActive,
+  rowFilter,
+} from "./vault-filter";
+import {
+  filterNotes,
+  mergeFilters,
+  parseNoteQuery,
+} from "@/lib/vault/note-query";
 import { useZoteroPdf, zoteroPdfTarget } from "@/components/zotero-pdf-dialog";
 import { PanelBoundary } from "@/components/panel-boundary";
 
@@ -690,6 +702,9 @@ function NoteList({
 }) {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [row, setRow] = useState<FilterRow>(EMPTY_ROW);
+  const filtering = query.trim() !== "" || rowActive(row);
   const standalone = useVaultStandalone();
   const projectOpen = useDocumentStore((s) => Boolean(s.projectRoot));
   const [citedOnlySet, setCitedOnly] = useState(false);
@@ -698,7 +713,14 @@ function NoteList({
   const [citedOrder, setCitedOrder] = useState<CitedOrder>("text");
   const cited = useCitedNotes(citedOnly);
   const results = useMemo(() => {
-    const found = searchNotes(index, query);
+    const found = filtering
+      ? filterNotes(
+          index,
+          index.list,
+          mergeFilters(parseNoteQuery(query), rowFilter(row)),
+          row.sort,
+        )
+      : index.list;
     if (!citedOnly) return found;
     const first = [...cited.byNote.keys()];
     return orderCited(
@@ -707,14 +729,14 @@ function NoteList({
       (n) => first.indexOf(n.name),
       citedOrder,
     );
-  }, [index, query, citedOnly, cited, citedOrder]);
+  }, [index, query, row, filtering, citedOnly, cited, citedOrder]);
   const groups = useMemo(() => {
-    if (query.trim() || citedOnly) return [{ group: null, notes: results }];
+    if (filtering || citedOnly) return [{ group: null, notes: results }];
     const byGroup = new Map<string, VaultNote[]>();
     for (const n of results)
       byGroup.set(n.group, [...(byGroup.get(n.group) ?? []), n]);
     return [...byGroup].map(([group, notes]) => ({ group, notes }));
-  }, [results, query, citedOnly]);
+  }, [results, filtering, citedOnly]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -726,9 +748,15 @@ function NoteList({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search notes…"
             aria-label="Search notes"
+            title='Also: author:nelson, year:1990-2005, year:>2010, topic:"open science", type:paper, tag:name'
             className="h-7 pl-7 text-xs"
           />
         </div>
+        <FilterToggle
+          open={showFilters}
+          active={rowActive(row)}
+          onToggle={() => setShowFilters((v) => !v)}
+        />
         {projectOpen && <CitedToggle on={citedOnly} onChange={setCitedOnly} />}
         <Button
           variant="ghost"
@@ -741,6 +769,9 @@ function NoteList({
           <PlusIcon className="size-3.5" />
         </Button>
       </div>
+      {showFilters && (
+        <FilterRowControls index={index} row={row} onChange={setRow} />
+      )}
       {creating && (
         <NewNoteForm
           index={index}
@@ -754,7 +785,12 @@ function NoteList({
         />
       )}
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
-        {standalone && !query && <VaultMap index={index} onOpen={onOpen} />}
+        {standalone && !filtering && <VaultMap index={index} onOpen={onOpen} />}
+        {filtering && !citedOnly && (
+          <p className="px-2 pt-1 pb-0.5 text-[11px] text-muted-foreground">
+            {results.length} {results.length === 1 ? "note" : "notes"}
+          </p>
+        )}
         {citedOnly && (
           <CitedHeader order={citedOrder} onOrder={setCitedOrder}>
             {cited.byNote.size} cited in this project
@@ -1547,9 +1583,30 @@ function Connections({
   const [scope, setScope] = useState<GraphScope>(1);
   const [query, setQuery] = useState("");
   const wide = useDockSection()?.wide ?? false;
-  const both = note.outgoing.filter((n) => note.incoming.includes(n));
-  const linksTo = note.outgoing.filter((n) => !both.includes(n));
-  const linkedFrom = note.incoming.filter((n) => !both.includes(n));
+  const allBoth = note.outgoing.filter((n) => note.incoming.includes(n));
+  const allTo = note.outgoing.filter((n) => !allBoth.includes(n));
+  const allFrom = note.incoming.filter((n) => !allBoth.includes(n));
+  // The linked notes, filtered and ordered (by year, say) like the list.
+  const [linkQuery, setLinkQuery] = useState("");
+  const [linkRow, setLinkRow] = useState<FilterRow>(EMPTY_ROW);
+  const [linkFilters, setLinkFilters] = useState(false);
+  const linkFiltering = linkQuery.trim() !== "" || rowActive(linkRow);
+  const narrow = (names: string[]) => {
+    if (!linkFiltering) return names;
+    const notes = names
+      .map((n) => findNote(index, n))
+      .filter((n): n is VaultNote => Boolean(n));
+    return filterNotes(
+      index,
+      notes,
+      mergeFilters(parseNoteQuery(linkQuery), rowFilter(linkRow)),
+      linkRow.sort,
+    ).map((n) => n.name);
+  };
+  const both = narrow(allBoth);
+  const linksTo = narrow(allTo);
+  const linkedFrom = narrow(allFrom);
+  const linkCount = allBoth.length + allTo.length + allFrom.length;
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const fullGraph = useMemo(
     () => graphFor(index, note.name, scope),
@@ -1650,6 +1707,39 @@ function Connections({
         hidden={hidden}
         onToggle={toggleGroup}
       />
+      {linkCount > 5 && (
+        <div className="mt-2">
+          <div className="flex items-center gap-1">
+            <Input
+              value={linkQuery}
+              onChange={(e) => setLinkQuery(e.target.value)}
+              placeholder="Filter links…"
+              aria-label="Filter linked notes"
+              title='Also: author:nelson, year:1990-2005, topic:"open science", type:paper'
+              className="h-6 text-xs"
+            />
+            <FilterToggle
+              open={linkFilters}
+              active={rowActive(linkRow)}
+              onToggle={() => setLinkFilters((v) => !v)}
+            />
+          </div>
+          {linkFilters && (
+            <div className="-mx-2.5 pt-1.5">
+              <FilterRowControls
+                index={index}
+                row={linkRow}
+                onChange={setLinkRow}
+              />
+            </div>
+          )}
+          {linkFiltering && (
+            <p className="pt-1 text-[11px] text-muted-foreground">
+              {both.length + linksTo.length + linkedFrom.length} of {linkCount}
+            </p>
+          )}
+        </div>
+      )}
       <LinkGroup title="Both ways" names={both} index={index} onOpen={onOpen} />
       <LinkGroup
         title="Links to"
@@ -1697,7 +1787,14 @@ function LinkGroup({
                 className="size-1.5 shrink-0 rounded-full"
                 style={{ backgroundColor: n ? noteColor(n) : undefined }}
               />
-              <span className="truncate">{n?.title ?? name}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {n?.title ?? name}
+              </span>
+              {n?.kind === "paper" && (
+                <span className="shrink-0 text-muted-foreground tabular-nums">
+                  {noteSubtitle(n)}
+                </span>
+              )}
             </button>
           </NoteContextMenu>
         );

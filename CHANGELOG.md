@@ -21,6 +21,17 @@ tag.
 
 ## [Unreleased]
 
+### Added
+
+- Vault search like Zotero's: a filter row (the sliders button by the search)
+  for a range of years, a type, a topic and the order (best match, newest,
+  oldest, title, first author). Conditions can also be typed:
+  `author:nelson`, `year:1990-2005`, `year:>2010`, `topic:"open science"`,
+  `type:paper`, `tag:name`, alongside ordinary words.
+- A note's links (Both ways, Links to, Linked from) can be filtered and
+  sorted the same way once there are more than a few, and each paper there
+  shows its first author and year.
+
 ### Fixed
 
 - An app left open only looked for updates when it started, so a version
