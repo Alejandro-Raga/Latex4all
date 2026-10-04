@@ -217,6 +217,11 @@ tag.
 
 ### Getting around
 
+- Report a bug, from the Projects page, the command palette (⌘K) or
+  Settings → Updates: describe what happened, add screenshots (paste, drop
+  or pick them) and, if you like, an email for a reply. The app's version,
+  system and recent errors go with it, and you can see them, or leave them
+  out, before sending.
 - A command palette (⌘K) to jump to a file, note or PDF, or run a command,
   and shortcuts for the side panels (⌘⌥1–3) and PDF tabs (⌘⇧[ and ⌘⇧]).
 - Settings from anywhere (⌘,), with sections for the editor, PDFs, Zotero

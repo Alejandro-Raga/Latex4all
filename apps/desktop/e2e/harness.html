@@ -13,7 +13,20 @@
           currentWindow: { label: "main" },
           currentWebview: { windowLabel: "main", label: "main" },
         },
-        invoke: async (cmd) => {
+        invoke: async (cmd, args) => {
+          // The bug report window: its system details, and the report sent
+          // kept for the test to read.
+          if (location.search.includes("scenario=bug")) {
+            if (cmd === "get_system_info") {
+              return { os: "macos", os_version: "15", arch: "aarch64", app_version: "1.2.120" };
+            }
+            if (cmd === "send_bug_report") {
+              window.__sentReport = args.report;
+              return "2026-10-04_10-00-00_abc123";
+            }
+            if (cmd.startsWith("plugin:event")) return 0;
+            return null;
+          }
           if (workspace) {
             if (cmd.startsWith("plugin:event")) return 0;
             return /^(list|check|get_spelling|detect|history_list|slash)/.test(cmd)

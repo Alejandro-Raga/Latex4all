@@ -37,6 +37,7 @@ import { useZoteroLibrary } from "@/lib/zotero-library";
 import { useDocumentStore } from "@/stores/document-store";
 import { ChatComposer } from "@/components/claude-chat/chat-composer";
 import { LibraryView } from "@/components/library-view";
+import { BugReportDialog, useBugReport } from "@/components/bug-report-dialog";
 import { useAiUsage } from "@/lib/ai-usage";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 
@@ -529,6 +530,15 @@ if (scenario === "library") {
       <div className="h-full" style={chrome}>
         <LibraryView />
       </div>
+    </ThemeProvider>,
+  );
+}
+
+if (scenario === "bug") {
+  useBugReport.getState().show();
+  root.render(
+    <ThemeProvider attribute="class" themes={THEME_IDS}>
+      <BugReportDialog />
     </ThemeProvider>,
   );
 }

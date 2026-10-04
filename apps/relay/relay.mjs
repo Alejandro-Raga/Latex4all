@@ -11,6 +11,9 @@
 //   PUT  /p/<id>/blobs/<blobId>   store a binary file (images, PDFs)
 //   GET  /p/<id>/blobs/<blobId>
 //   GET  /health
+//   POST /reports                 a bug report from the app: JSON {text,
+//                                 contact?, app?, log?, images?: [{type,
+//                                 data (base64)}]}; see reports.mjs
 // WebSocket /p/<id>/sync          all need "Authorization: Bearer <token>", and
 //                                 "Latex4All-Protocol: <n>" (absent means 1):
 //                                 below `minProtocol` it's refused with 426
@@ -41,6 +44,7 @@ import fs from "node:fs";
 import { STATUS_CODES, createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
+import { Reports, parseReport } from "./reports.mjs";
 import { ACCESS_HASH, BLOB_ID, PROJECT_ID, Storage } from "./storage.mjs";
 
 const MiB = 1024 * 1024;
@@ -73,6 +77,12 @@ export const DEFAULT_LIMITS = {
   /** One message, image included. */
   maxChatMessageBytes: 3 * MiB,
   sweepMs: 6 * 60 * 60 * 1000,
+  /** Bug reports: one, its screenshots, from one address a day, all kept. */
+  maxReportBytes: 16 * MiB,
+  maxReportImages: 6,
+  maxReportImageBytes: 4 * MiB,
+  reportsPerIpPerDay: 10,
+  maxReportsBytes: 500 * MiB,
 };
 
 export const FRAME = { UPDATE: 1, AWARENESS: 2, SNAPSHOT: 3, CHAT: 4 };
@@ -145,6 +155,8 @@ export function createRelay({
   const users = new Map();
   const connectionsByIp = new Map();
   const createdByIp = new Map();
+  const reportsByIp = new Map();
+  const reports = new Reports({ dir: dataDir, limits: config, now });
   const buckets = new Map();
   const wss = new WebSocketServer({
     noServer: true,
@@ -238,6 +250,22 @@ export function createRelay({
     send(res, 201);
   }
 
+  async function createReport(req, res) {
+    const ip = clientIp(req);
+    const today = Math.floor(now() / DAY);
+    const sent = reportsByIp.get(ip);
+    const count = sent?.day === today ? sent.count : 0;
+    if (count >= config.reportsPerIpPerDay) return send(res, 429);
+    const body = await readBody(req, config.maxReportBytes);
+    if (!body) return send(res, 413);
+    const report = parseReport(body, config);
+    if (!report) return send(res, 400);
+    const id = reports.save(report);
+    reportsByIp.set(ip, { day: today, count: count + 1 });
+    log("bug report received");
+    send(res, 201, id);
+  }
+
   async function putBlob(req, res, id, blobId) {
     const project = authorize(req, id, (status) => send(res, status));
     if (!project) return;
@@ -282,6 +310,9 @@ export function createRelay({
     const handle = async () => {
       if (req.method === "GET" && url.pathname === "/health") {
         return send(res, 200, `ok ${storage.projectIds().length}\n`);
+      }
+      if (req.method === "POST" && url.pathname === "/reports") {
+        return createReport(req, res);
       }
       if (parts[0] !== "p" || !PROJECT_ID.test(parts[1] ?? "")) {
         return send(res, 404);

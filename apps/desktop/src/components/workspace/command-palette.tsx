@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Command } from "cmdk";
 import {
   BrainIcon,
+  BugIcon,
   FileIcon,
   FileTextIcon,
   LibraryIcon,
@@ -30,6 +31,7 @@ import {
 import { useVaultStore } from "@/stores/vault-store";
 import { useCitationCheck } from "./citation-check";
 import { useMemoryDialog } from "@/components/claude-chat/memory-dialog";
+import { useBugReport } from "@/components/bug-report-dialog";
 import { syncProjectNote } from "./project-note-sync";
 
 export const useCommandPalette = create<{
@@ -251,6 +253,12 @@ export function CommandPalette() {
                   onSelect={() => run(() => void syncProjectNote())}
                 />
               )}
+              <Item
+                icon={BugIcon}
+                label="Report a bug"
+                value="Report a bug problem issue feedback"
+                onSelect={() => run(() => useBugReport.getState().show())}
+              />
               {SETTINGS.map((s) => (
                 <Item
                   key={s.id}

@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/context-menu";
 import { toast } from "sonner";
 import {
+  BugIcon,
   CheckIcon,
   StarIcon,
   FolderOpenIcon,
@@ -79,6 +80,7 @@ import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
 import { ThemeMenuButton } from "@/components/theme-picker";
 import { LibraryView } from "@/components/library-view";
+import { useBugReport } from "@/components/bug-report-dialog";
 
 const log = createLogger("project-picker");
 
@@ -461,6 +463,14 @@ export function ProjectPicker() {
             onClick={() => setActiveSection("settings")}
           >
             Settings
+          </ProjectNavButton>
+          <ProjectNavButton
+            active={false}
+            collapsed={isSidebarCollapsed}
+            icon={BugIcon}
+            onClick={() => useBugReport.getState().show()}
+          >
+            Report a bug
           </ProjectNavButton>
         </nav>
 

@@ -537,3 +537,38 @@ test("tells apps how full the project and the relay are, not counting chat", asy
   assert.equal((await c.hello()).relayNearlyFull, true);
   await c.close();
 });
+
+test("bug reports are kept with their screenshots, and capped", async () => {
+  const relay = await startRelay({ limits: { reportsPerIpPerDay: 2 } });
+  const png = Buffer.from("89504e470d0a1a0a", "hex").toString("base64");
+  const post = (body) =>
+    fetch(`${relay.http}/reports`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const res = await post({
+    text: "The map shrinks",
+    contact: "me@example.com",
+    app: { version: "1.2.120", os: "macos" },
+    log: "error: something",
+    images: [
+      { type: "image/png", data: png },
+      { type: "text/html", data: png },
+    ],
+  });
+  assert.equal(res.status, 201);
+  const id = await res.text();
+  const dir = path.join(relay.dataDir, "reports", id);
+  const saved = JSON.parse(fs.readFileSync(path.join(dir, "report.json"), "utf8"));
+  assert.equal(saved.text, "The map shrinks");
+  assert.equal(saved.app.version, "1.2.120");
+  assert.deepEqual(saved.images, ["image-1.png"]);
+  assert.ok(fs.existsSync(path.join(dir, "image-1.png")));
+  // Not a report without text; and only so many a day from one address.
+  assert.equal((await post({ text: "  " })).status, 400);
+  assert.equal((await post({ text: "again" })).status, 201);
+  assert.equal((await post({ text: "too many" })).status, 429);
+  // Projects don't see the reports folder.
+  assert.equal(await (await fetch(`${relay.http}/health`)).text(), "ok 0\n");
+});

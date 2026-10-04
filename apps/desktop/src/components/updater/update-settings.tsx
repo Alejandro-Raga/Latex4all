@@ -1,4 +1,10 @@
-import { DownloadIcon, FlaskConicalIcon, Loader2Icon } from "lucide-react";
+import {
+  BugIcon,
+  DownloadIcon,
+  FlaskConicalIcon,
+  Loader2Icon,
+} from "lucide-react";
+import { useBugReport } from "@/components/bug-report-dialog";
 import { Button } from "@/components/ui/button";
 import { useSettingsStore, type UpdateChannel } from "@/stores/settings-store";
 import { useUpdater } from "@/hooks/use-updater";
@@ -94,6 +100,15 @@ export function UpdateSettings({ appVersion }: { appVersion?: string }) {
           {status.state === "available" && ` — ${status.version} available`}
           {status.state === "error" && " — check failed"}
         </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto gap-1.5"
+          onClick={() => useBugReport.getState().show()}
+        >
+          <BugIcon className="size-3.5" />
+          Report a bug
+        </Button>
       </div>
     </div>
   );

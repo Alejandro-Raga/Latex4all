@@ -2,6 +2,7 @@
 
 mod agents;
 mod anthropic_proxy;
+mod bug_report;
 mod claude;
 mod claude_process;
 mod collab;
@@ -656,6 +657,7 @@ pub fn run() {
             agents::agent_status,
             agents::codex_rate_limits,
             claude::claude_usage,
+            bug_report::send_bug_report,
             claude::rename_claude_session,
             agents::copilot_quota,
             agents::copilot_run_usage,

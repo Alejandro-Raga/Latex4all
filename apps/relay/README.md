@@ -51,3 +51,13 @@ scp apps/relay/{package.json,relay.mjs,storage.mjs,Dockerfile,compose.yml,.docke
 ssh vm 'cd latex4all-relay && mkdir -p data && docker compose up -d --build'
 ssh vm 'curl -s 127.0.0.1:8082/health'   # "ok <stored projects>"
 ```
+
+## Bug reports
+
+The app's "Report a bug" window posts to `POST /reports` (see `reports.mjs`).
+Each report is a folder in `data/reports/<date>_<id>/` with `report.json`
+(text, optional contact, app details, recent warnings and errors) and its
+screenshots. They aren't encrypted: they're meant to be read. Limits: 16 MB a
+report, 6 images of up to 4 MB, 10 reports per address a day, 500 MB in all
+(the oldest go first). `scripts/bug-reports.sh` in the repo copies them to
+`~/Latex4All-bug-reports` and lists them.
