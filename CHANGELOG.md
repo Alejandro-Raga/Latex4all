@@ -21,6 +21,8 @@ tag.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-04
+
 ### Fixed
 
 - A paper note's highlight links ("p. 2") did nothing in Latex4All. They
