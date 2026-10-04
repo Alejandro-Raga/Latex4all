@@ -82,6 +82,7 @@ export function ChatTabBar() {
     <div className="flex items-center border-border border-b">
       <div
         ref={scrollRef}
+        data-scroll-sideways
         className="scrollbar-none flex min-w-0 flex-1 items-center overflow-x-auto"
       >
         {tabs.map((tab) => (

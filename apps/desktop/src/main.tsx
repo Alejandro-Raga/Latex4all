@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { initializeAppZoom } from "./lib/app-zoom";
+import { installWheelSideways } from "./lib/wheel-sideways";
 import { createLogger } from "./lib/debug/logger";
 import { APP_VISIBILITY_RESTORED } from "./lib/debug/log-store";
 import "./styles/globals.css";
@@ -65,6 +66,7 @@ function hideLoadingScreen() {
 
 async function bootstrap() {
   try {
+    installWheelSideways();
     await initializeAppZoom();
   } catch (error) {
     log.error("Failed to initialize app zoom", { error: String(error) });

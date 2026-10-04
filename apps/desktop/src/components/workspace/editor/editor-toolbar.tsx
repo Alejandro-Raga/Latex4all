@@ -379,7 +379,10 @@ export function EditorToolbar({
       <div className="mx-2 h-4 w-px shrink-0 bg-border" />
       {/* Scrolls sideways when the pane is narrow, fading out where it's cut
           off so it never looks fused with the buttons after it. */}
-      <div className="scrollbar-none flex min-w-0 items-center gap-1 overflow-x-auto pr-5 [mask-image:linear-gradient(to_right,black_calc(100%-20px),transparent)] [&>*]:shrink-0">
+      <div
+        data-scroll-sideways
+        className="scrollbar-none flex min-w-0 items-center gap-1 overflow-x-auto pr-5 [mask-image:linear-gradient(to_right,black_calc(100%-20px),transparent)] [&>*]:shrink-0"
+      >
         <LatexRibbon editorView={editorView} />
         <div className="mx-2 h-4 w-px bg-border" />
         {/* Vim keys change what a click and typing do, so they're switched

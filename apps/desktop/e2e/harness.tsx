@@ -35,12 +35,15 @@ import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { useDocumentStore } from "@/stores/document-store";
+import { installWheelSideways } from "@/lib/wheel-sideways";
 import { ChatComposer } from "@/components/claude-chat/chat-composer";
 import { LibraryView } from "@/components/library-view";
 import { BugReportDialog, useBugReport } from "@/components/bug-report-dialog";
 import { useAiUsage } from "@/lib/ai-usage";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 
+// As the app does at startup.
+installWheelSideways();
 const params = new URLSearchParams(location.search);
 const scenario = params.get("scenario");
 const root = createRoot(document.getElementById("root") as HTMLElement);

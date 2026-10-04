@@ -68,8 +68,9 @@ tag.
 - Literature notes from Zotero plugins are recognised as papers, however
   your template writes them: Cite adds a paper to the bibliography and cites
   it, and the citation under the cursor leads to its note.
-- A living map of your notes: drag, zoom, hover to light up links, and see a
-  note's neighbourhood as a tree or the whole vault. A legend names its
+- A living map of your notes: drag, zoom (wheel, pinch or the + and −
+  buttons), hover to light up links, and see a note's neighbourhood as a
+  tree or the whole vault. A legend names its
   groups, and the map saves as an image.
 - Add papers to your vault from Latex4All: right-click a Zotero item, or use
   Check citations to add every cited paper at once. The note is always
@@ -254,6 +255,11 @@ tag.
   citations. Both stay now.
 - Selecting a single letter (a click that moved a little) no longer opens
   the selection toolbar.
+- A trackpad pinch no longer resizes the whole window; ⌘+ and ⌘− (Ctrl on
+  Windows) still zoom the app, and the PDF and the map still zoom with a
+  pinch.
+- Strips that scroll sideways (the editor's ribbon, the chat and PDF tabs)
+  move with a plain mouse wheel too, not only a trackpad.
 - Text in PDFs couldn't be selected, so nothing could be copied or
   double-clicked to its place in the source. Selection now works like in a
   PDF reader, from the nearest letter, and shows on every page color.

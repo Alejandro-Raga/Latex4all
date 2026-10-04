@@ -18,7 +18,7 @@ import {
   type SimulationLinkDatum,
   type SimulationNodeDatum,
 } from "d3-force";
-import { ImageDownIcon, ScanIcon } from "lucide-react";
+import { ImageDownIcon, MinusIcon, PlusIcon, ScanIcon } from "lucide-react";
 import { APP_THEMES } from "@/lib/app-themes";
 import {
   fitTransform,
@@ -164,6 +164,30 @@ function graphLayout(
 }
 
 const DRAG_THRESHOLD = 3;
+/** How much one press of + or − zooms. */
+const ZOOM_STEP = 1.4;
+
+function MapButton({
+  onClick,
+  label,
+  children,
+}: {
+  onClick: () => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex size-6 items-center justify-center rounded bg-background/80 text-muted-foreground shadow-sm transition-colors hover:text-foreground"
+      title={label}
+      aria-label={label}
+    >
+      {children}
+    </button>
+  );
+}
 /** A node's smallest size on screen, in pixels. */
 const MIN_NODE_PX = 3.5;
 /** Above this many notes, labels wait until you zoom in. */
@@ -665,6 +689,15 @@ export function VaultGraph({
     [],
   );
 
+  // Zoom about the middle of the view, for the buttons.
+  const zoomBy = (factor: number) => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    const centre = { x: wrap.clientWidth / 2, y: wrap.clientHeight / 2 };
+    viewRef.current = zoomAt(viewRef.current, centre, factor);
+    redraw();
+  };
+
   return (
     <div
       ref={wrapRef}
@@ -678,26 +711,23 @@ export function VaultGraph({
         role="img"
         aria-label="Map of linked notes. Drag to pan, scroll to zoom, click a note to open it."
       />
-      <button
-        type="button"
-        onClick={fit}
-        className="absolute right-1.5 bottom-1.5 flex size-6 items-center justify-center rounded bg-background/80 text-muted-foreground shadow-sm transition-colors hover:text-foreground"
-        title="Fit to view (or double-click)"
-        aria-label="Fit to view"
-      >
-        <ScanIcon className="size-3.5" />
-      </button>
-      {onSaveImage && (
-        <button
-          type="button"
-          onClick={() => void saveImage()}
-          className="absolute right-9 bottom-1.5 flex size-6 items-center justify-center rounded bg-background/80 text-muted-foreground shadow-sm transition-colors hover:text-foreground"
-          title="Save as image"
-          aria-label="Save map as image"
-        >
-          <ImageDownIcon className="size-3.5" />
-        </button>
-      )}
+      {/* Zoom and framing by mouse too (the wheel and a pinch also zoom). */}
+      <div className="absolute right-1.5 bottom-1.5 flex gap-1">
+        {onSaveImage && (
+          <MapButton onClick={() => void saveImage()} label="Save map as image">
+            <ImageDownIcon className="size-3.5" />
+          </MapButton>
+        )}
+        <MapButton onClick={() => zoomBy(1 / ZOOM_STEP)} label="Zoom out">
+          <MinusIcon className="size-3.5" />
+        </MapButton>
+        <MapButton onClick={() => zoomBy(ZOOM_STEP)} label="Zoom in">
+          <PlusIcon className="size-3.5" />
+        </MapButton>
+        <MapButton onClick={fit} label="Fit to view (or double-click)">
+          <ScanIcon className="size-3.5" />
+        </MapButton>
+      </div>
     </div>
   );
 }

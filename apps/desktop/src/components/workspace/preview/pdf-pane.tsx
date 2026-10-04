@@ -98,6 +98,7 @@ export function PdfPane() {
         <div
           role="tablist"
           aria-label="Documents in this pane"
+          data-scroll-sideways
           className="pane-header flex h-[calc(var(--titlebar-height)+34px)] shrink-0 items-end gap-0.5 overflow-x-auto border-b px-2 pt-[var(--titlebar-height)]"
         >
           <Tab
