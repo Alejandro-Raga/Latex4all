@@ -719,9 +719,11 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
                           ))}
                         </SelectContent>
                       </Select>
-                      <CitedToggle on={citedOnly} onChange={setCitedOnly} />
+                      {currentProjectRoot && (
+                        <CitedToggle on={citedOnly} onChange={setCitedOnly} />
+                      )}
                     </div>
-                    {citedOnly ? (
+                    {citedOnly && currentProjectRoot ? (
                       <>
                         <CitedHeader order={citedOrder} onOrder={setCitedOrder}>
                           {!libraryReady ? (
@@ -1026,6 +1028,8 @@ function ReferenceProjects({
  * by PDFs sitting in another project's folder.
  */
 function ReferencePdfActions({ source }: { source: ReferencePdfSource }) {
+  // Both go into the open project: none, nothing to offer.
+  const projectOpen = useDocumentStore((s) => Boolean(s.projectRoot));
   // A Zotero PDF has to be downloaded first, which is slow enough to need
   // saying so — the menu has already closed by then.
   const run = (
@@ -1044,6 +1048,7 @@ function ReferencePdfActions({ source }: { source: ReferencePdfSource }) {
     });
   };
 
+  if (!projectOpen) return null;
   return (
     <>
       <ContextMenuItem
@@ -1089,6 +1094,7 @@ function ZoteroTreeRow({
   /** Right-click adds the whole collection (null: library) to a .bib file. */
   collectionKey?: string | null;
 }) {
+  const projectOpen = useDocumentStore((s) => Boolean(s.projectRoot));
   const row = (
     <div className="flex w-full items-center rounded-md hover:bg-muted">
       <button
@@ -1114,7 +1120,7 @@ function ZoteroTreeRow({
       </button>
     </div>
   );
-  if (collectionKey === undefined) return row;
+  if (collectionKey === undefined || !projectOpen) return row;
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
@@ -1199,6 +1205,7 @@ function ZoteroItemRow({
   /** Where the open project cites it. */
   places?: CitePlace[];
 }) {
+  const projectOpen = useDocumentStore((s) => Boolean(s.projectRoot));
   const subtitle = [item.creators, item.year].filter(Boolean).join(" · ");
   const addItemToBib = useZoteroStore((s) => s.addItemToBib);
   const [adding, setAdding] = useState(false);
@@ -1293,8 +1300,8 @@ function ZoteroItemRow({
             vaultNoteName ?? (await addPaperToVault(item.key)).name
           }
         />
-        <ContextMenuSeparator />
-        {bibFiles.length === 0 ? (
+        {projectOpen && <ContextMenuSeparator />}
+        {!projectOpen ? null : bibFiles.length === 0 ? (
           <ContextMenuItem
             disabled={adding}
             onClick={() => handleAdd(null, DEFAULT_BIB_FILE_NAME)}

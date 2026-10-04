@@ -36,6 +36,7 @@ import {
   XIcon,
   FileTextIcon,
   LayoutTemplateIcon,
+  LibraryIcon,
   Loader2Icon,
   SearchIcon,
   PanelLeftIcon,
@@ -77,6 +78,7 @@ import { JoinDialog } from "@/components/collab/join-dialog";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
 import { ThemeMenuButton } from "@/components/theme-picker";
+import { LibraryView } from "@/components/library-view";
 
 const log = createLogger("project-picker");
 
@@ -94,7 +96,7 @@ const SORTS: Array<{ value: ProjectSort; label: string }> = [
   { value: "type", label: "Type" },
 ];
 
-type ProjectPickerSection = "projects" | "settings";
+type ProjectPickerSection = "projects" | "library" | "settings";
 
 type RecentProject = {
   path: string;
@@ -445,6 +447,14 @@ export function ProjectPicker() {
             All projects
           </ProjectNavButton>
           <ProjectNavButton
+            active={activeSection === "library"}
+            collapsed={isSidebarCollapsed}
+            icon={LibraryIcon}
+            onClick={() => setActiveSection("library")}
+          >
+            Library & Vault
+          </ProjectNavButton>
+          <ProjectNavButton
             active={activeSection === "settings"}
             collapsed={isSidebarCollapsed}
             icon={SettingsIcon}
@@ -484,144 +494,154 @@ export function ProjectPicker() {
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-[calc(48px+var(--titlebar-height))] shrink-0 flex-nowrap items-center gap-3 border-border/70 border-b bg-background px-5">
-          <div className="mr-auto flex min-w-0 items-center">
-            <h1 className="truncate font-semibold text-lg leading-none">
-              {activeSection === "settings" ? "Settings" : "All projects"}
-            </h1>
-          </div>
-
-          {activeSection === "projects" && (
-            <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2">
-              <div className="relative flex min-w-40 flex-1 items-center sm:max-w-sm">
-                <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  ref={searchInputRef}
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search"
-                  className="h-9 w-full rounded-lg border border-input bg-background pr-16 pl-9 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
-                />
-                <kbd className="pointer-events-none absolute top-1/2 right-2 flex h-6 min-w-10 -translate-y-1/2 items-center justify-center rounded-md border border-border/70 bg-muted/30 px-1.5 font-medium text-[11px] text-muted-foreground leading-none">
-                  {searchShortcutLabel}
-                </kbd>
+        {activeSection === "library" ? (
+          <LibraryView />
+        ) : (
+          <>
+            <header className="flex h-[calc(48px+var(--titlebar-height))] shrink-0 flex-nowrap items-center gap-3 border-border/70 border-b bg-background px-5">
+              <div className="mr-auto flex min-w-0 items-center">
+                <h1 className="truncate font-semibold text-lg leading-none">
+                  {activeSection === "settings" ? "Settings" : "All projects"}
+                </h1>
               </div>
 
-              <Button
-                onClick={() => setShowJoinDialog(true)}
-                variant="secondary"
-                className="h-9 shrink-0 gap-1.5 rounded-lg px-3.5"
-              >
-                <UsersIcon className="size-4" />
-                Join
-              </Button>
-              <Button
-                onClick={handleOpenFolder}
-                variant="secondary"
-                className="h-9 shrink-0 gap-1.5 rounded-lg px-3.5"
-              >
-                <FolderOpenIcon className="size-4" />
-                Import
-              </Button>
-              <Button
-                onClick={() => setShowModeDialog(true)}
-                className="h-9 shrink-0 gap-1.5 rounded-lg px-4"
-              >
-                <PlusIcon className="size-4" />
-                New
-              </Button>
-            </div>
-          )}
-        </header>
-
-        <div className="min-h-0 flex-1 overflow-auto">
-          {activeSection === "settings" ? (
-            <SettingsView
-              section={settingsDetailSection}
-              onSectionChange={setSettingsDetailSection}
-            />
-          ) : (
-            <div className="flex w-full flex-col gap-4 px-5 py-5">
-              {visibleProjects.length === 0 ? (
-                <div className="flex min-h-80 flex-col items-center justify-center rounded-lg border border-border border-dashed bg-muted/10 px-6 text-center">
-                  <FileTextIcon className="mb-4 size-10 text-muted-foreground/70" />
-                  <h2 className="font-semibold text-lg">
-                    {normalizedSearch ? "No matching projects" : "No projects"}
-                  </h2>
-                  <div className="mt-5 flex flex-wrap justify-center gap-3">
-                    <Button onClick={() => setShowModeDialog(true)}>
-                      <PlusIcon className="mr-2 size-4" />
-                      New
-                    </Button>
-                    <Button onClick={handleOpenFolder} variant="outline">
-                      <FolderOpenIcon className="mr-2 size-4" />
-                      Import
-                    </Button>
+              {activeSection === "projects" && (
+                <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2">
+                  <div className="relative flex min-w-40 flex-1 items-center sm:max-w-sm">
+                    <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      ref={searchInputRef}
+                      value={searchQuery}
+                      onChange={(event) => setSearchQuery(event.target.value)}
+                      placeholder="Search"
+                      className="h-9 w-full rounded-lg border border-input bg-background pr-16 pl-9 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
+                    />
+                    <kbd className="pointer-events-none absolute top-1/2 right-2 flex h-6 min-w-10 -translate-y-1/2 items-center justify-center rounded-md border border-border/70 bg-muted/30 px-1.5 font-medium text-[11px] text-muted-foreground leading-none">
+                      {searchShortcutLabel}
+                    </kbd>
                   </div>
+
+                  <Button
+                    onClick={() => setShowJoinDialog(true)}
+                    variant="secondary"
+                    className="h-9 shrink-0 gap-1.5 rounded-lg px-3.5"
+                  >
+                    <UsersIcon className="size-4" />
+                    Join
+                  </Button>
+                  <Button
+                    onClick={handleOpenFolder}
+                    variant="secondary"
+                    className="h-9 shrink-0 gap-1.5 rounded-lg px-3.5"
+                  >
+                    <FolderOpenIcon className="size-4" />
+                    Import
+                  </Button>
+                  <Button
+                    onClick={() => setShowModeDialog(true)}
+                    className="h-9 shrink-0 gap-1.5 rounded-lg px-4"
+                  >
+                    <PlusIcon className="size-4" />
+                    New
+                  </Button>
                 </div>
-              ) : (
-                <>
-                  <div className="flex items-center gap-1">
-                    {SORTS.map(({ value, label }) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => setProjectSort(value)}
-                        className={cn(
-                          "rounded-md px-2.5 py-1 text-xs transition-colors",
-                          projectSort === value
-                            ? "bg-accent font-medium text-accent-foreground"
-                            : "text-muted-foreground hover:bg-muted/60",
-                        )}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+              )}
+            </header>
 
-                  {projectGroups.map((group) => (
-                    <div key={group.key} className="flex flex-col gap-3">
-                      {group.label && (
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-                            {group.label}
-                          </span>
-                          <span className="text-muted-foreground/60 text-xs tabular-nums">
-                            {group.projects.length}
-                          </span>
-                        </div>
-                      )}
-                      <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-6 gap-y-6">
-                        {group.projects.map((project) => (
-                          <ProjectPreviewCard
-                            key={project.path}
-                            project={project}
-                            isFavorite={favorites.includes(project.path)}
-                            type={projectTypes[project.path] ?? null}
-                            typeOptions={typeOptions}
-                            onOpen={() => handleOpenRecent(project.path)}
-                            onRemove={() => setRemoveProjectTarget(project)}
-                            onToggleFavorite={() =>
-                              toggleFavorite(project.path)
-                            }
-                            onSetType={(type) =>
-                              void setProjectType(project.path, type)
-                            }
-                            onCustomType={() => {
-                              setCustomType(projectTypes[project.path] ?? "");
-                              setTypePrompt(project.path);
-                            }}
-                            onMove={() => void handleMoveProject(project)}
-                          />
-                        ))}
+            <div className="min-h-0 flex-1 overflow-auto">
+              {activeSection === "settings" ? (
+                <SettingsView
+                  section={settingsDetailSection}
+                  onSectionChange={setSettingsDetailSection}
+                />
+              ) : (
+                <div className="flex w-full flex-col gap-4 px-5 py-5">
+                  {visibleProjects.length === 0 ? (
+                    <div className="flex min-h-80 flex-col items-center justify-center rounded-lg border border-border border-dashed bg-muted/10 px-6 text-center">
+                      <FileTextIcon className="mb-4 size-10 text-muted-foreground/70" />
+                      <h2 className="font-semibold text-lg">
+                        {normalizedSearch
+                          ? "No matching projects"
+                          : "No projects"}
+                      </h2>
+                      <div className="mt-5 flex flex-wrap justify-center gap-3">
+                        <Button onClick={() => setShowModeDialog(true)}>
+                          <PlusIcon className="mr-2 size-4" />
+                          New
+                        </Button>
+                        <Button onClick={handleOpenFolder} variant="outline">
+                          <FolderOpenIcon className="mr-2 size-4" />
+                          Import
+                        </Button>
                       </div>
                     </div>
-                  ))}
-                </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-1">
+                        {SORTS.map(({ value, label }) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setProjectSort(value)}
+                            className={cn(
+                              "rounded-md px-2.5 py-1 text-xs transition-colors",
+                              projectSort === value
+                                ? "bg-accent font-medium text-accent-foreground"
+                                : "text-muted-foreground hover:bg-muted/60",
+                            )}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {projectGroups.map((group) => (
+                        <div key={group.key} className="flex flex-col gap-3">
+                          {group.label && (
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+                                {group.label}
+                              </span>
+                              <span className="text-muted-foreground/60 text-xs tabular-nums">
+                                {group.projects.length}
+                              </span>
+                            </div>
+                          )}
+                          <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-6 gap-y-6">
+                            {group.projects.map((project) => (
+                              <ProjectPreviewCard
+                                key={project.path}
+                                project={project}
+                                isFavorite={favorites.includes(project.path)}
+                                type={projectTypes[project.path] ?? null}
+                                typeOptions={typeOptions}
+                                onOpen={() => handleOpenRecent(project.path)}
+                                onRemove={() => setRemoveProjectTarget(project)}
+                                onToggleFavorite={() =>
+                                  toggleFavorite(project.path)
+                                }
+                                onSetType={(type) =>
+                                  void setProjectType(project.path, type)
+                                }
+                                onCustomType={() => {
+                                  setCustomType(
+                                    projectTypes[project.path] ?? "",
+                                  );
+                                  setTypePrompt(project.path);
+                                }}
+                                onMove={() => void handleMoveProject(project)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </main>
 
       <JoinDialog open={showJoinDialog} onOpenChange={setShowJoinDialog} />

@@ -36,6 +36,7 @@ import { useZoteroStore } from "@/stores/zotero-store";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { useDocumentStore } from "@/stores/document-store";
 import { ChatComposer } from "@/components/claude-chat/chat-composer";
+import { LibraryView } from "@/components/library-view";
 import { useAiUsage } from "@/lib/ai-usage";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 
@@ -467,6 +468,18 @@ if (scenario === "composer") {
     <ThemeProvider attribute="class" themes={THEME_IDS}>
       <div data-testid="composer" style={{ width, padding: 8 }}>
         <ChatComposer isOpen />
+      </div>
+    </ThemeProvider>,
+  );
+}
+
+if (scenario === "library") {
+  // Zotero and the vault side by side, no project open.
+  useDocumentStore.setState({ projectRoot: null } as never);
+  root.render(
+    <ThemeProvider attribute="class" themes={THEME_IDS}>
+      <div className="h-full" style={chrome}>
+        <LibraryView />
       </div>
     </ThemeProvider>,
   );

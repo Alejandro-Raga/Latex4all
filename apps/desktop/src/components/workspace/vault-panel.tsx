@@ -688,7 +688,10 @@ function NoteList({
 }) {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
-  const [citedOnly, setCitedOnly] = useState(false);
+  const projectOpen = useDocumentStore((s) => Boolean(s.projectRoot));
+  const [citedOnlySet, setCitedOnly] = useState(false);
+  // Only with a project open: it's what the project cites.
+  const citedOnly = citedOnlySet && projectOpen;
   const [citedOrder, setCitedOrder] = useState<CitedOrder>("text");
   const cited = useCitedNotes(citedOnly);
   const results = useMemo(() => {
@@ -723,7 +726,7 @@ function NoteList({
             className="h-7 pl-7 text-xs"
           />
         </div>
-        <CitedToggle on={citedOnly} onChange={setCitedOnly} />
+        {projectOpen && <CitedToggle on={citedOnly} onChange={setCitedOnly} />}
         <Button
           variant="ghost"
           size="icon"
@@ -1117,17 +1120,15 @@ function NoteView({
             <PencilIcon className="size-3" />
             Edit
           </Button>
-          {note.kind === "paper" ? (
-            <CiteButton papers={[note]} />
-          ) : (
-            linkedPapers.length > 0 &&
-            projectOpen && (
-              <CiteButton
-                papers={linkedPapers}
-                label={`Cite its ${linkedPapers.length === 1 ? "paper" : `${linkedPapers.length} papers`}`}
-              />
-            )
-          )}
+          {note.kind === "paper"
+            ? projectOpen && <CiteButton papers={[note]} />
+            : linkedPapers.length > 0 &&
+              projectOpen && (
+                <CiteButton
+                  papers={linkedPapers}
+                  label={`Cite its ${linkedPapers.length === 1 ? "paper" : `${linkedPapers.length} papers`}`}
+                />
+              )}
         </div>
         {citedAt && (
           <div className="flex items-baseline gap-1.5 text-muted-foreground text-xs">

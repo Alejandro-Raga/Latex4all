@@ -54,6 +54,11 @@ tag.
 
 ### Your Obsidian vault
 
+- Library & Vault on the Projects page: your Zotero library and your vault
+  side by side, without opening a project. Read papers, add them to the
+  vault, file them under topics and write notes; actions that need a
+  project (citing, adding to a .bib, "cited in this project") show once one
+  is open.
 - Your vault beside your writing, from the icons on the right: search, read
   and edit notes, create them from your templates, and see what links where.
   It works with a vault on this computer (Obsidian Sync, iCloud, Dropbox,
