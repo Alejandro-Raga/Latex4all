@@ -59,6 +59,8 @@ tag.
   vault, file them under topics and write notes; actions that need a
   project (citing, adding to a .bib, "cited in this project") show once one
   is open.
+- There, the vault opens on a map of the whole vault, filterable by type;
+  inside a project it stays as it was.
 - Your vault beside your writing, from the icons on the right: search, read
   and edit notes, create them from your templates, and see what links where.
   It works with a vault on this computer (Obsidian Sync, iCloud, Dropbox,
@@ -266,6 +268,8 @@ tag.
 - After closing the update notice with "Not now", Check now found the
   update but showed nothing. It shows the notice again, and Settings names
   the version available.
+- On the whole-vault map, hiding types left the rest spread far apart and
+  tiny. They now gather and keep a size you can see.
 - In a narrow chat, the bar under the message box wrapped onto two lines.
   It stays on one now, dropping the less needed details first.
 - Claude Code's notices about connectors and unknown model names no longer

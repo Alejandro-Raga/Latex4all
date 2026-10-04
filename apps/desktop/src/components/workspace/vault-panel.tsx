@@ -107,6 +107,7 @@ import {
   DockWideButton,
   useDockSection,
 } from "./dock/dock-section";
+import { useVaultStandalone } from "./vault-standalone";
 import { PanelBoundary } from "@/components/panel-boundary";
 
 const REFRESH_MS = 30_000;
@@ -688,6 +689,7 @@ function NoteList({
 }) {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
+  const standalone = useVaultStandalone();
   const projectOpen = useDocumentStore((s) => Boolean(s.projectRoot));
   const [citedOnlySet, setCitedOnly] = useState(false);
   // Only with a project open: it's what the project cites.
@@ -751,6 +753,7 @@ function NoteList({
         />
       )}
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2">
+        {standalone && !query && <VaultMap index={index} onOpen={onOpen} />}
         {citedOnly && (
           <CitedHeader order={citedOrder} onOrder={setCitedOrder}>
             {cited.byNote.size} cited in this project
@@ -1425,6 +1428,112 @@ function GraphLegend({
   );
 }
 
+/** Saves the map as a JPEG where the user picks. */
+const saveMapImage = (name: string) => async (jpeg: Uint8Array) => {
+  const path = await saveDialog({
+    defaultPath: `${name} map.jpg`,
+    filters: [{ name: "JPEG image", extensions: ["jpg", "jpeg"] }],
+  });
+  if (!path) return;
+  try {
+    await writeFile(path, jpeg);
+    toast.success(`Saved ${path.split(/[\\/]/).pop()}`);
+  } catch (err) {
+    toast.error(
+      `Couldn't save the image. ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+};
+
+/** Notes whose title has every word typed, to light up in the map. */
+function useMapHighlight(nodes: GraphNodeInput[], query: string) {
+  return useMemo(() => {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return null;
+    return new Set(
+      nodes
+        .filter((n) => words.every((w) => n.label.toLowerCase().includes(w)))
+        .map((n) => n.id),
+    );
+  }, [nodes, query]);
+}
+
+/**
+ * The whole vault's map, on the vault's front page when it's shown on its
+ * own (Library & Vault): every note, filterable by type, click to open.
+ */
+function VaultMap({
+  index,
+  onOpen,
+}: {
+  index: VaultIndex;
+  onOpen: (name: string) => void;
+}) {
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState("");
+  const [menuNote, setMenuNote] = useState<string | null>(null);
+  const fullGraph = useMemo(() => graphFor(index, "", "all"), [index]);
+  const graph = useMemo(
+    () => filterGraph(fullGraph, hidden),
+    [fullGraph, hidden],
+  );
+  const highlight = useMapHighlight(graph.nodes, query);
+  if (index.list.length === 0) return null;
+  return (
+    <div className="mb-2 px-1.5">
+      <div className="mb-1.5 flex items-center gap-1 px-1">
+        <span className="font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
+          Whole vault
+        </span>
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Highlight…"
+          aria-label="Highlight notes in the map"
+          className="ml-auto h-6 w-32 text-xs"
+        />
+      </div>
+      <PanelBoundary name="The map" resetKeys={[graph]}>
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            <div>
+              <VaultGraph
+                onNodeMenu={setMenuNote}
+                nodes={graph.nodes}
+                links={graph.links}
+                height={380}
+                layout="force"
+                onSaveImage={saveMapImage("Vault")}
+                highlight={highlight}
+                onOpen={onOpen}
+              />
+            </div>
+          </ContextMenuTrigger>
+          <ContextMenuContent className="w-52">
+            {menuNote ? (
+              <NoteMenuItems noteName={menuNote} />
+            ) : (
+              <ContextMenuItem disabled>Right-click a note</ContextMenuItem>
+            )}
+          </ContextMenuContent>
+        </ContextMenu>
+      </PanelBoundary>
+      <GraphLegend
+        groups={fullGraph.groups}
+        hidden={hidden}
+        onToggle={(group) =>
+          setHidden((prev) => {
+            const next = new Set(prev);
+            if (next.has(group)) next.delete(group);
+            else next.add(group);
+            return next;
+          })
+        }
+      />
+    </div>
+  );
+}
+
 function Connections({
   index,
   note,
@@ -1458,15 +1567,7 @@ function Connections({
       else next.add(group);
       return next;
     });
-  const highlight = useMemo(() => {
-    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-    if (words.length === 0) return null;
-    return new Set(
-      graph.nodes
-        .filter((n) => words.every((w) => n.label.toLowerCase().includes(w)))
-        .map((n) => n.id),
-    );
-  }, [graph, query]);
+  const highlight = useMapHighlight(graph.nodes, query);
   if (note.outgoing.length + note.incoming.length === 0 && scope !== "all") {
     return (
       <div className="flex items-center justify-between px-3 pt-2 pb-3 text-muted-foreground text-xs">
@@ -1526,23 +1627,9 @@ function Connections({
                 links={graph.links}
                 height={wide ? 460 : scope === 1 ? 200 : 280}
                 layout={scope === "all" ? "force" : "radial"}
-                onSaveImage={async (jpeg) => {
-                  const path = await saveDialog({
-                    defaultPath: `${scope === "all" ? "Vault" : note.name} map.jpg`,
-                    filters: [
-                      { name: "JPEG image", extensions: ["jpg", "jpeg"] },
-                    ],
-                  });
-                  if (!path) return;
-                  try {
-                    await writeFile(path, jpeg);
-                    toast.success(`Saved ${path.split(/[\\/]/).pop()}`);
-                  } catch (err) {
-                    toast.error(
-                      `Couldn't save the image. ${err instanceof Error ? err.message : String(err)}`,
-                    );
-                  }
-                }}
+                onSaveImage={saveMapImage(
+                  scope === "all" ? "Vault" : note.name,
+                )}
                 highlight={highlight}
                 onOpen={onOpen}
               />

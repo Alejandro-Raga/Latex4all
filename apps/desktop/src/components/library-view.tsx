@@ -4,6 +4,7 @@ import { LibraryIcon, NotebookTextIcon } from "lucide-react";
 import { PanelBoundary } from "@/components/panel-boundary";
 import { QuickReferencePanel } from "@/components/workspace/quick-reference-panel";
 import { VaultPanel } from "@/components/workspace/vault-panel";
+import { VaultStandalone } from "@/components/workspace/vault-standalone";
 import { confirmLeaveVaultEdit } from "@/stores/vault-store";
 
 /**
@@ -44,7 +45,9 @@ export function LibraryView() {
         {shown.vault && (
           <Panel id="vault" order={2} minSize={25} className="min-w-0">
             <PanelBoundary name="Vault">
-              <VaultPanel onClose={() => close("vault")} />
+              <VaultStandalone.Provider value>
+                <VaultPanel onClose={() => close("vault")} />
+              </VaultStandalone.Provider>
             </PanelBoundary>
           </Panel>
         )}

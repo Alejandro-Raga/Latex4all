@@ -27,3 +27,26 @@ test("library and vault side by side without a project", async ({ page }) => {
   ).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test("the vault opens on the whole vault's map there", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/e2e/harness.html?scenario=library&vault=1");
+  await expect(page.getByText("Whole vault")).toBeVisible();
+  const map = page.locator("canvas").first();
+  await expect(map).toBeVisible();
+  await page.waitForTimeout(2500);
+  if (process.env.SHOTS) {
+    await map.screenshot({ path: `${process.env.SHOTS}/map-all.png` });
+  }
+  // One type alone (topics): the notes keep a usable size.
+  const legend = page.getByRole("group", { name: "Groups on the map" });
+  const chips = legend.getByRole("button");
+  for (let i = 0; i < (await chips.count()); i++) {
+    const chip = chips.nth(i);
+    if (!/topic/i.test(await chip.innerText())) await chip.click();
+  }
+  await page.waitForTimeout(2500);
+  if (process.env.SHOTS) {
+    await map.screenshot({ path: `${process.env.SHOTS}/map-topics.png` });
+  }
+});

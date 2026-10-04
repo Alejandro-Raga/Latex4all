@@ -140,7 +140,9 @@ function graphLayout(
     [
       "charge",
       forceManyBody<GNode>()
-        .strength(-Math.max(70, 260 / Math.sqrt(count / 20)))
+        // Gentler in big vaults; capped in small ones, or a few notes
+        // (one type shown) fly apart and the fitted view shrinks them.
+        .strength(-Math.min(140, Math.max(70, 260 / Math.sqrt(count / 20))))
         .distanceMax(500),
     ],
     [
@@ -151,12 +153,19 @@ function graphLayout(
     ],
     // A gentle pull to the middle; loose notes pulled less, so they ring
     // the network rather than land on it.
-    ["x", forceX<GNode>(0).strength((n) => (deg(n) ? 0.05 : 0.015))],
-    ["y", forceY<GNode>(0).strength((n) => (deg(n) ? 0.05 : 0.015))],
+    // With few links left (a type hidden), loose notes are most of the map:
+    // pulled in harder then, so they don't drift off.
+    ...(["x", "y"] as const).map((axis): [string, Force<GNode, GLink>] => {
+      const loose = links.length < nodes.length / 2 ? 0.04 : 0.015;
+      const f = axis === "x" ? forceX<GNode>(0) : forceY<GNode>(0);
+      return [axis, f.strength((n) => (deg(n) ? 0.05 : loose))];
+    }),
   ];
 }
 
 const DRAG_THRESHOLD = 3;
+/** A node's smallest size on screen, in pixels. */
+const MIN_NODE_PX = 3.5;
 /** Above this many notes, labels wait until you zoom in. */
 const CROWDED = 20;
 
@@ -283,7 +292,8 @@ export function VaultGraph({
         ctx.globalAlpha = on ? (faint ? 0.6 : 1) : 0.15;
         ctx.fillStyle = n.color;
         ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        // Never smaller than a few pixels, however far out the view is.
+        ctx.arc(n.x, n.y, Math.max(n.r, MIN_NODE_PX / t.k), 0, Math.PI * 2);
         ctx.fill();
         if (n.id === hover || n.centre) {
           ctx.strokeStyle = `rgba(${colors.text},0.7)`;
@@ -449,7 +459,13 @@ export function VaultGraph({
       redraw();
       return;
     }
-    const known = shapeRef.current !== "";
+    // Many notes gone at once (a type hidden): settle afresh, or the rest
+    // keep the spread the whole vault needed.
+    const before = new Set(nodesRef.current.map((o) => o.id));
+    const kept = nodeInput.filter((n) => before.has(n.id)).length;
+    const shrank =
+      nodesRef.current.length > 0 && kept < nodesRef.current.length * 0.7;
+    const known = shapeRef.current !== "" && !shrank;
     shapeRef.current = shape;
     const old = new Map(nodesRef.current.map((n) => [n.id, n]));
     const degree = new Map<string, number>();

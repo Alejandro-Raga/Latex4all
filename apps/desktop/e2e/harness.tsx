@@ -474,8 +474,56 @@ if (scenario === "composer") {
 }
 
 if (scenario === "library") {
-  // Zotero and the vault side by side, no project open.
+  // Zotero and the vault side by side, no project open; with ?vault=1, a
+  // small linked vault (papers, topics, ideas) for the map.
   useDocumentStore.setState({ projectRoot: null } as never);
+  if (params.get("vault")) {
+    const files = new Map<string, string>();
+    const papers = Array.from({ length: 14 }, (_, i) => `Paper${i + 1}`);
+    papers.forEach((p, i) =>
+      files.set(
+        `Papers/${p}.md`,
+        `---\ntitle: Paper ${i + 1}\ncitekey: ${p}\nyear: ${2000 + i}\ntags: [paper]\n---\nText.\n`,
+      ),
+    );
+    const topics = ["Corporate Science", "Economics of Science", "Geography"];
+    topics.forEach((t, i) =>
+      files.set(
+        `Topics/${t}.md`,
+        `---\ntags: [topic]\n---\n${papers
+          .filter((_, j) => j % 3 === i)
+          .map((p) => `[[${p}]]`)
+          .join(" ")} [[${topics[(i + 1) % 3]}]]\n`,
+      ),
+    );
+    for (const idea of ["Science is getting harder", "Regional influence"]) {
+      files.set(
+        `Ideas/${idea}.md`,
+        `---\ntags: [idea]\n---\n[[Paper1]] [[Corporate Science]]\n`,
+      );
+    }
+    useVaultStore.setState({
+      source: {
+        kind: "local",
+        label: "Commonplace",
+        load: async () => ({
+          notes: [...files].map(([p, t]) => parseNote(p, t)),
+          attachments: new Map(),
+          versions: new Map(),
+          templates: [],
+          newNoteFolder: null,
+        }),
+        readAttachment: async () => new Uint8Array(),
+        readNote: async (p: string) => ({
+          text: files.get(p) ?? "",
+          version: null,
+        }),
+        writeNote: async () => null,
+        createNote: async () => {},
+      },
+      index: null,
+    } as never);
+  }
   root.render(
     <ThemeProvider attribute="class" themes={THEME_IDS}>
       <div className="h-full" style={chrome}>
