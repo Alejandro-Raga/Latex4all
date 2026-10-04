@@ -61,3 +61,9 @@ screenshots. They aren't encrypted: they're meant to be read. Limits: 16 MB a
 report, 6 images of up to 4 MB, 10 reports per address a day, 500 MB in all
 (the oldest go first). `scripts/bug-reports.sh` in the repo copies them to
 `~/Latex4All-bug-reports` and lists them.
+
+To read them in a browser, set `REPORTS_PASSWORD` in `.env` next to
+`compose.yml` and open `/reports/admin` (any user name, that password). Ten
+wrong passwords from one address lock it out for an hour. Without the
+setting there's no page. Each report has a Delete button for once it's dealt
+with.

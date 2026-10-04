@@ -14,6 +14,8 @@
 //   POST /reports                 a bug report from the app: JSON {text,
 //                                 contact?, app?, log?, images?: [{type,
 //                                 data (base64)}]}; see reports.mjs
+//   GET  /reports/admin           the reports, behind a password
+//                                 (REPORTS_PASSWORD); see reports-page.mjs
 // WebSocket /p/<id>/sync          all need "Authorization: Bearer <token>", and
 //                                 "Latex4All-Protocol: <n>" (absent means 1):
 //                                 below `minProtocol` it's refused with 426
@@ -44,6 +46,7 @@ import fs from "node:fs";
 import { STATUS_CODES, createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
+import { createReportsPage } from "./reports-page.mjs";
 import { Reports, parseReport } from "./reports.mjs";
 import { ACCESS_HASH, BLOB_ID, PROJECT_ID, Storage } from "./storage.mjs";
 
@@ -146,6 +149,7 @@ export function createRelay({
   limits = {},
   now = Date.now,
   log = () => {},
+  reportsPassword = "",
 }) {
   const config = { ...DEFAULT_LIMITS, ...limits };
   const storage = new Storage({ dir: dataDir, limits: config, now });
@@ -157,6 +161,11 @@ export function createRelay({
   const createdByIp = new Map();
   const reportsByIp = new Map();
   const reports = new Reports({ dir: dataDir, limits: config, now });
+  const reportsPage = createReportsPage({
+    dir: dataDir,
+    password: reportsPassword,
+    now,
+  });
   const buckets = new Map();
   const wss = new WebSocketServer({
     noServer: true,
@@ -314,6 +323,7 @@ export function createRelay({
       if (req.method === "POST" && url.pathname === "/reports") {
         return createReport(req, res);
       }
+      if (reportsPage(req, res, url, clientIp(req))) return;
       if (parts[0] !== "p" || !PROJECT_ID.test(parts[1] ?? "")) {
         return send(res, 404);
       }
@@ -533,6 +543,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     dataDir,
     limits: { minProtocol },
     log: (line) => console.log(`[relay] ${line}`),
+    reportsPassword: process.env.REPORTS_PASSWORD ?? "",
   });
   server.listen(port, host, () => {
     console.log(`[relay] listening on ${host}:${port}, data in ${dataDir}`);

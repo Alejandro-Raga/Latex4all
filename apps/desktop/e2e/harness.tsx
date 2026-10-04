@@ -537,7 +537,12 @@ if (scenario === "library") {
 if (scenario === "bug") {
   useBugReport.getState().show();
   root.render(
-    <ThemeProvider attribute="class" themes={THEME_IDS}>
+    <ThemeProvider
+      attribute="class"
+      themes={THEME_IDS}
+      forcedTheme={params.get("theme") ?? undefined}
+    >
+      <ThemeBridge />
       <BugReportDialog />
     </ThemeProvider>,
   );

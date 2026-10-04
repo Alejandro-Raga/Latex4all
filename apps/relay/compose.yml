@@ -14,6 +14,8 @@ services:
     environment:
       # Set in .env next to this file; see the README.
       MIN_PROTOCOL: ${MIN_PROTOCOL:-1}
+      # The bug reports page's password; unset, there's no page.
+      REPORTS_PASSWORD: ${REPORTS_PASSWORD:-}
     read_only: true
     volumes:
       # Owned by uid 1000, which is both `usr` on the vm and `node` in here.

@@ -51,6 +51,8 @@ async function appDetails(): Promise<{
     ai: providerLabel(tab?.providerKey ?? null),
     screen: `${window.innerWidth}×${window.innerHeight}`,
   };
+  // Only what's known.
+  for (const [k, v] of Object.entries(app)) if (!v) delete app[k];
   const log = useLogStore
     .getState()
     .getEntries()
@@ -238,7 +240,7 @@ export function BugReportDialog() {
             <button
               type="button"
               onClick={() => setShowDetails((v) => !v)}
-              className="text-primary hover:underline"
+              className="text-primary underline underline-offset-2"
             >
               {showDetails ? "Hide" : "See what's sent"}
             </button>

@@ -574,3 +574,75 @@ test("bug reports are kept with their screenshots, and capped", async () => {
   // Projects don't see the reports folder.
   assert.equal(await (await fetch(`${relay.http}/health`)).text(), "ok 0\n");
 });
+
+test("the reports page needs the password, and holds off guessing", async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "relay-"));
+  const clock = { now: Date.UTC(2026, 0, 1) };
+  const server = createRelay({
+    dataDir,
+    now: () => clock.now,
+    reportsPassword: "s3cret",
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  running.push({ server, dir: dataDir });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const auth = (pw) => ({
+    Authorization: `Basic ${Buffer.from(`x:${pw}`).toString("base64")}`,
+  });
+  await fetch(`${base}/reports`, {
+    method: "POST",
+    body: JSON.stringify({
+      text: "<script>alert(1)</script> broken",
+      images: [{ type: "image/png", data: "iVBORw0KGgo=" }],
+    }),
+  });
+  assert.equal((await fetch(`${base}/reports/admin`)).status, 401);
+  const ok = await fetch(`${base}/reports/admin`, { headers: auth("s3cret") });
+  assert.equal(ok.status, 200);
+  const html = await ok.text();
+  assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt; broken"));
+  assert.ok(!html.includes("<script>alert(1)"));
+  const id = html.match(/\/reports\/admin\/([^/"]+)\/image-1\.png/)[1];
+  const img = await fetch(`${base}/reports/admin/${id}/image-1.png`, {
+    headers: auth("s3cret"),
+  });
+  assert.equal(img.headers.get("content-type"), "image/png");
+  assert.equal(
+    (
+      await fetch(`${base}/reports/admin/${id}/../../x`, {
+        headers: auth("s3cret"),
+      })
+    ).status,
+    404,
+  );
+  // Ten wrong guesses lock the address out for an hour, right password too.
+  for (let i = 0; i < 10; i++) {
+    assert.equal(
+      (await fetch(`${base}/reports/admin`, { headers: auth("nope") })).status,
+      401,
+    );
+  }
+  assert.equal(
+    (await fetch(`${base}/reports/admin`, { headers: auth("s3cret") })).status,
+    429,
+  );
+  clock.now += 61 * 60 * 1000;
+  assert.equal(
+    (await fetch(`${base}/reports/admin`, { headers: auth("s3cret") })).status,
+    200,
+  );
+  // Deleting a report.
+  const del = await fetch(`${base}/reports/admin/${id}/delete`, {
+    method: "POST",
+    headers: auth("s3cret"),
+    redirect: "manual",
+  });
+  assert.equal(del.status, 303);
+  assert.ok(!fs.existsSync(path.join(dataDir, "reports", id)));
+});
+
+test("no password set, no reports page", async () => {
+  const relay = await startRelay();
+  assert.equal((await fetch(`${relay.http}/reports/admin`)).status, 404);
+});
