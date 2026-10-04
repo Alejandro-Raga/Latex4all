@@ -21,6 +21,17 @@ tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- A paper note's highlight links ("p. 2") did nothing in Latex4All. They
+  now open the PDF here, at that page, with its highlights; inside a
+  project it can go on to a tab.
+- Paper notes showed codes like "^ivkzhggg" under each highlight. They're
+  link targets for Obsidian and are no longer shown.
+- Notes written by "Add to vault" put each highlight's link target where
+  Obsidian couldn't find it, and kept the PDF's broken words ("pub-
+  lishing"). Both are fixed.
+
 ## [1.2.0] - 2026-10-04
 
 ### Writing together

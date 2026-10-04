@@ -70,7 +70,7 @@ describe("literature notes written by Latex4All", () => {
       ].join("\n"),
     );
     expect(text).toContain(
-      "> we document a shift away from science\n> — [p. 3](zotero://open-pdf/library/items/GPXJ69P7?page=1&annotation=VI9CU433) #hl/yellow ^vi9cu433\n\nKey claim, see [[Nelson1959]]",
+      "> we document a shift away from science\n> — [p. 3](zotero://open-pdf/library/items/GPXJ69P7?page=1&annotation=VI9CU433) #hl/yellow\n\n^vi9cu433\n\nKey claim, see [[Nelson1959]]",
     );
     expect(text.endsWith(`${END}\n\n## My notes\n\n`)).toBe(true);
     // Obsidian reads it as a paper with its key.
@@ -116,5 +116,16 @@ describe("literature notes written by Latex4All", () => {
     expect(papersFolderOf(index, "")).toBe("Lecturas/Zotero");
     expect(papersFolderOf(index, "Mine")).toBe("Mine");
     expect(papersFolderOf(buildVaultIndex([]), "")).toBe("Papers");
+  });
+});
+
+describe("highlight text", () => {
+  it("loses what the PDF layout added", async () => {
+    const { cleanHighlight } = await import("./paper-note");
+    expect(
+      cleanHighlight(
+        "pub\u00ad lishing incen- tives ﬁrms R&D- intensive pre- and",
+      ),
+    ).toBe("publishing incentives firms R&D-intensive pre- and");
   });
 });

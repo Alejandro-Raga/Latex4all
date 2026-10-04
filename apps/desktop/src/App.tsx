@@ -13,6 +13,7 @@ import { followAnnotations } from "@/stores/annotations-store";
 import { useClaudeChatStore } from "@/stores/claude-chat-store";
 import { ProjectPicker } from "@/components/project-picker";
 import { BugReportDialog } from "@/components/bug-report-dialog";
+import { ZoteroPdfDialog } from "@/components/zotero-pdf-dialog";
 import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -251,6 +252,7 @@ export function App({ onReady }: { onReady?: () => void }) {
           {projectRoot ? <WorkspaceWithClaude /> : <ProjectPicker />}
           <EnvironmentOnboarding />
           <BugReportDialog />
+          <ZoteroPdfDialog />
           <UpdateManager />
           {showDebug && (
             <div className="fixed inset-0 z-[9998] flex items-end justify-center">

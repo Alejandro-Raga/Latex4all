@@ -121,6 +121,32 @@ export function safeNoteName(text: string, limit = 90) {
   return name;
 }
 
+const LIGATURES: Record<string, string> = {
+  "\ufb00": "ff",
+  "\ufb01": "fi",
+  "\ufb02": "fl",
+  "\ufb03": "ffi",
+  "\ufb04": "ffl",
+  "\ufb05": "st",
+  "\ufb06": "st",
+};
+
+/**
+ * A highlight's text as written, without what the PDF's layout adds: soft
+ * hyphens, words split at line ends ("incen- tives", but not "pre- and"),
+ * ligatures, doubled spaces. As the vault's Zotero sync does.
+ */
+export function cleanHighlight(text: string): string {
+  return text
+    .replace(/\u00ad\s*/g, "")
+    .replace(/[\ufb00-\ufb06]/g, (c) => LIGATURES[c] ?? c)
+    .replace(/([a-z])- (?!(?:and|or|to|nor|as|vs)\b)([a-z])/g, "$1$2")
+    .replace(/([A-Z0-9])- ([A-Za-z0-9])/g, "$1-$2")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .trim();
+}
+
 const quote = (text: string) =>
   text
     .trim()
@@ -141,7 +167,8 @@ function annotationBlock(pdfKey: string, a: PaperAnnotation) {
   const link = pageLink(pdfKey, a);
   const lines: string[] = [];
   if ((a.type === "highlight" || a.type === "underline") && a.text) {
-    lines.push(quote(a.text), `> — ${link}${tag} ${block}`);
+    // Obsidian finds a quote's block id only on a line of its own.
+    lines.push(quote(cleanHighlight(a.text)), `> — ${link}${tag}`, "", block);
   } else if (a.type === "note") {
     lines.push(`📝 ${link}${tag} ${block}`);
   } else {

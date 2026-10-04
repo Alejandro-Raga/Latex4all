@@ -108,6 +108,7 @@ import {
   useDockSection,
 } from "./dock/dock-section";
 import { useVaultStandalone } from "./vault-standalone";
+import { useZoteroPdf, zoteroPdfTarget } from "@/components/zotero-pdf-dialog";
 import { PanelBoundary } from "@/components/panel-boundary";
 
 const REFRESH_MS = 30_000;
@@ -1144,7 +1145,7 @@ function NoteView({
       <Connections index={index} note={note} onOpen={onOpen} />
 
       <div className="border-border border-t px-3 py-3">
-        <NoteMarkdown markdown={markdown} onOpen={onOpen} />
+        <NoteMarkdown markdown={markdown} onOpen={onOpen} title={note.title} />
       </div>
     </div>
   );
@@ -1745,13 +1746,26 @@ const MARKDOWN_CLASSES = cn(
   "[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:text-xs [&_hr]:my-3 [&_hr]:border-border",
 );
 
+/** Obsidian's block ids ("^ab12cd34", alone on a line or ending one):
+ *  link targets, not text, so not shown. */
+const BLOCK_ID_LINE = /^[ \t]*\^[A-Za-z0-9-]+[ \t]*$/gm;
+const BLOCK_ID_END = /[ \t]+\^[A-Za-z0-9-]+[ \t]*$/gm;
+
+export function withoutBlockIds(markdown: string): string {
+  return markdown.replace(BLOCK_ID_LINE, "").replace(BLOCK_ID_END, "");
+}
+
 function NoteMarkdown({
   markdown,
   onOpen,
+  title = "Paper",
 }: {
   markdown: string;
   onOpen: (name: string) => void;
+  /** Names the PDF a highlight link opens. */
+  title?: string;
 }) {
+  const shown = useMemo(() => withoutBlockIds(markdown), [markdown]);
   return (
     <div className={MARKDOWN_CLASSES}>
       <ReactMarkdown
@@ -1767,14 +1781,16 @@ function NoteMarkdown({
             return (
               <button
                 type="button"
-                onClick={() =>
-                  target
-                    ? onOpen(target)
-                    : href &&
-                      shellOpen(href).catch(() =>
-                        toast.error("Couldn't open that link."),
-                      )
-                }
+                onClick={() => {
+                  if (target) return onOpen(target);
+                  if (!href) return;
+                  // A highlight's "p. 4": the PDF here, at that page.
+                  const pdf = zoteroPdfTarget(href, title);
+                  if (pdf) return useZoteroPdf.getState().show(pdf);
+                  shellOpen(href).catch(() =>
+                    toast.error("Couldn't open that link."),
+                  );
+                }}
                 className="text-left text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary"
               >
                 {children}
@@ -1794,7 +1810,7 @@ function NoteMarkdown({
           },
         }}
       >
-        {markdown}
+        {shown}
       </ReactMarkdown>
     </div>
   );
