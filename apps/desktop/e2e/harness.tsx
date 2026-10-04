@@ -81,12 +81,35 @@ if (scenario === "pdf") {
   )
     .then((r) => r.arrayBuffer())
     .then((buf) => {
+      // ?focus=1: a highlight on page 3, and the viewer's way to it on
+      // window.focusAnnotation, as a note's highlight link uses.
+      const focus = { current: null as ((key: string) => boolean) | null };
+      (window as any).focusAnnotation = (key: string) =>
+        focus.current?.(key) ?? false;
+      const annotations = params.get("focus")
+        ? [
+            {
+              key: "FOCUS123",
+              pageIndex: 2,
+              rects: [[72, 300, 400, 312]] as [
+                number,
+                number,
+                number,
+                number,
+              ][],
+              color: "#ffd400",
+              type: "highlight" as const,
+            },
+          ]
+        : undefined;
       function Viewer() {
         const [scale, setScale] = useState(1);
         return (
           <div className="flex h-full flex-col">
             <PdfViewer
               data={new Uint8Array(buf)}
+              annotations={annotations}
+              focusAnnotationRef={focus}
               scale={scale}
               onScaleChange={setScale}
               theme={(params.get("ptheme") ?? "light") as never}

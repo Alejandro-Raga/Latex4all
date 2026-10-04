@@ -515,6 +515,8 @@ export async function downloadAttachmentFile(
 }
 
 export interface ZoteroAnnotation {
+  /** The annotation's item key, which zotero:// links name it by. */
+  key?: string;
   pageIndex: number;
   rects: [number, number, number, number][];
   color: string;
@@ -711,7 +713,9 @@ export async function fetchAnnotations(
       `/users/${userID}/items/${attachmentKey}/children?${params}`,
     );
     const children = (await response.json()) as {
+      key?: string;
       data: {
+        key?: string;
         itemType: string;
         annotationType?: string;
         annotationColor?: string;
@@ -734,6 +738,7 @@ export async function fetchAnnotations(
           continue;
         }
         result.push({
+          key: child.key ?? child.data.key,
           pageIndex: position.pageIndex,
           rects: position.rects,
           color: child.data.annotationColor || "#ffd400",

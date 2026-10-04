@@ -372,6 +372,26 @@
   opacity: 0.85;
 }
 
+/* A highlight a link pointed to: ringed for a moment, so it's found. */
+.pdf-focus-flash {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 3px;
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.9);
+  animation: pdf-focus-flash 2.4s ease-out forwards;
+}
+
+@keyframes pdf-focus-flash {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 /* The project's highlights and notes over the PDF: the same soft colors as in
    the editor, grey once resolved. Never takes the pointer. */
 .pdf-notes-layer {

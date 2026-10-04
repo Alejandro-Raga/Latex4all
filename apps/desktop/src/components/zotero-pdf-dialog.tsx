@@ -23,6 +23,8 @@ interface Target {
   attachmentKey: string;
   /** 1-based, as zotero:// links give it. */
   page: number | null;
+  /** The highlight the link is about, to bring into view. */
+  annotationKey: string | null;
   label: string;
 }
 
@@ -48,9 +50,12 @@ export function zoteroPdfTarget(href: string, label = "Paper"): Target | null {
   if (!m) return null;
   const params = new URLSearchParams(m[2] ?? "");
   const page = Number(params.get("page"));
+  const annotation = params.get("annotation");
   return {
     attachmentKey: m[1],
     page: Number.isFinite(page) && page > 0 ? page : null,
+    annotationKey:
+      annotation && /^[A-Z0-9]{8}$/i.test(annotation) ? annotation : null,
     label,
   };
 }
@@ -70,6 +75,7 @@ export function ZoteroPdfDialog() {
   >({ kind: "loading" });
   const [scale, setScale] = useState(1);
   const scrollToPageRef = useRef<((page: number) => void) | null>(null);
+  const focusRef = useRef<((key: string) => boolean) | null>(null);
 
   useEffect(() => {
     if (!target) return;
@@ -163,15 +169,21 @@ export function ZoteroPdfDialog() {
               theme={theme}
               onThemeChange={setTheme}
               scrollToPageRef={scrollToPageRef}
+              focusAnnotationRef={focusRef}
               onLoadSuccess={() => {
-                // Once the pages are laid out, to the highlight's page.
-                // Pages appear as they're laid out: try again shortly after.
+                // Pages appear as they're laid out: keep trying until the
+                // highlight's page is there, then bring the highlight into
+                // view (its page, if the highlight isn't found).
+                const key = target?.annotationKey;
                 const page = target?.page;
-                if (page) {
-                  for (const wait of [80, 400, 1000]) {
-                    setTimeout(() => scrollToPageRef.current?.(page), wait);
-                  }
-                }
+                let tries = 0;
+                const attempt = () => {
+                  tries++;
+                  if (key && focusRef.current?.(key)) return;
+                  if (key && tries < 30) return void setTimeout(attempt, 100);
+                  if (page) scrollToPageRef.current?.(page);
+                };
+                setTimeout(attempt, 60);
               }}
             />
           )}

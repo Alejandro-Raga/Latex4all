@@ -84,3 +84,23 @@ test("the PDF's text layer has its words and can be selected", async ({
   }
   expect(rects[0][1]).toBeGreaterThan(rects[rects.length - 1][1]);
 });
+
+test("a highlight link brings that highlight into view", async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto("/e2e/harness.html?scenario=pdf&focus=1");
+  await expect(page.locator('[data-page-number="3"]')).toBeAttached();
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as any).focusAnnotation("focus123")),
+    )
+    .toBe(true);
+  const flash = page.locator('[data-page-number="3"] .pdf-focus-flash');
+  await expect(flash).toBeAttached();
+  const box = await flash.boundingBox();
+  // In view, around a third of the way down, with context above it.
+  expect(box?.y ?? -1).toBeGreaterThan(100);
+  expect(box?.y ?? 9999).toBeLessThan(600);
+  expect(
+    await page.evaluate(() => (window as any).focusAnnotation("NOPE0000")),
+  ).toBe(false);
+});

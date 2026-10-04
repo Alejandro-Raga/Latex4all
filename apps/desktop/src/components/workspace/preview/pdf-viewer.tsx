@@ -235,6 +235,8 @@ export interface CaptureResult {
 /** A highlight/underline mark to overlay on a rendered page — currently sourced
  * from Zotero annotations, but generic to any 0-based page index + PDF-space rects. */
 export interface PdfAnnotationRect {
+  /** Zotero's key for it, so a link can bring it into view. */
+  key?: string;
   pageIndex: number;
   rects: [number, number, number, number][];
   color: string;
@@ -270,6 +272,9 @@ interface PdfViewerProps {
   onContainerResize?: (width: number, height: number) => void;
   onCurrentPageChange?: (page: number) => void;
   scrollToPageRef?: React.RefObject<((page: number) => void) | null>;
+  /** Brings an annotation (by key) to the middle of the view and flashes
+   *  it; false while its page isn't laid out yet, or if there's no such. */
+  focusAnnotationRef?: React.RefObject<((key: string) => boolean) | null>;
   captureMode?: boolean;
   onCapture?: (result: CaptureResult) => void;
   onCancelCapture?: () => void;
@@ -296,6 +301,7 @@ export function PdfViewer({
   onContainerResize,
   onCurrentPageChange,
   scrollToPageRef,
+  focusAnnotationRef,
   captureMode = false,
   onCapture,
   onCancelCapture,
@@ -940,6 +946,48 @@ export function PdfViewer({
       cancelAnimationFrame(rafId);
     };
   }, [pageSizes, isActive]);
+
+  // Expose focusing an annotation via ref: its top a third down the view,
+  // with the passage around it, and a flash to find it by.
+  useEffect(() => {
+    if (!focusAnnotationRef) return;
+    focusAnnotationRef.current = (key: string) => {
+      const container = containerRef.current;
+      const ann = annotations?.find(
+        (a) => a.key?.toUpperCase() === key.toUpperCase(),
+      );
+      const size = ann ? pageSizes[ann.pageIndex] : undefined;
+      if (!container || !ann || !size) return false;
+      const pageEl = container.querySelector(
+        `[data-page-number="${ann.pageIndex + 1}"]`,
+      ) as HTMLElement | null;
+      if (!pageEl) return false;
+      const xs = ann.rects.flatMap((r) => [r[0], r[2]]);
+      const ys = ann.rects.flatMap((r) => [r[1], r[3]]);
+      const top = size.height - Math.max(...ys);
+      const bottom = size.height - Math.min(...ys);
+      scrollToPoint(
+        container,
+        ann.pageIndex + 1,
+        top,
+        container.clientHeight / 3,
+      );
+      const flash = document.createElement("div");
+      flash.className = "pdf-focus-flash";
+      Object.assign(flash.style, {
+        left: `${(Math.min(...xs) / size.width) * 100 - 0.6}%`,
+        top: `${(top / size.height) * 100 - 0.5}%`,
+        width: `${((Math.max(...xs) - Math.min(...xs)) / size.width) * 100 + 1.2}%`,
+        height: `${((bottom - top) / size.height) * 100 + 1}%`,
+      });
+      pageEl.appendChild(flash);
+      setTimeout(() => flash.remove(), 2400);
+      return true;
+    };
+    return () => {
+      focusAnnotationRef.current = null;
+    };
+  }, [focusAnnotationRef, annotations, pageSizes]);
 
   // Expose scrollToPage via ref
   useEffect(() => {

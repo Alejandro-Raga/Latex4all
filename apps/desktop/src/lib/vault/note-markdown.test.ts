@@ -19,7 +19,12 @@ describe("a highlight's zotero:// link", () => {
         "zotero://open-pdf/library/items/APDRGR25?page=2&annotation=2BIHEYEW",
         "Rotolo 2022",
       ),
-    ).toEqual({ attachmentKey: "APDRGR25", page: 2, label: "Rotolo 2022" });
+    ).toEqual({
+      attachmentKey: "APDRGR25",
+      page: 2,
+      annotationKey: "2BIHEYEW",
+      label: "Rotolo 2022",
+    });
     expect(
       zoteroPdfTarget("zotero://open-pdf/groups/123/items/APDRGR25")?.page,
     ).toBeNull();

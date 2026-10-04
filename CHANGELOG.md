@@ -21,6 +21,14 @@ tag.
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-10-04
+
+### Fixed
+
+- A highlight link in a paper note opened its PDF at the top. It now goes to
+  the highlight itself, with the text around it in view, and rings it for a
+  moment so it's easy to spot.
+
 ## [1.2.1] - 2026-10-04
 
 ### Fixed
