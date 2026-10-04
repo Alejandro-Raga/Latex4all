@@ -19,7 +19,7 @@ URL changed. Branch layout, CI, refactors and tests belong in commit messages.
 Write entries under `## [Unreleased]` and rename it to `## [x.y.z]` when you
 tag.
 
-## [Unreleased]
+## [1.2.0] - 2026-10-04
 
 ### Writing together
 
@@ -54,6 +54,10 @@ tag.
 
 ### Your Obsidian vault
 
+- Your vault beside your writing, from the icons on the right: search, read
+  and edit notes, create them from your templates, and see what links where.
+  It works with a vault on this computer (Obsidian Sync, iCloud, Dropbox,
+  Git…) or on a WebDAV server (Remotely Save, Nextcloud, Seafile…).
 - Library & Vault on the Projects page: your Zotero library and your vault
   side by side, without opening a project. Read papers, add them to the
   vault, file them under topics and write notes; actions that need a
@@ -61,10 +65,6 @@ tag.
   is open.
 - There, the vault opens on a map of the whole vault, filterable by type;
   inside a project it stays as it was.
-- Your vault beside your writing, from the icons on the right: search, read
-  and edit notes, create them from your templates, and see what links where.
-  It works with a vault on this computer (Obsidian Sync, iCloud, Dropbox,
-  Git…) or on a WebDAV server (Remotely Save, Nextcloud, Seafile…).
 - Literature notes from Zotero plugins are recognised as papers, however
   your template writes them: Cite adds a paper to the bibliography and cites
   it, and the citation under the cursor leads to its note.
@@ -198,7 +198,7 @@ tag.
   a day than Flash (about 500 against 20). Next to the send button, "Today
   12/20" shows how many of a free model's daily requests are used. The
   limit is learned from Google once it's reached.
-- OpenAI, Gemini, GLM and Ollama now count input tokens too.
+- OpenAI, Gemini, GLM and Ollama count the tokens they read, not only those they write.
 - The chat remembers its model and thinking effort, and starts on Sonnet,
   which uses much less than Opus.
 - Long chats show a notice with a button to start a new one.
@@ -248,56 +248,12 @@ tag.
 
 ### Fixed
 
-- Switching a chat between AIs (for example ChatGPT and Gemini) could fail
-  with "No conversation found" or empty the chat. The new AI now gets the
-  conversation so far.
-- Services added with an API key (Gemini, DeepSeek…) were labelled and
-  priced as Claude Sonnet, and sometimes said they were Claude. They now
-  show their real model and price.
-- A chat with Gemini could hang for many minutes when Google was busy. If
-  a service doesn't start answering within 60 seconds, or goes silent for
-  2 minutes mid-answer, the chat now says it's busy.
-- Usage limits from API services showed as connection errors. They now show
-  as limits, and the chat moves to your next AI.
-- Asking an AI to remember something now creates AGENTS.md if it's missing.
-  The memory window and the Chats panel have more room.
-- Claude disappeared from the model list after adding an API key.
-- The VIM button sat at the end of the ribbon, easy to hit by accident; with
-  it on, a click shows a block cursor and typing doesn't write. It's now
-  only in Settings ("Vim keys"), and when on, the editor shows "Vim on ×" to
-  turn it off.
-- Selecting a single letter (a click that moved a little) no longer opens
-  the selection toolbar.
-- The Projects page showed no preview for a project whose main file isn't
-  called main.tex: it now finds the compiled PDF whatever its name.
-- After closing the update notice with "Not now", Check now found the
-  update but showed nothing. It shows the notice again, and Settings names
-  the version available.
-- On the whole-vault map, hiding types left the rest spread far apart and
-  tiny. They now gather and keep a size you can see.
-- In a narrow chat, the bar under the message box wrapped onto two lines.
-  It stays on one now, dropping the less needed details first.
-- Claude Code's notices about connectors and unknown model names no longer
-  show in the chat.
-- A Gemini model that used its free requests for the day is no longer
-  retried for minutes. The chat says which limit ran out, and moves on.
-- Gemma is no longer offered with a Gemini key: on the free tier it accepts
-  16,000 tokens a minute, less than one message here sends.
-- On Windows, ChatGPT couldn't edit project files. Its changes still go
-  through review and Undo, and the chat says when a change fails.
-- Adding a Gemini key failed on retired models or ones that can't chat
-  (audio, images, speech). Only chat models are listed now, and a retired
-  model is replaced with the one Google suggests.
 - Syncing a Zotero collection with a .bib file deleted the entries that
   weren't in your library, such as a collaborator's, and could change a
   paper's citation key when its details changed in Zotero, breaking the
   citations. Both stay now.
-- "Cited in this project" in the Zotero library missed papers whose titles
-  have capitals kept in braces, as Zotero writes them; it now finds them,
-  and by author and year when the title differs. Check citations finds
-  them in Zotero too, and without going online.
-- Link suggestions after "[[" follow the pointer, so the full name shows
-  beside the one you point at, not just the first.
+- Selecting a single letter (a click that moved a little) no longer opens
+  the selection toolbar.
 - Text in PDFs couldn't be selected, so nothing could be copied or
   double-clicked to its place in the source. Selection now works like in a
   PDF reader, from the nearest letter, and shows on every page color.
