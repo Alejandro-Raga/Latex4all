@@ -234,20 +234,19 @@ reinstalled by hand once.
 
 ### Release versioning
 
-Releases are numbered `1.A.BC`, set by hand in `tauri.conf.json` before tagging
-`v1.A.BC`. Only three numbers, because the Windows installers and the updater
-accept no more:
+Releases follow [SemVer](https://semver.org): `MAJOR.MINOR.PATCH`, set by hand
+in `tauri.conf.json` before tagging `vMAJOR.MINOR.PATCH`.
 
-| Change                         | Bumps                    | Example                 |
-|--------------------------------|--------------------------|-------------------------|
-| Major additions or features    | `A`; `BC` back to `0`    | `1.2.11` → `1.3.0`      |
-| Minor feature improvements     | `B` (the tens of the last number), `C` to `0` | `1.2.0` → `1.2.10` → `1.2.20` |
-| Hotfixes                       | `C` (the units)          | `1.2.0` → `1.2.1`; `1.2.10` → `1.2.11` |
+| Change                         | Bumps                          | Example            |
+|--------------------------------|--------------------------------|--------------------|
+| Major additions or features    | `MAJOR`; the others back to 0  | `1.3.2` → `2.0.0`  |
+| Minor feature improvements     | `MINOR`; `PATCH` back to 0     | `1.2.1` → `1.3.0`  |
+| Hotfixes                       | `PATCH`                        | `1.2.0` → `1.2.1`  |
 
-So a hotfix never takes the place of an improvement's number: up to nine of
-them fit between two improvements (`1.2.11` … `1.2.19`). The changelog section
-for a release is named after the version (`## [1.2.10] - <date>`), and the
-notes come from it.
+Only three numbers: the Windows installers and the updater accept no more,
+and no prerelease suffix in a release. The changelog section for a release
+is named after the version (`## [1.3.0] - <date>`), and the notes come from
+it.
 
 ### Test-channel versioning
 
