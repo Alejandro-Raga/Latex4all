@@ -21,6 +21,13 @@ tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- A reply from ChatGPT, Gemini or Copilot could keep showing "Thinking…"
+  long after it had finished, or never end, when something it started (a
+  compile, say) went on running in the background. The chat now finishes
+  as soon as the AI does.
+
 ## [1.2.2] - 2026-10-04
 
 ### Fixed

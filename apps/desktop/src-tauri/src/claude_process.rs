@@ -60,6 +60,55 @@ fn process_key(window_label: &str, tab_id: &str) -> String {
     format!("{}:{}", window_label, tab_id)
 }
 
+/// How long output may stay open after the process exits before reading
+/// stops (what's left is usually a background process holding the pipe).
+const OUTPUT_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Waits until the process under `key` exits, and takes it out of the map.
+/// None if it's gone from the map first (stopped by the user).
+async fn wait_for_exit(
+    processes: &Arc<Mutex<HashMap<String, Child>>>,
+    key: &str,
+) -> Option<std::io::Result<std::process::ExitStatus>> {
+    loop {
+        {
+            let mut map = processes.lock().await;
+            let child = map.get_mut(key)?;
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    map.remove(key);
+                    return Some(Ok(status));
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    map.remove(key);
+                    return Some(Err(e));
+                }
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+}
+
+/// Lets the readers finish what's left, for at most `grace`; stops them
+/// otherwise. True if they finished on their own.
+async fn drain_output(
+    stdout_task: &mut tokio::task::JoinHandle<()>,
+    stderr_task: &mut tokio::task::JoinHandle<()>,
+    grace: std::time::Duration,
+) -> bool {
+    let both = async {
+        let _ = (&mut *stdout_task).await;
+        let _ = (&mut *stderr_task).await;
+    };
+    if tokio::time::timeout(grace, both).await.is_ok() {
+        return true;
+    }
+    stdout_task.abort();
+    stderr_task.abort();
+    false
+}
+
 /// Spawn the Claude CLI process and stream output via Tauri events.
 /// Events are emitted only to the originating window, tagged with tab_id.
 pub async fn spawn_claude_process(
@@ -223,45 +272,52 @@ pub async fn spawn_claude_process(
     let tab_id_wait = tab_id;
     let result_success_wait = result_success_holder.clone();
     tokio::spawn(async move {
-        let _ = stdout_task.await;
-        let _ = stderr_task.await;
-
-        let mut processes = process_arc_wait.lock().await;
-        let success = if let Some(mut child) = processes.remove(&process_key_wait) {
-            match child.wait().await {
-                Ok(status) => {
-                    let exit_success = status.success();
-                    let result_success = result_success_wait.lock().ok().and_then(|guard| *guard);
-                    let success = exit_success || result_success == Some(true);
-                    eprintln!(
-                        "[claude-process] [{}] exited with status={} result_success={:?} final_success={} ({:.1}s)",
-                        tab_id_wait,
-                        status,
-                        result_success,
-                        success,
-                        start_time.elapsed().as_secs_f64()
-                    );
-                    success
-                }
-                Err(e) => {
-                    eprintln!(
-                        "[claude-process] [{}] wait error: {} ({:.1}s)",
-                        tab_id_wait,
-                        e,
-                        start_time.elapsed().as_secs_f64()
-                    );
-                    false
-                }
-            }
-        } else {
+        // Done when the process itself exits, not when its output closes:
+        // something it started in the background (a compile, a server) can
+        // hold that open long after, and the chat would wait forever.
+        let exit = wait_for_exit(&process_arc_wait, &process_key_wait).await;
+        let mut stdout_task = stdout_task;
+        let mut stderr_task = stderr_task;
+        if !drain_output(&mut stdout_task, &mut stderr_task, OUTPUT_GRACE).await {
             eprintln!(
-                "[claude-process] [{}] no child found in map ({:.1}s)",
-                tab_id_wait,
-                start_time.elapsed().as_secs_f64()
+                "[claude-process] [{}] output still open {:?} after exit; stopped reading",
+                tab_id_wait, OUTPUT_GRACE
             );
-            false
+        }
+
+        let success = match exit {
+            Some(Ok(status)) => {
+                let exit_success = status.success();
+                let result_success = result_success_wait.lock().ok().and_then(|guard| *guard);
+                let success = exit_success || result_success == Some(true);
+                eprintln!(
+                    "[claude-process] [{}] exited with status={} result_success={:?} final_success={} ({:.1}s)",
+                    tab_id_wait,
+                    status,
+                    result_success,
+                    success,
+                    start_time.elapsed().as_secs_f64()
+                );
+                success
+            }
+            Some(Err(e)) => {
+                eprintln!(
+                    "[claude-process] [{}] wait error: {} ({:.1}s)",
+                    tab_id_wait,
+                    e,
+                    start_time.elapsed().as_secs_f64()
+                );
+                false
+            }
+            None => {
+                eprintln!(
+                    "[claude-process] [{}] no child found in map ({:.1}s)",
+                    tab_id_wait,
+                    start_time.elapsed().as_secs_f64()
+                );
+                false
+            }
         };
-        drop(processes);
 
         let _ = win_wait.emit(
             "claude-complete",
@@ -364,5 +420,67 @@ pub async fn kill_process_for_window(state: &ClaudeProcessState, window_label: &
         if let Some(mut child) = processes.remove(&key) {
             let _ = child.kill().await;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    /// Runs `script`, then waits for it as the chat does; the lines it wrote,
+    /// whether its output closed on its own, and how long it all took.
+    async fn run(script: &str) -> (bool, f64, Vec<String>) {
+        let mut cmd = Command::new("sh");
+        cmd.args(["-c", script])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        let mut child = cmd.spawn().unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let stderr = child.stderr.take().unwrap();
+        let map: Arc<Mutex<HashMap<String, Child>>> = Arc::new(Mutex::new(HashMap::new()));
+        map.lock().await.insert("k".into(), child);
+        let lines = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let seen = lines.clone();
+        let mut out = tokio::spawn(async move {
+            let mut reader = BufReader::new(stdout).lines();
+            while let Ok(Some(line)) = reader.next_line().await {
+                seen.lock().unwrap().push(line);
+            }
+        });
+        let mut err = tokio::spawn(async move {
+            let mut reader = BufReader::new(stderr).lines();
+            while let Ok(Some(_)) = reader.next_line().await {}
+        });
+        let started = Instant::now();
+        let exit = wait_for_exit(&map, "k").await;
+        assert!(exit.unwrap().unwrap().success());
+        let drained = drain_output(&mut out, &mut err, Duration::from_secs(3)).await;
+        let got = lines.lock().unwrap().clone();
+        (drained, started.elapsed().as_secs_f64(), got)
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn finishes_when_a_background_child_keeps_the_output_open() {
+        let (drained, secs, lines) = run("echo done; sleep 30 &").await;
+        assert!(!drained);
+        assert!(secs < 5.0, "took {secs}s");
+        assert_eq!(lines, vec!["done".to_string()]);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn reads_all_an_ordinary_process_writes() {
+        let (drained, secs, lines) = run("echo a; sleep 0.3; echo b").await;
+        assert!(drained);
+        assert!(secs < 2.0);
+        assert_eq!(lines, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn a_stopped_process_has_no_exit_to_wait_for() {
+        let map: Arc<Mutex<HashMap<String, Child>>> = Arc::new(Mutex::new(HashMap::new()));
+        assert!(wait_for_exit(&map, "gone").await.is_none());
     }
 }
