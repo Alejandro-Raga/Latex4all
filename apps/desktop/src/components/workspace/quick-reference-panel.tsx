@@ -24,7 +24,6 @@ import {
   LibraryIcon,
   Loader2Icon,
   Maximize2Icon,
-  MinusIcon,
   PlusIcon,
   BookOpenIcon,
   MessageSquarePlusIcon,
@@ -39,8 +38,7 @@ import { toast } from "sonner";
 import { useProjectStore } from "@/stores/project-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { DEFAULT_BIB_FILE_NAME, useZoteroStore } from "@/stores/zotero-store";
-import { useSettingsStore } from "@/stores/settings-store";
-import { useReadingStore } from "@/stores/reading-store";
+import { type ReadingPaper, useReadingStore } from "@/stores/reading-store";
 import {
   buildCollectionTree,
   type ZoteroCollectionNode,
@@ -67,7 +65,8 @@ import {
   sortReferences,
   type ReferenceSort,
 } from "@/lib/zotero-search";
-import { PdfViewer, type PdfAnnotationRect } from "./preview/pdf-viewer";
+import { PaperReader } from "./preview/paper-reader";
+import type { PdfAnnotationRect } from "./preview/pdf-viewer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -1655,9 +1654,6 @@ function TreeView({
   );
 }
 
-/** Per-file zoom cache, mirroring the main PDF preview's per-root cache. */
-const pdfZoomCache = new Map<string, number>();
-
 function FilePreview({
   selectedFile,
   preview,
@@ -1665,33 +1661,6 @@ function FilePreview({
   selectedFile: SelectedFile | null;
   preview: Preview | null;
 }) {
-  const [scale, setScale] = useState(1);
-  const pdfTheme = useSettingsStore((s) => s.pdfThemeReference);
-  const setPdfTheme = useSettingsStore((s) => s.setPdfThemeReference);
-
-  useEffect(() => {
-    if (selectedFile) {
-      setScale(pdfZoomCache.get(selectedFile.id) ?? 1);
-    }
-  }, [selectedFile]);
-
-  const handleScaleChange = useCallback(
-    (next: number) => {
-      setScale(next);
-      if (selectedFile) pdfZoomCache.set(selectedFile.id, next);
-    },
-    [selectedFile],
-  );
-
-  const zoomIn = useCallback(
-    () => handleScaleChange(Math.min(4, scale + 0.1)),
-    [handleScaleChange, scale],
-  );
-  const zoomOut = useCallback(
-    () => handleScaleChange(Math.max(0.25, scale - 0.1)),
-    [handleScaleChange, scale],
-  );
-
   if (!selectedFile) {
     return (
       <div className="flex h-full items-center justify-center p-4 text-center text-muted-foreground text-xs">
@@ -1754,95 +1723,54 @@ function FilePreview({
     );
   }
 
-  // preview.kind === "pdf"
-  const annotationCount = preview.annotations?.length ?? 0;
-
+  // preview.kind === "pdf": the same reader as the PDF pane (highlights,
+  // notes, ideas and topics), under the preview's own title.
+  const paper: ReadingPaper = {
+    id: selectedFile.id,
+    label:
+      selectedFile.source === "fs"
+        ? (selectedFile.label.split(/[\\/]/).pop() ?? selectedFile.label)
+        : selectedFile.label,
+    data: preview.data,
+    annotations: preview.annotations,
+    filePath:
+      selectedFile.source === "fs" ? selectedFile.absolutePath : undefined,
+    zotero:
+      selectedFile.source === "zotero" && preview.attachmentKey
+        ? {
+            itemKey: selectedFile.itemKey,
+            attachmentKey: preview.attachmentKey,
+          }
+        : undefined,
+  };
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-8 shrink-0 items-center justify-between gap-1 border-border border-b px-2">
-        {preview.annotationsError ? (
+    <PaperReader
+      key={selectedFile.id}
+      paper={paper}
+      visible
+      inline
+      status={
+        preview.annotationsError ? (
           <span
-            className="min-w-0 truncate text-destructive text-xs"
+            className="min-w-0 flex-1 truncate text-destructive text-xs"
             title={preview.annotationsError}
           >
             Annotations: {preview.annotationsError}
           </span>
-        ) : (
-          <span className="min-w-0 truncate text-muted-foreground text-xs">
-            {annotationCount > 0
-              ? `${annotationCount} annotation${annotationCount === 1 ? "" : "s"}`
-              : "No annotations found"}
-          </span>
-        )}
-        <div className="flex shrink-0 items-center gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            className="mr-1 h-6 gap-1 px-2 text-xs"
-            onClick={() =>
-              useReadingStore.getState().open({
-                id: selectedFile.id,
-                label:
-                  selectedFile.source === "fs"
-                    ? (selectedFile.label.split(/[\\/]/).pop() ??
-                      selectedFile.label)
-                    : selectedFile.label,
-                data: preview.data,
-                annotations: preview.annotations,
-                filePath:
-                  selectedFile.source === "fs"
-                    ? selectedFile.absolutePath
-                    : undefined,
-                zotero:
-                  selectedFile.source === "zotero" && preview.attachmentKey
-                    ? {
-                        itemKey: selectedFile.itemKey,
-                        attachmentKey: preview.attachmentKey,
-                      }
-                    : undefined,
-              })
-            }
-            title="Opens it in a tab of the big PDF pane, beside your editor"
-          >
-            <Maximize2Icon className="size-3" />
-            Open in PDF pane
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6"
-            onClick={zoomOut}
-            disabled={scale <= 0.25}
-            title="Zoom out"
-            aria-label="Zoom out"
-          >
-            <MinusIcon className="size-3.5" />
-          </Button>
-          <span className="w-10 text-center text-muted-foreground text-xs tabular-nums">
-            {Math.round(scale * 100)}%
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-6"
-            onClick={zoomIn}
-            disabled={scale >= 4}
-            title="Zoom in"
-            aria-label="Zoom in"
-          >
-            <PlusIcon className="size-3.5" />
-          </Button>
-        </div>
-      </div>
-      <PdfViewer
-        data={preview.data}
-        scale={scale}
-        rootFileId={selectedFile.id}
-        onScaleChange={handleScaleChange}
-        annotations={preview.annotations}
-        theme={pdfTheme}
-        onThemeChange={setPdfTheme}
-      />
-    </div>
+        ) : undefined
+      }
+      actions={
+        <Button
+          variant="outline"
+          size="sm"
+          className="mr-1 h-6 shrink-0 gap-1 px-2 text-xs"
+          onClick={() => useReadingStore.getState().open(paper)}
+          title="Opens it in a tab of the big PDF pane, beside your editor"
+        >
+          <Maximize2Icon className="size-3" />
+          Open in PDF pane
+        </Button>
+      }
+    />
   );
 }

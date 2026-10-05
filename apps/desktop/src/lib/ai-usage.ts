@@ -345,6 +345,22 @@ export interface CodexLimits {
   observedAt: number;
 }
 
+/** "plus" → "Plus", "prolite" → "Pro Lite": ChatGPT's plan by its name. */
+export function chatGptPlanName(plan: string): string {
+  const names: Record<string, string> = {
+    free: "Free",
+    go: "Go",
+    plus: "Plus",
+    pro: "Pro",
+    prolite: "Pro Lite",
+    team: "Business",
+    business: "Business",
+    enterprise: "Enterprise",
+    edu: "Edu",
+  };
+  return names[plan.toLowerCase()] ?? plan[0].toUpperCase() + plan.slice(1);
+}
+
 /** "5h", "week", "month": a window's name from its length. */
 export function windowName(minutes: number): string {
   if (minutes === 300) return "5h";
@@ -355,7 +371,8 @@ export function windowName(minutes: number): string {
     : `${Math.round(minutes / 60)}h`;
 }
 
-/** Codex's rate_limits record, as the app keeps it. */
+/** Codex's rate limits, as the app keeps them: live from Codex's app
+ *  server (camelCase), or as recorded in its session logs (snake_case). */
 export function codexLimitsFrom(
   raw: unknown,
   now = Date.now(),
@@ -365,17 +382,19 @@ export function codexLimitsFrom(
   const win = (w: unknown): PlanWindow | undefined => {
     if (!w || typeof w !== "object") return undefined;
     const x = w as Record<string, number>;
-    if (typeof x.used_percent !== "number") return undefined;
+    const used = x.usedPercent ?? x.used_percent;
+    if (typeof used !== "number") return undefined;
     return {
-      usedPercent: x.used_percent,
-      minutes: x.window_minutes ?? 0,
-      resetsAt: (x.resets_at ?? 0) * 1000,
+      usedPercent: used,
+      minutes: x.windowDurationMins ?? x.window_minutes ?? 0,
+      resetsAt: (x.resetsAt ?? x.resets_at ?? 0) * 1000,
     };
   };
+  const plan = r.planType ?? r.plan_type;
   return {
     primary: win(r.primary),
     secondary: win(r.secondary),
-    plan: typeof r.plan_type === "string" ? r.plan_type : null,
+    plan: typeof plan === "string" ? plan : null,
     observedAt: now,
   };
 }
@@ -460,6 +479,8 @@ interface AiUsageState {
   recordLimits: (info: RateLimitInfo) => void;
   /** Asks Claude Code for its plan limits now (free: no model involved). */
   refreshClaudeUsage: () => Promise<boolean>;
+  /** ChatGPT's plan and windows now, asked of Codex. */
+  refreshCodexLimits: () => Promise<void>;
   setDailyBudget: (usd: number | null) => void;
   clear: () => void;
 }
@@ -564,6 +585,13 @@ export const useAiUsage = create<AiUsageState>()(
             description: `About $${spent.toFixed(2)}. Settings → AI usage has the details.`,
           });
         }
+      },
+      refreshCodexLimits: async () => {
+        const raw = await invoke("codex_rate_limits", {
+          threadId: null,
+        }).catch(() => null);
+        const limits = codexLimitsFrom(raw);
+        if (limits) set({ codexLimits: limits });
       },
       refreshClaudeUsage: async () => {
         const text = await invoke<string>("claude_usage").catch(() => "");

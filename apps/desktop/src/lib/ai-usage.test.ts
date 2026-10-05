@@ -3,6 +3,7 @@ import {
   parseClaudeUsage,
   parseResetTime,
   lastCallContext,
+  chatGptPlanName,
   codexLimitsFrom,
   windowName,
   claudeLimited,
@@ -183,6 +184,24 @@ describe("ChatGPT's plan windows", () => {
     expect(windowName(10080)).toBe("week");
     expect(windowName(43200)).toBe("month");
     expect(codexLimitsFrom(null)).toBeNull();
+    // Live, from Codex's app server.
+    const live = codexLimitsFrom(
+      {
+        limitId: "codex",
+        primary: { usedPercent: 40, windowDurationMins: 300, resetsAt: 100 },
+        secondary: { usedPercent: 8, windowDurationMins: 10080, resetsAt: 9 },
+        planType: "pro",
+      },
+      0,
+    );
+    expect(live?.primary).toEqual({
+      usedPercent: 40,
+      minutes: 300,
+      resetsAt: 100000,
+    });
+    expect(live?.plan).toBe("pro");
+    expect(chatGptPlanName("plus")).toBe("Plus");
+    expect(chatGptPlanName("team")).toBe("Business");
   });
 });
 

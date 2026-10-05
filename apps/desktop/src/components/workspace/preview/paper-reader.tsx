@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { addPassage, type PassageGroup } from "@/lib/vault/add-passage";
 import { useDockStore } from "@/stores/dock-store";
 import { useVaultStore } from "@/stores/vault-store";
@@ -53,8 +60,9 @@ async function saveHighlight(
   paper: ReadingPaper,
   selection: PdfTextSelection,
   color: AnnotationColor,
-  comment?: string,
-  quiet = false,
+  comment: string | undefined,
+  quiet: boolean,
+  onAdded: (annotation: PdfAnnotationRect) => void,
 ): Promise<string | null> {
   const { apiKey, userID } = useZoteroStore.getState();
   if (!paper.zotero || !apiKey || !userID) return null;
@@ -79,12 +87,14 @@ async function saveHighlight(
       },
       selection.pageHeight,
     );
-    useReadingStore.getState().addAnnotation(paper.id, {
+    onAdded({
       key,
       pageIndex: selection.pageNumber - 1,
       rects,
       color: hex,
       type: "highlight",
+      text: selection.text,
+      comment,
     });
     if (!quiet) {
       toast.success(
@@ -145,8 +155,16 @@ async function fileHighlight(
   selection: PdfTextSelection,
   group: PassageGroup,
   name: string,
+  onAdded: (annotation: PdfAnnotationRect) => void,
 ) {
-  const key = await saveHighlight(paper, selection, "yellow", undefined, true);
+  const key = await saveHighlight(
+    paper,
+    selection,
+    "yellow",
+    undefined,
+    true,
+    onAdded,
+  );
   if (!key || !paper.zotero) return;
   try {
     const note = await addPassage(group, name, {
@@ -171,10 +189,19 @@ const zoomByPaper = new Map<string, number>();
 export function PaperReader({
   paper,
   visible,
+  inline = false,
+  status,
+  actions: headerActions,
 }: {
   paper: ReadingPaper;
   /** Its tab is in front (hidden tabs stay mounted to keep their place). */
   visible: boolean;
+  /** Shown inside a panel (the Library's preview), under its own title. */
+  inline?: boolean;
+  /** In place of the highlight count (an error loading them, say). */
+  status?: ReactNode;
+  /** Buttons for the header, before the zoom. */
+  actions?: ReactNode;
 }) {
   const theme = useSettingsStore((s) => s.pdfThemeReference);
   const setTheme = useSettingsStore((s) => s.setPdfThemeReference);
@@ -203,7 +230,24 @@ export function PaperReader({
     if (visible) fitIfNew();
   }, [visible, fitIfNew]);
 
-  const count = paper.annotations?.length ?? 0;
+  // Highlights made here show at once; the open tab of this paper, if any,
+  // gets them too.
+  const [added, setAdded] = useState<PdfAnnotationRect[]>([]);
+  const annotations = useMemo(() => {
+    const known = new Set((paper.annotations ?? []).map((a) => a.key));
+    return [
+      ...(paper.annotations ?? []),
+      ...added.filter((a) => !a.key || !known.has(a.key)),
+    ];
+  }, [paper.annotations, added]);
+  const onAdded = useCallback(
+    (annotation: PdfAnnotationRect) => {
+      setAdded((list) => [...list, annotation]);
+      useReadingStore.getState().addAnnotation(paper.id, annotation);
+    },
+    [paper.id],
+  );
+  const count = annotations.length;
   const zoteroConnected = useZoteroStore((s) => s.isAuthenticated);
   const canHighlight = Boolean(paper.zotero && zoteroConnected);
   const [selection, setSelection] = useState<PdfTextSelection | null>(null);
@@ -257,16 +301,35 @@ export function PaperReader({
 
   return (
     <div ref={wrapperRef} className="flex h-full min-w-0 flex-col bg-muted/50">
-      <div className="pane-header flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] shrink-0 items-center gap-1.5 border-b px-3 pt-[var(--titlebar-height)]">
-        <BookOpenIcon className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate font-medium text-sm">
-          {paper.label}
-        </span>
-        {count > 0 && (
-          <span className="shrink-0 text-muted-foreground text-xs">
-            {count} highlight{count === 1 ? "" : "s"}
+      <div
+        className={
+          inline
+            ? "flex h-8 shrink-0 items-center gap-1 border-b bg-background px-2"
+            : "pane-header flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] shrink-0 items-center gap-1.5 border-b px-3 pt-[var(--titlebar-height)]"
+        }
+      >
+        {!inline && (
+          <BookOpenIcon className="size-3.5 shrink-0 text-muted-foreground" />
+        )}
+        {!inline && (
+          <span className="min-w-0 flex-1 truncate font-medium text-sm">
+            {paper.label}
           </span>
         )}
+        {status ??
+          (count > 0 && (
+            <span
+              className={
+                inline
+                  ? "min-w-0 flex-1 truncate text-muted-foreground text-xs"
+                  : "shrink-0 text-muted-foreground text-xs"
+              }
+            >
+              {count} highlight{count === 1 ? "" : "s"}
+            </span>
+          ))}
+        {inline && !status && count === 0 && <span className="flex-1" />}
+        {headerActions}
         <Button
           variant="ghost"
           size="icon"
@@ -325,7 +388,14 @@ export function PaperReader({
           onHighlight={
             canHighlight
               ? (color) => {
-                  saveHighlight(paper, selection, color);
+                  saveHighlight(
+                    paper,
+                    selection,
+                    color,
+                    undefined,
+                    false,
+                    onAdded,
+                  );
                   dismiss();
                 }
               : undefined
@@ -387,7 +457,13 @@ export function PaperReader({
           anchor={filing.selection.position}
           onCancel={() => setFiling(null)}
           onPick={async (name) => {
-            await fileHighlight(paper, filing.selection, filing.group, name);
+            await fileHighlight(
+              paper,
+              filing.selection,
+              filing.group,
+              name,
+              onAdded,
+            );
             setFiling(null);
             window.getSelection()?.removeAllRanges();
           }}
@@ -407,7 +483,14 @@ export function PaperReader({
             autoFocus
             submitLabel="Save"
             onSubmit={(text) => {
-              saveHighlight(paper, noteFor, "yellow", text.trim());
+              saveHighlight(
+                paper,
+                noteFor,
+                "yellow",
+                text.trim(),
+                false,
+                onAdded,
+              );
               setNoteFor(null);
               window.getSelection()?.removeAllRanges();
             }}
@@ -430,7 +513,7 @@ export function PaperReader({
           pageWidthRef.current = width;
           fitIfNew();
         }}
-        annotations={paper.annotations}
+        annotations={annotations}
         theme={theme}
         onThemeChange={setTheme}
       />

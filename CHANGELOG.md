@@ -49,6 +49,12 @@ tag.
 
 ### Fixed
 
+- A PDF opened from the Library & Vault page can be highlighted and noted,
+  and its passages added to ideas and topics, as in the PDF pane.
+- ChatGPT's usage meter shows your plan (Plus, Pro…) and how much of it is
+  used right now, as ChatGPT counts it, including use on other devices and
+  apps. Before, it could show stale figures, or the limits of a single model
+  instead of the plan's.
 - Highlights from Zotero, and new ones made here, show as one band per line,
   as in Zotero, not a patchwork of words (most visible in scanned PDFs).
 - In a shared project, a file that couldn't be sent because the server was

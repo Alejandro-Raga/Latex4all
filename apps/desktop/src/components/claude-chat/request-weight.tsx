@@ -2,7 +2,6 @@ import { useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { engineOfProvider } from "@/lib/agent-events";
 import {
-  codexLimitsFrom,
   copilotQuotaFrom,
   copilotUsedPercent,
   useAiUsage,
@@ -106,14 +105,7 @@ export function RequestWeight() {
 
   // ChatGPT's windows, as Codex last recorded them, once it's picked.
   useEffect(() => {
-    if (engine === "codex") {
-      void invoke("codex_rate_limits", { threadId: null })
-        .then((raw) => {
-          const limits = codexLimitsFrom(raw);
-          if (limits) useAiUsage.getState().setCodexLimits(limits);
-        })
-        .catch(() => {});
-    }
+    if (engine === "codex") void useAiUsage.getState().refreshCodexLimits();
     // Copilot's month, as GitHub counts it.
     if (engine === "copilot") {
       void invoke("copilot_quota")

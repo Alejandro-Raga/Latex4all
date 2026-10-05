@@ -766,13 +766,84 @@ fn codex_session_files() -> Vec<PathBuf> {
     files
 }
 
-/// How full the ChatGPT plan's windows are, as Codex last recorded them:
-/// for one session (its thread id), or the latest of all. Codex writes it
-/// with each turn's token count.
+/// The account's plan and how full its windows are now, asked of Codex
+/// itself (its app server, as its own /status does): counted on OpenAI's
+/// side, so use from other devices and apps is in it, and the main window
+/// rather than a model's own.
+async fn codex_live_limits() -> Option<serde_json::Value> {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    let program = find_binary(Engine::Codex)?;
+    let mut cmd = create_command(&program, vec!["app-server".into()], &home_string(), None);
+    cmd.stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .kill_on_drop(true);
+    let mut child = cmd.spawn().ok()?;
+    let mut stdin = child.stdin.take()?;
+    let stdout = child.stdout.take()?;
+    let requests = [
+        serde_json::json!({"jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {
+            "clientInfo": {"name": "latex4all", "title": "Latex4All", "version": env!("CARGO_PKG_VERSION")}
+        }}),
+        serde_json::json!({"jsonrpc": "2.0", "method": "initialized"}),
+        serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "account/rateLimits/read"}),
+    ];
+    for request in requests {
+        stdin.write_all(format!("{}\n", request).as_bytes()).await.ok()?;
+    }
+    stdin.flush().await.ok()?;
+    let mut lines = BufReader::new(stdout).lines();
+    let read = async {
+        while let Ok(Some(line)) = lines.next_line().await {
+            if let Some(limits) = live_limits_in(&line) {
+                return limits;
+            }
+        }
+        None
+    };
+    let limits = tokio::time::timeout(Duration::from_secs(15), read)
+        .await
+        .ok()
+        .flatten();
+    drop(stdin);
+    let _ = child.kill().await;
+    limits
+}
+
+/// The app server's answer to the rate-limits request, if `line` is it:
+/// Some(None) when it had none to give (signed in with an API key, say).
+fn live_limits_in(line: &str) -> Option<Option<serde_json::Value>> {
+    let value = serde_json::from_str::<serde_json::Value>(line).ok()?;
+    if value.get("id").and_then(|i| i.as_i64()) != Some(1) {
+        return None;
+    }
+    Some(
+        value
+            .pointer("/result/rateLimits")
+            .filter(|l| !l.is_null())
+            .cloned(),
+    )
+}
+
+/// Whether a recorded rate_limits record is the plan's main one (Codex
+/// also records a model's own windows, under another limit_id).
+fn is_main_limit(limits: &serde_json::Value) -> bool {
+    match limits.get("limit_id").and_then(|i| i.as_str()) {
+        None => true,
+        Some(id) => id == "codex",
+    }
+}
+
+/// How full the ChatGPT plan's windows are: asked of Codex live, or else as
+/// Codex last recorded them, for one session (its thread id) or the latest
+/// of all. Codex writes it with each turn's token count.
 #[tauri::command]
 pub async fn codex_rate_limits(
     thread_id: Option<String>,
 ) -> Result<Option<serde_json::Value>, String> {
+    if let Some(limits) = codex_live_limits().await {
+        return Ok(Some(limits));
+    }
     let mut files = codex_session_files();
     if let Some(id) = thread_id.filter(|id| !id.is_empty()) {
         files.retain(|f| {
@@ -794,7 +865,7 @@ pub async fn codex_rate_limits(
                 continue;
             };
             if let Some(limits) = value.pointer("/payload/rate_limits") {
-                if !limits.is_null() {
+                if !limits.is_null() && is_main_limit(limits) {
                     return Ok(Some(limits.clone()));
                 }
             }
@@ -945,6 +1016,23 @@ pub async fn execute_agent(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_the_live_limits_answer() {
+        let answer = r#"{"id":1,"result":{"rateLimits":{"limitId":"codex","primary":{"usedPercent":12,"windowDurationMins":300,"resetsAt":1793525119},"planType":"plus"}}}"#;
+        let limits = live_limits_in(answer).unwrap().unwrap();
+        assert_eq!(limits["planType"], "plus");
+        assert!(live_limits_in(r#"{"id":0,"result":{}}"#).is_none());
+        assert!(live_limits_in(r#"{"method":"account/updated","params":{}}"#).is_none());
+        assert_eq!(live_limits_in(r#"{"id":1,"result":{"rateLimits":null}}"#), Some(None));
+    }
+
+    #[test]
+    fn keeps_the_main_recorded_limits() {
+        assert!(is_main_limit(&serde_json::json!({"limit_id": "codex"})));
+        assert!(is_main_limit(&serde_json::json!({"primary": {}})));
+        assert!(!is_main_limit(&serde_json::json!({"limit_id": "codex_bengalfox"})));
+    }
 
     #[test]
     fn codex_resumes_with_the_prompt_on_stdin() {

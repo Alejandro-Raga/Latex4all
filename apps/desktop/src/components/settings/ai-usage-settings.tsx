@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import {
   type AiUsageEntry,
+  chatGptPlanName,
   claudeLimited,
   type LimitWindow,
   type PlanWindow,
@@ -401,9 +402,19 @@ function Services() {
   );
 }
 
-/** ChatGPT's plan windows, as Codex last recorded them. */
+/** ChatGPT's plan and its windows, asked of Codex on opening. */
 function ChatGptPlan() {
   const limits = useAiUsage((s) => s.codexLimits);
+  const [checking, setChecking] = useState(false);
+  const refresh = useCallback(async () => {
+    setChecking(true);
+    await useAiUsage.getState().refreshCodexLimits();
+    setChecking(false);
+  }, []);
+  useEffect(() => {
+    // Only for someone who has used ChatGPT here: it starts Codex.
+    if (useAiUsage.getState().codexLimits) void refresh();
+  }, [refresh]);
   const now = Date.now();
   const windows = [limits?.primary, limits?.secondary].filter(
     (w): w is PlanWindow => Boolean(w && w.resetsAt > now),
@@ -413,14 +424,26 @@ function ChatGptPlan() {
     <div className="mx-5 mb-4 space-y-3 rounded-lg border border-border p-3">
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-medium text-sm">
-          ChatGPT plan{limits.plan ? ` (${limits.plan})` : ""}
+          ChatGPT {limits.plan ? chatGptPlanName(limits.plan) : "plan"}
         </span>
-        <span className="text-muted-foreground text-xs">
+        <span className="flex items-center gap-1.5 text-muted-foreground text-xs">
           as of{" "}
           {new Date(limits.observedAt).toLocaleTimeString(undefined, {
             hour: "2-digit",
             minute: "2-digit",
           })}
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={checking}
+            className="rounded p-0.5 hover:bg-muted hover:text-foreground"
+            aria-label="Refresh"
+            title="Refresh"
+          >
+            <RefreshCwIcon
+              className={cn("size-3", checking && "animate-spin")}
+            />
+          </button>
         </span>
       </div>
       {windows.map((w) => (
