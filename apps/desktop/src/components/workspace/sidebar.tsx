@@ -36,6 +36,7 @@ import {
   SettingsIcon,
   NotebookTextIcon,
   type LucideIcon,
+  FolderOpenIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -51,6 +52,7 @@ import {
 } from "@dnd-kit/core";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useDocumentStore, type ProjectFile } from "@/stores/document-store";
+import { revealInFileManager, revealLabel } from "@/lib/reveal";
 import { useHistoryStore } from "@/stores/history-store";
 import { cn } from "@/lib/utils";
 import { useSettingsWindow } from "@/stores/settings-window-store";
@@ -1523,6 +1525,14 @@ export function Sidebar({
                         <UploadIcon className="mr-2 size-4" />
                         Import file
                       </ContextMenuItem>
+                      {projectRoot && (
+                        <ContextMenuItem
+                          onClick={() => revealInFileManager(projectRoot)}
+                        >
+                          <FolderOpenIcon className="mr-2 size-4" />
+                          {revealLabel()}
+                        </ContextMenuItem>
+                      )}
                     </ContextMenuContent>
                   </ContextMenu>
                   <DragOverlay dropAnimation={null}>
@@ -1997,6 +2007,19 @@ function FileTreeNode({
                 <UploadIcon className="mr-2 size-4" />
                 Import file here
               </ContextMenuItem>
+              <ContextMenuItem
+                onClick={() => {
+                  const root = useDocumentStore.getState().projectRoot;
+                  if (root) {
+                    revealInFileManager(
+                      `${root.replace(/[\\/]+$/, "")}/${node.relativePath}`,
+                    );
+                  }
+                }}
+              >
+                <FolderOpenIcon className="mr-2 size-4" />
+                {revealLabel()}
+              </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem
                 onClick={() => onRename(node.relativePath, node.name)}
@@ -2107,6 +2130,14 @@ function FileTreeNode({
             >
               <Maximize2Icon className="mr-2 size-4" />
               Open in PDF pane
+            </ContextMenuItem>
+          )}
+          {!batchOperation && (
+            <ContextMenuItem
+              onClick={() => revealInFileManager(file.absolutePath)}
+            >
+              <FolderOpenIcon className="mr-2 size-4" />
+              {revealLabel()}
             </ContextMenuItem>
           )}
           <ContextMenuItem

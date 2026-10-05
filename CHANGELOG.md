@@ -44,6 +44,9 @@ tag.
   goes into that note word for word, under its paper, with links back to the
   paper note and to the spot in the PDF. Works without any Zotero sync
   running elsewhere, and matches the notes such a sync writes.
+- Right-click a file or folder in the project's file list, or its empty
+  space, and choose "Show in Finder" ("Show in File Explorer" on Windows) to
+  see it there.
 - A refresh button on the Zotero section of the Reference panel fetches
   what changed in Zotero since the library was last read.
 

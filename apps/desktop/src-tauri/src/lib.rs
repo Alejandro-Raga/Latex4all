@@ -103,6 +103,73 @@ fn is_editor_installed(editor: &EditorDef) -> bool {
     which::which(editor.cli).is_ok()
 }
 
+/// Shows a file or folder in the system's file manager: a file selected in
+/// its folder, a folder opened.
+#[tauri::command]
+fn reveal_in_file_manager(path: String) -> Result<(), String> {
+    let target = Path::new(&path);
+    if !target.exists() {
+        return Err(format!("{} isn't there any more.", path));
+    }
+    let is_dir = target.is_dir();
+    #[cfg(target_os = "macos")]
+    let result = {
+        let mut cmd = std::process::Command::new("open");
+        if !is_dir {
+            cmd.arg("-R");
+        }
+        cmd.arg(target).spawn()
+    };
+    #[cfg(target_os = "windows")]
+    let result = {
+        let mut cmd = std::process::Command::new("explorer");
+        if is_dir {
+            cmd.arg(path.replace('/', "\\"));
+        } else {
+            // One argument, as Explorer wants it: /select,"C:\path".
+            use std::os::windows::process::CommandExt;
+            cmd.raw_arg(format!("/select,\"{}\"", path.replace('/', "\\")));
+        }
+        cmd.spawn()
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let result = {
+        // The file selected, where the file manager speaks FileManager1;
+        // else its folder opened.
+        let uri = format!("file://{}", path);
+        let shown = !is_dir
+            && std::process::Command::new("dbus-send")
+                .args([
+                    "--session",
+                    "--dest=org.freedesktop.FileManager1",
+                    "--type=method_call",
+                    "/org/freedesktop/FileManager1",
+                    "org.freedesktop.FileManager1.ShowItems",
+                    &format!("array:string:{}", uri),
+                    "string:",
+                ])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+        if shown {
+            Ok(())
+        } else {
+            let folder = if is_dir {
+                target
+            } else {
+                target.parent().unwrap_or(target)
+            };
+            std::process::Command::new("xdg-open")
+                .arg(folder)
+                .spawn()
+                .map(|_| ())
+        }
+    };
+    result
+        .map(|_| ())
+        .map_err(|e| format!("Couldn't open the file manager: {}", e))
+}
+
 #[tauri::command]
 fn open_in_editor(
     editor_id: String,
@@ -629,6 +696,7 @@ pub fn run() {
             list_default_projects,
             detect_editors,
             open_in_editor,
+            reveal_in_file_manager,
             js_log,
             read_clipboard_file_paths,
             dictionary::lookup_dictionary_definition,
