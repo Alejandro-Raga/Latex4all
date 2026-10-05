@@ -336,6 +336,53 @@ fn state_dir(project_root: &Path) -> PathBuf {
     project_root.join(".latex4all")
 }
 
+/// This computer's own sync state for a project (the document as far as it
+/// has it, what it hasn't sent yet, the chat), kept with the app rather than
+/// in the project: a project folder may itself be synced to another computer
+/// (Seafile, Dropbox…), and two computers sharing one record of what each
+/// has seen lose track of each other's changes. The link stays in the
+/// project, so both know it's shared.
+fn device_state_dir(project_root: &Path) -> PathBuf {
+    let canonical =
+        std::fs::canonicalize(project_root).unwrap_or_else(|_| project_root.to_path_buf());
+    let id = hex(digest::digest(&digest::SHA256, canonical.to_string_lossy().as_bytes()).as_ref());
+    let Some(base) = dirs::data_local_dir() else {
+        return state_dir(project_root);
+    };
+    let dir = base.join("Latex4All").join("shared-projects").join(&id[..32]);
+    leave_project_folder(project_root, &dir);
+    dir
+}
+
+/// Earlier versions kept that state in the project's `.latex4all`. The chat
+/// moves here; the rest, which may be another computer's, is dropped (the
+/// document comes again from the relay, and the files on disk are compared
+/// afresh, a differing one kept as a conflicted copy). Copies a file sync
+/// made of them when both computers wrote at once go too.
+fn leave_project_folder(project_root: &Path, dir: &Path) {
+    let legacy = state_dir(project_root);
+    if legacy == dir {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(&legacy) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !["collab-doc", "collab-outbox", "collab-chat"]
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
+        {
+            continue;
+        }
+        if name == CHAT_FILE && !dir.join(CHAT_FILE).exists() {
+            let _ = std::fs::create_dir_all(dir);
+            let _ = std::fs::copy(entry.path(), dir.join(CHAT_FILE));
+        }
+        let _ = std::fs::remove_file(entry.path());
+    }
+}
+
 fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -1237,14 +1284,22 @@ pub fn collab_write_link(project_root: String, link: String) -> Result<(), Strin
 /// Stops treating this folder as a shared project. The files stay.
 #[tauri::command]
 pub fn collab_remove_link(project_root: String) -> Result<(), String> {
-    let dir = state_dir(Path::new(&project_root));
-    for name in [LINK_FILE, DOC_FILE, OUTBOX_FILE, CHAT_FILE] {
-        match std::fs::remove_file(dir.join(name)) {
+    let root = Path::new(&project_root);
+    let device = device_state_dir(root);
+    for path in [
+        state_dir(root).join(LINK_FILE),
+        device.join(DOC_FILE),
+        device.join(OUTBOX_FILE),
+        device.join(CHAT_FILE),
+    ] {
+        match std::fs::remove_file(path) {
             Ok(()) => {}
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
             Err(err) => return Err(err.to_string()),
         }
     }
+    // Gone too once empty.
+    let _ = std::fs::remove_dir(&device);
     Ok(())
 }
 
@@ -1258,7 +1313,7 @@ pub struct SavedDoc {
 
 #[tauri::command]
 pub fn collab_load_doc(project_root: String) -> Option<SavedDoc> {
-    let buf = std::fs::read(state_dir(Path::new(&project_root)).join(DOC_FILE)).ok()?;
+    let buf = std::fs::read(device_state_dir(Path::new(&project_root)).join(DOC_FILE)).ok()?;
     let seq = u64::from_be_bytes(buf.get(0..8)?.try_into().ok()?);
     let local_len = u32::from_be_bytes(buf.get(8..12)?.try_into().ok()?) as usize;
     let local = String::from_utf8(buf.get(12..12 + local_len)?.to_vec()).ok()?;
@@ -1282,7 +1337,7 @@ pub fn collab_save_doc(
     buf.extend_from_slice(&(local.len() as u32).to_be_bytes());
     buf.extend_from_slice(local.as_bytes());
     buf.extend_from_slice(&decode(&data)?);
-    write_atomic(&state_dir(Path::new(&project_root)).join(DOC_FILE), &buf)
+    write_atomic(&device_state_dir(Path::new(&project_root)).join(DOC_FILE), &buf)
 }
 
 /// Connects this window to a shared project, replacing any earlier
@@ -1298,7 +1353,7 @@ pub fn collab_connect(
 ) -> Result<(), String> {
     let link = Link::parse(&link)?;
     let keys = Arc::new(Keys::derive(&link));
-    let dir = project_root.map(|root| state_dir(Path::new(&root)));
+    let dir = project_root.map(|root| device_state_dir(Path::new(&root)));
     let outbox = Outbox::load(dir.as_ref().map(|dir| dir.join(OUTBOX_FILE)));
     let chat = ChatLog::load(dir.map(|dir| dir.join(CHAT_FILE)), now_ms());
     let (tx, rx) = mpsc::unbounded_channel();
@@ -1372,7 +1427,7 @@ pub struct ChatMessage {
 #[tauri::command]
 pub fn collab_load_chat(project_root: String) -> Vec<ChatMessage> {
     let cutoff = chat_cutoff(now_ms());
-    read_chat(&state_dir(Path::new(&project_root)).join(CHAT_FILE))
+    read_chat(&device_state_dir(Path::new(&project_root)).join(CHAT_FILE))
         .into_iter()
         .filter(|e| e.at >= cutoff)
         .map(|e| ChatMessage {
@@ -1555,7 +1610,7 @@ mod tests {
     fn chat_log_keeps_new_messages_and_forgets_old_ones() {
         let dir = temp_dir("chat");
         let root = dir.to_string_lossy().into_owned();
-        let path = state_dir(&dir).join(CHAT_FILE);
+        let path = device_state_dir(&dir).join(CHAT_FILE);
         let day = 24 * 60 * 60 * 1000;
         let now = now_ms();
         let mut log = ChatLog::load(Some(path.clone()), now);
@@ -1639,6 +1694,44 @@ mod tests {
         assert!(collab_read_link(root.clone()).is_none());
         assert!(collab_load_doc(root).is_none());
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn sync_state_stays_on_this_computer() {
+        let a = temp_dir("device-a");
+        let b = temp_dir("device-b");
+        let (root_a, root_b) = (
+            a.to_string_lossy().into_owned(),
+            b.to_string_lossy().into_owned(),
+        );
+        assert_ne!(device_state_dir(&a), device_state_dir(&b));
+        assert!(!device_state_dir(&a).starts_with(&a), "not in the project");
+
+        // Left in the project by an earlier version, with a file sync's
+        // conflict copy: the chat comes along, the rest goes.
+        let legacy = state_dir(&a);
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join(DOC_FILE), [0u8; 20]).unwrap();
+        std::fs::write(legacy.join("collab-doc (SFConflict 2026-09-27).bin"), [1u8]).unwrap();
+        std::fs::write(legacy.join(OUTBOX_FILE), [2u8]).unwrap();
+        std::fs::write(legacy.join(CHAT_FILE), [3u8]).unwrap();
+        std::fs::write(legacy.join(LINK_FILE), b"{}").unwrap();
+        assert!(collab_load_doc(root_a.clone()).is_none());
+        let names: Vec<_> = std::fs::read_dir(&legacy)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec![LINK_FILE.to_string()]);
+        assert_eq!(std::fs::read(device_state_dir(&a).join(CHAT_FILE)).unwrap(), vec![3u8]);
+
+        collab_save_doc(root_a.clone(), 1, "{}".into(), BASE64.encode([5u8])).unwrap();
+        assert!(collab_load_doc(root_b.clone()).is_none(), "another folder's");
+        collab_remove_link(root_a).unwrap();
+        collab_remove_link(root_b).unwrap();
+        let _ = std::fs::remove_dir_all(device_state_dir(&a));
+        let _ = std::fs::remove_dir_all(device_state_dir(&b));
+        std::fs::remove_dir_all(a).unwrap();
+        std::fs::remove_dir_all(b).unwrap();
     }
 
     #[test]

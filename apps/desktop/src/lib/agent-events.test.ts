@@ -15,6 +15,31 @@ const run = (engine: AgentEngine, events: object[]) => {
 };
 
 describe("Codex events as chat messages", () => {
+  it("waits through Codex reconnecting, and stops when it gives up", () => {
+    const out = run("codex", [
+      { type: "thread.started", thread_id: "T1" },
+      {
+        type: "error",
+        message:
+          "Reconnecting... 2/5 (stream disconnected before completion: idle timeout)",
+      },
+    ]);
+    expect(out.some((m) => m.type === "result")).toBe(false);
+    expect(JSON.stringify(out)).toContain("trying again (2 of 5)");
+    expect(
+      run("codex", [
+        {
+          type: "error",
+          message: "Falling back from WebSockets to HTTPS transport.",
+        },
+      ]),
+    ).toEqual([]);
+    const failed = run("codex", [
+      { type: "error", message: "unexpected status 401 Unauthorized" },
+    ]);
+    expect(failed[0]).toMatchObject({ type: "result", is_error: true });
+  });
+
   it("translates a turn with a command, an edit and a reply", () => {
     const out = run("codex", [
       { type: "thread.started", thread_id: "T1" },

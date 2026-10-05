@@ -273,6 +273,26 @@ export function translateCodex(
     case "turn.failed":
       return [result(st, null, ev.error?.message ?? "ChatGPT stopped.")];
     case "error":
+      // Codex lost its connection and is trying again ("Reconnecting...
+      // 2/5 (stream disconnected…)"): the turn goes on, and only fails, with
+      // turn.failed, once it gives up. Said in the reply, so a long wait has
+      // its reason.
+      if (/^re-?connecting/i.test(ev.message ?? "")) {
+        const attempt = /(\d+)\s*\/\s*(\d+)/.exec(ev.message ?? "");
+        return [
+          assistant([
+            {
+              type: "thinking",
+              thinking: `The connection to ChatGPT dropped; trying again${attempt ? ` (${attempt[1]} of ${attempt[2]})` : ""}…`,
+            },
+          ]),
+        ];
+      }
+      // Notices that it goes on another way ("Falling back from WebSockets
+      // to HTTPS transport."): nothing to stop for.
+      if (/falling back|waiting for network/i.test(ev.message ?? "")) {
+        return [];
+      }
       return [result(st, null, ev.message ?? "ChatGPT stopped.")];
     default:
       return [];

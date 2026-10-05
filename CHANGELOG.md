@@ -52,6 +52,14 @@ tag.
 
 ### Fixed
 
+- A shared project whose folder is also synced to another computer
+  (Seafile, Dropbox, iCloud…) no longer loses track of changes between
+  the two. Each computer now keeps its own record of the sync with the app
+  instead of in the project. The first time such a project opens after
+  updating, it is compared afresh with the shared copy, and a file that
+  differs is kept as a "(conflicted copy)".
+- When ChatGPT's connection drops and it tries again, the reply says so
+  and waits, instead of stopping with an error.
 - A PDF opened from the Library & Vault page can be highlighted and noted,
   and its passages added to ideas and topics, as in the PDF pane.
 - ChatGPT's usage meter shows your plan (Plus, Pro…) and how much of it is
