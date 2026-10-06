@@ -52,6 +52,12 @@ tag.
 
 ### Fixed
 
+- Shared projects stopped making duplicate "(2)" files and needless
+  "(conflicted copy)" files after the last update. Copies that are
+  identical to the file they copy are removed the next time the project
+  opens; copies that differ are kept.
+- Adding the same paper to a chat again reuses the file already in the
+  project instead of saving another copy.
 - Clicking in the editor selected a single letter and typing didn't write:
   Vim keys had been left on. They are now off until switched on again in
   Settings, and while they're on, the editor shows the Vim mode (NORMAL,

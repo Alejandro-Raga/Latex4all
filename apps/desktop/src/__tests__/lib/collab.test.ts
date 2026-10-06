@@ -315,8 +315,9 @@ class Device {
     const known: Known = this.saved ? JSON.parse(this.saved.local) : {};
 
     // Connected first so local changes have somewhere to go, but what the
-    // relay sends waits until the folder has been settled.
-    this.buffered = [];
+    // relay sends waits until the folder has been settled; with no record
+    // here, the relay's copy comes first, then the folder is compared.
+    this.buffered = this.saved ? [] : null;
     session.connecting();
     if (online) relay.connect(this);
     if (name) metaMap(session.doc).set("name", name);
@@ -324,7 +325,7 @@ class Device {
       onError: (message) => this.errors.push(message),
     });
     await this.sync.start();
-    for (const event of this.buffered.splice(0)) session.handle(event);
+    for (const event of this.buffered?.splice(0) ?? []) session.handle(event);
     this.buffered = null;
     await this.settle();
   }
@@ -391,6 +392,61 @@ describe("shared projects", () => {
     expect(b.errors).toEqual([]);
   });
 
+  it("a folder synced from another computer gets no duplicates", async () => {
+    const relay = new FakeRelay();
+    const files = {
+      "main.tex": "\\documentclass{article}",
+      "attachments/paper.pdf": "PDFDATA",
+    };
+    const a = new Device(relay, new FakeWorkspace(relay, files));
+    await a.open();
+    await settleAll(a);
+    // The same files arrived on another computer by Seafile; it has no
+    // record of the shared project yet.
+    const b = new Device(relay, new FakeWorkspace(relay, files));
+    await b.open();
+    await settleAll(a, b);
+    expect(b.workspace.snapshot()).toEqual(files);
+    expect(a.workspace.snapshot()).toEqual(files);
+    expect(b.errors).toEqual([]);
+  });
+
+  it("removes mistaken copies identical to their file, keeps differing ones", async () => {
+    const relay = new FakeRelay();
+    const a = new Device(
+      relay,
+      new FakeWorkspace(relay, {
+        "main.tex": "text",
+        "attachments/paper.pdf": "PDFDATA",
+        "attachments/paper (2).pdf": "PDFDATA",
+        "refs.bib": "@a{x}",
+        "refs (conflicted copy).bib": "@a{x}",
+        "notes.tex": "mine",
+        "notes (conflicted copy).tex": "theirs",
+      }),
+    );
+    await a.open();
+    await settleAll(a);
+    const b = new Device(relay, new FakeWorkspace(relay));
+    await b.open();
+    await settleAll(a, b);
+
+    expect(await a.sync!.dropIdenticalCopies()).toEqual([
+      "attachments/paper (2).pdf",
+      "refs (conflicted copy).bib",
+    ]);
+    await settleAll(a, b);
+    const left = {
+      "main.tex": "text",
+      "attachments/paper.pdf": "PDFDATA",
+      "refs.bib": "@a{x}",
+      "notes.tex": "mine",
+      "notes (conflicted copy).tex": "theirs",
+    };
+    expect(a.workspace.snapshot()).toEqual(left);
+    expect(b.workspace.snapshot()).toEqual(left);
+  });
+
   it("tries a file again after the relay was briefly down", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const relay = new FakeRelay();
@@ -433,16 +489,20 @@ describe("shared projects", () => {
 
     // Joining with an image download that doesn't finish.
     const slow = new FakeWorkspace(relay);
-    let release = () => {};
+    const gate: { release: (() => void) | null } = { release: null };
     const download = slow.download.bind(slow);
     slow.download = (path, blobId) =>
       new Promise<void>((resolve) => {
-        release = () => void download(path, blobId).then(resolve);
+        gate.release = () => void download(path, blobId).then(resolve);
       });
     const b = new Device(relay, slow);
     // (The test's open also waits for the download, so it's checked midway.)
     const opening = b.open();
-    for (let i = 0; i < 50 && b.session?.status !== "synced"; i++) {
+    for (
+      let i = 0;
+      i < 50 && (b.session?.status !== "synced" || !gate.release);
+      i++
+    ) {
       await new Promise((r) => setTimeout(r, 0));
     }
 
@@ -453,7 +513,7 @@ describe("shared projects", () => {
     );
     expect(slow.disk.has("figures/plot.png")).toBe(false);
 
-    release();
+    gate.release?.();
     await opening;
     await settleAll(a, b);
     expect(slow.snapshot()).toEqual(a.workspace.snapshot());

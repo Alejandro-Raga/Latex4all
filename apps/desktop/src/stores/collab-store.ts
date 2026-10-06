@@ -447,6 +447,11 @@ export const useCollabStore = create<CollabState>()(
         const saved = await loadDoc(root).catch(() => null);
         const known: Known = saved ? JSON.parse(saved.local || "{}") : {};
         let buffered: SyncEvent[] | null = [];
+        // The relay's copy, in full, the first time it's been sent.
+        let caughtUp: (() => void) | null = null;
+        const firstCatchUp = new Promise<void>((resolve) => {
+          caughtUp = resolve;
+        });
 
         const target: Active = {
           root,
@@ -481,6 +486,8 @@ export const useCollabStore = create<CollabState>()(
               if (active === target) set({ status });
             },
             onCaughtUp: (changed) => {
+              caughtUp?.();
+              caughtUp = null;
               if (changed) recordCollaboratorChanges(target);
             },
             onConcurrentEdits: (base, mine, theirs) => {
@@ -552,8 +559,22 @@ export const useCollabStore = create<CollabState>()(
         // Connected before the folder is settled, so local changes found
         // there have somewhere to go; what the relay sends waits until then,
         // so an edit made while the app was closed isn't mistaken for stale.
+        if (!saved) {
+          // No record of this project on this computer (its folder synced
+          // from another one, or kept from before records moved out of the
+          // project): the shared copy comes first, then the folder is
+          // compared with it. Compared with nothing, every file looked new
+          // here, and came back from the relay as a "(2)" copy.
+          for (const event of buffered.splice(0)) session.handle(event);
+          buffered = null;
+        }
         await connect(info.link, session.seq, root);
         session.connecting();
+        if (!saved) {
+          // Offline, it waits (shown as syncing) rather than guess.
+          await firstCatchUp;
+          if (active !== target) return;
+        }
         const meta = metaMap(session.doc);
         if (!meta.get("name")) {
           meta.set("name", root.split(/[\\/]/).filter(Boolean).pop() ?? "");
@@ -566,7 +587,20 @@ export const useCollabStore = create<CollabState>()(
         );
         await target.sync.start();
         if (active !== target) return;
-        for (const event of buffered.splice(0)) session.handle(event);
+        // Once everything's in: copies made by mistake that are identical to
+        // their file go (earlier versions made some).
+        void target.sync
+          .idle()
+          .then(() =>
+            active === target ? target.sync?.dropIdenticalCopies() : [],
+          )
+          .then((removed) => {
+            if (removed?.length) {
+              log.info("Removed identical copies", { removed });
+            }
+          })
+          .catch(() => {});
+        for (const event of buffered?.splice(0) ?? []) session.handle(event);
         buffered = null;
         trackPresence(target);
         trackPeople(target);

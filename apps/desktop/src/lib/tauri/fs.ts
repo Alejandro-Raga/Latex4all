@@ -257,11 +257,48 @@ export async function getUniqueTargetName(
   return `${baseName} (${Date.now()})${ext}`;
 }
 
+/**
+ * The name under which these bytes are already in the project (the target
+ * name or a numbered one), so adding the same paper again reuses it rather
+ * than making "paper (2).pdf".
+ */
+async function sameFileIn(
+  rootPath: string,
+  targetName: string,
+  data: Uint8Array,
+): Promise<string | null> {
+  const dotIndex = targetName.lastIndexOf(".");
+  const slashIndex = targetName.lastIndexOf("/");
+  const hasExt = dotIndex > slashIndex + 1;
+  const baseName = hasExt ? targetName.slice(0, dotIndex) : targetName;
+  const ext = hasExt ? targetName.slice(dotIndex) : "";
+  for (let i = 0; i < 100; i++) {
+    const candidate = i === 0 ? targetName : `${baseName} (${i})${ext}`;
+    const path = await join(rootPath, candidate);
+    if (!(await exists(path))) {
+      if (i > 1) return null;
+      continue;
+    }
+    const existing = await readFile(path).catch(() => null);
+    if (
+      existing &&
+      existing.length === data.length &&
+      existing.every((b, k) => b === data[k])
+    ) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 export async function copyFileToProject(
   rootPath: string,
   sourcePath: string,
   targetName: string,
 ): Promise<string> {
+  const source = await readFile(sourcePath).catch(() => null);
+  const already = source && (await sameFileIn(rootPath, targetName, source));
+  if (already) return already;
   // Auto-deduplicate filename
   const uniqueName = await getUniqueTargetName(rootPath, targetName);
   const fullPath = await join(rootPath, uniqueName);
@@ -286,6 +323,8 @@ export async function writeBytesToProject(
   targetName: string,
   data: Uint8Array,
 ): Promise<string> {
+  const already = await sameFileIn(rootPath, targetName, data);
+  if (already) return already;
   const uniqueName = await getUniqueTargetName(rootPath, targetName);
   const fullPath = await join(rootPath, uniqueName);
   const lastSlash = Math.max(

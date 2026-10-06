@@ -166,6 +166,46 @@ export class ProjectSync {
     while (this.running) await this.running;
   }
 
+  /**
+   * Copies a sync made by mistake ("paper (2).pdf", "refs (conflicted
+   * copy).bib") that are, byte for byte, the file they copy: removed, here
+   * and so for everyone. A copy that differs is someone's version, and
+   * stays. Run once everything is in (a binary's id is its content's).
+   */
+  async dropIdenticalCopies(): Promise<string[]> {
+    if (this.stopped || !this.workspace.available()) return [];
+    const local = this.localFiles();
+    const byPath = new Map([...this.known.values()].map((k) => [k.path, k]));
+    const removed: string[] = [];
+    for (const file of local.values()) {
+      const m = /^(.*) \((?:\d+|conflicted copy(?: \d+)?)\)(\.[^./]*)?$/.exec(
+        file.path,
+      );
+      if (!m || file.dirty) continue;
+      const original = local.get(m[1] + (m[2] ?? ""));
+      if (!original || original.kind !== file.kind) continue;
+      const blobId = byPath.get(file.path)?.blobId;
+      const same =
+        file.kind === "text"
+          ? file.content !== undefined && file.content === original.content
+          : file.size === original.size &&
+            blobId !== undefined &&
+            blobId === byPath.get(original.path)?.blobId;
+      if (!same) continue;
+      try {
+        await this.workspace.remove(file.path);
+        removed.push(file.path);
+      } catch {
+        // Left for next time.
+      }
+    }
+    if (removed.length) {
+      await this.workspace.refresh();
+      this.schedule();
+    }
+    return removed;
+  }
+
   knownFiles(): Known {
     return Object.fromEntries(this.known);
   }
