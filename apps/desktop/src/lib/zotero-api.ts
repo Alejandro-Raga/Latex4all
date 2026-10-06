@@ -616,6 +616,61 @@ export async function addZoteroTag(
   }
 }
 
+/** The item's current version, for a write that mustn't undo another's. */
+async function itemVersion(apiKey: string, userID: string, key: string) {
+  const current = await zoteroFetch(apiKey, `/users/${userID}/items/${key}`);
+  return ((await current.json()) as { version: number }).version;
+}
+
+async function writeItem(
+  apiKey: string,
+  userID: string,
+  key: string,
+  method: "PATCH" | "DELETE",
+  body?: object,
+) {
+  const response = await fetch(`${ZOTERO_BASE}/users/${userID}/items/${key}`, {
+    method,
+    headers: {
+      "Zotero-API-Key": apiKey,
+      "Zotero-API-Version": "3",
+      "Content-Type": "application/json",
+      "If-Unmodified-Since-Version": String(
+        await itemVersion(apiKey, userID, key),
+      ),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (response.status === 403) throw new ZoteroWriteDeniedError();
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Zotero API error: ${response.status}`);
+  }
+}
+
+/** Changes a highlight's color or note in Zotero. */
+export function updateZoteroAnnotation(
+  apiKey: string,
+  userID: string,
+  key: string,
+  change: { color?: string; comment?: string },
+): Promise<void> {
+  return writeItem(apiKey, userID, key, "PATCH", {
+    ...(change.color !== undefined ? { annotationColor: change.color } : {}),
+    ...(change.comment !== undefined
+      ? { annotationComment: change.comment }
+      : {}),
+  });
+}
+
+/** Deletes a highlight (or any item) from Zotero. */
+export function deleteZoteroItem(
+  apiKey: string,
+  userID: string,
+  key: string,
+): Promise<void> {
+  return writeItem(apiKey, userID, key, "DELETE");
+}
+
 /** Zotero's own highlight colors, which its apps show as named swatches. */
 export const ZOTERO_HIGHLIGHT_COLORS = {
   yellow: "#ffd400",

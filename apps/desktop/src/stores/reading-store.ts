@@ -37,6 +37,12 @@ interface ReadingState {
   reset: () => void;
   /** Shows a highlight just made on an open paper. */
   addAnnotation: (id: string, annotation: PdfAnnotationRect) => void;
+  /** A highlight recolored or noted (a change), or deleted (null). */
+  changeAnnotation: (
+    id: string,
+    key: string,
+    change: Partial<PdfAnnotationRect> | null,
+  ) => void;
 }
 
 /**
@@ -70,6 +76,19 @@ export const useReadingStore = create<ReadingState>((set, get) => ({
   },
   activate: (tab) => set({ active: tab }),
   reset: () => set({ papers: [], active: "preview" }),
+  changeAnnotation: (id, key, change) =>
+    set((s) => ({
+      papers: s.papers.map((p) =>
+        p.id !== id
+          ? p
+          : {
+              ...p,
+              annotations: (p.annotations ?? []).flatMap((a) =>
+                a.key !== key ? [a] : change ? [{ ...a, ...change }] : [],
+              ),
+            },
+      ),
+    })),
   addAnnotation: (id, annotation) =>
     set((s) => ({
       papers: s.papers.map((p) =>

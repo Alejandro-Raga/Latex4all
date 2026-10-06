@@ -10,6 +10,11 @@ import { addPassage, type PassageGroup } from "@/lib/vault/add-passage";
 import { useDockStore } from "@/stores/dock-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { GroupPicker } from "./group-picker";
+import {
+  removePassageEverywhere,
+  updatePassageComment,
+} from "@/lib/vault/passage-edits";
+import { addPaperToVault } from "@/lib/vault/add-paper";
 import { mergeLineRects } from "@/lib/pdf-line-rects";
 import {
   BookOpenIcon,
@@ -19,6 +24,7 @@ import {
   PlusIcon,
   LightbulbIcon,
   TagIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { NoteInput } from "@/components/workspace/editor/annotation-card";
@@ -30,6 +36,8 @@ import { Button } from "@/components/ui/button";
 import type { AnnotationColor } from "@/lib/annotations/types";
 import {
   createZoteroHighlight,
+  deleteZoteroItem,
+  updateZoteroAnnotation,
   ZOTERO_HIGHLIGHT_COLORS,
 } from "@/lib/zotero-api";
 import { useClaudeChatStore } from "@/stores/claude-chat-store";
@@ -51,6 +59,18 @@ const ZOTERO_COLOR: Record<AnnotationColor, string> = {
   purple: ZOTERO_HIGHLIGHT_COLORS.purple,
   none: ZOTERO_HIGHLIGHT_COLORS.yellow,
 };
+
+/** The colors a highlight can be changed to, as Zotero shows them. */
+const SWATCHES: Partial<Record<AnnotationColor, string>> = {
+  yellow: ZOTERO_HIGHLIGHT_COLORS.yellow,
+  green: ZOTERO_HIGHLIGHT_COLORS.green,
+  blue: ZOTERO_HIGHLIGHT_COLORS.blue,
+  pink: ZOTERO_HIGHLIGHT_COLORS.red,
+  purple: ZOTERO_HIGHLIGHT_COLORS.purple,
+};
+
+const errorText = (err: unknown) =>
+  err instanceof Error ? err.message : String(err);
 
 /**
  * Saves a highlight (and optional comment) on a Zotero paper to the Zotero
@@ -233,13 +253,28 @@ export function PaperReader({
   // Highlights made here show at once; the open tab of this paper, if any,
   // gets them too.
   const [added, setAdded] = useState<PdfAnnotationRect[]>([]);
+  // Highlights recolored, noted or deleted here, until the paper's reloaded.
+  const [changed, setChanged] = useState<
+    Record<string, Partial<PdfAnnotationRect> | null>
+  >({});
   const annotations = useMemo(() => {
     const known = new Set((paper.annotations ?? []).map((a) => a.key));
     return [
       ...(paper.annotations ?? []),
       ...added.filter((a) => !a.key || !known.has(a.key)),
-    ];
-  }, [paper.annotations, added]);
+    ].flatMap((a) => {
+      const change = a.key ? changed[a.key] : undefined;
+      if (change === null) return [];
+      return change ? [{ ...a, ...change }] : [a];
+    });
+  }, [paper.annotations, added, changed]);
+  const change = useCallback(
+    (key: string, next: Partial<PdfAnnotationRect> | null) => {
+      setChanged((c) => ({ ...c, [key]: next }));
+      useReadingStore.getState().changeAnnotation(paper.id, key, next);
+    },
+    [paper.id],
+  );
   const onAdded = useCallback(
     (annotation: PdfAnnotationRect) => {
       setAdded((list) => [...list, annotation]);
@@ -285,6 +320,12 @@ export function PaperReader({
     annotation: PdfAnnotationRect;
     at: { left: number; top: number };
     group?: PassageGroup;
+    confirmDelete?: boolean;
+  } | null>(null);
+  // A highlight's note being written or changed.
+  const [editingNote, setEditingNote] = useState<{
+    annotation: PdfAnnotationRect;
+    at: { left: number; top: number };
   } | null>(null);
 
   const actions = useMemo<ToolbarAction[]>(
@@ -318,14 +359,71 @@ export function PaperReader({
     [canHighlight],
   );
 
+  const recolor = async (a: PdfAnnotationRect, color: AnnotationColor) => {
+    const { apiKey, userID } = useZoteroStore.getState();
+    if (!a.key || !apiKey || !userID) return;
+    const before = a.color;
+    const hex = ZOTERO_COLOR[color];
+    change(a.key, { color: hex });
+    try {
+      await updateZoteroAnnotation(apiKey, userID, a.key, { color: hex });
+    } catch (err) {
+      change(a.key, { color: before });
+      toast.error(`Couldn't change it in Zotero: ${errorText(err)}`);
+    }
+  };
+
+  const renote = async (a: PdfAnnotationRect, comment: string) => {
+    const { apiKey, userID } = useZoteroStore.getState();
+    if (!a.key || !apiKey || !userID) return;
+    if (comment === (a.comment ?? "")) return;
+    change(a.key, { comment });
+    try {
+      await updateZoteroAnnotation(apiKey, userID, a.key, { comment });
+      await updatePassageComment(a.key, a.comment, comment).catch(() => []);
+      toast.success(comment ? "Note saved to Zotero" : "Note removed");
+    } catch (err) {
+      change(a.key, { comment: a.comment });
+      toast.error(`Couldn't save it in Zotero: ${errorText(err)}`);
+    }
+  };
+
+  const removeHighlight = async (a: PdfAnnotationRect) => {
+    const { apiKey, userID } = useZoteroStore.getState();
+    if (!a.key || !apiKey || !userID) return;
+    change(a.key, null);
+    try {
+      await deleteZoteroItem(apiKey, userID, a.key);
+    } catch (err) {
+      change(a.key, {});
+      toast.error(`Couldn't delete it in Zotero: ${errorText(err)}`);
+      return;
+    }
+    // Its passage leaves the ideas and topics it was added to.
+    const notes = await removePassageEverywhere(a.key, a.comment).catch(
+      () => [] as string[],
+    );
+    toast.success(
+      notes.length
+        ? `Highlight deleted, and its passage from ${notes.map((n) => `“${n}”`).join(", ")}`
+        : "Highlight deleted",
+    );
+    // The paper's own note lists its highlights.
+    if (paper.zotero)
+      void addPaperToVault(paper.zotero.itemKey).catch(() => {});
+  };
+
   // Esc closes the highlight's menu and the note box too.
-  const anyOpen = Boolean(noteFor || (highlightMenu && !highlightMenu.group));
+  const anyOpen = Boolean(
+    noteFor || editingNote || (highlightMenu && !highlightMenu.group),
+  );
   useEffect(() => {
     if (!anyOpen) return;
     const key = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.stopPropagation();
       setNoteFor(null);
+      setEditingNote(null);
       setHighlightMenu((m) => (m && !m.group ? null : m));
     };
     window.addEventListener("keydown", key, true);
@@ -453,12 +551,43 @@ export function PaperReader({
             }}
           />
           <div
-            className="fixed z-50 w-48 rounded-md border border-border bg-popover p-1 text-sm shadow-lg"
+            className="fixed z-50 w-52 rounded-md border border-border bg-popover p-1 text-sm shadow-lg"
             style={{
-              left: Math.min(highlightMenu.at.left, window.innerWidth - 200),
-              top: Math.min(highlightMenu.at.top, window.innerHeight - 90),
+              left: Math.min(highlightMenu.at.left, window.innerWidth - 220),
+              top: Math.min(highlightMenu.at.top, window.innerHeight - 200),
             }}
           >
+            <div className="flex items-center gap-1.5 px-2 py-1.5">
+              {(Object.keys(SWATCHES) as AnnotationColor[]).map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  title={`Make it ${color}`}
+                  aria-label={`Make it ${color}`}
+                  onClick={() => {
+                    void recolor(highlightMenu.annotation, color);
+                    setHighlightMenu(null);
+                  }}
+                  className="size-4 rounded-full ring-offset-1 ring-offset-popover hover:ring-2 hover:ring-ring"
+                  style={{ backgroundColor: SWATCHES[color] }}
+                />
+              ))}
+            </div>
+            <div className="my-1 h-px bg-border" />
+            <button
+              type="button"
+              onClick={() => {
+                setEditingNote({
+                  annotation: highlightMenu.annotation,
+                  at: highlightMenu.at,
+                });
+                setHighlightMenu(null);
+              }}
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
+            >
+              <MessageSquarePlusIcon className="size-3.5" />
+              {highlightMenu.annotation.comment ? "Edit note" : "Add note"}
+            </button>
             {(["idea", "topic"] as const).map((group) => (
               <button
                 key={group}
@@ -474,6 +603,24 @@ export function PaperReader({
                 Add to {group}…
               </button>
             ))}
+            <div className="my-1 h-px bg-border" />
+            <button
+              type="button"
+              onClick={() => {
+                if (!highlightMenu.confirmDelete) {
+                  setHighlightMenu({ ...highlightMenu, confirmDelete: true });
+                  return;
+                }
+                void removeHighlight(highlightMenu.annotation);
+                setHighlightMenu(null);
+              }}
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-destructive text-xs hover:bg-destructive/10"
+            >
+              <Trash2Icon className="size-3.5" />
+              {highlightMenu.confirmDelete
+                ? "Delete it, here and in Zotero"
+                : "Delete highlight"}
+            </button>
           </div>
         </>
       )}
@@ -506,6 +653,27 @@ export function PaperReader({
             window.getSelection()?.removeAllRanges();
           }}
         />
+      )}
+      {editingNote && (
+        <div
+          className="fixed z-50 w-72 rounded-lg border border-border bg-background p-2.5 shadow-xl"
+          style={{
+            left: Math.min(editingNote.at.left, window.innerWidth - 300),
+            top: Math.min(editingNote.at.top + 8, window.innerHeight - 180),
+          }}
+        >
+          <NoteInput
+            placeholder="Your note, saved in Zotero…"
+            initial={editingNote.annotation.comment ?? ""}
+            autoFocus
+            submitLabel="Save"
+            onSubmit={(text) => {
+              void renote(editingNote.annotation, text.trim());
+              setEditingNote(null);
+            }}
+            onCancel={() => setEditingNote(null)}
+          />
+        </div>
       )}
       {noteFor && (
         <div

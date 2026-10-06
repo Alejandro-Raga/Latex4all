@@ -23,6 +23,9 @@ tag.
 
 ### Added
 
+- Right-click a highlight on a paper to change its color, write or edit its
+  note, or delete it. A deleted highlight's passage also leaves the ideas
+  and topics it was added to, and an edited note shows there too.
 - "Connect to idea" in the Zotero library's right-click menu, next to
   "Connect to topic": the paper goes on the idea note's list of papers
   (the note is made if it's new).
