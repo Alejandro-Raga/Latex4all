@@ -29,8 +29,37 @@ function lineText(el: SVGTextElement): Text | null {
  * that is applied here. Down the page, the line's box from the PDF is used:
  * the stand-in font's own height sits a little off the printed line.
  */
+/** A line's printed character edges (data-chars), parsed once. */
+const edgesCache = new WeakMap<SVGTextElement, [number, number][] | null>();
+function printedEdges(el: SVGTextElement): [number, number][] | null {
+  if (edgesCache.has(el)) return edgesCache.get(el) ?? null;
+  const raw = el.dataset.chars;
+  const edges = raw
+    ? raw.split(",").map((pair) => {
+        const [a, b] = pair.split(" ").map(Number);
+        return [a, b] as [number, number];
+      })
+    : null;
+  edgesCache.set(el, edges);
+  return edges;
+}
+
 function charExtent(el: SVGTextElement, i: number): DOMRect {
   const b = el.getExtentOfChar(i);
+  // Where the page itself prints the letter, when known: exact even where
+  // a scan's words are spaced unevenly.
+  const printed = printedEdges(el)?.[i];
+  if (printed) {
+    b.x = printed[0];
+    b.width = Math.max(printed[1] - printed[0], 0);
+    const top = Number(el.dataset.top);
+    const height = Number(el.dataset.height);
+    if (Number.isFinite(top) && height > 0) {
+      b.y = top;
+      b.height = height;
+    }
+    return b;
+  }
   const length = Number(el.getAttribute("textLength"));
   const natural = el.getComputedTextLength();
   if (length > 0 && natural > 0 && Math.abs(length - natural) > 0.5) {

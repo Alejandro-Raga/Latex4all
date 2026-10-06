@@ -29,6 +29,10 @@ export interface StructuredTextLine {
   x: number;
   y: number;
   text: string;
+  /** Where each character of `text` is printed, left and right edge (per
+   *  UTF-16 unit), when known: a scanned page's words aren't evenly spaced
+   *  across the line, so these place selection on the print. */
+  chars?: [number, number][];
   font: {
     name: string;
     family: string;

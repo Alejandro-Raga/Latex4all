@@ -187,14 +187,25 @@ export const MupdfPage = memo(function MupdfPage({
                 <text
                   key={`${bi}-${li}`}
                   data-block={`${pageIndex}:${bi}`}
-                  x={line.bbox.x}
+                  // Each letter where it's printed, when mupdf says where;
+                  // else the line stretched evenly over its printed width.
+                  x={
+                    line.chars
+                      ? line.chars.map((c) => c[0]).join(" ")
+                      : line.bbox.x
+                  }
+                  data-chars={line.chars
+                    ?.map((c) => `${c[0]} ${c[1]}`)
+                    .join(",")}
                   data-top={line.bbox.y}
                   data-height={line.bbox.h}
                   y={line.y}
                   fontSize={line.font.size}
                   fontFamily={line.font.family || line.font.name || "serif"}
-                  textLength={line.bbox.w > 0 ? line.bbox.w : undefined}
-                  lengthAdjust="spacingAndGlyphs"
+                  textLength={
+                    !line.chars && line.bbox.w > 0 ? line.bbox.w : undefined
+                  }
+                  lengthAdjust={line.chars ? undefined : "spacingAndGlyphs"}
                 >
                   {line.text}
                 </text>

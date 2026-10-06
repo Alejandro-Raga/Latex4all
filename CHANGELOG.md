@@ -52,6 +52,9 @@ tag.
 
 ### Fixed
 
+- Selecting text and highlighting on old scanned papers lines up with the
+  printed words. Before, the selection drifted away from them partway
+  through a line, and highlights saved from it came out shifted.
 - A shared project whose folder is also synced to another computer
   (Seafile, Dropbox, iCloud…) no longer loses track of changes between
   the two. Each computer now keeps its own record of the sync with the app

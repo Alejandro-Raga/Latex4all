@@ -48,6 +48,22 @@ function lineFrom(line: any): StructuredTextLine {
 }
 
 /**
+ * Each line's character edges, from mupdf's walk of the same structured
+ * text, set on the lines (in the same order) whose text they match.
+ */
+export function withCharEdges(
+  data: StructuredTextData,
+  walked: [number, number][][],
+): StructuredTextData {
+  const lines = data.blocks.flatMap((b) => (b.type === "text" ? b.lines : []));
+  if (lines.length !== walked.length) return data;
+  lines.forEach((line, i) => {
+    if (walked[i].length === line.text.length) line.chars = walked[i];
+  });
+  return data;
+}
+
+/**
  * mupdf's structured-text JSON as the flat lines the text layer draws. The
  * text layer is what makes a PDF's words selectable and copyable.
  */

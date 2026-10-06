@@ -1,5 +1,5 @@
 import type { PDFDocument } from "mupdf";
-import { toTextLayer } from "./structured-text";
+import { toTextLayer, withCharEdges } from "./structured-text";
 import type { PdfMark } from "@/lib/annotations/pdf-placement";
 import { addHighlightAnnotations, readPageChars } from "./pdf-annotations";
 
@@ -118,8 +118,23 @@ methods.getPageText = (docId: number, pageIndex: number): unknown => {
   const page = doc.loadPage(pageIndex);
   const stext = page.toStructuredText("preserve-whitespace");
   const raw = JSON.parse(stext.asJSON());
-
-  return toTextLayer(raw);
+  // Each character's edges too, per line, one entry per UTF-16 unit.
+  const edges: [number, number][][] = [];
+  stext.walk({
+    beginLine: () => {
+      edges.push([]);
+    },
+    onChar: (c: string, _o: unknown, _f: unknown, _s: number, q: number[]) => {
+      const x0 = Math.min(q[0], q[2], q[4], q[6]);
+      const x1 = Math.max(q[0], q[2], q[4], q[6]);
+      const box: [number, number] = [
+        Math.round(x0 * 10) / 10,
+        Math.round(x1 * 10) / 10,
+      ];
+      for (let i = 0; i < c.length; i++) edges[edges.length - 1]?.push(box);
+    },
+  });
+  return withCharEdges(toTextLayer(raw), edges);
 };
 
 /** Every character with its box, for placing highlights over the page. */
