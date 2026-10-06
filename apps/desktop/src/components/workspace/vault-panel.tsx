@@ -122,6 +122,7 @@ import {
   parseNoteQuery,
 } from "@/lib/vault/note-query";
 import { openZoteroPdf, zoteroPdfTarget } from "@/components/zotero-pdf-dialog";
+import { followLatex4AllLink } from "@/hooks/use-deep-links";
 import { PanelBoundary } from "@/components/panel-boundary";
 
 const REFRESH_MS = 30_000;
@@ -1884,7 +1885,9 @@ function NoteMarkdown({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         urlTransform={(url) =>
-          /^(vault:|vault-embed:|zotero:\/\/|obsidian:\/\/)/.test(url)
+          /^(vault:|vault-embed:|zotero:\/\/|obsidian:\/\/|latex4all:\/\/)/.test(
+            url,
+          )
             ? url
             : defaultUrlTransform(url)
         }
@@ -1900,6 +1903,10 @@ function NoteMarkdown({
                   // A highlight's "p. 4": the PDF here, at that page.
                   const pdf = zoteroPdfTarget(href, title);
                   if (pdf) return void openZoteroPdf(pdf);
+                  // A passage of a project's own text: there, at its line.
+                  if (href.startsWith("latex4all://")) {
+                    return void followLatex4AllLink(href);
+                  }
                   shellOpen(href).catch(() =>
                     toast.error("Couldn't open that link."),
                   );

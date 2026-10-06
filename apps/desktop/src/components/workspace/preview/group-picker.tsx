@@ -3,6 +3,8 @@ import { LightbulbIcon, Loader2Icon, PlusIcon, TagIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { PassageGroup } from "@/lib/vault/add-passage";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { useDockStore } from "@/stores/dock-store";
 import { useVaultStore } from "@/stores/vault-store";
 
 /**
@@ -152,5 +154,21 @@ export function GroupPicker({
         )}
       </div>
     </div>
+  );
+}
+
+/** Says where a passage went, with a way to open that note. */
+export function filedToast(group: PassageGroup, note: string) {
+  toast.success(
+    `Added to ${group === "idea" ? "the idea" : "the topic"} “${note}”`,
+    {
+      action: {
+        label: "Open",
+        onClick: () => {
+          useDockStore.getState().setOpen("vault", true);
+          useVaultStore.getState().open(note);
+        },
+      },
+    },
   );
 }

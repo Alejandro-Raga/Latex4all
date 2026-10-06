@@ -6,6 +6,11 @@ import { openAtLine } from "@/lib/open-at-line";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
 
+/** Opens a latex4all:// link's project, at its file and line. */
+export async function followLatex4AllLink(url: string) {
+  return follow(url);
+}
+
 async function follow(url: string) {
   const link = parseLatex4AllLink(url);
   if (!link) return;

@@ -146,7 +146,19 @@ import {
   Loader2Icon,
   MessageSquarePlusIcon,
   PencilLineIcon,
+  LightbulbIcon,
 } from "lucide-react";
+import { toast } from "sonner";
+import type { PassageGroup } from "@/lib/vault/add-passage";
+import {
+  addOwnPassage,
+  latexAsProse,
+  type OwnPassage,
+} from "@/lib/vault/own-passage";
+import {
+  filedToast,
+  GroupPicker,
+} from "@/components/workspace/preview/group-picker";
 import { ClaudeChatDrawer } from "@/components/claude-chat/claude-chat-drawer";
 import { ProposedChangesPanel } from "@/components/claude-chat/proposed-changes-panel";
 import { ImagePreview } from "./image-preview";
@@ -1559,9 +1571,27 @@ export function LatexEditor() {
         icon: <PencilLineIcon className="size-4" />,
         hint: "⌘⌥E",
       },
+      {
+        id: "idea",
+        label: "Add to idea…",
+        icon: <LightbulbIcon className="size-4" />,
+      },
+      {
+        id: "topic",
+        label: "Add to topic…",
+        icon: <TagIcon className="size-4" />,
+      },
     ],
     [],
   );
+
+  // A passage of this file filed under an idea or topic, its name being
+  // picked.
+  const [ownFiling, setOwnFiling] = useState<{
+    group: PassageGroup;
+    passage: OwnPassage;
+    at: { left: number; top: number };
+  } | null>(null);
 
   const handleToolbarAction = useCallback(
     (actionId: string) => {
@@ -1577,6 +1607,33 @@ export function LatexEditor() {
             range.end,
             actionId === "add-note" ? "note" : "suggest",
           );
+        }
+        toolbarStickyRef.current = false;
+        setSelectionCoords(null);
+      } else if (actionId === "idea" || actionId === "topic") {
+        const view = viewRef.current;
+        const range = useDocumentStore.getState().selectionRange;
+        const file = useDocumentStore
+          .getState()
+          .files.find((f) => f.id === useDocumentStore.getState().activeFileId);
+        const root = useDocumentStore.getState().projectRoot;
+        if (view && range && file && root) {
+          const text = latexAsProse(
+            view.state.sliceDoc(range.start, range.end),
+          );
+          const coords = view.coordsAtPos(range.start);
+          setOwnFiling({
+            group: actionId,
+            passage: {
+              projectRoot: root,
+              file: file.relativePath,
+              line: view.state.doc.lineAt(range.start).number,
+              text,
+            },
+            at: coords
+              ? { left: coords.left, top: coords.bottom }
+              : { left: 200, top: 200 },
+          });
         }
         toolbarStickyRef.current = false;
         setSelectionCoords(null);
@@ -1928,6 +1985,28 @@ export function LatexEditor() {
               )}
             {reviewingSnapshot && historyDiffResult && (
               <HistoryDiffView diffs={historyDiffResult} />
+            )}
+            {ownFiling && (
+              <GroupPicker
+                group={ownFiling.group}
+                anchor={ownFiling.at}
+                onCancel={() => setOwnFiling(null)}
+                onPick={async (name) => {
+                  try {
+                    const note = await addOwnPassage(
+                      ownFiling.group,
+                      name,
+                      ownFiling.passage,
+                    );
+                    filedToast(ownFiling.group, note);
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error ? err.message : String(err),
+                    );
+                  }
+                  setOwnFiling(null);
+                }}
+              />
             )}
             {toolbarAnchor &&
               selectionLabel &&

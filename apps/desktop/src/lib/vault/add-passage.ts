@@ -86,6 +86,35 @@ export function withPassage(
   annotationKey: string,
   markdown: string,
 ): string {
+  return withPassageFrom(
+    noteText,
+    {
+      heading: `[[${paper.name}]] ${paper.title}`,
+      headingKey: `### [[${paper.name}]]`,
+      literature: { link: `- [[${paper.name}]]`, line: paperLine(paper) },
+    },
+    `annotation=${annotationKey}`,
+    markdown,
+  );
+}
+
+/** Where a passage comes from, as the note shows it. */
+export interface PassageSource {
+  /** The heading it goes under (after "### "). */
+  heading: string;
+  /** How that heading starts, to find it again (its title may change). */
+  headingKey: string;
+  /** For a paper: its line in the note's Literature list. */
+  literature: { link: string; line: string } | null;
+}
+
+/** As withPassage, for a passage from any source; `marker` names it once. */
+export function withPassageFrom(
+  noteText: string,
+  source: PassageSource,
+  marker: string,
+  markdown: string,
+): string {
   let text = noteText;
   if (!text.includes(BEGIN) || !text.includes(END)) {
     // A note written by hand: the list goes below what's there.
@@ -94,29 +123,27 @@ export function withPassage(
   const begin = text.indexOf(BEGIN) + BEGIN.length;
   const end = text.indexOf(END, begin);
   let block = text.slice(begin, end);
-  if (block.includes(`annotation=${annotationKey}`)) return noteText;
+  if (block.includes(marker)) return noteText;
 
-  const link = `[[${paper.name}]]`;
   const literature = /## Literature\n/.exec(block);
-  if (!block.includes(`- ${link}`)) {
+  if (source.literature && !block.includes(source.literature.link)) {
     if (literature) {
       // At the end of the list: the line before the next heading or the end.
       const after = literature.index + literature[0].length;
       const next = block.slice(after).search(/\n## /);
       const at = next < 0 ? block.length : after + next;
       const list = block.slice(after, at).replace(/\s*$/, "");
-      block = `${block.slice(0, after)}${list ? `${list}\n` : "\n"}${paperLine(paper)}\n${block.slice(at)}`;
+      block = `${block.slice(0, after)}${list ? `${list}\n` : "\n"}${source.literature.line}\n${block.slice(at)}`;
     } else {
-      block = `\n## Literature\n\n${paperLine(paper)}\n${block}`;
+      block = `\n## Literature\n\n${source.literature.line}\n${block}`;
     }
   }
   if (!/## Passages\n/.test(block)) {
     block = `${block.replace(/\s*$/, "")}\n\n## Passages\n`;
   }
-  const heading = `### ${link}`;
-  const at = block.indexOf(heading);
+  const at = block.indexOf(source.headingKey);
   if (at < 0) {
-    block = `${block.replace(/\s*$/, "")}\n\n${heading} ${paper.title}\n\n${markdown}\n`;
+    block = `${block.replace(/\s*$/, "")}\n\n### ${source.heading}\n\n${markdown}\n`;
   } else {
     // Under its paper: before the next paper's heading, or the end.
     const lineEnd = block.indexOf("\n", at);

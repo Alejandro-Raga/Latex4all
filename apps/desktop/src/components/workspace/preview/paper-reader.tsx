@@ -8,8 +8,7 @@ import {
 } from "react";
 import { addPassage, type PassageGroup } from "@/lib/vault/add-passage";
 import { useDockStore } from "@/stores/dock-store";
-import { useVaultStore } from "@/stores/vault-store";
-import { GroupPicker } from "./group-picker";
+import { filedToast, GroupPicker } from "./group-picker";
 import {
   removePassageEverywhere,
   updatePassageComment,
@@ -154,21 +153,6 @@ async function fileExisting(
       `Couldn't add it to the ${group}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-}
-
-function filedToast(group: PassageGroup, note: string) {
-  toast.success(
-    `Added to ${group === "idea" ? "the idea" : "the topic"} “${note}”`,
-    {
-      action: {
-        label: "Open",
-        onClick: () => {
-          useDockStore.getState().setOpen("vault", true);
-          useVaultStore.getState().open(note);
-        },
-      },
-    },
-  );
 }
 
 /** Highlights the selection and files the passage under an idea or topic. */

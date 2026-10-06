@@ -15,6 +15,8 @@ import {
   CrosshairIcon,
   ChevronUpIcon,
   ChevronDownIcon,
+  LightbulbIcon,
+  TagIcon,
 } from "lucide-react";
 import { writeFile, mkdir, exists } from "@tauri-apps/plugin-fs";
 import { join } from "@tauri-apps/api/path";
@@ -83,6 +85,9 @@ import type { PdfMark } from "@/lib/annotations/pdf-placement";
 import { getMupdfClient } from "@/lib/mupdf/mupdf-client";
 import { currentAuthor, useAnnotationsStore } from "@/stores/annotations-store";
 import { createLogger } from "@/lib/debug/logger";
+import type { PassageGroup } from "@/lib/vault/add-passage";
+import { addOwnPassage } from "@/lib/vault/own-passage";
+import { filedToast, GroupPicker } from "./group-picker";
 
 const log = createLogger("pdf-preview");
 
@@ -490,15 +495,54 @@ export function PdfPreview() {
         icon: <FileTextIcon className="size-4" />,
         hint: "dbl-click",
       },
+      {
+        id: "idea",
+        label: "Add to idea…",
+        icon: <LightbulbIcon className="size-4" />,
+      },
+      {
+        id: "topic",
+        label: "Add to topic…",
+        icon: <TagIcon className="size-4" />,
+      },
     ],
     [],
   );
+
+  // A passage of the document filed under an idea or topic: where it is in
+  // the source is looked up while the name is picked.
+  const [ownFiling, setOwnFiling] = useState<{
+    group: PassageGroup;
+    text: string;
+    at: { left: number; top: number };
+    located: Promise<{ file: string; line: number } | null>;
+  } | null>(null);
 
   const handlePdfToolbarAction = useCallback(
     (actionId: string) => {
       if (!pdfSelection) return;
       if (actionId === "note") {
         composePdfNote();
+        return;
+      }
+      if (actionId === "idea" || actionId === "topic") {
+        const located = selectionInSource().then((range) => {
+          if (!range) return null;
+          const file = files.find((f) => f.relativePath === range.path);
+          const before = (file?.content ?? "").slice(0, range.from);
+          return { file: range.path, line: before.split("\n").length };
+        });
+        setOwnFiling({
+          group: actionId,
+          text: pdfSelection.text
+            .replace(/-\n(?=\w)/g, "")
+            .replace(/\s+/g, " ")
+            .trim(),
+          at: pdfSelection.position,
+          located,
+        });
+        setPdfSelection(null);
+        window.getSelection()?.removeAllRanges();
         return;
       }
       const label = pdfContextLabel;
@@ -529,6 +573,8 @@ export function PdfPreview() {
       navigateToSource,
       buildPdfContext,
       composePdfNote,
+      selectionInSource,
+      files,
     ],
   );
 
@@ -1230,6 +1276,29 @@ export function PdfPreview() {
           onAction={handlePdfToolbarAction}
           onDismiss={handlePdfToolbarDismiss}
           onHighlight={highlightPdfSelection}
+        />
+      )}
+      {ownFiling && projectRoot && (
+        <GroupPicker
+          group={ownFiling.group}
+          anchor={ownFiling.at}
+          onCancel={() => setOwnFiling(null)}
+          onPick={async (name) => {
+            const { group, text, located } = ownFiling;
+            try {
+              const where = await located.catch(() => null);
+              const note = await addOwnPassage(group, name, {
+                projectRoot,
+                file: where?.file,
+                line: where?.line,
+                text,
+              });
+              filedToast(group, note);
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : String(err));
+            }
+            setOwnFiling(null);
+          }}
         />
       )}
       {/* A note on text chosen in the PDF, attached to its LaTeX source. */}

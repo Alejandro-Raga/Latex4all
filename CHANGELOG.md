@@ -23,6 +23,10 @@ tag.
 
 ### Added
 
+- Your own writing can go into ideas and topics too: select text in the
+  editor or in the compiled PDF and choose "Add to idea…" or "Add to
+  topic…". It's quoted under the project's name, with a link that opens the
+  project at that file and line.
 - The Library's Projects list shows every project, grouped by type
   (favourites first), with groups that fold away, a search by name or type,
   and a right-click menu to star a project or remove it from the list.
