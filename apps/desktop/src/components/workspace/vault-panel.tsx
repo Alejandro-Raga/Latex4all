@@ -121,7 +121,7 @@ import {
   mergeFilters,
   parseNoteQuery,
 } from "@/lib/vault/note-query";
-import { useZoteroPdf, zoteroPdfTarget } from "@/components/zotero-pdf-dialog";
+import { openZoteroPdf, zoteroPdfTarget } from "@/components/zotero-pdf-dialog";
 import { PanelBoundary } from "@/components/panel-boundary";
 
 const REFRESH_MS = 30_000;
@@ -1899,7 +1899,7 @@ function NoteMarkdown({
                   if (!href) return;
                   // A highlight's "p. 4": the PDF here, at that page.
                   const pdf = zoteroPdfTarget(href, title);
-                  if (pdf) return useZoteroPdf.getState().show(pdf);
+                  if (pdf) return void openZoteroPdf(pdf);
                   shellOpen(href).catch(() =>
                     toast.error("Couldn't open that link."),
                   );

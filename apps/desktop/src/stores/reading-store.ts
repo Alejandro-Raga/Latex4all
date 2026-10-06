@@ -12,6 +12,15 @@ export interface ReadingPaper {
   zotero?: { itemKey: string; attachmentKey: string };
   /** For a PDF on disk: where it is, so it can be reopened. */
   filePath?: string;
+  /** Where to bring into view (a note's "p. 4" link): a highlight, else a
+   *  page; `at` tells one request from the next. */
+  focus?: PaperFocus;
+}
+
+export interface PaperFocus {
+  annotationKey: string | null;
+  page: number | null;
+  at: number;
 }
 
 /** The PDF pane's tabs: the compiled preview, papers, a widened side panel. */

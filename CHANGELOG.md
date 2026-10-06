@@ -52,6 +52,11 @@ tag.
 
 ### Fixed
 
+- A highlight's link in a note ("p. 2") opens the paper at that highlight
+  in a PDF tab when a project is open, and in the Library's preview
+  otherwise, with highlighting, notes and ideas all available. Before, it
+  opened in a window that sometimes wouldn't scroll, and a paper moved from
+  there to a tab only offered Copy.
 - Some PDFs in shared projects kept failing to sync with "The relay
   answered 502". These were files the relay already had.
 - Shared projects stopped making duplicate "(2)" files and needless

@@ -464,6 +464,20 @@ export interface ZoteroAttachmentInfo {
   downloadable: boolean;
 }
 
+/** The item an attachment belongs to (its paper), or null. */
+export async function fetchAttachmentParent(
+  apiKey: string,
+  userID: string,
+  attachmentKey: string,
+): Promise<string | null> {
+  const response = await zoteroFetch(
+    apiKey,
+    `/users/${userID}/items/${attachmentKey}`,
+  );
+  const item = (await response.json()) as { data?: { parentItem?: string } };
+  return item.data?.parentItem ?? null;
+}
+
 export async function findPdfAttachment(
   apiKey: string,
   userID: string,

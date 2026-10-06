@@ -248,6 +248,30 @@ export function PaperReader({
     [paper.id],
   );
   const count = annotations.length;
+
+  // Brought to the highlight (or page) a link asked for, once the pages
+  // are there, and again for each new request.
+  const scrollToPageRef = useRef<((page: number) => void) | null>(null);
+  const focusAnnotationRef = useRef<((key: string) => boolean) | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const focus = paper.focus;
+  useEffect(() => {
+    if (!loaded || !focus) return;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const attempt = () => {
+      tries++;
+      const key = focus.annotationKey;
+      if (key && focusAnnotationRef.current?.(key)) return;
+      if (key && tries < 30) {
+        timer = setTimeout(attempt, 100);
+        return;
+      }
+      if (focus.page) scrollToPageRef.current?.(focus.page);
+    };
+    timer = setTimeout(attempt, 60);
+    return () => clearTimeout(timer);
+  }, [loaded, focus]);
   const zoteroConnected = useZoteroStore((s) => s.isAuthenticated);
   const canHighlight = Boolean(paper.zotero && zoteroConnected);
   const [selection, setSelection] = useState<PdfTextSelection | null>(null);
@@ -509,6 +533,9 @@ export function PaperReader({
         scale={scale}
         rootFileId={paper.id}
         onScaleChange={changeScale}
+        scrollToPageRef={scrollToPageRef}
+        focusAnnotationRef={focusAnnotationRef}
+        onLoadSuccess={() => setLoaded(true)}
         onFirstPageSize={(width) => {
           pageWidthRef.current = width;
           fitIfNew();

@@ -38,7 +38,12 @@ import { toast } from "sonner";
 import { useProjectStore } from "@/stores/project-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { DEFAULT_BIB_FILE_NAME, useZoteroStore } from "@/stores/zotero-store";
-import { type ReadingPaper, useReadingStore } from "@/stores/reading-store";
+import {
+  type PaperFocus,
+  type ReadingPaper,
+  useReadingStore,
+} from "@/stores/reading-store";
+import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import {
   buildCollectionTree,
   type ZoteroCollectionNode,
@@ -229,6 +234,8 @@ type SelectedFile =
       id: string;
       label: string;
       itemKey: string;
+      /** A highlight or page to bring into view (a note's link). */
+      focus?: PaperFocus;
     };
 
 /** Sentinel cache/expand key for "My Library" (all items, no collection filter). */
@@ -409,6 +416,30 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
     },
     [],
   );
+
+  // A note's highlight link, with no project open: shown here.
+  useEffect(() => {
+    useLibraryPreview.setState((s) => ({ listening: s.listening + 1 }));
+    const show = (
+      request: ReturnType<typeof useLibraryPreview.getState>["request"],
+    ) => {
+      if (!request) return;
+      useLibraryPreview.getState().done();
+      setSelectedFile({
+        source: "zotero",
+        id: `zotero:${request.itemKey}`,
+        label: request.label,
+        itemKey: request.itemKey,
+        focus: request.focus,
+      });
+    };
+    show(useLibraryPreview.getState().request);
+    const unsubscribe = useLibraryPreview.subscribe((s) => show(s.request));
+    return () => {
+      unsubscribe();
+      useLibraryPreview.setState((s) => ({ listening: s.listening - 1 }));
+    };
+  }, []);
 
   const selectZoteroItem = useCallback((item: ZoteroItemSummary) => {
     setSelectedFile({
@@ -1742,6 +1773,7 @@ function FilePreview({
             attachmentKey: preview.attachmentKey,
           }
         : undefined,
+    focus: selectedFile.source === "zotero" ? selectedFile.focus : undefined,
   };
   return (
     <PaperReader

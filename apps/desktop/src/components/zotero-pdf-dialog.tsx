@@ -12,10 +12,12 @@ import {
   type PdfAnnotationRect,
   PdfViewer,
 } from "@/components/workspace/preview/pdf-viewer";
-import { fetchAnnotations } from "@/lib/zotero-api";
+import { toast } from "sonner";
+import { fetchAnnotations, fetchAttachmentParent } from "@/lib/zotero-api";
+import { useZoteroLibrary } from "@/lib/zotero-library";
 import { zoteroPdfBytes } from "@/lib/zotero-pdf-cache";
 import { useDocumentStore } from "@/stores/document-store";
-import { useReadingStore } from "@/stores/reading-store";
+import { type PaperFocus, useReadingStore } from "@/stores/reading-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 
@@ -38,6 +40,79 @@ export const useZoteroPdf = create<{
   show: (target) => set({ target }),
   close: () => set({ target: null }),
 }));
+
+/** A paper the Library's own preview is asked to show (no project open). */
+export const useLibraryPreview = create<{
+  /** Whether a Library page is there to show it. */
+  listening: number;
+  request: { itemKey: string; label: string; focus: PaperFocus } | null;
+  ask: (request: { itemKey: string; label: string; focus: PaperFocus }) => void;
+  done: () => void;
+}>((set) => ({
+  listening: 0,
+  request: null,
+  ask: (request) => set({ request }),
+  done: () => set({ request: null }),
+}));
+
+/** The paper (Zotero item) a PDF attachment belongs to. */
+async function paperOf(attachmentKey: string): Promise<string | null> {
+  const known = useZoteroLibrary.getState().mirror?.attachments[attachmentKey];
+  if (known) return known.parent;
+  const { apiKey, userID } = useZoteroStore.getState();
+  if (!apiKey || !userID) return null;
+  return fetchAttachmentParent(apiKey, userID, attachmentKey).catch(() => null);
+}
+
+/**
+ * Opens a note's highlight link ("p. 4") where the paper can be read and
+ * worked on: in a tab of the PDF pane with a project open, in the
+ * Library's preview without one, at the highlight. Elsewhere, a window.
+ */
+export async function openZoteroPdf(target: Target) {
+  const { apiKey, userID } = useZoteroStore.getState();
+  const projectOpen = Boolean(useDocumentStore.getState().projectRoot);
+  const library = useLibraryPreview.getState();
+  if (!apiKey || !userID || (!projectOpen && !library.listening)) {
+    useZoteroPdf.getState().show(target);
+    return;
+  }
+  const focus: PaperFocus = {
+    annotationKey: target.annotationKey,
+    page: target.page,
+    at: Date.now(),
+  };
+  const itemKey = await paperOf(target.attachmentKey);
+  if (!projectOpen) {
+    if (itemKey) library.ask({ itemKey, label: target.label, focus });
+    else useZoteroPdf.getState().show(target);
+    return;
+  }
+  const opening = toast.loading(`Opening ${target.label}…`);
+  try {
+    const [data, annotations] = await Promise.all([
+      zoteroPdfBytes(apiKey, userID, { key: target.attachmentKey }),
+      fetchAnnotations(apiKey, userID, target.attachmentKey).catch(
+        () => [] as PdfAnnotationRect[],
+      ),
+    ]);
+    useReadingStore.getState().open({
+      // The same tab the Library opens for this paper.
+      id: itemKey ? `zotero:${itemKey}` : `zotero-att:${target.attachmentKey}`,
+      label: target.label,
+      data,
+      annotations,
+      zotero: itemKey
+        ? { itemKey, attachmentKey: target.attachmentKey }
+        : undefined,
+      focus,
+    });
+  } catch {
+    useZoteroPdf.getState().show(target);
+  } finally {
+    toast.dismiss(opening);
+  }
+}
 
 /**
  * A zotero://open-pdf link (what paper notes link highlights with), as a
@@ -110,13 +185,23 @@ export function ZoteroPdfDialog() {
     };
   }, [target, apiKey, userID]);
 
-  const openInTab = () => {
+  const openInTab = async () => {
     if (!target || state.kind !== "ready") return;
+    // With its paper, so highlights, notes and ideas work there too.
+    const itemKey = await paperOf(target.attachmentKey);
     useReadingStore.getState().open({
-      id: `zotero-att:${target.attachmentKey}`,
+      id: itemKey ? `zotero:${itemKey}` : `zotero-att:${target.attachmentKey}`,
       label: target.label,
       data: state.data,
       annotations: state.annotations,
+      zotero: itemKey
+        ? { itemKey, attachmentKey: target.attachmentKey }
+        : undefined,
+      focus: {
+        annotationKey: target.annotationKey,
+        page: target.page,
+        at: Date.now(),
+      },
     });
     useZoteroPdf.getState().close();
   };
@@ -140,7 +225,7 @@ export function ZoteroPdfDialog() {
               variant="outline"
               size="sm"
               className="h-7 gap-1.5 text-xs"
-              onClick={openInTab}
+              onClick={() => void openInTab()}
             >
               <PanelRightOpenIcon className="size-3.5" />
               Open in a tab
