@@ -52,6 +52,8 @@ tag.
 
 ### Fixed
 
+- Some PDFs in shared projects kept failing to sync with "The relay
+  answered 502". These were files the relay already had.
 - Shared projects stopped making duplicate "(2)" files and needless
   "(conflicted copy)" files after the last update. Copies that are
   identical to the file they copy are removed the next time the project

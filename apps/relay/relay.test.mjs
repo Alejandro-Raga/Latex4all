@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
@@ -319,6 +320,46 @@ test("stores binary files, and deletes unused ones after a day", async () => {
   await settle();
   assert.equal((await fetch(blob, { headers: auth })).status, 404);
   await client.close();
+});
+
+test("answers an upload of a file it has only once it's all sent", async () => {
+  const relay = await startRelay();
+  const { id, token } = await createProject(relay);
+  const blobPath = `/p/${id}/blobs/${hex(32)}`;
+  const body = randomBytes(64 * 1024);
+  const auth = { Authorization: `Bearer ${token}` };
+  assert.equal(
+    (
+      await fetch(`${relay.http}${blobPath}`, {
+        method: "PUT",
+        body,
+        headers: auth,
+      })
+    ).status,
+    201,
+  );
+  // Again, sent slowly: no answer until the last byte is in.
+  const { port } = relay.server.address();
+  const req = http.request({
+    host: "127.0.0.1",
+    port,
+    path: blobPath,
+    method: "PUT",
+    headers: { ...auth, "Content-Length": body.length },
+  });
+  let answered = false;
+  const response = new Promise((resolve) =>
+    req.on("response", (res) => {
+      answered = true;
+      res.resume();
+      resolve(res.statusCode);
+    }),
+  );
+  req.write(body.subarray(0, 1000));
+  await new Promise((r) => setTimeout(r, 100));
+  assert.equal(answered, false);
+  req.end(body.subarray(1000));
+  assert.equal(await response, 200);
 });
 
 test("enforces the storage limits", async () => {

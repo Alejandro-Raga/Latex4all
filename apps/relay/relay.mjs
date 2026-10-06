@@ -128,6 +128,13 @@ function frame(type, seq, data) {
   return Buffer.concat([header, data]);
 }
 
+/** Reads a request body to its end, keeping nothing. */
+async function drain(req) {
+  for await (const _ of req) {
+    // discarded
+  }
+}
+
 /** Reads a request body, or null if it's longer than `limit`. */
 async function readBody(req, limit) {
   const chunks = [];
@@ -282,12 +289,15 @@ export function createRelay({
       const declared = Number(req.headers["content-length"]);
       if (!Number.isFinite(declared)) return send(res, 411);
       if (declared > config.maxFileBytes) return send(res, 413);
+      // Already here, or no room: the upload is read through all the same
+      // before answering. An answer mid-upload is a dropped connection to
+      // the tunnel in front, which tells the app 502 instead.
       if (project.hasBlob(blobId)) {
-        req.resume();
+        await drain(req);
         return send(res, 200);
       }
       if (!project.blobFits(declared)) {
-        req.resume();
+        await drain(req);
         return send(res, 507);
       }
       const data = await readBody(req, declared);
