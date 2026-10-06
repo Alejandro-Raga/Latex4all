@@ -43,7 +43,10 @@ import {
   type ReadingPaper,
   useReadingStore,
 } from "@/stores/reading-store";
-import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
+import {
+  openPaperInTab,
+  useLibraryPreview,
+} from "@/components/zotero-pdf-dialog";
 import {
   buildCollectionTree,
   type ZoteroCollectionNode,
@@ -441,7 +444,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
-  const selectZoteroItem = useCallback((item: ZoteroItemSummary) => {
+  const showZoteroItem = useCallback((item: ZoteroItemSummary) => {
     setSelectedFile({
       source: "zotero",
       id: `zotero:${item.key}`,
@@ -449,6 +452,28 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
       itemKey: item.key,
     });
   }, []);
+
+  const selectZoteroItem = useCallback(
+    (item: ZoteroItemSummary) => {
+      // In a project, a paper opens in a tab of the big PDF pane (its
+      // header moves it here); here when it has no PDF, to say so.
+      if (currentProjectRoot) {
+        void openPaperInTab(item.key, item.title).then((opened) => {
+          if (!opened) {
+            setSelectedFile({
+              source: "zotero",
+              id: `zotero:${item.key}`,
+              label: item.title,
+              itemKey: item.key,
+            });
+          }
+        });
+        return;
+      }
+      showZoteroItem(item);
+    },
+    [currentProjectRoot, showZoteroItem],
+  );
 
   useEffect(() => {
     if (!selectedFile) {

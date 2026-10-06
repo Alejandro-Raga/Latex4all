@@ -24,8 +24,10 @@ import {
   PlusIcon,
   LightbulbIcon,
   TagIcon,
+  PanelRightIcon,
   Trash2Icon,
 } from "lucide-react";
+import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import { toast } from "sonner";
 import { NoteInput } from "@/components/workspace/editor/annotation-card";
 import {
@@ -466,6 +468,25 @@ export function PaperReader({
           ))}
         {inline && !status && count === 0 && <span className="flex-1" />}
         {headerActions}
+        {!inline && paper.zotero && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            onClick={() => {
+              const { itemKey } = paper.zotero ?? {};
+              if (!itemKey) return;
+              // To the Reference panel's preview, beside the editor.
+              useDockStore.getState().setOpen("reference", true);
+              useLibraryPreview.getState().ask({ itemKey, label: paper.label });
+              useReadingStore.getState().close(paper.id);
+            }}
+            title="Move to the side panel"
+            aria-label="Move to the side panel"
+          >
+            <PanelRightIcon className="size-3.5" />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"

@@ -23,6 +23,9 @@ tag.
 
 ### Added
 
+- In a project, a paper picked in the Reference panel opens in a tab of
+  the big PDF pane. A button in the tab's header moves it to the side
+  panel; the side panel's "Open in PDF pane" moves it back.
 - Right-click a highlight on a paper to change its color, write or edit its
   note, or delete it. A deleted highlight's passage also leaves the ideas
   and topics it was added to, and an edited note shows there too.

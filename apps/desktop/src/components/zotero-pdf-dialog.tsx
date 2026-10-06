@@ -13,8 +13,12 @@ import {
   PdfViewer,
 } from "@/components/workspace/preview/pdf-viewer";
 import { toast } from "sonner";
-import { fetchAnnotations, fetchAttachmentParent } from "@/lib/zotero-api";
-import { useZoteroLibrary } from "@/lib/zotero-library";
+import {
+  fetchAnnotations,
+  fetchAttachmentParent,
+  findPdfAttachment,
+} from "@/lib/zotero-api";
+import { pdfOf, useZoteroLibrary } from "@/lib/zotero-library";
 import { zoteroPdfBytes } from "@/lib/zotero-pdf-cache";
 import { useDocumentStore } from "@/stores/document-store";
 import { type PaperFocus, useReadingStore } from "@/stores/reading-store";
@@ -45,8 +49,12 @@ export const useZoteroPdf = create<{
 export const useLibraryPreview = create<{
   /** Whether a Library page is there to show it. */
   listening: number;
-  request: { itemKey: string; label: string; focus: PaperFocus } | null;
-  ask: (request: { itemKey: string; label: string; focus: PaperFocus }) => void;
+  request: { itemKey: string; label: string; focus?: PaperFocus } | null;
+  ask: (request: {
+    itemKey: string;
+    label: string;
+    focus?: PaperFocus;
+  }) => void;
   done: () => void;
 }>((set) => ({
   listening: 0,
@@ -109,6 +117,44 @@ export async function openZoteroPdf(target: Target) {
     });
   } catch {
     useZoteroPdf.getState().show(target);
+  } finally {
+    toast.dismiss(opening);
+  }
+}
+
+/**
+ * Opens a Zotero paper in a tab of the big PDF pane, with its highlights.
+ * False when it has no PDF to open there (then the side preview says why).
+ */
+export async function openPaperInTab(
+  itemKey: string,
+  label: string,
+): Promise<boolean> {
+  const { apiKey, userID } = useZoteroStore.getState();
+  if (!apiKey || !userID) return false;
+  const mirror = useZoteroLibrary.getState().mirror;
+  const opening = toast.loading(`Opening ${label}…`);
+  try {
+    const attachment =
+      (mirror && pdfOf(mirror, itemKey)) ??
+      (await findPdfAttachment(apiKey, userID, itemKey));
+    if (!attachment?.downloadable) return false;
+    const [data, annotations] = await Promise.all([
+      zoteroPdfBytes(apiKey, userID, attachment),
+      fetchAnnotations(apiKey, userID, attachment.key).catch(
+        () => [] as PdfAnnotationRect[],
+      ),
+    ]);
+    useReadingStore.getState().open({
+      id: `zotero:${itemKey}`,
+      label,
+      data,
+      annotations,
+      zotero: { itemKey, attachmentKey: attachment.key },
+    });
+    return true;
+  } catch {
+    return false;
   } finally {
     toast.dismiss(opening);
   }
