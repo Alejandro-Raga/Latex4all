@@ -29,6 +29,7 @@ import {
   MessageSquarePlusIcon,
   PaperclipIcon,
   SearchIcon,
+  StarIcon,
   XIcon,
   type LucideIcon,
   NotebookTextIcon,
@@ -116,6 +117,7 @@ import {
   addCitekeysToZoteroWithToast,
 } from "./citation-check";
 import { TopicMenu } from "./topic-menu";
+import { groupProjects } from "@/lib/project-grouping";
 import { LibraryFilterRow } from "./library-filter";
 import { FilterToggle } from "./vault-filter";
 import { createLogger } from "@/lib/debug/logger";
@@ -1058,20 +1060,51 @@ function ReferenceProjects({
   onBrowse: () => void;
 }) {
   const favorites = useProjectStore((s) => s.favorites);
+  const projectTypes = useProjectStore((s) => s.projectTypes);
+  const addedAt = useProjectStore((s) => s.addedAt);
   const [query, setQuery] = useState("");
-  const [all, setAll] = useState(false);
-  const ordered = useMemo(() => {
-    const starred = (path: string) =>
-      favorites.some((f) => normalizePath(f) === normalizePath(path));
+  // Sections folded shut, by type; with many projects, all but favourites
+  // start folded.
+  const [folded, setFolded] = useState<Set<string> | null>(null);
+  const types = useMemo(
+    () =>
+      new Map(
+        Object.entries(projectTypes).map(([path, type]) => [
+          normalizePath(path),
+          type,
+        ]),
+      ),
+    [projectTypes],
+  );
+  const groups = useMemo(() => {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-    return projects
-      .filter((p) => words.every((w) => p.name.toLowerCase().includes(w)))
-      .sort(
-        (a, b) =>
-          Number(starred(b.path)) - Number(starred(a.path)) ||
-          b.lastOpened - a.lastOpened,
-      );
-  }, [projects, favorites, query]);
+    const typeOf = (path: string) => types.get(normalizePath(path)) ?? "";
+    const matching = projects.filter((p) =>
+      words.every(
+        (w) =>
+          p.name.toLowerCase().includes(w) ||
+          typeOf(p.path).toLowerCase().includes(w),
+      ),
+    );
+    return groupProjects({
+      projects: matching,
+      sort: "type",
+      favorites: new Set(
+        projects
+          .filter((p) =>
+            favorites.some((f) => normalizePath(f) === normalizePath(p.path)),
+          )
+          .map((p) => p.path),
+      ),
+      types: new Map(
+        matching.flatMap((p) => {
+          const type = typeOf(p.path);
+          return type ? [[p.path, type] as const] : [];
+        }),
+      ),
+      addedAt: new Map(Object.entries(addedAt)),
+    });
+  }, [projects, favorites, types, addedAt, query]);
 
   if (projects.length === 0) {
     return (
@@ -1084,7 +1117,19 @@ function ReferenceProjects({
       </button>
     );
   }
-  const shown = all || query ? ordered : ordered.slice(0, PROJECTS_SHOWN);
+  const shut =
+    folded ??
+    new Set(
+      projects.length > PROJECTS_SHOWN * 2
+        ? groups.filter((g) => g.key !== "favorites").map((g) => g.key)
+        : [],
+    );
+  const toggle = (key: string) => {
+    const next = new Set(shut);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    setFolded(next);
+  };
   return (
     <div className="flex flex-col gap-0.5">
       {projects.length > PROJECTS_SHOWN && (
@@ -1093,34 +1138,88 @@ function ReferenceProjects({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Find a project…"
+            placeholder="Find a project or type…"
             aria-label="Find a project"
             className="h-7 pl-7 text-xs"
           />
         </div>
       )}
-      {shown.map((p) => (
+      {groups.map((group) => {
+        const open = query !== "" || !shut.has(group.key);
+        return (
+          <div key={group.key}>
+            {group.label && (
+              <button
+                type="button"
+                onClick={() => toggle(group.key)}
+                aria-expanded={open}
+                className="flex w-full items-center gap-1 px-2 pt-1.5 pb-0.5 text-left font-medium text-[11px] text-muted-foreground uppercase tracking-wide hover:text-foreground"
+              >
+                {open ? (
+                  <ChevronDownIcon className="size-3" />
+                ) : (
+                  <ChevronRightIcon className="size-3" />
+                )}
+                {group.label}
+                <span className="ml-1 normal-case">
+                  {group.projects.length}
+                </span>
+              </button>
+            )}
+            {open &&
+              group.projects.map((p) => (
+                <ProjectRow key={p.path} project={p} onOpen={onOpen} />
+              ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** A project in the list: opens on click; star or remove on right-click. */
+function ProjectRow({
+  project,
+  onOpen,
+}: {
+  project: { path: string; name: string };
+  onOpen: (path: string) => void;
+}) {
+  const starred = useProjectStore((s) =>
+    s.favorites.some((f) => normalizePath(f) === normalizePath(project.path)),
+  );
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
         <button
-          key={p.path}
           type="button"
-          onClick={() => onOpen(p.path)}
-          title={p.path}
-          className="flex items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-muted"
+          onClick={() => onOpen(project.path)}
+          title={project.path}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-muted"
         >
           <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate">{p.name}</span>
+          <span className="min-w-0 flex-1 truncate">{project.name}</span>
         </button>
-      ))}
-      {!query && ordered.length > PROJECTS_SHOWN && (
-        <button
-          type="button"
-          onClick={() => setAll(!all)}
-          className="px-2 py-0.5 text-left text-muted-foreground text-xs hover:text-foreground"
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-48">
+        <ContextMenuItem
+          onClick={() =>
+            useProjectStore.getState().toggleFavorite(project.path)
+          }
         >
-          {all ? "Show fewer" : `Show all ${ordered.length}`}
-        </button>
-      )}
-    </div>
+          <StarIcon className="size-3.5" />
+          {starred ? "Unstar" : "Star"}
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() =>
+            useProjectStore.getState().removeRecentProject(project.path)
+          }
+        >
+          <XIcon className="size-3.5" />
+          Remove from the list
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

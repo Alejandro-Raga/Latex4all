@@ -23,6 +23,13 @@ tag.
 
 ### Added
 
+- The Library's Projects list shows every project, grouped by type
+  (favourites first), with groups that fold away, a search by name or type,
+  and a right-click menu to star a project or remove it from the list.
+  Projects with no type chosen get one from their document class (article,
+  presentation, thesis, CV, letter…).
+- The projects page keeps every project opened, not only the last ten;
+  ones that had dropped off come back.
 - In a project, a paper picked in the Reference panel opens in a tab of
   the big PDF pane. A button in the tab's header moves it to the side
   panel; the side panel's "Open in PDF pane" moves it back.

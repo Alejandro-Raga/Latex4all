@@ -10,6 +10,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readFile, readTextFile, stat } from "@tauri-apps/plugin-fs";
+import { rememberedRoots } from "@/lib/workspace-memory";
 import { groupProjects, type ProjectSort } from "@/lib/project-grouping";
 import { syncProjectTypes } from "@/lib/project-type-sync";
 import {
@@ -218,6 +219,41 @@ export function ProjectPicker() {
       cancelled = true;
     };
   }, [addRecentProject, recentProjects.length]);
+
+  // Projects opened before every one was kept (the list held ten): found
+  // again by the workspace each left behind, when still on disk.
+  const recoveredRef = useRef(false);
+  useEffect(() => {
+    if (recoveredRef.current) return;
+    recoveredRef.current = true;
+    let cancelled = false;
+    void (async () => {
+      const known = new Set(
+        useProjectStore
+          .getState()
+          .recentProjects.map((p) =>
+            p.path.replace(/[\\/]+$/, "").toLowerCase(),
+          ),
+      );
+      for (const root of rememberedRoots()) {
+        const path = root.replace(/[\\/]+$/, "");
+        if (known.has(path.toLowerCase())) continue;
+        if (!(await exists(path).catch(() => false)) || cancelled) continue;
+        const [modified, created] = await Promise.all([
+          getProjectModifiedAt(path),
+          getProjectCreatedAt(path),
+        ]);
+        if (cancelled) return;
+        addRecentProject(path, {
+          lastOpened: modified ?? 0,
+          addedAt: created ?? modified ?? undefined,
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [addRecentProject]);
 
   const renameRecentProject = useProjectStore((s) => s.renameRecentProject);
   const setLastProjectFolder = useProjectStore((s) => s.setLastProjectFolder);

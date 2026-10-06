@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useProjectStore } from "@/stores/project-store";
+import { MAX_RECENT, useProjectStore } from "@/stores/project-store";
 
 const store = () => useProjectStore.getState();
 
@@ -47,15 +47,19 @@ describe("useProjectStore", () => {
       });
     });
 
-    it("limits to MAX_RECENT (10) entries", () => {
+    it("keeps every project opened, up to MAX_RECENT", () => {
       const store = useProjectStore.getState();
       for (let i = 0; i < 12; i++) {
         store.addRecentProject(`/project-${i}`);
       }
+      expect(useProjectStore.getState().recentProjects).toHaveLength(12);
+      for (let i = 12; i < MAX_RECENT + 2; i++) {
+        store.addRecentProject(`/project-${i}`);
+      }
       const { recentProjects } = useProjectStore.getState();
-      expect(recentProjects).toHaveLength(10);
+      expect(recentProjects).toHaveLength(MAX_RECENT);
       // Most recent should be first
-      expect(recentProjects[0].path).toBe("/project-11");
+      expect(recentProjects[0].path).toBe(`/project-${MAX_RECENT + 1}`);
     });
 
     it("extracts name from path correctly", () => {
@@ -124,18 +128,20 @@ describe("useProjectStore", () => {
       // The whole point of a star: it is the project you always want to see.
       store().addRecentProject("/keep");
       store().toggleFavorite("/keep");
-      for (let i = 0; i < 20; i++) store().addRecentProject(`/p${i}`);
+      for (let i = 0; i < MAX_RECENT + 10; i++)
+        store().addRecentProject(`/p${i}`);
 
       const paths = store().recentProjects.map((p) => p.path);
       expect(paths).toContain("/keep");
       // Favourites sit outside the cap rather than eating into it.
-      expect(paths.filter((p) => p !== "/keep")).toHaveLength(10);
+      expect(paths.filter((p) => p !== "/keep")).toHaveLength(MAX_RECENT);
     });
 
     it("lets an un-starred project fall past the cap again", () => {
       store().addRecentProject("/old");
       store().toggleFavorite("/old");
-      for (let i = 0; i < 15; i++) store().addRecentProject(`/p${i}`);
+      for (let i = 0; i < MAX_RECENT + 5; i++)
+        store().addRecentProject(`/p${i}`);
       expect(store().recentProjects.map((p) => p.path)).toContain("/old");
 
       store().toggleFavorite("/old");

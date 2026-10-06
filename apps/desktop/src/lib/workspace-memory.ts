@@ -22,7 +22,31 @@ export interface SavedWorkspace {
   active: string;
 }
 
-const KEY = (root: string) => `latex4all-workspace:${root}`;
+const PREFIX = "latex4all-workspace:";
+const KEY = (root: string) => `${PREFIX}${root}`;
+
+/** Every project this app has a workspace saved for: each one opened. */
+export function rememberedRoots(): string[] {
+  try {
+    const roots: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(PREFIX)) roots.push(key.slice(PREFIX.length));
+    }
+    return roots;
+  } catch {
+    return [];
+  }
+}
+
+/** Forgets a project's saved workspace (it was removed from the list). */
+export function forgetWorkspace(root: string) {
+  try {
+    localStorage.removeItem(KEY(root));
+  } catch {
+    // Nothing kept, nothing to forget.
+  }
+}
 
 /** A paper tab as it can be reopened later; null when it can't be (no source). */
 export function savedTab(paper: ReadingPaper): SavedTab | null {

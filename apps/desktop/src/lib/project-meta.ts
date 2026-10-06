@@ -12,6 +12,7 @@
 import {
   exists,
   mkdir,
+  readDir,
   readTextFile,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
@@ -117,14 +118,58 @@ export async function readProjectType(
 ): Promise<string | null> {
   try {
     const path = metaPath(projectPath);
-    if (!(await exists(path))) return null;
-    const meta = JSON.parse(await readTextFile(path)) as ProjectMeta;
-    const type = typeof meta.type === "string" ? normalizeType(meta.type) : "";
-    return type.length > 0 ? type : null;
+    if (await exists(path)) {
+      const meta = JSON.parse(await readTextFile(path)) as ProjectMeta;
+      const type =
+        typeof meta.type === "string" ? normalizeType(meta.type) : "";
+      if (type.length > 0) return type;
+    }
+    // None chosen: what the document's class says it is.
+    return await guessProjectType(projectPath);
   } catch (err) {
     log.warn(`Could not read project type for ${projectPath}: ${String(err)}`);
     return null;
   }
+}
+
+/** A project's type from its document class (\documentclass{beamer}…). */
+export function typeOfDocumentClass(source: string): string | null {
+  const m = source.match(/\\documentclass\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/);
+  if (!m) return null;
+  const cls = m[1].trim().toLowerCase();
+  if (cls === "beamer") return "Presentation";
+  if (/poster|tikzposter|baposter/.test(cls)) return "Poster";
+  if (/^(moderncv|altacv|awesome-cv|res|curve|europasscv|resume)/.test(cls)) {
+    return "CV";
+  }
+  if (/^(letter|scrlttr2|newlfm|lettre)/.test(cls)) return "Letter";
+  if (/thesis|dissertation/.test(cls)) return "Thesis";
+  if (/^(book|scrbook|memoir)$/.test(cls)) return "Book";
+  if (/^(report|scrreprt)$/.test(cls)) return "Report";
+  if (
+    /^(article|scrartcl|elsarticle|revtex|ieeetran|amsart|llncs|acmart|apa|aea|jss|sn-jnl|svjour|mdpi|elife|interact|aastex)/.test(
+      cls,
+    )
+  ) {
+    return "Article";
+  }
+  return null;
+}
+
+/** The type the project's main .tex file (its document class) points to. */
+async function guessProjectType(projectPath: string): Promise<string | null> {
+  const entries = await readDir(projectPath).catch(() => []);
+  const tex = entries
+    .filter((e) => e.isFile && e.name.toLowerCase().endsWith(".tex"))
+    .map((e) => e.name)
+    // main.tex first, as LaTeX projects usually name it.
+    .sort((a, b) => Number(b === "main.tex") - Number(a === "main.tex"));
+  for (const name of tex.slice(0, 5)) {
+    const source = await readTextFile(`${projectPath}/${name}`).catch(() => "");
+    const type = typeOfDocumentClass(source.slice(0, 4000));
+    if (type) return type;
+  }
+  return null;
 }
 
 /**

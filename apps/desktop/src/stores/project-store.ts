@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { ProjectSort } from "@/lib/project-grouping";
+import { forgetWorkspace } from "@/lib/workspace-memory";
 
 interface RecentProject {
   path: string;
@@ -50,12 +51,13 @@ interface ProjectState {
 }
 
 /**
- * How many non-favourite projects to remember.
+ * How many non-favourite projects to remember: every project opened, in
+ * practice (a project leaves the list when removed from it), with a ceiling
+ * only so the list can't grow without end.
  *
- * Favourites are held outside this limit. Starring something and then losing it
- * because ten other projects were opened would make the star meaningless.
+ * Favourites are held outside this limit.
  */
-const MAX_RECENT = 10;
+export const MAX_RECENT = 500;
 
 function normalizeRecentPath(path: string): string {
   return path.replace(/[\\/]+$/, "");
@@ -202,6 +204,8 @@ export const useProjectStore = create<ProjectState>()(
 
       removeRecentProject: (path) => {
         const normalizedPath = normalizeRecentPath(path);
+        // Or it would be found again among the projects once opened.
+        forgetWorkspace(normalizedPath);
         set((state) => {
           const projectTypes = { ...state.projectTypes };
           const addedAt = { ...state.addedAt };
