@@ -1349,7 +1349,8 @@ export function LatexEditor() {
     import("@replit/codemirror-vim").then(({ vim }) => {
       if (viewRef.current !== view) return;
       view.dispatch({
-        effects: vimCompartmentRef.current.reconfigure(vim()),
+        // With its mode shown under the editor (NORMAL, INSERT…).
+        effects: vimCompartmentRef.current.reconfigure(vim({ status: true })),
       });
     });
   }, [vimMode, activeFileId, isTextFile]);

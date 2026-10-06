@@ -44,6 +44,9 @@ interface SettingsState {
   compilerBackend: CompilerBackend;
   setCompilerBackend: (backend: CompilerBackend) => void;
   vimMode: boolean;
+  /** Vim keys switched on in Settings since they left the ribbon, where
+   *  they were easy to turn on by accident. */
+  vimChosen?: boolean;
   setVimMode: (enabled: boolean) => void;
   grammarCheckEnabled: boolean;
   setGrammarCheckEnabled: (enabled: boolean) => void;
@@ -90,7 +93,7 @@ export const useSettingsStore = create<SettingsState>()(
       compilerBackend: "tectonic",
       setCompilerBackend: (backend) => set({ compilerBackend: backend }),
       vimMode: false,
-      setVimMode: (enabled) => set({ vimMode: enabled }),
+      setVimMode: (enabled) => set({ vimMode: enabled, vimChosen: enabled }),
       // Off by default — only ever talks to a server the user runs
       // themselves (e.g. `brew install languagetool`), never a cloud
       // service, but shouldn't make even a localhost call without opt-in.
@@ -147,6 +150,9 @@ export const useSettingsStore = create<SettingsState>()(
               : "light";
         return {
           ...merged,
+          // On from before, maybe by accident (a click and a letter is
+          // selected, typing doesn't write): off until turned on again.
+          vimMode: merged.vimMode && saved.vimChosen === true,
           checkLanguage: supportedCheckLanguage(merged.checkLanguage),
           pdfThemeMain: theme("pdfThemeMain", "pdfDarkModeMain"),
           pdfThemeReference: theme("pdfThemeReference", "pdfDarkModeReference"),

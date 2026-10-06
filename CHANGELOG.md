@@ -52,6 +52,10 @@ tag.
 
 ### Fixed
 
+- Clicking in the editor selected a single letter and typing didn't write:
+  Vim keys had been left on. They are now off until switched on again in
+  Settings, and while they're on, the editor shows the Vim mode (NORMAL,
+  INSERT…) below the text.
 - Selecting text and highlighting on old scanned papers lines up with the
   printed words. Before, the selection drifted away from them partway
   through a line, and highlights saved from it came out shifted.
