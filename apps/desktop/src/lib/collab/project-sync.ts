@@ -58,6 +58,8 @@ interface Hooks {
   /** Files were added, removed or moved, so open editors may need to rebind. */
   onLayoutChanged?: () => void;
   onError?: (message: string) => void;
+  /** A file went through after all (sent or received): its warning goes. */
+  onSynced?: (path: string) => void;
 }
 
 function conflictPath(path: string, taken: (path: string) => boolean) {
@@ -387,6 +389,7 @@ export class ProjectSync {
         if (downloaded) {
           known.blobId = shared.blobId;
           known.size = shared.size;
+          this.hooks.onSynced?.(shared.path);
         }
       }
     }
@@ -412,6 +415,7 @@ export class ProjectSync {
             : this.workspace.download(shared.path, shared.blobId),
         );
         if (!written) continue;
+        this.hooks.onSynced?.(shared.path);
       }
       this.known.set(
         shared.fileId,
@@ -477,6 +481,7 @@ export class ProjectSync {
           fileId = addBlobFile(this.doc, file.path, blobId, size);
         }, LOCAL);
         this.known.set(fileId, { path: file.path, blobId, size });
+        this.hooks.onSynced?.(file.path);
       } catch (err) {
         this.uploadFailed(attempt, err);
         this.hooks.onError?.(
@@ -509,6 +514,7 @@ export class ProjectSync {
           }, LOCAL);
           known.blobId = blobId;
           known.size = size;
+          this.hooks.onSynced?.(mine.path);
         } catch (err) {
           this.uploadFailed(attempt, err);
           this.hooks.onError?.(

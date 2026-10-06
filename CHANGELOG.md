@@ -76,6 +76,9 @@ tag.
 
 ### Fixed
 
+- A "Couldn't share" warning in a shared project now goes away once the
+  file goes through on a later try, says briefly why it failed, and no
+  longer claims it waits for the file to change.
 - Esc, or a click elsewhere, closes the idea and topic picker, a
   highlight's menu and the note box.
 - "Connect to topic" in the Zotero library's menu sat off to the right.

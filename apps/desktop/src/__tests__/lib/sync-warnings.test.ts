@@ -42,4 +42,21 @@ describe("sync warnings", () => {
         ?.id,
     ).toBe("get:plot.png");
   });
+
+  it("say briefly why a file didn't go, and that it's tried again", () => {
+    expect(
+      warningForError("Couldn't share paper.pdf: The relay answered 502.")
+        ?.text,
+    ).toBe(
+      "Couldn't share paper.pdf: the relay didn't answer. Trying again in a few minutes.",
+    );
+    expect(
+      warningForError(
+        "Couldn't share a.pdf: Couldn't reach the relay: error sending request",
+      )?.text,
+    ).toContain(": no connection to the relay.");
+    expect(warningForError("Couldn't share a.pdf: something odd")?.text).toBe(
+      "Couldn't share a.pdf. Trying again in a few minutes.",
+    );
+  });
 });

@@ -58,6 +58,23 @@ export function usageWarnings(usage: Usage): SyncWarning[] {
  * A warning for an error from the sync (a relay error code, or a message
  * about one file), or null if it isn't worth keeping on show.
  */
+/** Why a file didn't go through, in a few words (with its leading ": "). */
+function plainReason(reason: string): string {
+  if (/relay answered 5\d\d/i.test(reason)) return ": the relay didn't answer";
+  if (
+    /couldn't reach the relay|error sending request|timed? ?out/i.test(reason)
+  ) {
+    return ": no connection to the relay";
+  }
+  if (/relay answered 4\d\d/i.test(reason)) {
+    return `: the relay refused it (${reason.match(/\d{3}/)?.[0]})`;
+  }
+  if (/no such file|not found|os error 2/i.test(reason)) {
+    return ": the file couldn't be read";
+  }
+  return "";
+}
+
 export function warningForError(message: string): SyncWarning | null {
   switch (message) {
     case "quota":
@@ -96,16 +113,17 @@ export function warningForError(message: string): SyncWarning | null {
         text: `${path} is over 25 MB, so it isn't shared.`,
       };
     }
+    const why = plainReason(reason);
     return action === "share"
       ? {
           id: `share:${path}`,
           level: "warning",
-          text: `Couldn't share ${path}. It will be tried again when it changes.`,
+          text: `Couldn't share ${path}${why}. Trying again in a few minutes.`,
         }
       : {
           id: `get:${path}`,
           level: "warning",
-          text: `Couldn't get the latest ${path}. It will be tried again.`,
+          text: `Couldn't get the latest ${path}${why}. Trying again.`,
         };
   }
   return { id: message, level: "warning", text: message };

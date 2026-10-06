@@ -253,6 +253,7 @@ class Device {
   sync: ProjectSync | null = null;
   saved: { seq: number; local: string; state: Uint8Array } | null = null;
   errors: string[] = [];
+  synced: string[] = [];
   /** Where overlapping edits were found on catching up. */
   conflicts: Array<{ path: string; from: number }> = [];
   private buffered: SyncEvent[] | null = null;
@@ -323,6 +324,7 @@ class Device {
     if (name) metaMap(session.doc).set("name", name);
     this.sync = new ProjectSync(session.doc, this.workspace, known, {
       onError: (message) => this.errors.push(message),
+      onSynced: (path) => this.synced.push(path),
     });
     await this.sync.start();
     for (const event of this.buffered?.splice(0) ?? []) session.handle(event);
@@ -474,6 +476,8 @@ describe("shared projects", () => {
     await b.open();
     await settleAll(a, b);
     expect(b.workspace.snapshot()["attachments/paper.pdf"]).toBe("PDFDATA");
+    // And says so, so the warning about it can go.
+    expect(a.synced).toContain("attachments/paper.pdf");
   });
 
   it("applies others' latest text without waiting on slow downloads", async () => {

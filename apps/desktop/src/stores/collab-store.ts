@@ -583,7 +583,19 @@ export const useCollabStore = create<CollabState>()(
           session.doc,
           documentStoreWorkspace(root, info.link),
           known,
-          { onLayoutChanged: bumpRevision, onError: warnAbout },
+          {
+            onLayoutChanged: bumpRevision,
+            onError: warnAbout,
+            onSynced: (path) => {
+              const { warnings } = useCollabStore.getState();
+              const ids = [`share:${path}`, `get:${path}`];
+              if (warnings.some((w) => ids.includes(w.id))) {
+                useCollabStore.setState({
+                  warnings: warnings.filter((w) => !ids.includes(w.id)),
+                });
+              }
+            },
+          },
         );
         await target.sync.start();
         if (active !== target) return;
