@@ -318,6 +318,20 @@ export function PaperReader({
     [canHighlight],
   );
 
+  // Esc closes the highlight's menu and the note box too.
+  const anyOpen = Boolean(noteFor || (highlightMenu && !highlightMenu.group));
+  useEffect(() => {
+    if (!anyOpen) return;
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setNoteFor(null);
+      setHighlightMenu((m) => (m && !m.group ? null : m));
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+  }, [anyOpen]);
+
   const dismiss = () => {
     setSelection(null);
     window.getSelection()?.removeAllRanges();

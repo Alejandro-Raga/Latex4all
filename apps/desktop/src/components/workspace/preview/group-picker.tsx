@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LightbulbIcon, Loader2Icon, PlusIcon, TagIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { PassageGroup } from "@/lib/vault/add-passage";
@@ -21,6 +21,25 @@ export function GroupPicker({
   onCancel: () => void;
 }) {
   const index = useVaultStore((s) => s.index);
+  const boxRef = useRef<HTMLDivElement>(null);
+  // Esc, or a click anywhere else, closes it, wherever the focus is.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onCancel();
+      }
+    };
+    const click = (e: MouseEvent) => {
+      if (!boxRef.current?.contains(e.target as Node)) onCancel();
+    };
+    window.addEventListener("keydown", key, true);
+    window.addEventListener("mousedown", click, true);
+    return () => {
+      window.removeEventListener("keydown", key, true);
+      window.removeEventListener("mousedown", click, true);
+    };
+  }, [onCancel]);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -59,13 +78,13 @@ export function GroupPicker({
 
   return (
     <div
+      ref={boxRef}
       className="fixed z-50 w-72 rounded-lg border border-border bg-background p-2 shadow-xl"
       style={{
         left: Math.min(anchor.left, window.innerWidth - 300),
         top: Math.min(anchor.top + 8, window.innerHeight - 320),
       }}
       onKeyDown={(e) => {
-        if (e.key === "Escape") onCancel();
         if (e.key === "ArrowDown") {
           e.preventDefault();
           setActive((i) => Math.min(i + 1, options.length - 1));

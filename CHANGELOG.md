@@ -23,6 +23,9 @@ tag.
 
 ### Added
 
+- "Connect to idea" in the Zotero library's right-click menu, next to
+  "Connect to topic": the paper goes on the idea note's list of papers
+  (the note is made if it's new).
 - Sort the vault's notes by title, first author or year (newest or oldest),
   from the menu next to the search. Papers, ideas and topics keep their own
   sections. The same menu orders a note's links, and Zotero references can
@@ -52,6 +55,9 @@ tag.
 
 ### Fixed
 
+- Esc, or a click elsewhere, closes the idea and topic picker, a
+  highlight's menu and the note box.
+- "Connect to topic" in the Zotero library's menu sat off to the right.
 - A highlight's link in a note ("p. 2") opens the paper at that highlight
   in a PDF tab when a project is open, and in the Library's preview
   otherwise, with highlighting, notes and ideas all available. Before, it

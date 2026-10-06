@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   CheckIcon,
   HashIcon,
+  LightbulbIcon,
   PlusIcon,
   ShapesIcon,
   Trash2Icon,
@@ -26,7 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { connectToTopic } from "@/lib/vault/connect-topic";
+import { connectToIdea, connectToTopic } from "@/lib/vault/connect-topic";
 import { chooseNoteKind, deleteNote } from "@/lib/vault/note-changes";
 import { findNote, type NoteKind } from "@/lib/vault/vault-index";
 import { topicNotes, topicsOf } from "@/lib/vault/topics";
@@ -35,21 +36,28 @@ import { useKindChoices, useVaultStore } from "@/stores/vault-store";
 /** The note a menu acts on: its name, found (or made) when chosen. */
 type Resolve = () => Promise<string>;
 
+type Group = "topic" | "idea";
+
 const useNewTopic = create<{
   resolve: Resolve | null;
-  ask: (resolve: Resolve) => void;
+  group: Group;
+  ask: (resolve: Resolve, group?: Group) => void;
   close: () => void;
 }>((set) => ({
   resolve: null,
-  ask: (resolve) => set({ resolve }),
+  group: "topic",
+  ask: (resolve, group = "topic") => set({ resolve, group }),
   close: () => set({ resolve: null }),
 }));
 
-async function connect(resolve: Resolve, topic: string) {
+async function connect(resolve: Resolve, topic: string, group: Group) {
   const id = toast.loading(`Connecting to ${topic}…`);
   try {
     const note = await resolve();
-    const name = await connectToTopic(note, topic);
+    const name = await (group === "idea" ? connectToIdea : connectToTopic)(
+      note,
+      topic,
+    );
     toast.success(`${note} is in ${name}`, { id });
   } catch (err) {
     toast.error(err instanceof Error ? err.message : String(err), { id });
@@ -63,40 +71,67 @@ async function connect(resolve: Resolve, topic: string) {
 export function TopicMenu({
   noteName,
   resolve,
+  group = "topic",
 }: {
   /** Known when the note exists already, to tick its topics. */
   noteName?: string;
   resolve: Resolve;
+  /** "idea": the same, for the vault's ideas. */
+  group?: Group;
 }) {
   const index = useVaultStore((s) => s.index);
-  const topics = useMemo(() => (index ? topicNotes(index) : []), [index]);
+  const topics = useMemo(
+    () =>
+      !index
+        ? []
+        : group === "idea"
+          ? index.list
+              .filter((n) => n.kind === "idea")
+              .sort((a, b) => a.name.localeCompare(b.name))
+          : topicNotes(index),
+    [index, group],
+  );
   const note = index && noteName ? findNote(index, noteName) : undefined;
-  const joined = index && note ? topicsOf(index, note) : new Set<string>();
+  const joined =
+    index && note
+      ? group === "idea"
+        ? new Set(
+            topics
+              .filter((t) => t.outgoing.includes(note.name))
+              .map((t) => t.name),
+          )
+        : topicsOf(index, note)
+      : new Set<string>();
+  const Icon = group === "idea" ? LightbulbIcon : HashIcon;
   return (
     <ContextMenuSub>
       <ContextMenuSubTrigger>
-        <HashIcon className="size-3.5" />
-        Connect to topic
+        <Icon className="size-3.5" />
+        <span className="flex-1 text-left">
+          Connect to {group === "idea" ? "idea" : "topic"}
+        </span>
       </ContextMenuSubTrigger>
       <ContextMenuSubContent className="max-h-80 w-56 overflow-y-auto">
         {topics.map((t) => (
           <ContextMenuItem
             key={t.path}
             disabled={joined.has(t.name)}
-            onClick={() => connect(resolve, t.name)}
+            onClick={() => connect(resolve, t.name, group)}
           >
             {joined.has(t.name) ? (
               <CheckIcon className="size-3.5" />
             ) : (
-              <HashIcon className="size-3.5 opacity-40" />
+              <Icon className="size-3.5 opacity-40" />
             )}
             <span className="truncate">{t.name}</span>
           </ContextMenuItem>
         ))}
         {topics.length > 0 && <ContextMenuSeparator />}
-        <ContextMenuItem onClick={() => useNewTopic.getState().ask(resolve)}>
+        <ContextMenuItem
+          onClick={() => useNewTopic.getState().ask(resolve, group)}
+        >
           <PlusIcon className="size-3.5" />
-          New topic…
+          New {group === "idea" ? "idea" : "topic"}…
         </ContextMenuItem>
       </ContextMenuSubContent>
     </ContextMenuSub>
@@ -188,12 +223,18 @@ export function DeleteNoteItem({ noteName }: { noteName: string }) {
 /** Names a new topic; mounted once, opened from any TopicMenu. */
 export function NewTopicDialog() {
   const resolve = useNewTopic((s) => s.resolve);
+  const group = useNewTopic((s) => s.group);
   const close = useNewTopic((s) => s.close);
   const index = useVaultStore((s) => s.index);
   const [name, setName] = useState("");
   const existing = useMemo(
-    () => (index ? topicNotes(index).map((t) => t.name) : []),
-    [index],
+    () =>
+      !index
+        ? []
+        : group === "idea"
+          ? index.list.filter((n) => n.kind === "idea").map((n) => n.name)
+          : topicNotes(index).map((t) => t.name),
+    [index, group],
   );
   // Close to an existing topic? Offer it, rather than a near-duplicate.
   const similar = name.trim()
@@ -203,7 +244,7 @@ export function NewTopicDialog() {
     : [];
   const submit = (topic: string) => {
     if (!resolve || !topic.trim()) return;
-    connect(resolve, topic.trim());
+    connect(resolve, topic.trim(), group);
     setName("");
     close();
   };
@@ -219,7 +260,7 @@ export function NewTopicDialog() {
     >
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>New topic</DialogTitle>
+          <DialogTitle>New {group === "idea" ? "idea" : "topic"}</DialogTitle>
         </DialogHeader>
         <form
           className="space-y-3"
@@ -233,7 +274,7 @@ export function NewTopicDialog() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Absorptive capacity"
-            aria-label="Topic name"
+            aria-label={group === "idea" ? "Idea name" : "Topic name"}
           />
           {similar.length > 0 && (
             <div className="flex flex-wrap gap-1.5">

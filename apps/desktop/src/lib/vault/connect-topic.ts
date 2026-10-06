@@ -17,6 +17,9 @@ import {
   withTopicProperty,
 } from "./topics";
 import { findNote } from "./vault-index";
+import { newGroupNote } from "./add-passage";
+import { kindFolder } from "./kind-folders";
+import { safeNoteName } from "./paper-note";
 
 /** Returns the topic's note name. */
 export async function connectToTopic(
@@ -64,6 +67,53 @@ export async function connectToTopic(
   const { apiKey, userID } = useZoteroStore.getState();
   if (note.zoteroKey && apiKey && userID) {
     await addZoteroTag(apiKey, userID, note.zoteroKey, `topic: ${name}`).catch(
+      () => {},
+    );
+  }
+  return name;
+}
+
+/**
+ * Connects a note (a paper) to an idea: the idea note lists it under its
+ * Literature (made if new, as a highlight filed there would make it), and
+ * in Zotero the paper gets the idea's tag. Returns the idea's note name.
+ */
+export async function connectToIdea(
+  noteName: string,
+  idea: string,
+): Promise<string> {
+  await useVaultStore.getState().ensureVault();
+  const { source, index, noteWritten } = useVaultStore.getState();
+  if (!source || !index) throw new Error("Connect your vault first.");
+  const note = findNote(index, noteName);
+  if (!note) throw new Error(`“${noteName}” isn't in the vault.`);
+  const id = topicId(idea);
+  const existing = index.list.find(
+    (n) =>
+      n.kind === "idea" &&
+      (n.name.toLowerCase() === idea.trim().toLowerCase() ||
+        n.frontmatter.zotero_idea === id),
+  );
+  const name = existing?.name ?? safeNoteName(idea);
+  if (!name) throw new Error("Give the idea a name.");
+  if (existing) {
+    const { text, version } = await source.readNote(existing.path);
+    const next = withPaper(text, note);
+    if (next !== text) {
+      await source.writeNote(existing.path, next, version);
+      noteWritten(existing.path, next);
+    }
+  } else {
+    const folder = kindFolder("idea");
+    const path = folder ? `${folder}/${name}.md` : `${name}.md`;
+    const today = new Date().toISOString().slice(0, 10);
+    const text = withPaper(newGroupNote("idea", name, today), note);
+    await source.createNote(path, text);
+    noteWritten(path, text);
+  }
+  const { apiKey, userID } = useZoteroStore.getState();
+  if (note.zoteroKey && apiKey && userID) {
+    await addZoteroTag(apiKey, userID, note.zoteroKey, `idea: ${name}`).catch(
       () => {},
     );
   }

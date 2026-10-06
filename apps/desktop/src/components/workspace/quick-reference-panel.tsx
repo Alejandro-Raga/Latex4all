@@ -1401,6 +1401,13 @@ function ZoteroItemRow({
             vaultNoteName ?? (await addPaperToVault(item.key)).name
           }
         />
+        <TopicMenu
+          group="idea"
+          noteName={vaultNoteName}
+          resolve={async () =>
+            vaultNoteName ?? (await addPaperToVault(item.key)).name
+          }
+        />
         {projectOpen && <ContextMenuSeparator />}
         {!projectOpen ? null : bibFiles.length === 0 ? (
           <ContextMenuItem

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { newGroupNote, passageMarkdown, withPassage } from "./add-passage";
 import { parseNote } from "./parse";
+import { withPaper } from "./topics";
 import { buildVaultIndex, findNote } from "./vault-index";
 
 const index = buildVaultIndex([
@@ -114,5 +115,17 @@ describe("a highlight filed under an idea", () => {
       text.startsWith("My own thoughts on this.\n\n%% begin zotero %%"),
     ).toBe(true);
     expect(text).toContain("> first");
+  });
+});
+
+describe("a whole paper connected to an idea", () => {
+  it("is listed under the idea's Literature, once", () => {
+    const note = withPaper(
+      newGroupNote("idea", "Science is harder", "2026-10-06"),
+      bloom,
+    );
+    const literature = note.slice(note.indexOf("## Literature"));
+    expect(literature).toContain("[[Bloom2020");
+    expect(withPaper(note, bloom)).toBe(note);
   });
 });
