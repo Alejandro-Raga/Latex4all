@@ -23,6 +23,10 @@ tag.
 
 ### Added
 
+- Help: a short manual of the app, with a search, from the Projects page's
+  sidebar, the ? button in a project's sidebar, or ⌘K. It covers writing,
+  references, reading papers, the vault, ideas and topics, the AI
+  assistants, shared projects and the keyboard shortcuts.
 - Your own writing can go into ideas and topics too: select text in the
   editor or in the compiled PDF and choose "Add to idea…" or "Add to
   topic…". It's quoted under the project's name, with a link that opens the

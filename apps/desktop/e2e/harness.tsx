@@ -38,6 +38,7 @@ import { useDocumentStore } from "@/stores/document-store";
 import { installWheelSideways } from "@/lib/wheel-sideways";
 import { ChatComposer } from "@/components/claude-chat/chat-composer";
 import { LibraryView } from "@/components/library-view";
+import { HelpDialog, useHelp } from "@/components/help-view";
 import { BugReportDialog, useBugReport } from "@/components/bug-report-dialog";
 import { useAiUsage } from "@/lib/ai-usage";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
@@ -570,6 +571,20 @@ if (scenario === "bug") {
     >
       <ThemeBridge />
       <BugReportDialog />
+    </ThemeProvider>,
+  );
+}
+
+if (scenario === "help") {
+  useHelp.getState().show();
+  root.render(
+    <ThemeProvider
+      attribute="class"
+      themes={THEME_IDS}
+      forcedTheme={params.get("theme") ?? undefined}
+    >
+      <ThemeBridge />
+      <HelpDialog />
     </ThemeProvider>,
   );
 }

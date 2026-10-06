@@ -46,6 +46,7 @@ import {
   SettingsIcon,
   GithubIcon,
   UsersIcon,
+  CircleHelpIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useProjectStore } from "@/stores/project-store";
@@ -81,6 +82,7 @@ import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
 import { ThemeMenuButton } from "@/components/theme-picker";
 import { LibraryView } from "@/components/library-view";
+import { HelpView } from "@/components/help-view";
 import { useBugReport } from "@/components/bug-report-dialog";
 
 const log = createLogger("project-picker");
@@ -99,7 +101,7 @@ const SORTS: Array<{ value: ProjectSort; label: string }> = [
   { value: "type", label: "Type" },
 ];
 
-type ProjectPickerSection = "projects" | "library" | "settings";
+type ProjectPickerSection = "projects" | "library" | "settings" | "help";
 
 type RecentProject = {
   path: string;
@@ -501,6 +503,14 @@ export function ProjectPicker() {
             Settings
           </ProjectNavButton>
           <ProjectNavButton
+            active={activeSection === "help"}
+            collapsed={isSidebarCollapsed}
+            icon={CircleHelpIcon}
+            onClick={() => setActiveSection("help")}
+          >
+            Help
+          </ProjectNavButton>
+          <ProjectNavButton
             active={false}
             collapsed={isSidebarCollapsed}
             icon={BugIcon}
@@ -542,6 +552,22 @@ export function ProjectPicker() {
       <main className="flex min-w-0 flex-1 flex-col">
         {activeSection === "library" ? (
           <LibraryView />
+        ) : activeSection === "help" ? (
+          <div className="flex h-full min-h-0 flex-col">
+            <header className="flex h-[calc(48px+var(--titlebar-height))] shrink-0 items-center border-border/70 border-b bg-background px-5 pt-[var(--titlebar-height)]">
+              <h1 className="font-semibold text-lg leading-none">Help</h1>
+            </header>
+            <HelpView
+              onNavigate={(target) => {
+                if (target.kind === "settings") {
+                  setSettingsDetailSection(target.section);
+                  setActiveSection("settings");
+                } else {
+                  setActiveSection(target.kind);
+                }
+              }}
+            />
+          </div>
         ) : (
           <>
             <header className="flex h-[calc(48px+var(--titlebar-height))] shrink-0 flex-nowrap items-center gap-3 border-border/70 border-b bg-background px-5">

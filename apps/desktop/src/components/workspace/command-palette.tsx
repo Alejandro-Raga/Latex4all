@@ -12,7 +12,9 @@ import {
   QuoteIcon,
   RefreshCwIcon,
   SettingsIcon,
+  CircleHelpIcon,
 } from "lucide-react";
+import { useHelp } from "@/components/help-view";
 import { useTheme } from "next-themes";
 import { create } from "zustand";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -253,6 +255,12 @@ export function CommandPalette() {
                   onSelect={() => run(() => void syncProjectNote())}
                 />
               )}
+              <Item
+                icon={CircleHelpIcon}
+                label="Help"
+                value="Help manual how to guide shortcuts keyboard"
+                onSelect={() => run(() => useHelp.getState().show())}
+              />
               <Item
                 icon={BugIcon}
                 label="Report a bug"

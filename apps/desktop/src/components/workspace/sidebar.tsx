@@ -37,6 +37,7 @@ import {
   NotebookTextIcon,
   type LucideIcon,
   FolderOpenIcon,
+  CircleHelpIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -56,6 +57,7 @@ import { revealInFileManager, revealLabel } from "@/lib/reveal";
 import { useHistoryStore } from "@/stores/history-store";
 import { cn } from "@/lib/utils";
 import { useSettingsWindow } from "@/stores/settings-window-store";
+import { useHelp } from "@/components/help-view";
 import { useReadingStore } from "@/stores/reading-store";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { Button } from "@/components/ui/button";
@@ -1598,6 +1600,16 @@ export function Sidebar({
           <div className="flex h-9 items-center justify-between border-sidebar-border border-t px-3 text-muted-foreground text-xs">
             <span className="truncate">Latex4All v{appVersion}</span>
             <div className="flex shrink-0 items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                onClick={() => useHelp.getState().show()}
+                title="Help"
+                aria-label="Help"
+              >
+                <CircleHelpIcon className="size-3.5" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
