@@ -9,6 +9,8 @@
  * instead, as a PDF reader does.
  */
 
+import { mergeLineRects, type PdfRect } from "@/lib/pdf-line-rects";
+
 export interface TextPoint {
   node: Text;
   offset: number;
@@ -193,5 +195,11 @@ export function selectionLineRects(range: Range): DOMRect[] {
     const box = charsBox(el, Math.min(from, n), n);
     if (box && box.width > 0.5) rects.push(box);
   }
-  return rects;
+  // One band per line, as highlights are drawn: a scanned page's text comes
+  // a word at a time, and its gaps would show.
+  return mergeLineRects(
+    rects.map((r) => [r.left, r.top, r.right, r.bottom] as PdfRect),
+  )
+    .map(([x1, y1, x2, y2]) => new DOMRect(x1, y1, x2 - x1, y2 - y1))
+    .sort((a, b) => a.top - b.top || a.left - b.left);
 }

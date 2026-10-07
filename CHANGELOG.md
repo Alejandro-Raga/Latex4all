@@ -107,8 +107,9 @@ tag.
   Settings, and while they're on, the editor shows the Vim mode (NORMAL,
   INSERT…) below the text.
 - Selecting text and highlighting on old scanned papers lines up with the
-  printed words. Before, the selection drifted away from them partway
-  through a line, and highlights saved from it came out shifted.
+  printed words, and the selection shows as one band per line, like the
+  highlights. Before, it drifted away from the words partway through a line
+  and showed as a patchwork, and highlights saved from it came out shifted.
 - A shared project whose folder is also synced to another computer
   (Seafile, Dropbox, iCloud…) no longer loses track of changes between
   the two. Each computer now keeps its own record of the sync with the app
