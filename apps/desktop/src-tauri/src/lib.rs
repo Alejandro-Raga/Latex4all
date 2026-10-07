@@ -479,11 +479,12 @@ fn project_modified_ms(dir: &Path) -> u64 {
     for relative in [
         "main.tex",
         "document.tex",
-        ".prism/build/main.pdf",
         ".latex4all/history.git/.git/refs/heads/master",
     ] {
         latest = latest.max(modified_ms(&dir.join(relative)));
     }
+    let build = latex::persistent_build_dir(&dir.to_string_lossy());
+    latest = latest.max(modified_ms(&build.join("main.pdf")));
 
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
@@ -696,6 +697,7 @@ pub fn run() {
             list_default_projects,
             detect_editors,
             open_in_editor,
+            latex::project_build_dir,
             reveal_in_file_manager,
             js_log,
             read_clipboard_file_paths,

@@ -238,7 +238,7 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
             }
             copy_dir_recursive(&src_path, &dst_path)?;
         } else {
-            std::fs::copy(&src_path, &dst_path)?;
+            copy_file(&src_path, &dst_path)?;
         }
     }
     Ok(())
@@ -291,7 +291,11 @@ fn sync_source_files(src: &Path, dst: &Path) -> std::io::Result<()> {
                     | "xdv"
             );
             let is_synctex = src_path.to_string_lossy().ends_with(".synctex.gz");
-            if !is_artifact && !is_synctex {
+            // A PDF beside the .tex of its name is a build's output (one
+            // exported there, say), not a figure, and is left out.
+            let is_output = ext.eq_ignore_ascii_case("pdf")
+                && src_path.with_extension("tex").exists();
+            if !is_artifact && !is_synctex && !is_output {
                 // Cloud storage (Dropbox/iCloud) may keep files as online-only
                 // placeholders with 0 bytes. Reading the file forces a download.
                 let metadata = std::fs::metadata(&src_path)?;
@@ -312,14 +316,14 @@ fn sync_source_files(src: &Path, dst: &Path) -> std::io::Result<()> {
 
                 if metadata.len() == 0 {
                     // Attempt to materialize the file by reading it
-                    let data = std::fs::read(&src_path)?;
+                    let data = std::fs::read(&src_path).map_err(|e| with_path(e, &src_path))?;
                     if !data.is_empty() {
                         std::fs::write(&dst_path, &data)?;
                     } else {
-                        std::fs::copy(&src_path, &dst_path)?;
+                        copy_file(&src_path, &dst_path)?;
                     }
                 } else {
-                    std::fs::copy(&src_path, &dst_path)?;
+                    copy_file(&src_path, &dst_path)?;
                 }
             }
         }
@@ -327,10 +331,64 @@ fn sync_source_files(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Persistent build directory inside the project.
-/// Stored in `<project>/.prism/build/` — hidden from file tree (dot-prefix is filtered).
-fn persistent_build_dir(project_dir: &str) -> PathBuf {
+/// The project's build directory, kept with the app rather than in the
+/// project (`…/Latex4All/builds/<id>`): a project folder synced by Seafile,
+/// Dropbox or OneDrive had its build files synced too, and on Windows a file
+/// the sync client held open stopped the build with "access denied".
+pub(crate) fn persistent_build_dir(project_dir: &str) -> PathBuf {
+    let root = PathBuf::from(project_dir.trim_end_matches(['/', '\\']));
+    let Some(base) = dirs::data_local_dir() else {
+        return legacy_build_dir(project_dir);
+    };
+    let canonical = std::fs::canonicalize(&root).unwrap_or_else(|_| root.clone());
+    let digest = ring::digest::digest(
+        &ring::digest::SHA256,
+        canonical.to_string_lossy().as_bytes(),
+    );
+    let id: String = digest.as_ref()[..12].iter().map(|b| format!("{b:02x}")).collect();
+    base.join("Latex4All").join("builds").join(id)
+}
+
+/// Where earlier versions built: inside the project.
+fn legacy_build_dir(project_dir: &str) -> PathBuf {
     PathBuf::from(project_dir).join(".prism").join("build")
+}
+
+/// The project's build directory, for reading its last PDF (the projects
+/// page's thumbnails).
+#[tauri::command]
+pub fn project_build_dir(project_dir: String) -> String {
+    persistent_build_dir(&project_dir).to_string_lossy().to_string()
+}
+
+/// Copies a file, trying again for a moment while another program (a sync
+/// client, an antivirus) holds it, and saying which file when it can't.
+fn copy_file(src: &Path, dst: &Path) -> std::io::Result<u64> {
+    let mut wait = 150;
+    for _ in 0..5 {
+        match std::fs::copy(src, dst) {
+            Err(err) if locked(&err) => {
+                std::thread::sleep(std::time::Duration::from_millis(wait));
+                wait *= 2;
+            }
+            other => return other.map_err(|e| with_path(e, src)),
+        }
+    }
+    std::fs::copy(src, dst).map_err(|e| with_path(e, src))
+}
+
+fn locked(err: &std::io::Error) -> bool {
+    err.kind() == std::io::ErrorKind::PermissionDenied
+        || matches!(err.raw_os_error(), Some(32) | Some(33))
+}
+
+fn with_path(err: std::io::Error, path: &Path) -> std::io::Error {
+    let hint = if locked(&err) {
+        " (another program has it open: Seafile, OneDrive, an editor or an antivirus)"
+    } else {
+        ""
+    };
+    std::io::Error::new(err.kind(), format!("{}: {err}{hint}", path.display()))
 }
 
 // --- Thread priority ---
@@ -1013,6 +1071,15 @@ pub async fn compile_latex(
             backend_label,
             pdf_bytes.len() / 1024
         );
+        // The build folder earlier versions kept in the project goes, so a
+        // sync client stops syncing (and locking) it.
+        let legacy = legacy_build_dir(&project_dir);
+        if legacy != work_dir && legacy.exists() {
+            let _ = std::fs::remove_dir_all(&legacy);
+            if let Some(prism) = legacy.parent() {
+                let _ = std::fs::remove_dir(prism); // only if now empty
+            }
+        }
         Ok(tauri::ipc::Response::new(pdf_bytes))
     } else {
         let log_content = std::fs::read_to_string(&log_path).unwrap_or_default();
@@ -1214,7 +1281,15 @@ mod tests {
     #[test]
     fn test_persistent_build_dir() {
         let dir = persistent_build_dir("/Users/dev/my-project");
-        assert_eq!(dir, PathBuf::from("/Users/dev/my-project/.prism/build"));
+        // With the app, not in the project, and one per project.
+        assert!(!dir.starts_with("/Users/dev/my-project"));
+        assert!(dir.ends_with(dir.file_name().unwrap()));
+        assert_ne!(dir, persistent_build_dir("/Users/dev/other"));
+        assert_eq!(dir, persistent_build_dir("/Users/dev/my-project/"));
+        assert_eq!(
+            legacy_build_dir("/Users/dev/my-project"),
+            PathBuf::from("/Users/dev/my-project/.prism/build")
+        );
     }
 
     // --- parse_synctex_node ---
@@ -1500,7 +1575,7 @@ Postamble:
     #[test]
     fn test_persistent_build_dir_trailing_slash() {
         let dir = persistent_build_dir("/project/");
-        assert_eq!(dir, PathBuf::from("/project/.prism/build"));
+        assert_eq!(dir, persistent_build_dir("/project"));
     }
 
     // --- copy_dir_recursive integration tests ---
