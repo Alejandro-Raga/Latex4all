@@ -389,7 +389,39 @@ fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
     }
     let tmp = path.with_extension("tmp");
     std::fs::write(&tmp, data).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+    // On Windows a file another program has open (Seafile syncing it, an
+    // antivirus scanning it, an editor) can't be replaced for a moment:
+    // tried again, then written in place, which such programs allow more
+    // often than a replace.
+    let mut last = None;
+    for wait in [0u64, 150, 300, 600, 1000] {
+        if wait > 0 {
+            std::thread::sleep(Duration::from_millis(wait));
+        }
+        match std::fs::rename(&tmp, path) {
+            Ok(()) => return Ok(()),
+            Err(err) if is_locked(&err) => last = Some(err),
+            Err(err) => {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(err.to_string());
+            }
+        }
+    }
+    let written = std::fs::write(path, data);
+    let _ = std::fs::remove_file(&tmp);
+    written.map_err(|err| {
+        if is_locked(&err) {
+            "another program has it open (Seafile, an editor or an antivirus)".to_string()
+        } else {
+            last.map(|e| e.to_string()).unwrap_or_else(|| err.to_string())
+        }
+    })
+}
+
+/// Whether an error is a file another program holds open (as Windows says).
+fn is_locked(err: &std::io::Error) -> bool {
+    err.kind() == std::io::ErrorKind::PermissionDenied
+        || matches!(err.raw_os_error(), Some(32) | Some(33))
 }
 
 /// Local changes the relay hasn't confirmed, oldest first. Kept on disk so a

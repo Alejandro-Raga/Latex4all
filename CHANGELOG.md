@@ -79,6 +79,10 @@ tag.
 
 ### Fixed
 
+- On Windows, a file that another program had open for a moment (Seafile
+  syncing it, an antivirus scanning it) couldn't be saved or synced. It's
+  now tried again for a few seconds, and if it's still locked, the warning
+  says so.
 - Shared projects sent their PDFs again every time a file changed, so a
   brief connection drop kept showing "Couldn't share" warnings, and a PDF
   could be set aside as a "(conflicted copy)" for no reason. A PDF is now

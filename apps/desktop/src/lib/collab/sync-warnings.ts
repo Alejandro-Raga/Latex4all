@@ -69,7 +69,14 @@ function plainReason(reason: string): string {
   if (/relay answered 4\d\d/i.test(reason)) {
     return `: the relay refused it (${reason.match(/\d{3}/)?.[0]})`;
   }
-  if (/no such file|not found|os error 2/i.test(reason)) {
+  if (
+    /os error (5|32|33)\b|being used by another process|access is denied/i.test(
+      reason,
+    )
+  ) {
+    return ": another program has it open (Seafile, an editor or an antivirus)";
+  }
+  if (/no such file|not found|os error 2\b/i.test(reason)) {
     return ": the file couldn't be read";
   }
   return "";

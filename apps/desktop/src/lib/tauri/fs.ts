@@ -178,11 +178,40 @@ export async function readTexFileContent(
   return readTextFile(absolutePath);
 }
 
+/**
+ * Whether an error is a file that another program has open, as Windows
+ * reports it (Seafile syncing it, an antivirus scanning it, an editor).
+ */
+export function isLockedFileError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /os error (5|32|33)\b|being used by another process|access is denied|locked a portion/i.test(
+    message,
+  );
+}
+
+/**
+ * Runs a file operation, trying again for a few seconds while the file is
+ * locked by another program: such locks are usually brief.
+ */
+export async function whileLocked<T>(
+  operation: () => Promise<T>,
+  waits = [150, 300, 600, 1000, 1500],
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await operation();
+    } catch (err) {
+      if (!isLockedFileError(err) || attempt >= waits.length) throw err;
+      await new Promise((r) => setTimeout(r, waits[attempt]));
+    }
+  }
+}
+
 export async function writeTexFileContent(
   absolutePath: string,
   content: string,
 ): Promise<void> {
-  return writeTextFile(absolutePath, content);
+  return whileLocked(() => writeTextFile(absolutePath, content));
 }
 
 export async function readImageAsDataUrl(
@@ -345,7 +374,7 @@ export async function writeBytesToProject(
 
 export async function deleteFileFromDisk(absolutePath: string): Promise<void> {
   log.debug(`Deleting file: ${absolutePath}`);
-  await remove(absolutePath);
+  await whileLocked(() => remove(absolutePath));
 }
 
 export async function deleteFolderFromDisk(
@@ -360,7 +389,7 @@ export async function renameFileOnDisk(
   newPath: string,
 ): Promise<void> {
   log.debug(`Renaming: ${oldPath} → ${newPath}`);
-  await rename(oldPath, newPath);
+  await whileLocked(() => rename(oldPath, newPath));
 }
 
 export async function createDirectory(absolutePath: string): Promise<void> {
