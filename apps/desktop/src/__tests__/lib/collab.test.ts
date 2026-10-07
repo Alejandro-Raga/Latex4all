@@ -449,6 +449,30 @@ describe("shared projects", () => {
     expect(b.workspace.snapshot()).toEqual(left);
   });
 
+  it("doesn't send a PDF again when its size wasn't read", async () => {
+    const relay = new FakeRelay();
+    const workspace = new FakeWorkspace(relay, {
+      "main.tex": "text",
+      "attachments/paper.pdf": "PDFDATA",
+    });
+    const a = new Device(relay, workspace);
+    await a.open();
+    await settleAll(a);
+    let uploads = 0;
+    const upload = workspace.upload.bind(workspace);
+    workspace.upload = async (path: string) => {
+      uploads++;
+      return upload(path);
+    };
+    // As the file list once reported every PDF: size 0.
+    const files = workspace.files.bind(workspace);
+    workspace.files = () =>
+      files().map((f) => (f.kind === "blob" ? { ...f, size: 0 } : f));
+    workspace.setText("main.tex", "text, edited");
+    await settleAll(a);
+    expect(uploads).toBe(0);
+  });
+
   it("tries a file again after the relay was briefly down", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const relay = new FakeRelay();

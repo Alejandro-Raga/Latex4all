@@ -501,6 +501,8 @@ export class ProjectSync {
       if (
         shared.kind === "blob" &&
         mine.kind === "blob" &&
+        // 0: its size wasn't read, which isn't a change.
+        mine.size > 0 &&
         mine.size !== known.size
       ) {
         const attempt = `${mine.path}|${mine.size}`;

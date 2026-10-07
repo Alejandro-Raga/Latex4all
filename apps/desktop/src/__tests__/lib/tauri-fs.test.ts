@@ -105,5 +105,20 @@ describe("tauri fs helpers", () => {
       expect(stat).toHaveBeenCalledTimes(2);
       expect(result.files.every((file) => file.type === "other")).toBe(true);
     });
+
+    it("knows a PDF's size, so a shared one isn't taken as changed", async () => {
+      vi.mocked(readDir).mockResolvedValue([
+        { name: "paper.pdf", isDirectory: false },
+      ] as any);
+      vi.mocked(stat).mockResolvedValue({ size: 1935820 } as any);
+
+      const result = await scanProjectFolder("/project");
+
+      expect(result.files[0]).toMatchObject({
+        relativePath: "paper.pdf",
+        type: "pdf",
+        fileSize: 1935820,
+      });
+    });
   });
 });

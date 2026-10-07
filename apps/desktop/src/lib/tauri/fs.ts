@@ -143,10 +143,12 @@ export async function scanProjectFolder(rootPath: string): Promise<ScanResult> {
       } else {
         const type = getProjectFileType(entry.name);
         if (type) {
-          // Only stat files that may be skipped by the large-file threshold
-          // (image and other). tex/bib/style are always loaded, pdf is always lazy.
+          // Sized: images and others for the large-file threshold, PDFs so
+          // a shared project can tell a changed one from the same one (with
+          // no size every PDF looked changed, and was sent again and again).
+          // tex/bib/style are loaded, and measured by their content.
           let fileSize = 0;
-          if (type === "image" || type === "other") {
+          if (type === "image" || type === "other" || type === "pdf") {
             try {
               const info = await stat(entryPath);
               fileSize = info.size;

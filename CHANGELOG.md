@@ -79,6 +79,10 @@ tag.
 
 ### Fixed
 
+- Shared projects sent their PDFs again every time a file changed, so a
+  brief connection drop kept showing "Couldn't share" warnings, and a PDF
+  could be set aside as a "(conflicted copy)" for no reason. A PDF is now
+  sent only when it has actually changed.
 - A "Couldn't share" warning in a shared project now goes away once the
   file goes through on a later try, says briefly why it failed, and no
   longer claims it waits for the file to change.
