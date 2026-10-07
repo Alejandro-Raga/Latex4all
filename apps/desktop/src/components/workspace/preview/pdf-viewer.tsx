@@ -214,6 +214,8 @@ export interface PdfTextSelection {
   text: string;
   pageNumber: number;
   position: { top: number; left: number };
+  /** Top of the selection's first line, in the window. */
+  firstTop?: number;
   pdfX: number;
   pdfY: number;
   /**
@@ -915,6 +917,7 @@ export function PdfViewer({
           position: last
             ? { top: last.bottom, left: last.left }
             : { top: rect.bottom, left: rect.left },
+          firstTop: lines[0]?.top ?? rect.top,
           pdfX,
           pdfY,
           rects,

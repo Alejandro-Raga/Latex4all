@@ -585,7 +585,11 @@ export function PdfPreview() {
   }, []);
 
   const pdfToolbarAnchor = pdfSelection
-    ? { x: pdfSelection.position.left, y: pdfSelection.position.top }
+    ? {
+        x: pdfSelection.position.left,
+        y: pdfSelection.position.top,
+        aboveY: pdfSelection.firstTop,
+      }
     : null;
 
   useEffect(() => {

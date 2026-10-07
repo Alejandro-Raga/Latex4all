@@ -14,7 +14,7 @@ export interface ToolbarAction {
 
 interface SelectionToolbarProps {
   /** Viewport-relative point (e.g. below the text selection) to anchor near. */
-  anchor: { x: number; y: number };
+  anchor: { x: number; y: number; aboveY?: number };
   contextLabel: string;
   actions: ToolbarAction[];
   onSendPrompt: (prompt: string) => void;
@@ -147,19 +147,36 @@ export function SelectionToolbar({
       )}
 
       {/* Action buttons */}
+      {/* Many actions sit two to a row, so the toolbar stays small enough
+          not to cover what's around the selection. */}
       {actions.length > 0 && (
-        <div className="flex flex-col py-1">
+        <div
+          className={
+            actions.length > 4
+              ? "grid grid-cols-2 gap-x-1 p-1"
+              : "flex flex-col py-1"
+          }
+        >
           {actions.map((action) => (
             <button
               key={action.id}
               onClick={() => onAction(action.id)}
-              className="flex items-center gap-2.5 px-3 py-1.5 text-left text-foreground text-sm transition-colors hover:bg-muted"
+              title={
+                actions.length > 4 && action.hint
+                  ? `${action.label} (${action.hint})`
+                  : undefined
+              }
+              className={
+                actions.length > 4
+                  ? "flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-foreground text-xs transition-colors hover:bg-muted"
+                  : "flex items-center gap-2.5 px-3 py-1.5 text-left text-foreground text-sm transition-colors hover:bg-muted"
+              }
             >
               <span className="size-4 text-muted-foreground">
                 {action.icon}
               </span>
-              {action.label}
-              {action.hint && (
+              <span className="truncate">{action.label}</span>
+              {action.hint && actions.length <= 4 && (
                 <span className="ml-auto text-muted-foreground text-xs">
                   {action.hint}
                 </span>

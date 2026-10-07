@@ -79,6 +79,9 @@ tag.
 
 ### Fixed
 
+- The toolbar for selected text no longer covers the selection: without
+  room below, it goes above the whole selection. With many actions they
+  sit two to a row, so it's half as tall.
 - On Windows, a file that another program had open for a moment (Seafile
   syncing it, an antivirus scanning it) couldn't be saved or synced. It's
   now tried again for a few seconds, and if it's still locked, the warning

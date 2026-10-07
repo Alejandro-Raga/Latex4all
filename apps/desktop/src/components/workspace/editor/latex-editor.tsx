@@ -341,6 +341,7 @@ export function LatexEditor() {
   const [selectionCoords, setSelectionCoords] = useState<{
     top: number;
     left: number;
+    startTop?: number;
   } | null>(null);
   // When the selection toolbar is visible, prevent CM selection changes from clearing it.
   // Only explicit dismiss/send/action should clear the toolbar.
@@ -890,6 +891,7 @@ export function LatexEditor() {
             setSelectionCoords({
               top: endCoords.bottom, // below last line of selection
               left: startCoords.left, // aligned to selection start
+              startTop: startCoords.top, // above it, when there's no room below
             });
           }
           toolbarStickyRef.current = true;
@@ -1509,7 +1511,11 @@ export function LatexEditor() {
     if (!selectionCoords) return null;
     // selectionCoords.top already holds the bottom-of-selection Y coordinate
     // (see the updateListener above), i.e. where the toolbar should start.
-    return { x: selectionCoords.left, y: selectionCoords.top };
+    return {
+      x: selectionCoords.left,
+      y: selectionCoords.top,
+      aboveY: selectionCoords.startTop,
+    };
   }, [selectionCoords]);
 
   const buildSelectionContext =

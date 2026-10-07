@@ -14,7 +14,13 @@ const VIEWPORT_MARGIN = 8;
  * `anchor` as the pre-measurement fallback (kept `visibility: hidden` until
  * `coords` is set, to avoid a flash at the unclamped position).
  */
-export function useViewportAnchoredPosition(anchor: { x: number; y: number }) {
+export function useViewportAnchoredPosition(anchor: {
+  x: number;
+  y: number;
+  /** Top of what it's about (a selection's first line): when it goes
+   *  above, it goes above this, so it never covers it. */
+  aboveY?: number;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [coords, setCoords] = useState<{ top: number; left: number } | null>(
     null,
@@ -35,7 +41,8 @@ export function useViewportAnchoredPosition(anchor: { x: number; y: number }) {
 
       let top = anchor.y + VIEWPORT_MARGIN;
       if (top + rect.height > window.innerHeight - VIEWPORT_MARGIN) {
-        const above = anchor.y - rect.height - VIEWPORT_MARGIN;
+        const above =
+          (anchor.aboveY ?? anchor.y) - rect.height - VIEWPORT_MARGIN;
         top =
           above >= VIEWPORT_MARGIN
             ? above
@@ -52,7 +59,7 @@ export function useViewportAnchoredPosition(anchor: { x: number; y: number }) {
     const observer = new ResizeObserver(reposition);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [anchor.x, anchor.y]);
+  }, [anchor.x, anchor.y, anchor.aboveY]);
 
   return { ref, coords };
 }

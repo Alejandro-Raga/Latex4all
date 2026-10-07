@@ -499,7 +499,11 @@ export function PaperReader({
       </div>
       {visible && selection && (
         <SelectionToolbar
-          anchor={{ x: selection.position.left, y: selection.position.top }}
+          anchor={{
+            x: selection.position.left,
+            y: selection.position.top,
+            aboveY: selection.firstTop,
+          }}
           contextLabel={paper.label}
           actions={actions}
           onDismiss={dismiss}
