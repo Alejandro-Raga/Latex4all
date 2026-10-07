@@ -23,6 +23,9 @@ tag.
 
 ### Added
 
+- Name the compiled PDF and choose its folder: the button beside Export PDF
+  saves every compile there too, such as "Raga - Proposal.pdf" in a
+  Deliverables folder. It's kept with the project.
 - Help: a short manual of the app, with a search, from the Projects page's
   sidebar, the ? button in a project's sidebar, or ⌘K. It covers writing,
   references, reading papers, the vault, ideas and topics, the AI

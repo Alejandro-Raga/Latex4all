@@ -88,6 +88,7 @@ import { createLogger } from "@/lib/debug/logger";
 import type { PassageGroup } from "@/lib/vault/add-passage";
 import { addOwnPassage } from "@/lib/vault/own-passage";
 import { filedToast, GroupPicker } from "./group-picker";
+import { CompiledCopyButton } from "./compiled-copy-button";
 
 const log = createLogger("pdf-preview");
 
@@ -1237,6 +1238,7 @@ export function PdfPreview() {
                 </kbd>
               </Button>
               <div className="mx-1 @[34rem]/pv:block hidden h-4 w-px bg-border" />
+              {projectRoot && <CompiledCopyButton projectRoot={projectRoot} />}
               <Button
                 variant="ghost"
                 size="icon"

@@ -104,6 +104,39 @@ interface ProjectMeta {
   type?: string;
   /** Stable across renames and moves; names the project's vault note. */
   id?: string;
+  /** Other settings kept with the project (see compiled-copy.ts). */
+  [key: string]: unknown;
+}
+
+/** Everything in the project's metadata ({} when there's none). */
+export async function readProjectMeta(
+  projectPath: string,
+): Promise<ProjectMeta> {
+  try {
+    const path = metaPath(projectPath);
+    if (!(await exists(path))) return {};
+    return JSON.parse(await readTextFile(path)) as ProjectMeta;
+  } catch {
+    return {};
+  }
+}
+
+/** Sets fields of the project's metadata (undefined removes one). */
+export async function updateProjectMeta(
+  projectPath: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  const meta = await readProjectMeta(projectPath);
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) delete meta[key];
+    else meta[key] = value;
+  }
+  const dir = `${projectPath}/${META_DIR}`;
+  if (!(await exists(dir))) await mkdir(dir, { recursive: true });
+  await writeTextFile(
+    metaPath(projectPath),
+    `${JSON.stringify(meta, null, 2)}\n`,
+  );
 }
 
 function metaPath(projectPath: string): string {

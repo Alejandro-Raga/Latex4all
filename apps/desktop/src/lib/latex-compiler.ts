@@ -1,5 +1,6 @@
 import type { SourceBox } from "@/lib/annotations/pdf-placement";
 import { invoke } from "@tauri-apps/api/core";
+import { saveCompiledCopy } from "@/lib/compiled-copy";
 import { resolveTexRoot, type ProjectFile } from "@/stores/document-store";
 import { createLogger } from "@/lib/debug/logger";
 
@@ -39,6 +40,8 @@ export async function compileLatex(
   projectDir: string,
   mainFile: string = "main.tex",
   useTexlive: boolean = false,
+  /** Also write the project's chosen copy of the PDF (not for previews). */
+  keepCopy: boolean = true,
 ): Promise<Uint8Array> {
   log.info(
     `Compiling ${mainFile} (backend: ${useTexlive ? "texlive" : "tectonic"})`,
@@ -52,6 +55,7 @@ export async function compileLatex(
   });
 
   const result = new Uint8Array(buffer);
+  if (keepCopy) void saveCompiledCopy(projectDir, mainFile, result);
   log.info(
     `Compiled ${mainFile} in ${(performance.now() - start).toFixed(0)}ms (${(result.byteLength / 1024).toFixed(0)} KB)`,
   );

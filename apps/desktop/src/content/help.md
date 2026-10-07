@@ -19,6 +19,7 @@ The window has three parts: your files on the left, the editor in the middle and
 Type in the editor; files save on their own, or with ⌘S.
 
 - **Compile** with ⌘↵, or the button above the PDF. The first compile of a project downloads the packages it needs.
+- **Keep the PDF where you want it:** the button beside Export PDF saves every compile under a name and in a folder you choose, such as "Raga - Proposal.pdf" in a Deliverables folder.
 - **Jump between text and PDF:** double-click a spot in the PDF to go to its line in the source.
 - **The ribbon** above the editor writes the LaTeX for you: bold, lists, figures, tables, equations, footnotes and citations. A package a button needs is added to the preamble.
 - **Spelling and grammar:** pick the language at the end of the ribbon, and turn on GRAMMAR for a grammar check that runs on your computer.
