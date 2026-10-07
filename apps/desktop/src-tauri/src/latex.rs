@@ -291,11 +291,7 @@ fn sync_source_files(src: &Path, dst: &Path) -> std::io::Result<()> {
                     | "xdv"
             );
             let is_synctex = src_path.to_string_lossy().ends_with(".synctex.gz");
-            // A PDF beside the .tex of its name is a build's output (one
-            // exported there, say), not a figure, and is left out.
-            let is_output = ext.eq_ignore_ascii_case("pdf")
-                && src_path.with_extension("tex").exists();
-            if !is_artifact && !is_synctex && !is_output {
+            if !is_artifact && !is_synctex {
                 // Cloud storage (Dropbox/iCloud) may keep files as online-only
                 // placeholders with 0 bytes. Reading the file forces a download.
                 let metadata = std::fs::metadata(&src_path)?;
@@ -347,6 +343,21 @@ pub(crate) fn persistent_build_dir(project_dir: &str) -> PathBuf {
     );
     let id: String = digest.as_ref()[..12].iter().map(|b| format!("{b:02x}")).collect();
     base.join("Latex4All").join("builds").join(id)
+}
+
+/// Whether nothing directly in `dir` has changed for `secs` seconds.
+fn untouched_for(dir: &Path, secs: u64) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    let limit = std::time::Duration::from_secs(secs);
+    entries.flatten().all(|e| {
+        e.metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|age| age > limit)
+    })
 }
 
 /// Where earlier versions built: inside the project.
@@ -1073,8 +1084,10 @@ pub async fn compile_latex(
         );
         // The build folder earlier versions kept in the project goes, so a
         // sync client stops syncing (and locking) it.
+        // Only once nothing in it has changed for a day: another computer
+        // on an earlier version, sharing the folder, may still build there.
         let legacy = legacy_build_dir(&project_dir);
-        if legacy != work_dir && legacy.exists() {
+        if legacy != work_dir && legacy.exists() && untouched_for(&legacy, 24 * 3600) {
             let _ = std::fs::remove_dir_all(&legacy);
             if let Some(prism) = legacy.parent() {
                 let _ = std::fs::remove_dir(prism); // only if now empty

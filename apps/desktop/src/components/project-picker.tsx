@@ -886,10 +886,14 @@ async function firstExistingPath(
  */
 async function builtPdf(projectPath: string): Promise<string | null> {
   const sep = projectPath.includes("\\") ? "\\" : "/";
-  // Kept with the app, not in the project.
-  const buildDir = await invoke<string>("project_build_dir", {
+  // Kept with the app, not in the project; a project not built since then
+  // still has its PDF in the folder earlier versions used.
+  const legacyDir = [projectPath, ".prism", "build"].join(sep);
+  const appDir = await invoke<string>("project_build_dir", {
     projectDir: projectPath,
-  }).catch(() => [projectPath, ".prism", "build"].join(sep));
+  }).catch(() => null);
+  const buildDir =
+    appDir && (await exists(appDir).catch(() => false)) ? appDir : legacyDir;
   try {
     const texNames = new Set(
       (await readDir(projectPath))
