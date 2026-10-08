@@ -670,6 +670,14 @@ pub fn run() {
         .manage(zotero::ZoteroOAuthState::default())
         .manage(collab::CollabState::default())
         .setup(|app| {
+            // Build folders no project needs any more (see cleanup_builds).
+            std::thread::spawn(|| {
+                std::thread::sleep(std::time::Duration::from_secs(60));
+                let removed = latex::cleanup_builds();
+                if !removed.is_empty() {
+                    eprintln!("[latex] removed {} unused build folders", removed.len());
+                }
+            });
             // Safety net: force-show the main window after a timeout if the
             // frontend JS never calls `getCurrentWindow().show()`.
             // This prevents the window from staying permanently hidden when

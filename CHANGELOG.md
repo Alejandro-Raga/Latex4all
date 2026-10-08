@@ -82,9 +82,11 @@ tag.
 - On Windows, a project in a Seafile, Dropbox or OneDrive folder could fail
   to compile with "access denied". Builds now happen in Latex4All's own
   folder instead of the project's, so the sync client no longer syncs or
-  locks them; the old build folder is removed from the project once
-  unused for a day. When a
-  source file is locked, the build waits a moment, and the error names it.
+  locks them. When a source file is locked, the build waits a moment, and
+  the error names it. The old .prism/build folder in a project is left as
+  it was and can be deleted. Builds of projects that no longer exist are
+  cleared after 30 days unused, and any build after 180; the next compile
+  makes it again.
 - The toolbar for selected text no longer covers the selection: without
   room below, it goes above the whole selection. With many actions they
   sit two to a row, so it's half as tall.

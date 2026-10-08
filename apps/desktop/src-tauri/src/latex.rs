@@ -345,19 +345,53 @@ pub(crate) fn persistent_build_dir(project_dir: &str) -> PathBuf {
     base.join("Latex4All").join("builds").join(id)
 }
 
-/// Whether nothing directly in `dir` has changed for `secs` seconds.
-fn untouched_for(dir: &Path, secs: u64) -> bool {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return false;
+/// Names the project a build folder belongs to (written after each build).
+const BUILD_MARKER: &str = ".latex4all-build.json";
+
+/// Removes build folders nobody needs: their project is gone and they
+/// haven't been used for 30 days, or they haven't been used for 180. A build
+/// holds only copies of a project's files and what compiling makes from
+/// them, so the next compile makes it again. Only folders with a marker are
+/// considered; projects themselves are never touched.
+pub fn cleanup_builds() -> Vec<PathBuf> {
+    let Some(root) = dirs::data_local_dir().map(|d| d.join("Latex4All").join("builds")) else {
+        return Vec::new();
     };
-    let limit = std::time::Duration::from_secs(secs);
-    entries.flatten().all(|e| {
-        e.metadata()
+    cleanup_builds_in(&root, std::time::SystemTime::now())
+}
+
+fn cleanup_builds_in(root: &Path, now: std::time::SystemTime) -> Vec<PathBuf> {
+    const DAY: u64 = 24 * 3600;
+    let mut removed = Vec::new();
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return removed;
+    };
+    for entry in entries.flatten() {
+        let dir = entry.path();
+        let marker = dir.join(BUILD_MARKER);
+        let Ok(text) = std::fs::read_to_string(&marker) else {
+            continue; // not one of ours, or not finished: left alone
+        };
+        let project = serde_json::from_str::<serde_json::Value>(&text)
+            .ok()
+            .and_then(|v| v["project"].as_str().map(PathBuf::from));
+        let Some(project) = project else { continue };
+        let Some(age) = std::fs::metadata(&marker)
             .and_then(|m| m.modified())
             .ok()
-            .and_then(|t| t.elapsed().ok())
-            .is_some_and(|age| age > limit)
-    })
+            .and_then(|t| now.duration_since(t).ok())
+        else {
+            continue;
+        };
+        let days = age.as_secs() / DAY;
+        let gone = !project.exists();
+        if (gone && days >= 30) || days >= 180 {
+            if std::fs::remove_dir_all(&dir).is_ok() {
+                removed.push(dir);
+            }
+        }
+    }
+    removed
 }
 
 /// Where earlier versions built: inside the project.
@@ -1084,15 +1118,12 @@ pub async fn compile_latex(
         );
         // The build folder earlier versions kept in the project goes, so a
         // sync client stops syncing (and locking) it.
-        // Only once nothing in it has changed for a day: another computer
-        // on an earlier version, sharing the folder, may still build there.
-        let legacy = legacy_build_dir(&project_dir);
-        if legacy != work_dir && legacy.exists() && untouched_for(&legacy, 24 * 3600) {
-            let _ = std::fs::remove_dir_all(&legacy);
-            if let Some(prism) = legacy.parent() {
-                let _ = std::fs::remove_dir(prism); // only if now empty
-            }
-        }
+        // Which project this build is for, so a cleanup knows its project
+        // is gone (see cleanup_builds); nothing else reads it.
+        let _ = std::fs::write(
+            work_dir.join(BUILD_MARKER),
+            serde_json::json!({ "project": project_dir }).to_string(),
+        );
         Ok(tauri::ipc::Response::new(pdf_bytes))
     } else {
         let log_content = std::fs::read_to_string(&log_path).unwrap_or_default();
@@ -1290,6 +1321,43 @@ mod tests {
     }
 
     // --- persistent_build_dir ---
+
+    #[test]
+    fn cleanup_keeps_what_may_be_needed() {
+        let root = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let make = |name: &str, project: &str| {
+            let dir = root.path().join(name);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("main.pdf"), "pdf").unwrap();
+            if !project.is_empty() {
+                std::fs::write(
+                    dir.join(BUILD_MARKER),
+                    serde_json::json!({ "project": project }).to_string(),
+                )
+                .unwrap();
+            }
+            dir
+        };
+        let alive = make("alive", &project.path().to_string_lossy());
+        let orphan = make("orphan", "/no/such/project");
+        let unmarked = make("unmarked", "");
+        let day = std::time::Duration::from_secs(24 * 3600);
+        let now = std::time::SystemTime::now();
+
+        // Used today: everything stays, even the one whose project is gone.
+        assert!(cleanup_builds_in(root.path(), now).is_empty());
+        // A month on: only the build of a project that's gone.
+        let removed = cleanup_builds_in(root.path(), now + day * 31);
+        assert_eq!(removed, vec![orphan.clone()]);
+        assert!(alive.exists() && unmarked.exists());
+        // Half a year unused: its project's next compile remakes it.
+        assert_eq!(cleanup_builds_in(root.path(), now + day * 181), vec![alive.clone()]);
+        // A folder that isn't marked as a build is never touched.
+        assert!(unmarked.exists());
+        // The project itself is never touched.
+        assert!(project.path().exists());
+    }
 
     #[test]
     fn test_persistent_build_dir() {
