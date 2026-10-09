@@ -44,7 +44,7 @@ import { useZoteroStore } from "@/stores/zotero-store";
 import { cn } from "@/lib/utils";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { clearPdfCache, pdfCacheSize } from "@/lib/zotero-pdf-cache";
-import { type ZoteroAppStatus, zoteroAppStatus } from "@/lib/zotero-source";
+import { ZoteroSourceControls } from "@/components/zotero-source-controls";
 import { NoteTypesSettings } from "./note-types-settings";
 import { AiUsageSettings } from "./ai-usage-settings";
 import { AgentAccounts } from "./agent-accounts";
@@ -263,97 +263,12 @@ const megabytes = (bytes: number) =>
     ? `${Math.max(1, Math.round(bytes / 1e3))} KB`
     : `${(bytes / 1e6).toFixed(bytes < 1e7 ? 1 : 0)} MB`;
 
-const ZOTERO_APP_DETAIL: Record<ZoteroAppStatus, string> = {
-  on: "In use: reading and saving go through Zotero",
-  off: "Zotero doesn't let other apps in yet",
-  closed: "Zotero isn't open, so zotero.org is used",
-};
-
-/** A note under a setting, wrapped rather than cut off. */
-function SettingNote({
-  children,
-  warning,
-}: {
-  children: ReactNode;
-  warning?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "mx-5 mb-3 rounded-md px-3 py-2 text-xs",
-        warning
-          ? "border border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400"
-          : "bg-muted text-muted-foreground",
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-/** Whether to go through the Zotero app when it's open, and if it is. */
+/** Where Zotero data comes from (the same controls as the toolbar's Zotero button). */
 function ZoteroAppSettings() {
-  const use = useSettingsStore((s) => s.useZoteroApp);
-  const setUse = useSettingsStore((s) => s.setUseZoteroApp);
-  const [status, setStatus] = useState<ZoteroAppStatus | null>(null);
-
-  useEffect(() => {
-    if (!use) return;
-    let alive = true;
-    const check = () =>
-      zoteroAppStatus(true).then((s) => alive && setStatus(s));
-    check();
-    const timer = setInterval(check, 5000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, [use]);
-
-  const apiKey = useZoteroStore((s) => s.apiKey);
-  const userID = useZoteroStore((s) => s.userID);
-  const fallback = useSettingsStore((s) => s.zoteroDatabaseFallback);
-  const setFallback = useSettingsStore((s) => s.setZoteroDatabaseFallback);
-
   return (
-    <>
-      <SettingRow
-        label="Use the Zotero app"
-        detail={use && status ? ZOTERO_APP_DETAIL[status] : undefined}
-      >
-        <Toggle checked={use} onChange={setUse} label="Use the Zotero app" />
-      </SettingRow>
-      {use && status === "off" && (
-        <SettingNote>
-          In Zotero, open Settings → Advanced and turn on “Allow other
-          applications on this computer to communicate with Zotero”.
-        </SettingNote>
-      )}
-      <SettingRow
-        label="Read Zotero's database when offline"
-        detail="When Zotero is closed and zotero.org can't be reached"
-      >
-        <Toggle
-          checked={fallback}
-          onChange={(on) => {
-            setFallback(on);
-            // BibTeX is kept with the library from now on: fetch it all.
-            if (on && apiKey && userID) {
-              useZoteroLibrary.getState().refetch(apiKey, userID);
-            }
-          }}
-          label="Read Zotero's database when offline"
-        />
-      </SettingRow>
-      {fallback && (
-        <SettingNote warning>
-          Latex4All then reads a copy of Zotero's database on this computer. You
-          can browse, search and open papers with their highlights, but nothing
-          is saved to Zotero and .bib files aren't updated until Zotero or
-          zotero.org is back. BibTeX is as of the last library update.
-        </SettingNote>
-      )}
-    </>
+    <div className="px-5 py-3">
+      <ZoteroSourceControls />
+    </div>
   );
 }
 

@@ -20,7 +20,7 @@ import {
   type ZoteroItemSummary,
   zoteroFetch,
 } from "./zotero-api";
-import { type ZoteroSource, zoteroSource } from "./zotero-source";
+import { type ZoteroSource, withZoteroSource } from "./zotero-source";
 import { useSettingsStore } from "@/stores/settings-store";
 
 export interface LibraryPdf {
@@ -230,7 +230,15 @@ export async function syncMirror(
   apiKey: string,
   userID: string,
 ): Promise<boolean> {
-  const source = await zoteroSource();
+  return withZoteroSource((source) => syncFrom(mirror, apiKey, userID, source));
+}
+
+async function syncFrom(
+  mirror: LibraryMirror,
+  apiKey: string,
+  userID: string,
+  source: ZoteroSource,
+): Promise<boolean> {
   const since =
     (source === "local" ? mirror.localVersion : mirror.version) ?? 0;
   const { items, version } = await fetchChanges(apiKey, userID, since, source);

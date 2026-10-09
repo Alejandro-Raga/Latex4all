@@ -7,7 +7,6 @@
  * copy, which keeps it while this is on.
  */
 import { invoke } from "@tauri-apps/api/core";
-import { toast } from "sonner";
 
 interface DbItem {
   key: string;
@@ -114,19 +113,6 @@ async function page(
   return json(body, version, items.length);
 }
 
-const NOTICE_EVERY_MS = 10 * 60_000;
-let noticed = 0;
-
-/** Says, now and then, that what's shown comes from the database. */
-function notice() {
-  if (Date.now() - noticed < NOTICE_EVERY_MS) return;
-  noticed = Date.now();
-  toast.warning("Zotero can't be reached", {
-    description:
-      "Showing your library from Zotero's database on this computer. Saving to Zotero is paused until Zotero or zotero.org is back.",
-  });
-}
-
 /**
  * Answers a read zotero.org would answer (a path under /users/<id>/) from
  * Zotero's database.
@@ -138,7 +124,6 @@ export async function databaseResponse(path: string): Promise<Response> {
   const route = parts.slice(2);
   const params = url.searchParams;
   const lib = await library();
-  notice();
 
   if (route.length === 1 && route[0] === "collections") {
     const all = lib.collections.map((c) => ({

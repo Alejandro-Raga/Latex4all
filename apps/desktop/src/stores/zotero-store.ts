@@ -18,7 +18,7 @@ import { collectSubtreeKeys } from "@/lib/zotero-collection-tree";
 import { useDocumentStore } from "@/stores/document-store";
 import { createFileOnDisk, readTexFileContent } from "@/lib/tauri/fs";
 import { createLogger } from "@/lib/debug/logger";
-import { zoteroSource } from "@/lib/zotero-source";
+import { withZoteroSource } from "@/lib/zotero-source";
 
 const log = createLogger("zotero");
 
@@ -251,16 +251,18 @@ export const useZoteroStore = create<ZoteroState>()(
           const collectionKeys = collectionKey
             ? collectSubtreeKeys(collections, collectionKey)
             : null;
-          const source = await zoteroSource();
-          const result = await importCollection(
-            apiKey,
-            userID,
-            collectionKeys,
-            (loaded, total) => {
-              set({ syncProgress: { loaded, total } });
-            },
+          const { source, result } = await withZoteroSource(async (source) => ({
             source,
-          );
+            result: await importCollection(
+              apiKey,
+              userID,
+              collectionKeys,
+              (loaded, total) => {
+                set({ syncProgress: { loaded, total } });
+              },
+              source,
+            ),
+          }));
 
           // Determine .bib file name
           const bibFileName = `${sanitizeFileName(name)}.bib`;
@@ -339,20 +341,24 @@ export const useZoteroStore = create<ZoteroState>()(
           const collectionKeys = collectionKey
             ? collectSubtreeKeys(collections, collectionKey)
             : null;
-          const source = await zoteroSource();
-          const since =
-            (source === "local"
-              ? syncInfo.localLibraryVersion
-              : syncInfo.libraryVersion) ?? 0;
-          const result = await syncCollection(
-            apiKey,
-            userID,
-            collectionKeys,
-            since,
-            (loaded, total) => {
-              set({ syncProgress: { loaded, total } });
+          const { source, since, result } = await withZoteroSource(
+            async (source) => {
+              const since =
+                (source === "local"
+                  ? syncInfo.localLibraryVersion
+                  : syncInfo.libraryVersion) ?? 0;
+              const result = await syncCollection(
+                apiKey,
+                userID,
+                collectionKeys,
+                since,
+                (loaded, total) => {
+                  set({ syncProgress: { loaded, total } });
+                },
+                source,
+              );
+              return { source, since, result };
             },
-            source,
           );
 
           // Entries Zotero didn't make stay, and keys the text uses don't

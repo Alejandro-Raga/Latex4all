@@ -5,8 +5,15 @@ import { databaseResponse } from "./zotero-db";
 import {
   forgetZoteroApp,
   localZoteroRequest,
+  noteFailed,
+  noteServed,
+  noteWebDown,
   ZoteroAppDeniedError,
+  type ZoteroServedBy,
   type ZoteroSource,
+  useZoteroConnection,
+  withZoteroSource,
+  zoteroAppStatus,
   zoteroSource,
 } from "./zotero-source";
 
@@ -98,37 +105,42 @@ export interface ZoteroRequest {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   headers?: Record<string, string>;
   body?: string;
-  /** Where to send it; by default the Zotero app when it's open, else zotero.org. */
+  /** Where to send it, and only there; by default as the settings say. */
   source?: ZoteroSource;
 }
 
 /**
- * One request to Zotero's API, to the Zotero app (see zotero-source.ts) or to
- * zotero.org. Reads from zotero.org are asked again when it's briefly busy.
- * Returns the response as it came; the caller decides what a status means.
+ * One request to Zotero's API (see zotero-source.ts for where it goes):
+ * zotero.org — asked again when briefly busy — or the Zotero app; when
+ * zotero.org fails, the app as a fallback and, for reads, Zotero's
+ * database, as the settings allow. A request given a `source` goes there
+ * only. Returns the response as it came; the caller decides what a status
+ * means.
  */
 export async function zoteroRequest(
   apiKey: string,
   path: string,
   { method = "GET", headers = {}, body, source }: ZoteroRequest = {},
 ): Promise<Response> {
+  const settings = useSettingsStore.getState();
   const via = source ?? (await zoteroSource());
+  const fromApp = async () => {
+    const response = await localZoteroRequest(method, path, headers, body);
+    noteServed("local");
+    return response;
+  };
   if (via === "local") {
     try {
-      return await localZoteroRequest(method, path, headers, body);
+      return await fromApp();
     } catch (err) {
       // The app closed: zotero.org instead, unless the caller needs the app.
       forgetZoteroApp();
       if (source || err instanceof ZoteroAppDeniedError) throw err;
     }
   }
-  // Last resort for a read: Zotero's database on this computer.
-  const fallback =
-    method === "GET" &&
-    !source &&
-    useSettingsStore.getState().zoteroDatabaseFallback;
+
+  let response: Response | null = null;
   for (let attempt = 0; ; attempt++) {
-    let response: Response;
     try {
       response = await fetch(`${ZOTERO_BASE}${path}`, {
         method,
@@ -140,8 +152,8 @@ export async function zoteroRequest(
         body,
       });
     } catch {
-      if (fallback) return databaseResponse(path);
-      throw new Error("Can't reach zotero.org. Check your connection.");
+      response = null;
+      break;
     }
     const retry =
       method === "GET" &&
@@ -149,15 +161,38 @@ export async function zoteroRequest(
       attempt < RETRY_DELAYS_MS.length
         ? retryDelayMs(response, RETRY_DELAYS_MS[attempt])
         : null;
-    if (retry !== null) {
-      await new Promise((resolve) => setTimeout(resolve, retry));
-      continue;
-    }
-    if (fallback && RETRY_STATUSES.has(response.status)) {
-      return databaseResponse(path);
-    }
+    if (retry === null) break;
+    await new Promise((resolve) => setTimeout(resolve, retry));
+  }
+  if (response && !RETRY_STATUSES.has(response.status)) {
+    noteServed("web");
     return response;
   }
+
+  // zotero.org is down or out of reach.
+  noteWebDown();
+  if (!source) {
+    if (
+      via === "web" &&
+      settings.zoteroAppMode === "fallback" &&
+      (await zoteroAppStatus()) === "on"
+    ) {
+      try {
+        return await fromApp();
+      } catch (err) {
+        forgetZoteroApp();
+        if (err instanceof ZoteroAppDeniedError) throw err;
+      }
+    }
+    if (method === "GET" && settings.zoteroDatabaseFallback) {
+      const answer = await databaseResponse(path);
+      noteServed("database");
+      return answer;
+    }
+  }
+  noteFailed();
+  if (response) return response;
+  throw new Error("Can't reach zotero.org. Check your connection.");
 }
 
 /** A read; throws unless Zotero answered with what was asked for. */
@@ -179,14 +214,12 @@ async function zoteroWrite(
   path: string,
   request: ZoteroRequest,
 ): Promise<Response> {
-  const source = request.source ?? (await zoteroSource());
   const response = await zoteroRequest(apiKey, path, {
     ...request,
-    source,
     headers: { "Content-Type": "application/json", ...request.headers },
   });
   if (response.status === 403) {
-    throw source === "local"
+    throw useZoteroConnection.getState().servedBy === "local"
       ? new ZoteroAppDeniedError()
       : new ZoteroWriteDeniedError();
   }
@@ -658,13 +691,27 @@ export async function downloadAttachmentFile(
   userID: string,
   attachmentKey: string,
 ): Promise<Uint8Array> {
-  const bytes = await invoke<number[]>("zotero_download_attachment", {
-    apiKey,
-    userId: userID,
-    attachmentKey,
-    useDatabase: useSettingsStore.getState().zoteroDatabaseFallback,
-  });
-  return new Uint8Array(bytes);
+  const settings = useSettingsStore.getState();
+  try {
+    const { bytes, source } = await invoke<{
+      bytes: number[];
+      source: ZoteroServedBy;
+    }>("zotero_download_attachment", {
+      apiKey,
+      userId: userID,
+      attachmentKey,
+      appMode: settings.zoteroAppMode,
+      useDatabase: settings.zoteroDatabaseFallback,
+    });
+    // Not from zotero.org when it was asked first: it failed.
+    if (source !== "web" && settings.zoteroAppMode !== "always") noteWebDown();
+    noteServed(source);
+    return new Uint8Array(bytes);
+  } catch (err) {
+    noteWebDown();
+    noteFailed();
+    throw err;
+  }
 }
 
 export interface ZoteroAnnotation {
@@ -724,24 +771,25 @@ export async function addZoteroTag(
   tag: string,
 ): Promise<void> {
   // Read and write in one place: versions differ between the two.
-  const source = await zoteroSource();
-  const current = await zoteroFetch(
-    apiKey,
-    `/users/${userID}/items/${itemKey}`,
-    undefined,
-    source,
-  );
-  const item = (await current.json()) as {
-    version: number;
-    data: { tags?: { tag: string; type?: number }[] };
-  };
-  const tags = item.data.tags ?? [];
-  if (tags.some((t) => t.tag.toLowerCase() === tag.toLowerCase())) return;
-  await zoteroWrite(apiKey, `/users/${userID}/items/${itemKey}`, {
-    method: "PATCH",
-    source,
-    headers: { "If-Unmodified-Since-Version": String(item.version) },
-    body: JSON.stringify({ tags: [...tags, { tag }] }),
+  await withZoteroSource(async (source) => {
+    const current = await zoteroFetch(
+      apiKey,
+      `/users/${userID}/items/${itemKey}`,
+      undefined,
+      source,
+    );
+    const item = (await current.json()) as {
+      version: number;
+      data: { tags?: { tag: string; type?: number }[] };
+    };
+    const tags = item.data.tags ?? [];
+    if (tags.some((t) => t.tag.toLowerCase() === tag.toLowerCase())) return;
+    await zoteroWrite(apiKey, `/users/${userID}/items/${itemKey}`, {
+      method: "PATCH",
+      source,
+      headers: { "If-Unmodified-Since-Version": String(item.version) },
+      body: JSON.stringify({ tags: [...tags, { tag }] }),
+    });
   });
 }
 
@@ -768,17 +816,18 @@ async function writeItem(
   method: "PATCH" | "DELETE",
   body?: object,
 ) {
-  const source = await zoteroSource();
-  await zoteroWrite(apiKey, `/users/${userID}/items/${key}`, {
-    method,
-    source,
-    headers: {
-      "If-Unmodified-Since-Version": String(
-        await itemVersion(apiKey, userID, key, source),
-      ),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  await withZoteroSource(async (source) =>
+    zoteroWrite(apiKey, `/users/${userID}/items/${key}`, {
+      method,
+      source,
+      headers: {
+        "If-Unmodified-Since-Version": String(
+          await itemVersion(apiKey, userID, key, source),
+        ),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+  );
 }
 
 /** Changes a highlight's color or note in Zotero. */

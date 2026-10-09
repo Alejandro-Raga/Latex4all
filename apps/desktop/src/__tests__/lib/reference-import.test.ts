@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useSettingsStore } from "@/stores/settings-store";
 
 const mocks = vi.hoisted(() => ({
   copyFileToProject: vi.fn(),
@@ -129,6 +130,11 @@ describe("importReferencePdf", () => {
   });
 
   it("explains a Zotero item that has no PDF stored in the cloud", async () => {
+    // Without Zotero on this computer, a linked file can't be reached.
+    useSettingsStore.setState({
+      zoteroAppMode: "off",
+      zoteroDatabaseFallback: false,
+    });
     mocks.findPdfAttachment.mockResolvedValue({
       key: "ABC",
       filename: "paper.pdf",

@@ -85,9 +85,9 @@ interface SettingsState {
   /** Keep Zotero PDFs once opened, to reopen instantly and offline. */
   keepZoteroPdfs: boolean;
   setKeepZoteroPdfs: (keep: boolean) => void;
-  /** Read and write Zotero through the Zotero app when it's open. */
-  useZoteroApp: boolean;
-  setUseZoteroApp: (use: boolean) => void;
+  /** When to read and write Zotero through the Zotero app (zotero-source.ts). */
+  zoteroAppMode: "off" | "fallback" | "always";
+  setZoteroAppMode: (mode: "off" | "fallback" | "always") => void;
   /** Read Zotero's database when neither the app nor zotero.org answers. */
   zoteroDatabaseFallback: boolean;
   setZoteroDatabaseFallback: (use: boolean) => void;
@@ -126,8 +126,8 @@ export const useSettingsStore = create<SettingsState>()(
         })),
       keepZoteroPdfs: false,
       setKeepZoteroPdfs: (keep) => set({ keepZoteroPdfs: keep }),
-      useZoteroApp: true,
-      setUseZoteroApp: (use) => set({ useZoteroApp: use }),
+      zoteroAppMode: "fallback",
+      setZoteroAppMode: (mode) => set({ zoteroAppMode: mode }),
       zoteroDatabaseFallback: false,
       setZoteroDatabaseFallback: (use) => set({ zoteroDatabaseFallback: use }),
       customTheme: DEFAULT_CUSTOM_COLORS,

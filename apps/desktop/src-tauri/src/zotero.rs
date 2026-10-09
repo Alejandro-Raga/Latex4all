@@ -372,42 +372,91 @@ pub async fn zotero_cancel_oauth(state: tauri::State<'_, ZoteroOAuthState>) -> R
     Ok(())
 }
 
-/// Downloads an attachment's file bytes from the Rust side. The webview's fetch()
-/// is subject to CSP connect-src, which either doesn't cover — or is inconsistently
-/// enforced across — the storage backend Zotero's /file endpoint redirects to;
-/// doing the request here sidesteps that entirely (Rust-side HTTP isn't CSP-governed).
+#[derive(Serialize)]
+pub struct Download {
+    bytes: Vec<u8>,
+    /// What served it: "web" (zotero.org), "local" (the Zotero app or its
+    /// files) or "database" (found through Zotero's database).
+    source: &'static str,
+}
+
+/// An attachment's PDF, from where the settings allow (`app_mode` as in
+/// zotero-source.ts: "off", "fallback" or "always"): with "always", Zotero's
+/// files on this computer first; else zotero.org first, then those files
+/// when it fails — the app's, or, with `use_database`, as Zotero's database
+/// names them (the app closed). A linked file only exists on this computer.
 #[tauri::command]
 pub async fn zotero_download_attachment(
     api_key: String,
     user_id: String,
     attachment_key: String,
+    app_mode: Option<String>,
     use_database: Option<bool>,
-) -> Result<Vec<u8>, String> {
-    // The Zotero app's own copy, when it's on this computer: no download, and
-    // it opens while Zotero's servers are down. With the app open, it also
-    // names the file of a linked attachment, which zotero.org can't serve.
-    if let Some(path) = local_attachment(&attachment_key) {
-        if let Ok(bytes) = std::fs::read(&path) {
-            return Ok(bytes);
+) -> Result<Download, String> {
+    let mode = app_mode.as_deref().unwrap_or("off");
+    let use_app = mode != "off";
+    let use_database = use_database == Some(true);
+    let local = |source: &'static str| {
+        let key = attachment_key.clone();
+        async move {
+            // Zotero's own copy, then (app open) where the app says the file is.
+            if let Some(bytes) = local_attachment(&key).and_then(|p| std::fs::read(p).ok()) {
+                return Some(Download { bytes, source });
+            }
+            if use_app {
+                if let Some(path) = local_app_file(&key).await {
+                    if let Ok(bytes) = std::fs::read(path) {
+                        return Some(Download { bytes, source });
+                    }
+                }
+            }
+            None
+        }
+    };
+
+    if mode == "always" {
+        if let Some(found) = local("local").await {
+            return Ok(found);
         }
     }
-    if let Some(path) = local_app_file(&attachment_key).await {
-        if let Ok(bytes) = std::fs::read(&path) {
-            return Ok(bytes);
+    let error = match download_web(&api_key, &user_id, &attachment_key).await {
+        Ok(bytes) => {
+            return Ok(Download {
+                bytes,
+                source: "web",
+            })
+        }
+        Err(error) => error,
+    };
+    if use_app || use_database {
+        if let Some(found) = local(if use_app { "local" } else { "database" }).await {
+            return Ok(found);
         }
     }
-    // With the app closed, Zotero's database still says where a linked file is.
-    if use_database == Some(true) {
+    if use_database {
         let key = attachment_key.clone();
         let linked = tokio::task::spawn_blocking(move || crate::zotero_db::linked_file(&key))
             .await
             .ok()
             .flatten();
         if let Some(bytes) = linked.and_then(|path| std::fs::read(path).ok()) {
-            return Ok(bytes);
+            return Ok(Download {
+                bytes,
+                source: "database",
+            });
         }
     }
+    Err(error)
+}
 
+/// Downloads an attachment's file from zotero.org. Done here rather than
+/// with the webview's fetch(): the /file endpoint redirects to Zotero's
+/// storage, which the webview's CSP may not let through.
+async fn download_web(
+    api_key: &str,
+    user_id: &str,
+    attachment_key: &str,
+) -> Result<Vec<u8>, String> {
     let url = format!(
         "https://api.zotero.org/users/{}/items/{}/file",
         user_id, attachment_key
@@ -422,11 +471,11 @@ pub async fn zotero_download_attachment(
     let response = loop {
         let response = client
             .get(&url)
-            .header("Zotero-API-Key", &api_key)
+            .header("Zotero-API-Key", api_key)
             .header("Zotero-API-Version", "3")
             .send()
             .await
-            .map_err(|e| format!("Download request failed: {}", e))?;
+            .map_err(|_| "Can't reach zotero.org. Check your connection.".to_string())?;
         let status = response.status();
         if status.is_success() {
             break response;

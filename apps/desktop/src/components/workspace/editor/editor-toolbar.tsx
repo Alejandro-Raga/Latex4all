@@ -49,6 +49,7 @@ import { useDocumentStore } from "@/stores/document-store";
 import { useLanguageToolStore } from "@/stores/language-tool-store";
 import { useLanguagePacksStore } from "@/stores/language-packs-store";
 import { CHECK_LANGUAGES, useSettingsStore } from "@/stores/settings-store";
+import { ZoteroButton } from "@/components/zotero-source-controls";
 
 interface EditorInfo {
   id: string;
@@ -539,6 +540,7 @@ export function EditorToolbar({
           )}
         </Button>
       )}
+      <ZoteroButton />
       <CollabButton />
       {editors.length === 1 && (
         <TooltipIconButton
