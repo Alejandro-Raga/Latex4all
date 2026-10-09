@@ -264,10 +264,32 @@ const megabytes = (bytes: number) =>
     : `${(bytes / 1e6).toFixed(bytes < 1e7 ? 1 : 0)} MB`;
 
 const ZOTERO_APP_DETAIL: Record<ZoteroAppStatus, string> = {
-  on: "In use: your library is read and saved through Zotero on this computer",
-  off: "In Zotero, turn on Settings → Advanced → “Allow other applications on this computer to communicate with Zotero”",
+  on: "In use: reading and saving go through Zotero",
+  off: "Zotero doesn't let other apps in yet",
   closed: "Zotero isn't open, so zotero.org is used",
 };
+
+/** A note under a setting, wrapped rather than cut off. */
+function SettingNote({
+  children,
+  warning,
+}: {
+  children: ReactNode;
+  warning?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "mx-5 mb-3 rounded-md px-3 py-2 text-xs",
+        warning
+          ? "border border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400"
+          : "bg-muted text-muted-foreground",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
 
 /** Whether to go through the Zotero app when it's open, and if it is. */
 function ZoteroAppSettings() {
@@ -288,13 +310,50 @@ function ZoteroAppSettings() {
     };
   }, [use]);
 
+  const apiKey = useZoteroStore((s) => s.apiKey);
+  const userID = useZoteroStore((s) => s.userID);
+  const fallback = useSettingsStore((s) => s.zoteroDatabaseFallback);
+  const setFallback = useSettingsStore((s) => s.setZoteroDatabaseFallback);
+
   return (
-    <SettingRow
-      label="Use the Zotero app"
-      detail={use && status ? ZOTERO_APP_DETAIL[status] : undefined}
-    >
-      <Toggle checked={use} onChange={setUse} label="Use the Zotero app" />
-    </SettingRow>
+    <>
+      <SettingRow
+        label="Use the Zotero app"
+        detail={use && status ? ZOTERO_APP_DETAIL[status] : undefined}
+      >
+        <Toggle checked={use} onChange={setUse} label="Use the Zotero app" />
+      </SettingRow>
+      {use && status === "off" && (
+        <SettingNote>
+          In Zotero, open Settings → Advanced and turn on “Allow other
+          applications on this computer to communicate with Zotero”.
+        </SettingNote>
+      )}
+      <SettingRow
+        label="Read Zotero's database when offline"
+        detail="When Zotero is closed and zotero.org can't be reached"
+      >
+        <Toggle
+          checked={fallback}
+          onChange={(on) => {
+            setFallback(on);
+            // BibTeX is kept with the library from now on: fetch it all.
+            if (on && apiKey && userID) {
+              useZoteroLibrary.getState().refetch(apiKey, userID);
+            }
+          }}
+          label="Read Zotero's database when offline"
+        />
+      </SettingRow>
+      {fallback && (
+        <SettingNote warning>
+          Latex4All then reads a copy of Zotero's database on this computer. You
+          can browse, search and open papers with their highlights, but nothing
+          is saved to Zotero and .bib files aren't updated until Zotero or
+          zotero.org is back. BibTeX is as of the last library update.
+        </SettingNote>
+      )}
+    </>
   );
 }
 

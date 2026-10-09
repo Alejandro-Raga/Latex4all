@@ -381,6 +381,7 @@ pub async fn zotero_download_attachment(
     api_key: String,
     user_id: String,
     attachment_key: String,
+    use_database: Option<bool>,
 ) -> Result<Vec<u8>, String> {
     // The Zotero app's own copy, when it's on this computer: no download, and
     // it opens while Zotero's servers are down. With the app open, it also
@@ -392,6 +393,17 @@ pub async fn zotero_download_attachment(
     }
     if let Some(path) = local_app_file(&attachment_key).await {
         if let Ok(bytes) = std::fs::read(&path) {
+            return Ok(bytes);
+        }
+    }
+    // With the app closed, Zotero's database still says where a linked file is.
+    if use_database == Some(true) {
+        let key = attachment_key.clone();
+        let linked = tokio::task::spawn_blocking(move || crate::zotero_db::linked_file(&key))
+            .await
+            .ok()
+            .flatten();
+        if let Some(bytes) = linked.and_then(|path| std::fs::read(path).ok()) {
             return Ok(bytes);
         }
     }
@@ -544,7 +556,7 @@ fn is_item_key(key: &str) -> bool {
 
 /// Where the Zotero app keeps its data: the folder chosen in its settings
 /// (`extensions.zotero.dataDir` in a profile's prefs.js), else ~/Zotero.
-fn zotero_data_dirs() -> Vec<std::path::PathBuf> {
+pub(crate) fn zotero_data_dirs() -> Vec<std::path::PathBuf> {
     let mut found = Vec::new();
     let profile_roots = [
         dirs::data_dir().map(|d| d.join("Zotero").join("Profiles")), // macOS

@@ -88,6 +88,9 @@ interface SettingsState {
   /** Read and write Zotero through the Zotero app when it's open. */
   useZoteroApp: boolean;
   setUseZoteroApp: (use: boolean) => void;
+  /** Read Zotero's database when neither the app nor zotero.org answers. */
+  zoteroDatabaseFallback: boolean;
+  setZoteroDatabaseFallback: (use: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -125,6 +128,8 @@ export const useSettingsStore = create<SettingsState>()(
       setKeepZoteroPdfs: (keep) => set({ keepZoteroPdfs: keep }),
       useZoteroApp: true,
       setUseZoteroApp: (use) => set({ useZoteroApp: use }),
+      zoteroDatabaseFallback: false,
+      setZoteroDatabaseFallback: (use) => set({ zoteroDatabaseFallback: use }),
       customTheme: DEFAULT_CUSTOM_COLORS,
       setCustomTheme: (colors) => set({ customTheme: colors }),
       pdfThemeMain: "light",

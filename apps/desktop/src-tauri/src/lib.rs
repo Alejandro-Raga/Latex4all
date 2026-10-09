@@ -23,6 +23,7 @@ mod uv;
 mod vault_webdav;
 mod wordnet;
 mod zotero;
+mod zotero_db;
 
 use std::path::Path;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -773,6 +774,7 @@ pub fn run() {
             zotero::zotero_cancel_oauth,
             zotero::zotero_download_attachment,
             zotero::zotero_local_request,
+            zotero_db::zotero_db_read,
             vault_webdav::vault_webdav_connect,
             vault_webdav::vault_webdav_status,
             vault_webdav::vault_webdav_disconnect,

@@ -183,10 +183,15 @@ export async function localZoteroRequest(
 
 /**
  * Whether an attachment's PDF can be opened: one stored in Zotero always,
- * a linked file only through the app, which knows where it is.
+ * a linked file only through the app or Zotero's database, which know where
+ * it is.
  */
 export async function canOpenPdf(attachment: {
   downloadable: boolean;
 }): Promise<boolean> {
-  return attachment.downloadable || (await zoteroSource()) === "local";
+  return (
+    attachment.downloadable ||
+    useSettingsStore.getState().zoteroDatabaseFallback ||
+    (await zoteroSource()) === "local"
+  );
 }

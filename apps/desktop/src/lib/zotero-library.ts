@@ -21,6 +21,7 @@ import {
   zoteroFetch,
 } from "./zotero-api";
 import { type ZoteroSource, zoteroSource } from "./zotero-source";
+import { useSettingsStore } from "@/stores/settings-store";
 
 export interface LibraryPdf {
   key: string;
@@ -33,6 +34,8 @@ export interface LibraryPdf {
 
 export interface LibraryItem extends ZoteroItemSummary {
   collections: string[];
+  /** Zotero's BibTeX, kept while the database fallback is on (see zotero-db.ts). */
+  bibtex?: string;
 }
 
 interface Attachment extends LibraryPdf {
@@ -65,6 +68,7 @@ export function emptyMirror(userID: string): LibraryMirror {
 /** An item as the Zotero API returns it (the parts used here). */
 export interface ApiItem {
   key: string;
+  bibtex?: string;
   data: {
     itemType: string;
     parentItem?: string;
@@ -82,7 +86,7 @@ export interface ApiItem {
 
 /** Folds changed items into the copy (new, edited, moved or trashed). */
 export function applyItems(mirror: LibraryMirror, changed: ApiItem[]) {
-  for (const { key, data } of changed) {
+  for (const { key, data, bibtex } of changed) {
     delete mirror.items[key];
     delete mirror.attachments[key];
     if (data.deleted) continue; // in the trash
@@ -115,6 +119,7 @@ export function applyItems(mirror: LibraryMirror, changed: ApiItem[]) {
       date,
       itemType: data.itemType,
       collections: data.collections ?? [],
+      ...(bibtex?.trim() ? { bibtex: bibtex.trim() } : {}),
     };
   }
 }
@@ -175,6 +180,10 @@ async function fetchChanges(
   for (let start = 0; ; start += 100) {
     const params = new URLSearchParams({
       format: "json",
+      // BibTeX too when it's kept for the database fallback.
+      ...(useSettingsStore.getState().zoteroDatabaseFallback
+        ? { include: "data,bibtex" }
+        : {}),
       since: String(since),
       // Annotations are many and not needed to browse or search.
       itemType: "-annotation",
@@ -285,6 +294,8 @@ interface LibraryState {
   /** Loads the copy (once) and brings it up to date in the background. */
   ensure: (apiKey: string, userID: string) => Promise<void>;
   sync: (apiKey: string, userID: string) => Promise<void>;
+  /** Fetches the whole library again (to keep BibTeX for the fallback). */
+  refetch: (apiKey: string, userID: string) => Promise<void>;
   forget: () => void;
 }
 
@@ -329,6 +340,12 @@ export const useZoteroLibrary = create<LibraryState>((set, get) => ({
     } finally {
       set({ syncing: false, loading: false });
     }
+  },
+
+  refetch: async (apiKey, userID) => {
+    const mirror = get().mirror;
+    if (mirror) set({ mirror: { ...mirror, version: 0, localVersion: 0 } });
+    await get().sync(apiKey, userID);
   },
 
   forget: () => {

@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
+import { useSettingsStore } from "@/stores/settings-store";
+import { databaseResponse } from "./zotero-db";
 import {
   forgetZoteroApp,
   localZoteroRequest,
@@ -120,24 +122,41 @@ export async function zoteroRequest(
       if (source || err instanceof ZoteroAppDeniedError) throw err;
     }
   }
+  // Last resort for a read: Zotero's database on this computer.
+  const fallback =
+    method === "GET" &&
+    !source &&
+    useSettingsStore.getState().zoteroDatabaseFallback;
   for (let attempt = 0; ; attempt++) {
-    const response = await fetch(`${ZOTERO_BASE}${path}`, {
-      method,
-      headers: {
-        "Zotero-API-Key": apiKey,
-        "Zotero-API-Version": "3",
-        ...headers,
-      },
-      body,
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${ZOTERO_BASE}${path}`, {
+        method,
+        headers: {
+          "Zotero-API-Key": apiKey,
+          "Zotero-API-Version": "3",
+          ...headers,
+        },
+        body,
+      });
+    } catch {
+      if (fallback) return databaseResponse(path);
+      throw new Error("Can't reach zotero.org. Check your connection.");
+    }
     const retry =
       method === "GET" &&
       RETRY_STATUSES.has(response.status) &&
       attempt < RETRY_DELAYS_MS.length
         ? retryDelayMs(response, RETRY_DELAYS_MS[attempt])
         : null;
-    if (retry === null) return response;
-    await new Promise((resolve) => setTimeout(resolve, retry));
+    if (retry !== null) {
+      await new Promise((resolve) => setTimeout(resolve, retry));
+      continue;
+    }
+    if (fallback && RETRY_STATUSES.has(response.status)) {
+      return databaseResponse(path);
+    }
+    return response;
   }
 }
 
@@ -643,6 +662,7 @@ export async function downloadAttachmentFile(
     apiKey,
     userId: userID,
     attachmentKey,
+    useDatabase: useSettingsStore.getState().zoteroDatabaseFallback,
   });
   return new Uint8Array(bytes);
 }
