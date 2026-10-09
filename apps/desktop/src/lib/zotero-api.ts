@@ -57,24 +57,52 @@ export async function cancelOAuth(): Promise<void> {
 
 // ─── Zotero Web API v3 ───
 
+/** Statuses Zotero sends when it's busy or briefly down; worth asking again. */
+const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
+const RETRY_DELAYS_MS = [1000, 3000, 8000];
+
+/** How long Zotero asked us to wait (Retry-After or Backoff), capped. */
+export function retryDelayMs(response: Response, fallback: number): number {
+  const asked = Number(
+    response.headers.get("Retry-After") ?? response.headers.get("Backoff"),
+  );
+  return asked > 0 ? Math.min(asked * 1000, 15_000) : fallback;
+}
+
+/** The message for a failed request, in words for the busy cases. */
+export function zoteroErrorMessage(status: number): string {
+  if (status === 429)
+    return "Zotero is limiting requests. Try again in a minute.";
+  if (status === 503 || status === 502 || status === 504)
+    return `Zotero is temporarily unavailable (${status}). Try again in a minute.`;
+  return `Zotero API error: ${status}`;
+}
+
 export async function zoteroFetch(
   apiKey: string,
   path: string,
   headers?: Record<string, string>,
 ): Promise<Response> {
-  const response = await fetch(`${ZOTERO_BASE}${path}`, {
-    headers: {
-      "Zotero-API-Key": apiKey,
-      "Zotero-API-Version": "3",
-      ...headers,
-    },
-  });
-  if (!response.ok) {
-    if (response.status === 304) return response;
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(`${ZOTERO_BASE}${path}`, {
+      headers: {
+        "Zotero-API-Key": apiKey,
+        "Zotero-API-Version": "3",
+        ...headers,
+      },
+    });
+    if (response.ok || response.status === 304) return response;
     if (response.status === 403) throw new Error("Invalid or expired API key");
-    throw new Error(`Zotero API error: ${response.status}`);
+    if (
+      RETRY_STATUSES.has(response.status) &&
+      attempt < RETRY_DELAYS_MS.length
+    ) {
+      const wait = retryDelayMs(response, RETRY_DELAYS_MS[attempt]);
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      continue;
+    }
+    throw new Error(zoteroErrorMessage(response.status));
   }
-  return response;
 }
 
 /** The citation key of a BibTeX entry — the `foo` in `@article{foo, ...}`. */
@@ -612,7 +640,7 @@ export async function addZoteroTag(
   );
   if (response.status === 403) throw new ZoteroWriteDeniedError();
   if (!response.ok && response.status !== 204) {
-    throw new Error(`Zotero API error: ${response.status}`);
+    throw new Error(zoteroErrorMessage(response.status));
   }
 }
 
@@ -643,7 +671,7 @@ async function writeItem(
   });
   if (response.status === 403) throw new ZoteroWriteDeniedError();
   if (!response.ok && response.status !== 204) {
-    throw new Error(`Zotero API error: ${response.status}`);
+    throw new Error(zoteroErrorMessage(response.status));
   }
 }
 
@@ -755,7 +783,7 @@ export async function createZoteroHighlight(
     body: JSON.stringify(body),
   });
   if (response.status === 403) throw new ZoteroWriteDeniedError();
-  if (!response.ok) throw new Error(`Zotero API error: ${response.status}`);
+  if (!response.ok) throw new Error(zoteroErrorMessage(response.status));
   const result = (await response.json()) as {
     successful?: Record<string, { key: string }>;
     failed?: Record<string, { message?: string }>;
@@ -861,7 +889,7 @@ export async function createZoteroItems(
       body: JSON.stringify(batch),
     });
     if (response.status === 403) throw new ZoteroWriteDeniedError();
-    if (!response.ok) throw new Error(`Zotero API error: ${response.status}`);
+    if (!response.ok) throw new Error(zoteroErrorMessage(response.status));
     const result = (await response.json()) as {
       successful?: Record<string, { key: string }>;
       failed?: Record<string, { message?: string }>;

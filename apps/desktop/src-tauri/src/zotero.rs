@@ -387,21 +387,45 @@ pub async fn zotero_download_attachment(
         user_id, attachment_key
     );
 
+    // Zotero (or the storage it redirects to) answers 429/5xx when busy or
+    // briefly down; wait as asked, or a little longer each time, and retry.
+    const RETRY_DELAYS: [u64; 3] = [1, 3, 8];
     let client = reqwest::Client::new();
-    let response = client
-        .get(&url)
-        .header("Zotero-API-Key", api_key)
-        .header("Zotero-API-Version", "3")
-        .send()
-        .await
-        .map_err(|e| format!("Download request failed: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!(
-            "Failed to download attachment: {}",
-            response.status()
-        ));
-    }
+    let mut attempt = 0;
+    let response = loop {
+        let response = client
+            .get(&url)
+            .header("Zotero-API-Key", &api_key)
+            .header("Zotero-API-Version", "3")
+            .send()
+            .await
+            .map_err(|e| format!("Download request failed: {}", e))?;
+        let status = response.status();
+        if status.is_success() {
+            break response;
+        }
+        let busy = status.as_u16() == 429 || status.is_server_error();
+        if busy && attempt < RETRY_DELAYS.len() {
+            let asked = response
+                .headers()
+                .get("Retry-After")
+                .or_else(|| response.headers().get("Backoff"))
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.trim().parse::<u64>().ok());
+            let wait = asked.map_or(RETRY_DELAYS[attempt], |s| s.clamp(1, 15));
+            tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+            attempt += 1;
+            continue;
+        }
+        return Err(match status.as_u16() {
+            429 => "Zotero is limiting requests. Try again in a minute.".to_string(),
+            502..=504 => format!(
+                "Zotero is temporarily unavailable ({}). Try again in a minute.",
+                status.as_u16()
+            ),
+            _ => format!("Failed to download attachment: {}", status),
+        });
+    };
 
     let bytes = response
         .bytes()
