@@ -20,6 +20,7 @@ import {
   type ZoteroItemSummary,
   zoteroFetch,
 } from "./zotero-api";
+import { type ZoteroSource, zoteroSource } from "./zotero-source";
 
 export interface LibraryPdf {
   key: string;
@@ -41,8 +42,10 @@ interface Attachment extends LibraryPdf {
 export interface LibraryMirror {
   format: 2;
   userID: string;
-  /** Zotero's library version this copy is up to date with. */
+  /** zotero.org's library version this copy is up to date with. */
   version: number;
+  /** The same in the Zotero app's own numbering, which is unrelated. */
+  localVersion?: number;
   items: Record<string, LibraryItem>;
   attachments: Record<string, Attachment>;
   collections: ZoteroCollection[];
@@ -161,7 +164,12 @@ export function pdfOf(
 // ─── Zotero ───
 
 /** Everything changed since `since` (all of it from 0), annotations aside. */
-async function fetchChanges(apiKey: string, userID: string, since: number) {
+async function fetchChanges(
+  apiKey: string,
+  userID: string,
+  since: number,
+  source: ZoteroSource,
+) {
   const items: ApiItem[] = [];
   let version = since;
   for (let start = 0; ; start += 100) {
@@ -177,6 +185,8 @@ async function fetchChanges(apiKey: string, userID: string, since: number) {
     const response = await zoteroFetch(
       apiKey,
       `/users/${userID}/items?${params}`,
+      undefined,
+      source,
     );
     version = Number(response.headers.get("Last-Modified-Version") ?? version);
     const page = (await response.json()) as ApiItem[];
@@ -186,10 +196,17 @@ async function fetchChanges(apiKey: string, userID: string, since: number) {
   return { items, version };
 }
 
-async function fetchDeleted(apiKey: string, userID: string, since: number) {
+async function fetchDeleted(
+  apiKey: string,
+  userID: string,
+  since: number,
+  source: ZoteroSource,
+) {
   const response = await zoteroFetch(
     apiKey,
     `/users/${userID}/deleted?since=${since}`,
+    undefined,
+    source,
   );
   const body = (await response.json()) as { items?: string[] };
   return body.items ?? [];
@@ -204,14 +221,22 @@ export async function syncMirror(
   apiKey: string,
   userID: string,
 ): Promise<boolean> {
-  const since = mirror.version;
-  const { items, version } = await fetchChanges(apiKey, userID, since);
+  const source = await zoteroSource();
+  const since =
+    (source === "local" ? mirror.localVersion : mirror.version) ?? 0;
+  const { items, version } = await fetchChanges(apiKey, userID, since, source);
   if (since > 0 && version === since && items.length === 0) return false;
+  if (since === 0) {
+    // The whole library: what isn't in it any more goes.
+    mirror.items = {};
+    mirror.attachments = {};
+  }
   applyItems(mirror, items);
   if (since > 0)
-    applyDeleted(mirror, await fetchDeleted(apiKey, userID, since));
-  mirror.collections = await fetchCollections(apiKey, userID);
-  mirror.version = version;
+    applyDeleted(mirror, await fetchDeleted(apiKey, userID, since, source));
+  mirror.collections = await fetchCollections(apiKey, userID, source);
+  if (source === "local") mirror.localVersion = version;
+  else mirror.version = version;
   return true;
 }
 
@@ -278,7 +303,7 @@ export const useZoteroLibrary = create<LibraryState>((set, get) => ({
       syncedThisSession = false;
       set({ loading: true, mirror: null, error: null });
       const mirror = await loadMirror(userID);
-      set({ mirror, loading: mirror.version === 0 });
+      set({ mirror, loading: Object.keys(mirror.items).length === 0 });
     }
     if (!syncedThisSession) {
       syncedThisSession = true;

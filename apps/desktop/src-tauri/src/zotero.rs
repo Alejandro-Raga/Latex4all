@@ -383,8 +383,14 @@ pub async fn zotero_download_attachment(
     attachment_key: String,
 ) -> Result<Vec<u8>, String> {
     // The Zotero app's own copy, when it's on this computer: no download, and
-    // it opens while Zotero's servers are down.
+    // it opens while Zotero's servers are down. With the app open, it also
+    // names the file of a linked attachment, which zotero.org can't serve.
     if let Some(path) = local_attachment(&attachment_key) {
+        if let Ok(bytes) = std::fs::read(&path) {
+            return Ok(bytes);
+        }
+    }
+    if let Some(path) = local_app_file(&attachment_key).await {
         if let Ok(bytes) = std::fs::read(&path) {
             return Ok(bytes);
         }
@@ -445,6 +451,97 @@ pub async fn zotero_download_attachment(
     Ok(bytes.to_vec())
 }
 
+/// The Zotero app's local API (Settings → Advanced → "Allow other applications
+/// on this computer to communicate with Zotero"), which serves the same
+/// requests as zotero.org's API from the library on this computer.
+const LOCAL_API: &str = "http://127.0.0.1:23119/api";
+
+#[derive(Serialize)]
+pub struct LocalResponse {
+    status: u16,
+    headers: HashMap<String, String>,
+    body: String,
+}
+
+/// One request to the Zotero app's local API. Done here rather than with the
+/// webview's fetch(), which its CSP and plain-HTTP rules would stop. Fails
+/// (Err) only when the app isn't there to answer.
+#[tauri::command]
+pub async fn zotero_local_request(
+    method: String,
+    path: String,
+    headers: HashMap<String, String>,
+    body: Option<String>,
+    timeout_secs: Option<u64>,
+) -> Result<LocalResponse, String> {
+    if !path.starts_with('/') || path.contains("..") {
+        return Err("Bad path".to_string());
+    }
+    let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(|e| e.to_string())?;
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(2))
+        .timeout(std::time::Duration::from_secs(timeout_secs.unwrap_or(60)))
+        // The /file endpoints answer with a file:// redirect, which is the answer.
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut request = client.request(method, format!("{LOCAL_API}{path}"));
+    for (name, value) in &headers {
+        request = request.header(name, value);
+    }
+    if let Some(body) = body {
+        request = request.body(body);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("Zotero app not reachable: {e}"))?;
+    let status = response.status().as_u16();
+    let headers = response
+        .headers()
+        .iter()
+        .filter_map(|(k, v)| Some((k.as_str().to_string(), v.to_str().ok()?.to_string())))
+        .collect();
+    let body = response.text().await.map_err(|e| e.to_string())?;
+    Ok(LocalResponse {
+        status,
+        headers,
+        body,
+    })
+}
+
+/// Where the Zotero app, if it's open and lets other apps in, keeps an
+/// attachment's file — stored or linked.
+async fn local_app_file(attachment_key: &str) -> Option<std::path::PathBuf> {
+    if !is_item_key(attachment_key) {
+        return None;
+    }
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(1))
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .ok()?;
+    let response = client
+        .get(format!(
+            "{LOCAL_API}/users/0/items/{attachment_key}/file/view/url"
+        ))
+        .header("Zotero-API-Version", "3")
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    let url = reqwest::Url::parse(response.text().await.ok()?.trim()).ok()?;
+    let path = url.to_file_path().ok()?;
+    path.is_file().then_some(path)
+}
+
+/// Item keys are 8 letters and digits; anything else isn't looked up on disk.
+fn is_item_key(key: &str) -> bool {
+    key.len() == 8 && key.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
 /// Where the Zotero app keeps its data: the folder chosen in its settings
 /// (`extensions.zotero.dataDir` in a profile's prefs.js), else ~/Zotero.
 fn zotero_data_dirs() -> Vec<std::path::PathBuf> {
@@ -485,8 +582,7 @@ fn data_dir_pref(prefs: &str) -> Option<String> {
 
 /// The Zotero app's local copy of an attachment's PDF, if it has one.
 fn local_attachment(attachment_key: &str) -> Option<std::path::PathBuf> {
-    // Item keys are 8 letters and digits; anything else isn't looked up on disk.
-    if attachment_key.len() != 8 || !attachment_key.chars().all(|c| c.is_ascii_alphanumeric()) {
+    if !is_item_key(attachment_key) {
         return None;
     }
     zotero_data_dirs().into_iter().find_map(|dir| {

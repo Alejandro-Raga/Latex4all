@@ -18,6 +18,7 @@ import { collectSubtreeKeys } from "@/lib/zotero-collection-tree";
 import { useDocumentStore } from "@/stores/document-store";
 import { createFileOnDisk, readTexFileContent } from "@/lib/tauri/fs";
 import { createLogger } from "@/lib/debug/logger";
+import { zoteroSource } from "@/lib/zotero-source";
 
 const log = createLogger("zotero");
 
@@ -39,7 +40,10 @@ export interface CollectionSyncInfo {
   collectionKey: string | null; // null = "My Library"
   name: string;
   bibFileName: string;
+  /** zotero.org's library version the file is up to date with. */
   libraryVersion: number;
+  /** The same in the Zotero app's own numbering (see zotero-source.ts). */
+  localLibraryVersion?: number;
   keyMap: Record<string, string>;
 }
 
@@ -206,7 +210,13 @@ export const useZoteroStore = create<ZoteroState>()(
           get().loadCollections();
         } catch (err) {
           log.warn("Revalidation failed", { error: String(err) });
-          set({ isAuthenticated: false });
+          // Only a key zotero.org refuses disconnects; while it's down or
+          // offline, the key still works (and the Zotero app may answer).
+          if (String(err).includes("Invalid or expired")) {
+            set({ isAuthenticated: false });
+          } else {
+            get().loadCollections();
+          }
         }
       },
 
@@ -241,6 +251,7 @@ export const useZoteroStore = create<ZoteroState>()(
           const collectionKeys = collectionKey
             ? collectSubtreeKeys(collections, collectionKey)
             : null;
+          const source = await zoteroSource();
           const result = await importCollection(
             apiKey,
             userID,
@@ -248,6 +259,7 @@ export const useZoteroStore = create<ZoteroState>()(
             (loaded, total) => {
               set({ syncProgress: { loaded, total } });
             },
+            source,
           );
 
           // Determine .bib file name
@@ -279,7 +291,8 @@ export const useZoteroStore = create<ZoteroState>()(
             collectionKey,
             name,
             bibFileName,
-            libraryVersion: result.libraryVersion,
+            libraryVersion: source === "web" ? result.libraryVersion : 0,
+            localLibraryVersion: source === "local" ? result.libraryVersion : 0,
             keyMap: result.keyMap,
           };
           set((s) => {
@@ -326,14 +339,20 @@ export const useZoteroStore = create<ZoteroState>()(
           const collectionKeys = collectionKey
             ? collectSubtreeKeys(collections, collectionKey)
             : null;
+          const source = await zoteroSource();
+          const since =
+            (source === "local"
+              ? syncInfo.localLibraryVersion
+              : syncInfo.libraryVersion) ?? 0;
           const result = await syncCollection(
             apiKey,
             userID,
             collectionKeys,
-            syncInfo.libraryVersion,
+            since,
             (loaded, total) => {
               set({ syncProgress: { loaded, total } });
             },
+            source,
           );
 
           // Entries Zotero didn't make stay, and keys the text uses don't
@@ -343,8 +362,9 @@ export const useZoteroStore = create<ZoteroState>()(
             keyMap: syncInfo.keyMap,
             updated: result.updatedEntries,
             deleted: result.deletedKeys,
-            // A collection is read again whole; the library, what changed.
-            complete: Boolean(collectionKey),
+            // A collection is read again whole; the library, what changed
+            // (or all of it, the first time from this source).
+            complete: Boolean(collectionKey) || since === 0,
           });
           docStore.updateFileContent(bibFile.id, merged.content);
           set((s) => {
@@ -356,7 +376,9 @@ export const useZoteroStore = create<ZoteroState>()(
                   ...pColls,
                   [sk]: {
                     ...syncInfo,
-                    libraryVersion: result.libraryVersion,
+                    ...(source === "local"
+                      ? { localLibraryVersion: result.libraryVersion }
+                      : { libraryVersion: result.libraryVersion }),
                     keyMap: merged.keyMap,
                   },
                 },

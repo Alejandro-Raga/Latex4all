@@ -44,6 +44,7 @@ import { useZoteroStore } from "@/stores/zotero-store";
 import { cn } from "@/lib/utils";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { clearPdfCache, pdfCacheSize } from "@/lib/zotero-pdf-cache";
+import { type ZoteroAppStatus, zoteroAppStatus } from "@/lib/zotero-source";
 import { NoteTypesSettings } from "./note-types-settings";
 import { AiUsageSettings } from "./ai-usage-settings";
 import { AgentAccounts } from "./agent-accounts";
@@ -250,6 +251,7 @@ function ZoteroSettings() {
           </Button>
         </SettingRow>
       )}
+      {authenticated && <ZoteroAppSettings />}
       {authenticated && <ZoteroOfflineSettings />}
       <ZoteroApiKeyDialog open={keyDialog} onOpenChange={setKeyDialog} />
     </div>
@@ -260,6 +262,41 @@ const megabytes = (bytes: number) =>
   bytes < 1e6
     ? `${Math.max(1, Math.round(bytes / 1e3))} KB`
     : `${(bytes / 1e6).toFixed(bytes < 1e7 ? 1 : 0)} MB`;
+
+const ZOTERO_APP_DETAIL: Record<ZoteroAppStatus, string> = {
+  on: "In use: your library is read and saved through Zotero on this computer",
+  off: "In Zotero, turn on Settings → Advanced → “Allow other applications on this computer to communicate with Zotero”",
+  closed: "Zotero isn't open, so zotero.org is used",
+};
+
+/** Whether to go through the Zotero app when it's open, and if it is. */
+function ZoteroAppSettings() {
+  const use = useSettingsStore((s) => s.useZoteroApp);
+  const setUse = useSettingsStore((s) => s.setUseZoteroApp);
+  const [status, setStatus] = useState<ZoteroAppStatus | null>(null);
+
+  useEffect(() => {
+    if (!use) return;
+    let alive = true;
+    const check = () =>
+      zoteroAppStatus(true).then((s) => alive && setStatus(s));
+    check();
+    const timer = setInterval(check, 5000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [use]);
+
+  return (
+    <SettingRow
+      label="Use the Zotero app"
+      detail={use && status ? ZOTERO_APP_DETAIL[status] : undefined}
+    >
+      <Toggle checked={use} onChange={setUse} label="Use the Zotero app" />
+    </SettingRow>
+  );
+}
 
 /** The saved library, and the PDFs kept for offline reading. */
 function ZoteroOfflineSettings() {

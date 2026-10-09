@@ -85,6 +85,9 @@ interface SettingsState {
   /** Keep Zotero PDFs once opened, to reopen instantly and offline. */
   keepZoteroPdfs: boolean;
   setKeepZoteroPdfs: (keep: boolean) => void;
+  /** Read and write Zotero through the Zotero app when it's open. */
+  useZoteroApp: boolean;
+  setUseZoteroApp: (use: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -120,6 +123,8 @@ export const useSettingsStore = create<SettingsState>()(
         })),
       keepZoteroPdfs: false,
       setKeepZoteroPdfs: (keep) => set({ keepZoteroPdfs: keep }),
+      useZoteroApp: true,
+      setUseZoteroApp: (use) => set({ useZoteroApp: use }),
       customTheme: DEFAULT_CUSTOM_COLORS,
       setCustomTheme: (colors) => set({ customTheme: colors }),
       pdfThemeMain: "light",

@@ -15,6 +15,7 @@ import { useClaudeChatStore } from "@/stores/claude-chat-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { downloadAttachmentFile, findPdfAttachment } from "@/lib/zotero-api";
 import { createLogger } from "@/lib/debug/logger";
+import { canOpenPdf } from "@/lib/zotero-source";
 
 const log = createLogger("reference-import");
 
@@ -49,9 +50,9 @@ async function zoteroPdfBytes(
   if (!attachment) {
     throw new ReferenceImportError("This item has no PDF attachment.");
   }
-  if (!attachment.downloadable) {
+  if (!(await canOpenPdf(attachment))) {
     throw new ReferenceImportError(
-      "This item's PDF is a link to a local file in Zotero, not stored in Zotero cloud storage.",
+      "This item's PDF is a link to a local file in Zotero, not stored in Zotero cloud storage. Open Zotero to use it.",
     );
   }
   const bytes = await downloadAttachmentFile(apiKey, userID, attachment.key);

@@ -1,5 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-shell";
+import {
+  forgetZoteroApp,
+  localZoteroRequest,
+  ZoteroAppDeniedError,
+  type ZoteroSource,
+  zoteroSource,
+} from "./zotero-source";
 
 const ZOTERO_BASE = "https://api.zotero.org";
 
@@ -85,33 +92,87 @@ export function zoteroErrorMessage(status: number): string {
   return `Zotero API error: ${status}`;
 }
 
-export async function zoteroFetch(
+export interface ZoteroRequest {
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  headers?: Record<string, string>;
+  body?: string;
+  /** Where to send it; by default the Zotero app when it's open, else zotero.org. */
+  source?: ZoteroSource;
+}
+
+/**
+ * One request to Zotero's API, to the Zotero app (see zotero-source.ts) or to
+ * zotero.org. Reads from zotero.org are asked again when it's briefly busy.
+ * Returns the response as it came; the caller decides what a status means.
+ */
+export async function zoteroRequest(
   apiKey: string,
   path: string,
-  headers?: Record<string, string>,
+  { method = "GET", headers = {}, body, source }: ZoteroRequest = {},
 ): Promise<Response> {
+  const via = source ?? (await zoteroSource());
+  if (via === "local") {
+    try {
+      return await localZoteroRequest(method, path, headers, body);
+    } catch (err) {
+      // The app closed: zotero.org instead, unless the caller needs the app.
+      forgetZoteroApp();
+      if (source || err instanceof ZoteroAppDeniedError) throw err;
+    }
+  }
   for (let attempt = 0; ; attempt++) {
     const response = await fetch(`${ZOTERO_BASE}${path}`, {
+      method,
       headers: {
         "Zotero-API-Key": apiKey,
         "Zotero-API-Version": "3",
         ...headers,
       },
+      body,
     });
-    if (response.ok || response.status === 304) return response;
-    if (response.status === 403) throw new Error("Invalid or expired API key");
-    if (
+    const retry =
+      method === "GET" &&
       RETRY_STATUSES.has(response.status) &&
       attempt < RETRY_DELAYS_MS.length
-    ) {
-      const wait = retryDelayMs(response, RETRY_DELAYS_MS[attempt]);
-      if (wait !== null) {
-        await new Promise((resolve) => setTimeout(resolve, wait));
-        continue;
-      }
-    }
-    throw new Error(zoteroErrorMessage(response.status));
+        ? retryDelayMs(response, RETRY_DELAYS_MS[attempt])
+        : null;
+    if (retry === null) return response;
+    await new Promise((resolve) => setTimeout(resolve, retry));
   }
+}
+
+/** A read; throws unless Zotero answered with what was asked for. */
+export async function zoteroFetch(
+  apiKey: string,
+  path: string,
+  headers?: Record<string, string>,
+  source?: ZoteroSource,
+): Promise<Response> {
+  const response = await zoteroRequest(apiKey, path, { headers, source });
+  if (response.ok || response.status === 304) return response;
+  if (response.status === 403) throw new Error("Invalid or expired API key");
+  throw new Error(zoteroErrorMessage(response.status));
+}
+
+/** A write; throws unless Zotero saved it. */
+async function zoteroWrite(
+  apiKey: string,
+  path: string,
+  request: ZoteroRequest,
+): Promise<Response> {
+  const source = request.source ?? (await zoteroSource());
+  const response = await zoteroRequest(apiKey, path, {
+    ...request,
+    source,
+    headers: { "Content-Type": "application/json", ...request.headers },
+  });
+  if (response.status === 403) {
+    throw source === "local"
+      ? new ZoteroAppDeniedError()
+      : new ZoteroWriteDeniedError();
+  }
+  if (!response.ok) throw new Error(zoteroErrorMessage(response.status));
+  return response;
 }
 
 /** The citation key of a BibTeX entry — the `foo` in `@article{foo, ...}`. */
@@ -123,7 +184,8 @@ export function extractCitekey(bibtex: string): string {
 export async function validateApiKey(
   apiKey: string,
 ): Promise<ZoteroCredentials> {
-  const response = await zoteroFetch(apiKey, "/keys/current");
+  // Only zotero.org knows its own keys.
+  const response = await zoteroFetch(apiKey, "/keys/current", undefined, "web");
   const data = await response.json();
   return {
     apiKey,
@@ -137,6 +199,7 @@ export async function validateApiKey(
 export async function fetchCollections(
   apiKey: string,
   userID: string,
+  source?: ZoteroSource,
 ): Promise<ZoteroCollection[]> {
   const result: ZoteroCollection[] = [];
   let start = 0;
@@ -151,6 +214,8 @@ export async function fetchCollections(
     const response = await zoteroFetch(
       apiKey,
       `/users/${userID}/collections?${params}`,
+      undefined,
+      source,
     );
     const data = (await response.json()) as {
       key: string;
@@ -186,6 +251,7 @@ async function fetchItemsFromPaths(
   apiKey: string,
   basePaths: string[],
   onProgress?: (loaded: number, total: number) => void,
+  source?: ZoteroSource,
 ): Promise<CollectionImportResult> {
   const bibtexByKey = new Map<string, string>();
   const keyMap: Record<string, string> = {};
@@ -205,7 +271,12 @@ async function fetchItemsFromPaths(
         limit: String(limit),
         start: String(start),
       });
-      const response = await zoteroFetch(apiKey, `${basePath}?${params}`);
+      const response = await zoteroFetch(
+        apiKey,
+        `${basePath}?${params}`,
+        undefined,
+        source,
+      );
 
       if (start === 0) {
         total = Number(response.headers.get("Total-Results") ?? 0);
@@ -257,6 +328,7 @@ export async function importCollection(
   userID: string,
   collectionKeys: string[] | null,
   onProgress?: (loaded: number, total: number) => void,
+  source?: ZoteroSource,
 ): Promise<CollectionImportResult> {
   const basePaths = collectionKeys
     ? collectionKeys.map(
@@ -264,7 +336,7 @@ export async function importCollection(
       )
     : [`/users/${userID}/items/top`];
 
-  return fetchItemsFromPaths(apiKey, basePaths, onProgress);
+  return fetchItemsFromPaths(apiKey, basePaths, onProgress, source);
 }
 
 // ─── Incremental Sync ───
@@ -283,10 +355,11 @@ export async function syncCollection(
   collectionKeys: string[] | null,
   lastVersion: number,
   onProgress?: (loaded: number, total: number) => void,
+  source?: ZoteroSource,
 ): Promise<CollectionSyncResult> {
   // For "My Library" (all items), we can use the `since` param
   if (!collectionKeys) {
-    return syncFullLibrary(apiKey, userID, lastVersion, onProgress);
+    return syncFullLibrary(apiKey, userID, lastVersion, onProgress, source);
   }
 
   // For a specific collection subtree, re-fetch all items and diff against keyMap
@@ -296,6 +369,7 @@ export async function syncCollection(
     userID,
     collectionKeys,
     onProgress,
+    source,
   );
 
   return {
@@ -316,6 +390,7 @@ async function syncFullLibrary(
   userID: string,
   lastVersion: number,
   onProgress?: (loaded: number, total: number) => void,
+  source?: ZoteroSource,
 ): Promise<CollectionSyncResult> {
   const updatedEntries: CollectionSyncResult["updatedEntries"] = [];
   let start = 0;
@@ -334,6 +409,8 @@ async function syncFullLibrary(
     const response = await zoteroFetch(
       apiKey,
       `/users/${userID}/items/top?${params}`,
+      undefined,
+      source,
     );
 
     if (start === 0) {
@@ -362,6 +439,8 @@ async function syncFullLibrary(
   const deletedResponse = await zoteroFetch(
     apiKey,
     `/users/${userID}/deleted?since=${lastVersion}`,
+    undefined,
+    source,
   );
   const deleted = (await deletedResponse.json()) as { items?: string[] };
   const deletedKeys = deleted.items ?? [];
@@ -624,9 +703,13 @@ export async function addZoteroTag(
   itemKey: string,
   tag: string,
 ): Promise<void> {
+  // Read and write in one place: versions differ between the two.
+  const source = await zoteroSource();
   const current = await zoteroFetch(
     apiKey,
     `/users/${userID}/items/${itemKey}`,
+    undefined,
+    source,
   );
   const item = (await current.json()) as {
     version: number;
@@ -634,28 +717,27 @@ export async function addZoteroTag(
   };
   const tags = item.data.tags ?? [];
   if (tags.some((t) => t.tag.toLowerCase() === tag.toLowerCase())) return;
-  const response = await fetch(
-    `${ZOTERO_BASE}/users/${userID}/items/${itemKey}`,
-    {
-      method: "PATCH",
-      headers: {
-        "Zotero-API-Key": apiKey,
-        "Zotero-API-Version": "3",
-        "Content-Type": "application/json",
-        "If-Unmodified-Since-Version": String(item.version),
-      },
-      body: JSON.stringify({ tags: [...tags, { tag }] }),
-    },
-  );
-  if (response.status === 403) throw new ZoteroWriteDeniedError();
-  if (!response.ok && response.status !== 204) {
-    throw new Error(zoteroErrorMessage(response.status));
-  }
+  await zoteroWrite(apiKey, `/users/${userID}/items/${itemKey}`, {
+    method: "PATCH",
+    source,
+    headers: { "If-Unmodified-Since-Version": String(item.version) },
+    body: JSON.stringify({ tags: [...tags, { tag }] }),
+  });
 }
 
 /** The item's current version, for a write that mustn't undo another's. */
-async function itemVersion(apiKey: string, userID: string, key: string) {
-  const current = await zoteroFetch(apiKey, `/users/${userID}/items/${key}`);
+async function itemVersion(
+  apiKey: string,
+  userID: string,
+  key: string,
+  source: ZoteroSource,
+) {
+  const current = await zoteroFetch(
+    apiKey,
+    `/users/${userID}/items/${key}`,
+    undefined,
+    source,
+  );
   return ((await current.json()) as { version: number }).version;
 }
 
@@ -666,22 +748,17 @@ async function writeItem(
   method: "PATCH" | "DELETE",
   body?: object,
 ) {
-  const response = await fetch(`${ZOTERO_BASE}/users/${userID}/items/${key}`, {
+  const source = await zoteroSource();
+  await zoteroWrite(apiKey, `/users/${userID}/items/${key}`, {
     method,
+    source,
     headers: {
-      "Zotero-API-Key": apiKey,
-      "Zotero-API-Version": "3",
-      "Content-Type": "application/json",
       "If-Unmodified-Since-Version": String(
-        await itemVersion(apiKey, userID, key),
+        await itemVersion(apiKey, userID, key, source),
       ),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (response.status === 403) throw new ZoteroWriteDeniedError();
-  if (!response.ok && response.status !== 204) {
-    throw new Error(zoteroErrorMessage(response.status));
-  }
 }
 
 /** Changes a highlight's color or note in Zotero. */
@@ -781,18 +858,11 @@ export async function createZoteroHighlight(
       tags: [],
     },
   ];
-  const response = await fetch(`${ZOTERO_BASE}/users/${userID}/items`, {
+  const response = await zoteroWrite(apiKey, `/users/${userID}/items`, {
     method: "POST",
-    headers: {
-      "Zotero-API-Key": apiKey,
-      "Zotero-API-Version": "3",
-      "Content-Type": "application/json",
-      "Zotero-Write-Token": crypto.randomUUID().replace(/-/g, ""),
-    },
+    headers: { "Zotero-Write-Token": crypto.randomUUID().replace(/-/g, "") },
     body: JSON.stringify(body),
   });
-  if (response.status === 403) throw new ZoteroWriteDeniedError();
-  if (!response.ok) throw new Error(zoteroErrorMessage(response.status));
   const result = (await response.json()) as {
     successful?: Record<string, { key: string }>;
     failed?: Record<string, { message?: string }>;
@@ -887,18 +957,11 @@ export async function createZoteroItems(
   const out: ({ key: string } | { error: string })[] = [];
   for (let start = 0; start < items.length; start += 50) {
     const batch = items.slice(start, start + 50);
-    const response = await fetch(`${ZOTERO_BASE}/users/${userID}/items`, {
+    const response = await zoteroWrite(apiKey, `/users/${userID}/items`, {
       method: "POST",
-      headers: {
-        "Zotero-API-Key": apiKey,
-        "Zotero-API-Version": "3",
-        "Content-Type": "application/json",
-        "Zotero-Write-Token": crypto.randomUUID().replace(/-/g, ""),
-      },
+      headers: { "Zotero-Write-Token": crypto.randomUUID().replace(/-/g, "") },
       body: JSON.stringify(batch),
     });
-    if (response.status === 403) throw new ZoteroWriteDeniedError();
-    if (!response.ok) throw new Error(zoteroErrorMessage(response.status));
     const result = (await response.json()) as {
       successful?: Record<string, { key: string }>;
       failed?: Record<string, { message?: string }>;

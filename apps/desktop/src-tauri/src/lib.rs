@@ -772,6 +772,7 @@ pub fn run() {
             zotero::zotero_complete_oauth,
             zotero::zotero_cancel_oauth,
             zotero::zotero_download_attachment,
+            zotero::zotero_local_request,
             vault_webdav::vault_webdav_connect,
             vault_webdav::vault_webdav_status,
             vault_webdav::vault_webdav_disconnect,

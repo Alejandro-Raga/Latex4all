@@ -24,6 +24,7 @@ import { useDocumentStore } from "@/stores/document-store";
 import { type PaperFocus, useReadingStore } from "@/stores/reading-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useZoteroStore } from "@/stores/zotero-store";
+import { canOpenPdf } from "@/lib/zotero-source";
 
 interface Target {
   attachmentKey: string;
@@ -138,7 +139,7 @@ export async function openPaperInTab(
     const attachment =
       (mirror && pdfOf(mirror, itemKey)) ??
       (await findPdfAttachment(apiKey, userID, itemKey));
-    if (!attachment?.downloadable) return false;
+    if (!attachment || !(await canOpenPdf(attachment))) return false;
     const [data, annotations] = await Promise.all([
       zoteroPdfBytes(apiKey, userID, attachment),
       fetchAnnotations(apiKey, userID, attachment.key).catch(

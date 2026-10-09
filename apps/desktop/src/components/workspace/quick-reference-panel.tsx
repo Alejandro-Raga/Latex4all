@@ -122,6 +122,7 @@ import { LibraryFilterRow } from "./library-filter";
 import { FilterToggle } from "./vault-filter";
 import { createLogger } from "@/lib/debug/logger";
 import { DockHeaderBar, DockWideButton } from "./dock/dock-section";
+import { canOpenPdf } from "@/lib/zotero-source";
 
 const log = createLogger("quick-reference");
 
@@ -511,11 +512,11 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
             selectedFile.itemKey,
           ));
         if (!attachment) return { kind: "unsupported" };
-        if (!attachment.downloadable) {
+        if (!(await canOpenPdf(attachment))) {
           return {
             kind: "error",
             message:
-              "This item's PDF is a local file link in Zotero, not uploaded to Zotero cloud storage, so it can't be opened from here.",
+              "This PDF is a linked file in Zotero, not uploaded to Zotero storage. Open Zotero to view it here.",
           };
         }
         const [data, annotationsResult] = await Promise.all([
