@@ -61,12 +61,19 @@ export async function cancelOAuth(): Promise<void> {
 const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
 const RETRY_DELAYS_MS = [1000, 3000, 8000];
 
-/** How long Zotero asked us to wait (Retry-After or Backoff), capped. */
-export function retryDelayMs(response: Response, fallback: number): number {
+/**
+ * How long Zotero asked us to wait (Retry-After or Backoff), or null when
+ * that's over 15 s: it's down for now, and waiting would only stall.
+ */
+export function retryDelayMs(
+  response: Response,
+  fallback: number,
+): number | null {
   const asked = Number(
     response.headers.get("Retry-After") ?? response.headers.get("Backoff"),
   );
-  return asked > 0 ? Math.min(asked * 1000, 15_000) : fallback;
+  if (!(asked > 0)) return fallback;
+  return asked <= 15 ? asked * 1000 : null;
 }
 
 /** The message for a failed request, in words for the busy cases. */
@@ -98,8 +105,10 @@ export async function zoteroFetch(
       attempt < RETRY_DELAYS_MS.length
     ) {
       const wait = retryDelayMs(response, RETRY_DELAYS_MS[attempt]);
-      await new Promise((resolve) => setTimeout(resolve, wait));
-      continue;
+      if (wait !== null) {
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        continue;
+      }
     }
     throw new Error(zoteroErrorMessage(response.status));
   }

@@ -382,6 +382,14 @@ pub async fn zotero_download_attachment(
     user_id: String,
     attachment_key: String,
 ) -> Result<Vec<u8>, String> {
+    // The Zotero app's own copy, when it's on this computer: no download, and
+    // it opens while Zotero's servers are down.
+    if let Some(path) = local_attachment(&attachment_key) {
+        if let Ok(bytes) = std::fs::read(&path) {
+            return Ok(bytes);
+        }
+    }
+
     let url = format!(
         "https://api.zotero.org/users/{}/items/{}/file",
         user_id, attachment_key
@@ -389,6 +397,7 @@ pub async fn zotero_download_attachment(
 
     // Zotero (or the storage it redirects to) answers 429/5xx when busy or
     // briefly down; wait as asked, or a little longer each time, and retry.
+    // A wait of more than 15 s means it's down for now, so give up at once.
     const RETRY_DELAYS: [u64; 3] = [1, 3, 8];
     let client = reqwest::Client::new();
     let mut attempt = 0;
@@ -412,10 +421,12 @@ pub async fn zotero_download_attachment(
                 .or_else(|| response.headers().get("Backoff"))
                 .and_then(|v| v.to_str().ok())
                 .and_then(|v| v.trim().parse::<u64>().ok());
-            let wait = asked.map_or(RETRY_DELAYS[attempt], |s| s.clamp(1, 15));
-            tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
-            attempt += 1;
-            continue;
+            let wait = asked.unwrap_or(RETRY_DELAYS[attempt]).max(1);
+            if wait <= 15 {
+                tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+                attempt += 1;
+                continue;
+            }
         }
         return Err(match status.as_u16() {
             429 => "Zotero is limiting requests. Try again in a minute.".to_string(),
@@ -434,9 +445,89 @@ pub async fn zotero_download_attachment(
     Ok(bytes.to_vec())
 }
 
+/// Where the Zotero app keeps its data: the folder chosen in its settings
+/// (`extensions.zotero.dataDir` in a profile's prefs.js), else ~/Zotero.
+fn zotero_data_dirs() -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    let profile_roots = [
+        dirs::data_dir().map(|d| d.join("Zotero").join("Profiles")), // macOS
+        dirs::data_dir().map(|d| d.join("Zotero").join("Zotero").join("Profiles")), // Windows
+        dirs::home_dir().map(|h| h.join(".zotero").join("zotero")),  // Linux
+    ];
+    for root in profile_roots.into_iter().flatten() {
+        let Ok(profiles) = std::fs::read_dir(&root) else {
+            continue;
+        };
+        for profile in profiles.flatten() {
+            let Ok(prefs) = std::fs::read_to_string(profile.path().join("prefs.js")) else {
+                continue;
+            };
+            if let Some(dir) = data_dir_pref(&prefs) {
+                found.push(std::path::PathBuf::from(dir));
+            }
+        }
+    }
+    if let Some(home) = dirs::home_dir() {
+        found.push(home.join("Zotero"));
+    }
+    found
+}
+
+/// The custom data folder in a prefs.js, if one is set.
+fn data_dir_pref(prefs: &str) -> Option<String> {
+    let line = prefs
+        .lines()
+        .find(|l| l.contains("\"extensions.zotero.dataDir\""))?;
+    let value = line.rsplit_once(", \"")?.1.split_once("\")")?.0;
+    let value = value.replace("\\\\", "\\");
+    (!value.is_empty()).then_some(value)
+}
+
+/// The Zotero app's local copy of an attachment's PDF, if it has one.
+fn local_attachment(attachment_key: &str) -> Option<std::path::PathBuf> {
+    // Item keys are 8 letters and digits; anything else isn't looked up on disk.
+    if attachment_key.len() != 8 || !attachment_key.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return None;
+    }
+    zotero_data_dirs().into_iter().find_map(|dir| {
+        std::fs::read_dir(dir.join("storage").join(attachment_key))
+            .ok()?
+            .flatten()
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.is_file()
+                    && path
+                        .extension()
+                        .is_some_and(|ext| ext.eq_ignore_ascii_case("pdf"))
+            })
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_data_dir_pref() {
+        let prefs = "user_pref(\"extensions.zotero.useDataDir\", true);\n\
+                     user_pref(\"extensions.zotero.dataDir\", \"/Users/me/Papers/Zotero\");\n";
+        assert_eq!(
+            data_dir_pref(prefs).as_deref(),
+            Some("/Users/me/Papers/Zotero")
+        );
+        let windows = "user_pref(\"extensions.zotero.dataDir\", \"C:\\\\Users\\\\me\\\\Zotero\");";
+        assert_eq!(
+            data_dir_pref(windows).as_deref(),
+            Some("C:\\Users\\me\\Zotero")
+        );
+        assert_eq!(data_dir_pref("user_pref(\"other\", 1);"), None);
+    }
+
+    #[test]
+    fn test_local_attachment_rejects_odd_keys() {
+        assert_eq!(local_attachment("../../etc"), None);
+        assert_eq!(local_attachment("ABC"), None);
+    }
 
     #[test]
     fn test_percent_encode_unreserved() {
