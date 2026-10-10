@@ -957,6 +957,8 @@ export async function fetchAnnotations(
   while (true) {
     const params = new URLSearchParams({
       format: "json",
+      // The Zotero app leaves annotations out of children unless asked.
+      itemType: "annotation",
       limit: String(limit),
       start: String(start),
     });

@@ -96,4 +96,16 @@ describe("syncing a .bib with Zotero", () => {
     ]);
     expect(next).toEqual({ N1: "nelson_simple_1959", Z9: "zahra_2002" });
   });
+
+  it("keeps an entry when a merged duplicate is deleted and the copy kept has its key", () => {
+    const { content, keyMap: next } = mergeSyncedBib({
+      content: before,
+      keyMap: { ...keyMap, DUP1: "nelson_simple_1959" },
+      updated: [],
+      deleted: ["DUP1"],
+      complete: false,
+    });
+    expect(parseBibEntries(content).has("nelson_simple_1959")).toBe(true);
+    expect(next).not.toHaveProperty("DUP1");
+  });
 });

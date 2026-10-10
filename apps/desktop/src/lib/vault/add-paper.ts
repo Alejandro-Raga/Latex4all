@@ -79,7 +79,8 @@ export async function fetchPaperData(
       const page = (await (
         await zoteroFetch(
           apiKey,
-          `/users/${userID}/items/${pdf.key}/children?format=json&limit=100&start=${start}`,
+          // The Zotero app leaves annotations out of children unless asked.
+          `/users/${userID}/items/${pdf.key}/children?format=json&itemType=annotation&limit=100&start=${start}`,
         )
       ).json()) as {
         key: string;

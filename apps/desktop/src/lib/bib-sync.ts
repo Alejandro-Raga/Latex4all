@@ -62,9 +62,17 @@ export function mergeSyncedBib(input: {
   }
   const gone = new Set<string>();
   for (const item of input.deleted ?? []) {
-    const key = input.keyMap[item];
-    if (key) gone.add(key);
     delete keyMap[item];
+  }
+  // A key goes with its item, unless another item still has it (a merged
+  // duplicate leaves its key to the copy kept).
+  const kept = new Set([
+    ...Object.values(keyMap),
+    ...input.updated.map((e) => input.keyMap[e.key] ?? e.citekey),
+  ]);
+  for (const item of input.deleted ?? []) {
+    const key = input.keyMap[item];
+    if (key && !kept.has(key)) gone.add(key);
   }
 
   const out = new Map<string, string>();
