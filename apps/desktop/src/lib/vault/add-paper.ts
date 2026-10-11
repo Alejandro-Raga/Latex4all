@@ -149,7 +149,11 @@ export async function addPaperToVault(
   const found =
     index?.list.find((n) => n.zoteroKey === itemKey) ??
     (citekey && index
-      ? noteForCitekey(index, citekey, new Map([[citekey, itemKey]]))
+      ? noteForCitekey(index, citekey, new Map([[citekey, itemKey]]), {
+          doi: paper.fields.DOI?.toLowerCase() ?? null,
+          title: paper.fields.title ?? null,
+          year: paper.fields.date?.match(/\d{4}/)?.[0] ?? null,
+        })
       : undefined);
   const key =
     citekey ??

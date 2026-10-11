@@ -5,12 +5,48 @@ import type { VaultIndex, VaultNote } from "./vault-index";
  * project's .bib entries; by the key the note gives (a citekey field, an
  * inline "Citekey::", a Better BibTeX link); by name or alias, with or
  * without Zotero Integration's "@" (`Nelson1959`, `@Nelson1959`), whatever
- * kind of note it is; or by author and year (`nelson_simple_1959`).
+ * kind of note it is; by the .bib entry's DOI; by author and year
+ * (`nelson_simple_1959`); or by the entry's title and year (never title
+ * alone: editions and replies share titles).
  */
 export function noteForCitekey(
   index: VaultIndex,
   key: string,
   itemKeyByCitekey: Map<string, string>,
+  entry?: { doi?: string | null; title?: string | null; year?: string | null },
+): VaultNote | undefined {
+  const found = byKeyOrAuthor(index, key, itemKeyByCitekey, entry);
+  if (found || !entry?.title || !entry.year) return found;
+  const title = fold(entry.title);
+  if (title.length < 12) return undefined;
+  return index.list.find(
+    (n) =>
+      n.kind === "paper" && n.year === entry.year && fold(n.title) === title,
+  );
+}
+
+const fold = (s: string) =>
+  s
+    .normalize("NFKD")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toLowerCase();
+
+/** A note's DOI, as its frontmatter gives it. */
+function doiOf(n: VaultNote): string | null {
+  const v = n.frontmatter.doi ?? n.frontmatter.DOI;
+  return typeof v === "string"
+    ? v
+        .toLowerCase()
+        .replace(/^https?:\/\/(dx\.)?doi\.org\//, "")
+        .trim() || null
+    : null;
+}
+
+function byKeyOrAuthor(
+  index: VaultIndex,
+  key: string,
+  itemKeyByCitekey: Map<string, string>,
+  entry?: { doi?: string | null },
 ): VaultNote | undefined {
   const itemKey = itemKeyByCitekey.get(key);
   const papers = index.list.filter((n) => n.kind === "paper");
@@ -28,6 +64,10 @@ export function noteForCitekey(
     index.list.find((n) => same(n.name)) ??
     index.list.find((n) => n.aliases.some(same));
   if (byName) return byName;
+  if (entry?.doi) {
+    const byDoi = papers.find((n) => doiOf(n) === entry.doi);
+    if (byDoi) return byDoi;
+  }
   const year = lower.match(/(1[5-9]|20)\d\d/)?.[0];
   if (!year) return undefined;
   const fold = (s: string) =>

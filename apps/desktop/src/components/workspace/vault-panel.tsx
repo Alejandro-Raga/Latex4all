@@ -62,6 +62,7 @@ import {
   CitedToggle,
   orderCited,
   useCitedNotes,
+  useBibEntryByKey,
   useItemKeyByCitekey,
 } from "./cited-here";
 import { NoteContextMenu, NoteMenuItems } from "./topic-menu";
@@ -697,8 +698,11 @@ function CursorCitation({ onOpen }: { onOpen: (name: string) => void }) {
   const current = useVaultStore((s) => s.current);
   const key = useCiteKeyAtCursor();
   const itemKeyByCitekey = useItemKeyByCitekey();
+  const entries = useBibEntryByKey();
   const note =
-    index && key ? noteForCitekey(index, key, itemKeyByCitekey) : undefined;
+    index && key
+      ? noteForCitekey(index, key, itemKeyByCitekey, entries.get(key))
+      : undefined;
   if (!note || note.name === current) return null;
   return (
     <button

@@ -1,7 +1,7 @@
 import { useDeferredValue, useMemo } from "react";
 import { QuoteIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { bibEntries } from "@/lib/citations";
+import { type BibEntry, bibEntries } from "@/lib/citations";
 import { itemForCitekey, itemsByTitle } from "@/lib/cite-match";
 import { openAtLine } from "@/lib/open-at-line";
 import { noteForCitekey } from "@/lib/vault/cite-link";
@@ -12,6 +12,25 @@ import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 
 /** Zotero item keys by the citation keys this project's .bib files use. */
+/** The project's .bib entries by key (DOI, title, year), for matching notes. */
+export function bibEntryByKey(
+  files: { name: string; relativePath: string; content?: string | null }[],
+): Map<string, BibEntry> {
+  const map = new Map<string, BibEntry>();
+  for (const f of files) {
+    if (!f.name.toLowerCase().endsWith(".bib")) continue;
+    for (const e of bibEntries(f.content ?? "", f.relativePath)) {
+      if (!map.has(e.key)) map.set(e.key, e);
+    }
+  }
+  return map;
+}
+
+export function useBibEntryByKey(): Map<string, BibEntry> {
+  const files = useDocumentStore((s) => s.files);
+  return useMemo(() => bibEntryByKey(files), [files]);
+}
+
 export function useItemKeyByCitekey(): Map<string, string> {
   const projectRoot = useDocumentStore((s) => s.projectRoot);
   const synced = useZoteroStore((s) => s.syncedCollections);
@@ -63,17 +82,18 @@ export function useCitedNotes(enabled: boolean) {
   const { places } = useCitePlaces(enabled);
   const index = useVaultStore((s) => s.index);
   const itemKeys = useItemKeyByCitekey();
+  const entries = useBibEntryByKey();
   return useMemo(() => {
     const byNote = new Map<string, CitePlace[]>();
     const missing: string[] = [];
     if (!index) return { byNote, missing };
     for (const [key, at] of places) {
-      const note = noteForCitekey(index, key, itemKeys);
+      const note = noteForCitekey(index, key, itemKeys, entries.get(key));
       if (note) addPlaces(byNote, note.name, at);
       else missing.push(key);
     }
     return { byNote, missing };
-  }, [index, places, itemKeys]);
+  }, [index, places, itemKeys, entries]);
 }
 
 /** Zotero items the open project cites, with where. */
@@ -82,6 +102,7 @@ export function useCitedItems(enabled: boolean) {
   const mirror = useZoteroLibrary((s) => s.mirror);
   const index = useVaultStore((s) => s.index);
   const itemKeys = useItemKeyByCitekey();
+  const entries = useBibEntryByKey();
   // Only when the library changes, not with every keystroke.
   const byTitle = useMemo(
     () => itemsByTitle(enabled && mirror ? Object.values(mirror.items) : []),
@@ -93,7 +114,9 @@ export function useCitedItems(enabled: boolean) {
     if (!mirror) return { items, missing };
     const found = new Map<string, CitePlace[]>();
     for (const [key, at] of places) {
-      const note = index ? noteForCitekey(index, key, itemKeys) : undefined;
+      const note = index
+        ? noteForCitekey(index, key, itemKeys, entries.get(key))
+        : undefined;
       const item = itemForCitekey(key, {
         items: mirror.items,
         byTitle,
@@ -108,7 +131,7 @@ export function useCitedItems(enabled: boolean) {
       items.push({ item: mirror.items[key], places: at });
     }
     return { items, missing };
-  }, [mirror, byTitle, index, places, titles, itemKeys]);
+  }, [mirror, byTitle, index, places, titles, itemKeys, entries]);
 }
 
 export type CitedOrder = "text" | "most";
@@ -246,7 +269,9 @@ export function citeInfo(key: string): CiteInfo {
     .flatMap((f) => bibEntries(f.content ?? "", f.relativePath))
     .find((e) => e.key === key)?.title;
   const index = useVaultStore.getState().index;
-  const note = index ? noteForCitekey(index, key, itemKeys) : undefined;
+  const note = index
+    ? noteForCitekey(index, key, itemKeys, bibEntryByKey(files).get(key))
+    : undefined;
   const mirror = useZoteroLibrary.getState().mirror;
   const itemKey = itemKeys.get(key);
   const item = mirror

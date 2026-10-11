@@ -18,12 +18,15 @@ import {
 } from "@/components/ui/dialog";
 import {
   bibEntries,
+  bibsInUse,
   type CitationReport,
   checkCitations,
   citekeySearch,
   renameCiteKey,
 } from "@/lib/citations";
 import { cn } from "@/lib/utils";
+import { findBibProblems } from "@/lib/bib-cleanup";
+import { BibCleanupPanel } from "./bib-cleanup-panel";
 import { addPaperToVault } from "@/lib/vault/add-paper";
 import { noteForCitekey } from "@/lib/vault/cite-link";
 import { findItemForCitekey } from "@/lib/zotero-api";
@@ -98,7 +101,14 @@ function localItemFor(key: string): string | null {
         .flatMap((f) => bibEntries(f.content, f.path))
         .find((e) => e.key === key)?.title,
       noteItemKey: index
-        ? noteForCitekey(index, key, itemKeys)?.zoteroKey
+        ? noteForCitekey(
+            index,
+            key,
+            itemKeys,
+            bibFiles()
+              .flatMap((f) => bibEntries(f.content, f.path))
+              .find((e) => e.key === key),
+          )?.zoteroKey
         : undefined,
     })?.key ?? null
   );
@@ -205,7 +215,7 @@ function scan(): CitationReport {
   );
 }
 
-type Tab = "bibliography" | "zotero" | "vault" | "unused";
+type Tab = "bibliography" | "zotero" | "vault" | "unused" | "cleanup";
 
 function Row({
   label,
@@ -322,6 +332,7 @@ export function CitationCheckDialog() {
                 vaultIndex,
                 key,
                 itemKeysByCitekey(useDocumentStore.getState().projectRoot),
+                report.entries.find((e) => e.key === key),
               ),
           )
         : [],
@@ -410,6 +421,22 @@ export function CitationCheckDialog() {
     }
   };
 
+  // The bibliography's tidying: only the .bib files the document uses.
+  const cleanup = useMemo(() => {
+    if (!report) return null;
+    const files = useDocumentStore.getState().files;
+    const tex = files
+      .filter((f) => f.type === "tex")
+      .map((f) => ({ path: f.relativePath, content: f.content ?? "" }));
+    const { used } = bibsInUse(tex, bibFiles());
+    return { tex, bib: used, problems: findBibProblems(tex, used) };
+  }, [report]);
+  const cleanupCount = cleanup
+    ? cleanup.problems.duplicates.length +
+      cleanup.problems.sameKey.length +
+      cleanup.problems.strays.length
+    : 0;
+
   const tabs: { id: Tab; label: string; count: number }[] = report
     ? [
         {
@@ -436,6 +463,7 @@ export function CitationCheckDialog() {
             ]
           : []),
         { id: "unused", label: "Never cited", count: report.unused.length },
+        { id: "cleanup", label: "Duplicates", count: cleanupCount },
       ]
     : [];
   // Open on the first list with something in it.
@@ -555,6 +583,20 @@ export function CitationCheckDialog() {
               ? `${report.cited.length} cited in this project`
               : "Checking…"}
           </DialogDescription>
+          {report && report.ignored.length > 0 && (
+            <p className="text-muted-foreground text-xs">
+              Not counted:{" "}
+              {report.ignored.map((f, i) => (
+                <span key={f.path}>
+                  {i > 0 && " · "}
+                  <span className="font-mono">{f.path}</span>{" "}
+                  {f.why === "conflict copy"
+                    ? "(a copy your sync service made of a clash: compare it with the original, then delete it)"
+                    : "(the document doesn't use it)"}
+                </span>
+              ))}
+            </p>
+          )}
         </DialogHeader>
 
         {report && (
@@ -592,7 +634,15 @@ export function CitationCheckDialog() {
               ))}
             </div>
 
-            {list && list.keys.length === 0 ? (
+            {shown === "cleanup" && cleanup ? (
+              <BibCleanupPanel
+                key={`${report.cited.length}:${cleanupCount}:${report.entries.length}`}
+                problems={cleanup.problems}
+                tex={cleanup.tex}
+                bib={cleanup.bib}
+                onDone={rescan}
+              />
+            ) : list && list.keys.length === 0 ? (
               <p className="flex items-center justify-center gap-1.5 py-8 text-muted-foreground text-sm">
                 <CheckIcon className="size-4 text-emerald-500" />
                 {list.empty}

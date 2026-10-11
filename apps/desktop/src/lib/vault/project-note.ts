@@ -41,21 +41,53 @@ export interface ProjectNoteInput {
   now?: Date;
 }
 
-const CITE_RE =
-  /\\[A-Za-z]*cite[A-Za-z]*\*?(?:\s*\[[^\]]*\]){0,2}\s*\{([^}]*)\}/g;
 const HEADING_RE =
   /\\(chapter|section|subsection)\*?\s*(?:\[[^\]]*\])?\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g;
 
 /** LaTeX with comments removed, so commented-out citations don't count. */
 const uncommented = (tex: string) => tex.replace(/(^|[^\\])%[^\n]*/g, "$1");
 
+const CITE_COMMAND = /\\([A-Za-z]*cite[A-Za-z]*)\*?/g;
+
+/**
+ * Where the keys of each cite command are: the text between the braces, as
+ * offsets into `tex`. biblatex's multicite commands (\cites, \parencites…)
+ * take several groups, each with its own notes: `\cites[see][1]{a}[2]{b}`.
+ */
+export function citeGroups(tex: string): { start: number; end: number }[] {
+  const groups: { start: number; end: number }[] = [];
+  for (const m of tex.matchAll(CITE_COMMAND)) {
+    const multi = /cites$/i.test(m[1]);
+    let i = (m.index ?? 0) + m[0].length;
+    while (i < tex.length) {
+      while (i < tex.length && /\s/.test(tex[i])) i++;
+      const open = tex[i];
+      const close =
+        open === "(" ? ")" : open === "[" ? "]" : open === "{" ? "}" : null;
+      if (!close) break;
+      const end = tex.indexOf(close, i + 1);
+      if (end < 0) break;
+      if (open === "{") {
+        groups.push({ start: i + 1, end });
+        i = end + 1;
+        if (!multi) break;
+      } else {
+        // A pre- or postnote: skipped.
+        i = end + 1;
+      }
+    }
+  }
+  return groups;
+}
+
 /** Citation keys in order of first use. */
 export function citedKeys(texFiles: { content: string }[]): string[] {
   const keys: string[] = [];
   const seen = new Set<string>();
   for (const { content } of texFiles) {
-    for (const m of uncommented(content).matchAll(CITE_RE)) {
-      for (const raw of m[1].split(",")) {
+    const text = uncommented(content);
+    for (const g of citeGroups(text)) {
+      for (const raw of text.slice(g.start, g.end).split(",")) {
         const key = raw.trim();
         if (key && key !== "*" && !seen.has(key)) {
           seen.add(key);
@@ -81,9 +113,9 @@ export function citeLocations(
   for (const { path, content } of texFiles) {
     // Comments go but their newlines stay, so line numbers still hold.
     const text = uncommented(content);
-    for (const m of text.matchAll(CITE_RE)) {
-      const line = lineAt(text, m.index ?? 0);
-      for (const raw of m[1].split(",")) {
+    for (const g of citeGroups(text)) {
+      const line = lineAt(text, g.start);
+      for (const raw of text.slice(g.start, g.end).split(",")) {
         const key = raw.trim();
         if (!key || key === "*") continue;
         const list = places.get(key) ?? [];
