@@ -105,7 +105,7 @@ The vault is your Obsidian vault, opened from the Vault panel. Connect it in **S
 - **Sections:** notes are listed by type (Papers, Ideas, Topics, and any type of your own). Each section folds away, and stays as you left it.
 - **Papers in your Zotero folders:** inside Papers, notes are sorted into the folders they have in Zotero. A folder shows up once one of your vault papers is in it; a paper in several folders is listed in each (it's still one note); papers in no folder are under **Unfiled**.
 - **Search** takes the same `author:` and `year:` conditions as the library, plus `topic:` and `type:`; the sliders button filters by type and topic, and the menu beside the search sorts. While you search, results are listed flat.
-- **Add a paper to the vault** by right-clicking it in the Zotero library, or with **Add to vault** in the vault's Project tab. Its note lists its details and your highlights.
+- **Add a paper to the vault** by right-clicking it in the Zotero library, or with **Add to vault** in the vault's Project tab. Its note lists its details and your highlights, and the paper gets the **vault tag** in Zotero (`obsidian` unless you choose another in Settings → Vault, such as `vault`), so you can see in Zotero which papers have notes.
 - **Right-click a note** to change its type, connect it to an idea or topic, or delete it.
 - **The map** shows how notes link. On the Library & Vault page it shows the whole vault.
 

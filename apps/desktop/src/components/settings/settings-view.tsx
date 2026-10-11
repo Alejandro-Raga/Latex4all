@@ -472,14 +472,16 @@ function VaultSettings() {
       </SettingRow>
       <NoteTypesSettings />
       <SettingRow
-        label="Zotero tag for the vault"
-        detail="“Add to vault” tags a paper with this in Zotero"
+        label="Vault tag in Zotero"
+        detail="Marks the papers in your vault; “Add to vault” adds it"
       >
         <Input
           value={paperTag}
           onChange={(e) => setPaperTag(e.target.value)}
+          placeholder="obsidian"
           className="h-7 w-44 text-xs"
-          aria-label="Zotero tag for the vault"
+          aria-label="Vault tag in Zotero"
+          title="The Zotero tag that says a paper belongs in your vault, such as “obsidian” or “vault”. Pick the one a Zotero-to-Obsidian sync you use expects."
         />
       </SettingRow>
       {projectRoot && (

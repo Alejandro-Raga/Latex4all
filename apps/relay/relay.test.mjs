@@ -687,3 +687,38 @@ test("no password set, no reports page", async () => {
   const relay = await startRelay();
   assert.equal((await fetch(`${relay.http}/reports/admin`)).status, 404);
 });
+
+test("the sync's switch: behind the password, kept across restarts, and the sync's last visit shows", async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "relay-"));
+  const clock = { now: Date.UTC(2026, 0, 1) };
+  const start = async () => {
+    const server = createRelay({ dataDir, now: () => clock.now, reportsPassword: "s3cret" });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    running.push({ server, dir: dataDir });
+    return `http://127.0.0.1:${server.address().port}`;
+  };
+  const auth = { Authorization: `Basic ${Buffer.from("x:s3cret").toString("base64")}` };
+  let base = await start();
+  assert.equal((await fetch(`${base}/reports/admin/sync/state`)).status, 401);
+  const state = async () =>
+    (await fetch(`${base}/reports/admin/sync/state?note=watching`, { headers: auth })).json();
+  assert.deepEqual(await state(), { paused: false, changedAt: null });
+  const pause = await fetch(`${base}/reports/admin/sync/pause`, {
+    method: "POST",
+    headers: auth,
+    redirect: "manual",
+  });
+  assert.equal(pause.status, 303);
+  assert.equal((await state()).paused, true);
+  clock.now += 40_000;
+  const page = await (await fetch(`${base}/reports/admin/sync`, { headers: auth })).text();
+  assert.ok(page.includes("Paused"));
+  assert.ok(page.includes("40 s ago (watching)"));
+  // A restarted relay remembers.
+  base = await start();
+  assert.equal((await state()).paused, true);
+  await fetch(`${base}/reports/admin/sync/resume`, { method: "POST", headers: auth, redirect: "manual" });
+  assert.equal((await state()).paused, false);
+});
+

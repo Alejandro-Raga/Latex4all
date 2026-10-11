@@ -6,6 +6,12 @@
 //   GET  /reports/admin                       the reports, newest first
 //   GET  /reports/admin/<id>/<image>          a screenshot
 //   POST /reports/admin/<id>/delete           remove one (once dealt with)
+//   GET  /reports/admin/sync                  the Zotero→Obsidian sync's switch
+//   POST /reports/admin/sync/pause|resume     turn it off or on
+//   GET  /reports/admin/sync/state            {paused, changedAt}, for the sync
+//                                             itself, which asks every half
+//                                             minute (when it last asked shows
+//                                             on the page)
 
 import { timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
@@ -43,6 +49,50 @@ export function createReportsPage({
   maxFailures = 10,
 }) {
   const reportsDir = path.join(dir, "reports");
+  const syncFile = path.join(dir, "sync-control.json");
+  /** When the sync last asked whether it's paused, and what it said it was doing. */
+  let lastSeen = null;
+
+  function syncState() {
+    try {
+      const s = JSON.parse(fs.readFileSync(syncFile, "utf8"));
+      return { paused: Boolean(s.paused), changedAt: s.changedAt ?? null };
+    } catch {
+      return { paused: false, changedAt: null };
+    }
+  }
+
+  function setPaused(paused) {
+    fs.mkdirSync(dir, { recursive: true });
+    const tmp = `${syncFile}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ paused, changedAt: new Date(now()).toISOString() }));
+    fs.renameSync(tmp, syncFile);
+  }
+
+  function syncPage() {
+    const { paused, changedAt } = syncState();
+    const ago = lastSeen ? Math.round((now() - lastSeen.at) / 1000) : null;
+    const seen =
+      ago === null
+        ? "It hasn't asked since the relay started."
+        : `It last asked ${ago < 90 ? `${ago} s` : `${Math.round(ago / 60)} min`} ago${lastSeen.note ? ` (${html(lastSeen.note)})` : ""}.`;
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>Zotero sync</title><style>
+:root{color-scheme:light dark;--bg:#f6f6f4;--card:#fff;--text:#1d1d1b;--muted:#6b6b66;--line:#e2e2dd}
+@media (prefers-color-scheme:dark){:root{--bg:#18181a;--card:#222225;--text:#ececea;--muted:#9a9a95;--line:#34343a}}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,system-ui,sans-serif}
+main{max-width:560px;margin:0 auto;padding:24px 16px}h1{font-size:20px;margin:0 0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.state{font-size:18px;font-weight:600}.on{color:#2e8b57}.off{color:#c0392b}
+p{color:var(--muted);margin:8px 0}button{font:inherit;padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);cursor:pointer}
+a{color:inherit}</style></head><body><main><h1>Zotero → Obsidian sync</h1>
+<div class="card"><div class="state ${paused ? "off" : "on"}">${paused ? "Paused" : "Running"}</div>
+<p>${paused ? "The sync writes nothing to the vault until you resume it." : "The sync keeps the vault in step with Zotero."}${changedAt ? ` Changed ${html(changedAt.replace("T", " ").slice(0, 16))} UTC.` : ""}</p>
+<p>${seen}</p>
+<form method="post" action="/reports/admin/sync/${paused ? "resume" : "pause"}"><button>${paused ? "Resume" : "Pause"}</button></form></div>
+<p><a href="/reports/admin">Bug reports</a></p></main></body></html>`;
+  }
   /** address → { count, since } of wrong passwords */
   const failures = new Map();
 
@@ -141,7 +191,7 @@ button:hover{color:#c0392b;border-color:#c0392b}
 .app{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)}
 details{margin-top:8px;font-size:13px}pre{white-space:pre-wrap;font-size:11px;background:var(--bg);padding:8px;border-radius:6px;overflow:auto}
 footer{margin-top:8px;font-size:11px;color:var(--muted)}a{color:inherit}
-</style></head><body><main><h1>Bug reports <small>${reports.length}</small></h1>
+</style></head><body><main><h1>Bug reports <small>${reports.length}</small> <small style="float:right"><a href="/reports/admin/sync">Zotero sync</a></small></h1>
 ${items || "<p>No reports.</p>"}</main></body></html>`;
   }
 
@@ -155,6 +205,34 @@ ${items || "<p>No reports.</p>"}</main></body></html>`;
     }
     if (!allowed(req, res, ip)) return true;
     const parts = url.pathname.split("/").filter(Boolean); // reports admin id file
+    if (parts[2] === "sync") {
+      const headers = { "Cache-Control": "no-store" };
+      if (parts.length === 3 && req.method === "GET") {
+        res.writeHead(200, {
+          ...headers,
+          "Content-Type": "text/html; charset=utf-8",
+          "Content-Security-Policy":
+            "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'",
+        });
+        res.end(syncPage());
+        return true;
+      }
+      if (parts.length === 4 && req.method === "POST" && (parts[3] === "pause" || parts[3] === "resume")) {
+        setPaused(parts[3] === "pause");
+        res.writeHead(303, { Location: "/reports/admin/sync" });
+        res.end();
+        return true;
+      }
+      if (parts.length === 4 && req.method === "GET" && parts[3] === "state") {
+        lastSeen = { at: now(), note: (url.searchParams.get("note") ?? "").slice(0, 120) };
+        res.writeHead(200, { ...headers, "Content-Type": "application/json" });
+        res.end(JSON.stringify(syncState()));
+        return true;
+      }
+      res.writeHead(404);
+      res.end();
+      return true;
+    }
     if (parts.length === 2 && req.method === "GET") {
       const html = page(list());
       res.writeHead(200, {
