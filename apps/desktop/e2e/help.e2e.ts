@@ -16,7 +16,7 @@ test("the help reads as a manual, and its search narrows it", async ({
     page.getByRole("button", { name: /Open the projects page/ }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: /Open Settings → Zotero/ }),
+    page.getByRole("button", { name: /Open Settings → Zotero/ }).first(),
   ).toBeVisible();
 
   await page.getByLabel("Search help").fill("highlight");

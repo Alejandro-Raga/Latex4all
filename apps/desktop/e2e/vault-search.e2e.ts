@@ -20,7 +20,7 @@ test("the vault list filters by year, typed or picked", async ({ page }) => {
   await expect(page.getByText("4 notes")).toHaveCount(0);
   // Ordered with nothing searched, the list keeps its sections.
   await expect(
-    page.getByRole("paragraph").filter({ hasText: /^Papers\s*14$/ }),
+    page.locator("button[aria-expanded]").filter({ hasText: /^Papers\s*14$/ }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: /^Paper \d+/ }).first(),
