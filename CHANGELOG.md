@@ -62,6 +62,8 @@ tag.
   your Zotero tags make notes. A tag can be stopped (its notes stay, no more
   are made) and resumed, and any tag you already use can be paired with a
   note or unpaired.
+- Changing the vault tag offers to rename the old tag on your items in
+  Zotero, so the papers already in your vault carry the new one.
 - Note types have a Zotero tag: give your own type one ("method") and its
   notes pair with Zotero tags like "method: Diff-in-diff". Note types are
   now kept in the vault, so every computer using it has the same ones.

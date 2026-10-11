@@ -487,10 +487,35 @@ if (scenario === "zotero-sync") {
     { tag: "survey data", meta: { type: 0, numItems: 8 } },
     { tag: "Economics", meta: { type: 1, numItems: 90 } },
   ];
-  window.fetch = (async (url: string) =>
-    String(url).includes("/tags")
-      ? new Response(JSON.stringify(tags), { status: 200 })
-      : new Response("[]", { status: 200 })) as typeof fetch;
+  const tagged = [
+    {
+      key: "AAAA0001",
+      version: 5,
+      data: { tags: [{ tag: "obsidian" }, { tag: "read" }] },
+    },
+    { key: "AAAA0002", version: 6, data: { tags: [{ tag: "obsidian" }] } },
+  ];
+  const posted: unknown[] = [];
+  (window as any).zoteroPosted = posted;
+  window.fetch = (async (url: string, init?: RequestInit) => {
+    const u = String(url);
+    if (init?.method === "POST") {
+      posted.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ successful: {}, failed: {} }), {
+        status: 200,
+      });
+    }
+    if (u.includes("/tags"))
+      return new Response(JSON.stringify(tags), { status: 200 });
+    if (u.includes("tag=obsidian"))
+      return new Response(
+        u.includes("format=keys")
+          ? "AAAA0001\nAAAA0002\n"
+          : JSON.stringify(tagged),
+        { status: 200, headers: { "Total-Results": "2" } },
+      );
+    return new Response("[]", { status: 200 });
+  }) as typeof fetch;
   useZoteroStore.setState({ apiKey: "k", userID: "1" } as never);
   const files = new Map<string, string>();
   const source = {

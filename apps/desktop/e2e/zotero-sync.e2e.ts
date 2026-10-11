@@ -29,3 +29,29 @@ test("Zotero sync settings explain the tags, and a tag can be stopped and resume
   await row.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByRole("listitem")).toHaveText(["No tags here."]);
 });
+
+test("changing the vault tag renames it on the papers in Zotero", async ({
+  page,
+}) => {
+  await open(page, "scenario=zotero-sync");
+  const field = page.getByLabel("Vault tag");
+  await field.fill("vault");
+  await field.press("Enter");
+  await expect(
+    page.getByText("2 items are tagged “obsidian” in Zotero"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Rename in Zotero" }).click();
+  await expect(page.getByLabel("Vault tag")).toHaveValue("vault");
+  const posted = await page.evaluate(() => (window as any).zoteroPosted);
+  expect(posted).toEqual([
+    [
+      {
+        key: "AAAA0001",
+        version: 5,
+        tags: [{ tag: "read" }, { tag: "vault" }],
+      },
+      { key: "AAAA0002", version: 6, tags: [{ tag: "vault" }] },
+    ],
+  ]);
+  await expect(page.getByLabel("Vault tag")).toHaveValue("vault");
+});

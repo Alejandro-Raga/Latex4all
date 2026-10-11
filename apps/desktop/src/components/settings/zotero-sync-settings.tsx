@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { countZoteroTag, renameZoteroTag } from "@/lib/zotero-api";
 import { papersFolderOf } from "@/lib/vault/add-paper";
 import { detectedKindFolder } from "@/lib/vault/kind-folders";
 import {
@@ -93,6 +94,7 @@ export function ZoteroSyncSettings() {
   const index = useVaultStore((s) => s.index);
   const { setPaperTag, setPapersFolder } = useVaultStore.getState();
   const [pairing, setPairing] = useState(false);
+  const [retag, setRetag] = useState<{ from: string; to: string } | null>(null);
   const ignored = useVaultStore((s) => s.ignoredTags.length);
   const paired = useMemo(
     () => (index?.list ?? []).filter((n) => pairedTag(n)).length,
@@ -146,7 +148,12 @@ export function ZoteroSyncSettings() {
             label="Vault tag"
             value={paperTag}
             placeholder="obsidian"
-            onSave={setPaperTag}
+            onSave={(tag) => {
+              const to = tag.trim();
+              if (!to || to === paperTag) return;
+              if (connected) setRetag({ from: paperTag, to });
+              else setPaperTag(to);
+            }}
             className="w-44"
           />
         </SettingRow>
@@ -199,6 +206,13 @@ export function ZoteroSyncSettings() {
       </ul>
 
       <TagsDialog open={pairing} onOpenChange={setPairing} />
+      {retag && (
+        <RetagDialog
+          from={retag.from}
+          to={retag.to}
+          onClose={() => setRetag(null)}
+        />
+      )}
     </div>
   );
 }
@@ -383,6 +397,121 @@ function NoteKinds() {
         </Button>
       </form>
     </div>
+  );
+}
+
+/**
+ * Changing the vault tag: the papers with the old tag can have it renamed
+ * in Zotero, so they stay in the vault under the new one; or the new tag is
+ * used for papers from now on.
+ */
+function RetagDialog({
+  from,
+  to,
+  onClose,
+}: {
+  from: string;
+  to: string;
+  onClose: () => void;
+}) {
+  const [count, setCount] = useState<number | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
+
+  useEffect(() => {
+    const { apiKey, userID } = useZoteroStore.getState();
+    if (!apiKey || !userID) return;
+    countZoteroTag(apiKey, userID, from)
+      .then(setCount)
+      .catch(() => setCount(-1));
+  }, [from]);
+
+  // Nothing carries the old tag: nothing to ask.
+  useEffect(() => {
+    if (count === 0) {
+      useVaultStore.getState().setPaperTag(to);
+      onClose();
+    }
+  }, [count, to, onClose]);
+
+  const done = () => {
+    useVaultStore.getState().setPaperTag(to);
+    if (useSettingsStore.getState().zoteroAutoVault)
+      void syncVaultWithZotero().catch(() => null);
+    onClose();
+  };
+
+  const rename = async () => {
+    const { apiKey, userID } = useZoteroStore.getState();
+    if (!apiKey || !userID) return;
+    setProgress("Renaming…");
+    try {
+      const n = await renameZoteroTag(apiKey, userID, from, to, (d, t) =>
+        setProgress(`Renaming… ${d} of ${t}`),
+      );
+      toast.success(`Renamed on ${n} item${n === 1 ? "" : "s"} in Zotero`);
+      done();
+    } catch (err) {
+      setProgress(null);
+      toast.error(
+        `Couldn't rename it in Zotero: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && !progress && onClose()}>
+      <DialogContent
+        className="sm:max-w-md"
+        // Opened by Enter in the tag field: focusing a button would let that
+        // same key press it.
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
+        <DialogHeader>
+          <DialogTitle>
+            Change the vault tag to <Tag>{to}</Tag>?
+          </DialogTitle>
+          <DialogDescription>
+            {count === null
+              ? `Counting the items tagged “${from}”…`
+              : count > 0
+                ? `${count} item${count === 1 ? " is" : "s are"} tagged “${from}” in Zotero. Rename the tag on ${count === 1 ? "it" : "them"} so ${count === 1 ? "it stays" : "they stay"} in the vault under “${to}”.`
+                : `Rename “${from}” to “${to}” on your items in Zotero, so they stay in the vault.`}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex items-center justify-end gap-2 pt-2">
+          {progress && (
+            <span className="mr-auto flex items-center gap-1.5 text-muted-foreground text-xs">
+              <Loader2Icon className="size-3.5 animate-spin" />
+              {progress}
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={Boolean(progress)}
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={Boolean(progress)}
+            onClick={done}
+            title={`Papers tagged “${from}” keep their notes but don't get new ones`}
+          >
+            New papers only
+          </Button>
+          <Button
+            size="sm"
+            disabled={Boolean(progress) || count === null}
+            onClick={rename}
+          >
+            Rename in Zotero
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -846,6 +846,92 @@ export function updateZoteroAnnotation(
 }
 
 /** Changes some of an item's fields in Zotero (the rest stay). */
+/** How many items carry a tag. */
+export async function countZoteroTag(
+  apiKey: string,
+  userID: string,
+  tag: string,
+): Promise<number> {
+  const params = new URLSearchParams({ tag, limit: "1", format: "keys" });
+  const response = await zoteroFetch(
+    apiKey,
+    `/users/${userID}/items?${params}`,
+  );
+  const total = Number(response.headers.get("Total-Results"));
+  if (Number.isFinite(total) && response.headers.has("Total-Results"))
+    return total;
+  return (await response.text()).split("\n").filter(Boolean).length;
+}
+
+/**
+ * Renames a tag on every item carrying it (Zotero has no rename of its own
+ * in its API): each item's tags are rewritten, 50 items at a time. Returns
+ * how many items were changed.
+ */
+export async function renameZoteroTag(
+  apiKey: string,
+  userID: string,
+  from: string,
+  to: string,
+  onProgress?: (done: number, total: number) => void,
+): Promise<number> {
+  return withZoteroSource(async (source) => {
+    type Tagged = {
+      key: string;
+      version: number;
+      data: { tags?: { tag: string; type?: number }[] };
+    };
+    const items: Tagged[] = [];
+    for (let start = 0; ; start += 100) {
+      const params = new URLSearchParams({
+        tag: from,
+        limit: "100",
+        start: String(start),
+      });
+      const page = (await (
+        await zoteroFetch(
+          apiKey,
+          `/users/${userID}/items?${params}`,
+          undefined,
+          source,
+        )
+      ).json()) as Tagged[];
+      items.push(...page);
+      if (page.length < 100) break;
+    }
+    let done = 0;
+    for (let i = 0; i < items.length; i += 50) {
+      const batch = items.slice(i, i + 50).map((item) => {
+        const tags = item.data.tags ?? [];
+        const kept = tags.filter((t) => t.tag !== from);
+        const has = kept.some((t) => t.tag === to);
+        return {
+          key: item.key,
+          version: item.version,
+          tags: has ? kept : [...kept, { tag: to }],
+        };
+      });
+      const response = await zoteroWrite(apiKey, `/users/${userID}/items`, {
+        method: "POST",
+        source,
+        body: JSON.stringify(batch),
+      });
+      const result = (await response.json()) as {
+        failed?: Record<string, { message?: string }>;
+      };
+      const failed = Object.values(result.failed ?? {});
+      if (failed.length) {
+        throw new Error(
+          failed[0]?.message ?? "Zotero didn't save some of them.",
+        );
+      }
+      done += batch.length;
+      onProgress?.(done, items.length);
+    }
+    return done;
+  });
+}
+
 export function updateZoteroItem(
   apiKey: string,
   userID: string,

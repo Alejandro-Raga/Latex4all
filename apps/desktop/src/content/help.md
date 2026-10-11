@@ -110,7 +110,7 @@ In Zotero, an idea or topic is a tag, such as `topic: Renewable energy`. Latex4A
 
 The Zotero sync lets you build your vault from any Zotero app, including on a tablet, using tags:
 
-- **The vault tag** (`obsidian` unless you choose another) gives a paper a note in the vault, with its highlights and comments, kept up to date.
+- **The vault tag** (`obsidian` unless you choose another) gives a paper a note in the vault, with its highlights and comments, kept up to date. When you change it, Latex4All offers to rename the old tag on your items in Zotero, so your papers move to the new tag.
 - **Tags written `type: name`**, such as `topic: Renewable energy`, file a paper or highlight in that note, and make the note if it's new.
 - **A highlight tagged `idea`** becomes an idea note named after your comment on it.
 
