@@ -120,9 +120,19 @@ function zoteroFor(
 ): SyncZotero {
   const get = (path: string) =>
     zoteroFetch(apiKey, `/users/${userID}${path}`, undefined, source);
+  // Read a page at a time; if the library changes meanwhile, items move
+  // between pages and one could be missed, so the reading starts over.
   const pages = async (since: number, extra: Record<string, string>) => {
+    for (let attempt = 0; ; attempt++) {
+      const read = await readPages(since, extra);
+      if (read.steady || attempt >= 3) return read;
+    }
+  };
+  const readPages = async (since: number, extra: Record<string, string>) => {
     const items: Item[] = [];
     let version = since;
+    let first: number | null = null;
+    let steady = true;
     for (let start = 0; ; start += 100) {
       const params = new URLSearchParams({
         since: String(since),
@@ -136,13 +146,15 @@ function zoteroFor(
       version = Number(
         response.headers.get("Last-Modified-Version") ?? version,
       );
+      if (first === null) first = version;
+      else if (version !== first) steady = false;
       const page = (await response.json()) as Item[];
       items.push(
         ...page.map(({ key, data }) => withoutTags({ key, data }, ignored)),
       );
       if (page.length < 100) break;
     }
-    return { items, version };
+    return { items, version, steady };
   };
   return {
     async itemsSince(since) {

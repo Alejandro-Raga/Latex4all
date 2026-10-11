@@ -293,7 +293,9 @@ function ZoteroOfflineSettings() {
           size="sm"
           disabled={syncing || !apiKey || !userID}
           onClick={() =>
-            apiKey && userID && useZoteroLibrary.getState().sync(apiKey, userID)
+            apiKey &&
+            userID &&
+            useZoteroLibrary.getState().sync(apiKey, userID, true)
           }
         >
           <RefreshCwIcon

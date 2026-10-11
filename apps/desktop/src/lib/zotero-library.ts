@@ -168,8 +168,24 @@ export function pdfOf(
 
 // ─── Zotero ───
 
-/** Everything changed since `since` (all of it from 0), annotations aside. */
+/**
+ * Everything changed since `since` (all of it from 0), annotations aside.
+ * Read a page at a time; if the library changes meanwhile, items move
+ * between pages and one could be missed, so the reading starts over.
+ */
 async function fetchChanges(
+  apiKey: string,
+  userID: string,
+  since: number,
+  source: ZoteroSource,
+) {
+  for (let attempt = 0; ; attempt++) {
+    const read = await readChanges(apiKey, userID, since, source);
+    if (read.steady || attempt >= 3) return read;
+  }
+}
+
+async function readChanges(
   apiKey: string,
   userID: string,
   since: number,
@@ -177,6 +193,8 @@ async function fetchChanges(
 ) {
   const items: ApiItem[] = [];
   let version = since;
+  let first: number | null = null;
+  let steady = true;
   for (let start = 0; ; start += 100) {
     const params = new URLSearchParams({
       format: "json",
@@ -198,11 +216,81 @@ async function fetchChanges(
       source,
     );
     version = Number(response.headers.get("Last-Modified-Version") ?? version);
+    if (first === null) first = version;
+    else if (version !== first) steady = false;
     const page = (await response.json()) as ApiItem[];
     items.push(...page);
     if (page.length < 100) break;
   }
-  return { items, version };
+  return { items, version, steady };
+}
+
+/**
+ * Checks the copy against the library's list of top-level items: anything
+ * missing (an item a sync didn't see) is fetched, and anything no longer in
+ * the library goes. Returns whether the copy changed.
+ */
+async function verifyMirror(
+  mirror: LibraryMirror,
+  apiKey: string,
+  userID: string,
+  source: ZoteroSource,
+): Promise<boolean> {
+  const response = await zoteroFetch(
+    apiKey,
+    `/users/${userID}/items/top?format=keys`,
+    undefined,
+    source,
+  );
+  const keys = new Set(
+    (await response.text()).split(/\s+/).filter((k) => /^[A-Z0-9]{8}$/.test(k)),
+  );
+  // An empty answer is a failed one, not an empty library.
+  if (keys.size === 0) return false;
+  let changed = false;
+  for (const key of Object.keys(mirror.items)) {
+    if (!keys.has(key)) {
+      delete mirror.items[key];
+      changed = true;
+    }
+  }
+  // Standalone notes and files are top-level too; they come back, and are
+  // left out of the copy again.
+  const missing = [...keys].filter((k) => !mirror.items[k]);
+  for (let i = 0; i < missing.length; i += 50) {
+    const params = new URLSearchParams({
+      format: "json",
+      itemKey: missing.slice(i, i + 50).join(","),
+      ...(useSettingsStore.getState().zoteroDatabaseFallback
+        ? { include: "data,bibtex" }
+        : {}),
+    });
+    const found = (await (
+      await zoteroFetch(
+        apiKey,
+        `/users/${userID}/items?${params}`,
+        undefined,
+        source,
+      )
+    ).json()) as ApiItem[];
+    const before = Object.keys(mirror.items).length;
+    applyItems(mirror, found);
+    // Their PDFs too, which the copy needs to open them.
+    for (const item of found) {
+      if (!mirror.items[item.key]) continue;
+      const children = (await (
+        await zoteroFetch(
+          apiKey,
+          `/users/${userID}/items/${item.key}/children?format=json`,
+          undefined,
+          source,
+        )
+      ).json()) as ApiItem[];
+      applyItems(mirror, children);
+    }
+    if (Object.keys(mirror.items).length !== before) changed = true;
+  }
+  return changed;
 }
 
 async function fetchDeleted(
@@ -229,8 +317,16 @@ export async function syncMirror(
   mirror: LibraryMirror,
   apiKey: string,
   userID: string,
+  verify = false,
 ): Promise<boolean> {
-  return withZoteroSource((source) => syncFrom(mirror, apiKey, userID, source));
+  return withZoteroSource(async (source) => {
+    const changed = await syncFrom(mirror, apiKey, userID, source);
+    if (!verify) return changed;
+    const fixed = await verifyMirror(mirror, apiKey, userID, source).catch(
+      () => false,
+    );
+    return changed || fixed;
+  });
 }
 
 async function syncFrom(
@@ -301,7 +397,8 @@ interface LibraryState {
   error: string | null;
   /** Loads the copy (once) and brings it up to date in the background. */
   ensure: (apiKey: string, userID: string) => Promise<void>;
-  sync: (apiKey: string, userID: string) => Promise<void>;
+  /** Brings the copy up to date; `verify` also checks it item by item. */
+  sync: (apiKey: string, userID: string, verify?: boolean) => Promise<void>;
   /** Fetches the whole library again (to keep BibTeX for the fallback). */
   refetch: (apiKey: string, userID: string) => Promise<void>;
   forget: () => void;
@@ -326,18 +423,19 @@ export const useZoteroLibrary = create<LibraryState>((set, get) => ({
     }
     if (!syncedThisSession) {
       syncedThisSession = true;
-      await get().sync(apiKey, userID);
+      // Once a session, the copy is also checked against the library.
+      await get().sync(apiKey, userID, true);
     }
   },
 
-  sync: async (apiKey, userID) => {
+  sync: async (apiKey, userID, verify = false) => {
     if (get().syncing) return;
     const current = get().mirror ?? emptyMirror(userID);
     // Work on a copy, so a half-finished sync never shows.
     const next: LibraryMirror = structuredClone(current);
     set({ syncing: true });
     try {
-      const changed = await syncMirror(next, apiKey, userID);
+      const changed = await syncMirror(next, apiKey, userID, verify);
       if (changed) {
         set({ mirror: next });
         await saveMirror(next);

@@ -82,6 +82,11 @@ tag.
 
 ### Fixed
 
+- A Zotero item changed while the library was being read could be left out
+  of it for good, so a paper in Zotero didn't show in Latex4All even after
+  refreshing. The library is read again when it changes mid-read, and the
+  refresh button (and each start) checks it item by item, bringing back
+  anything missing.
 - Comments under highlights in paper notes showed as raw HTML in the vault
   panel; they're shown faded, as in Obsidian.
 - Check citations counted every .bib file in the project folder, including

@@ -1339,7 +1339,8 @@ function ZoteroRefresh() {
   const error = useZoteroLibrary((s) => s.error);
   const refresh = () => {
     const { apiKey, userID } = useZoteroStore.getState();
-    if (apiKey && userID) void useZoteroLibrary.getState().sync(apiKey, userID);
+    if (apiKey && userID)
+      void useZoteroLibrary.getState().sync(apiKey, userID, true);
   };
   return (
     <button

@@ -123,4 +123,44 @@ describe("the saved Zotero library", () => {
     expect(Object.keys(m.items)).toEqual(["AAAA0002"]);
     expect(m.version).toBe(12);
   });
+
+  const reply = (body: unknown, version: number) => ({
+    headers: new Headers({ "Last-Modified-Version": String(version) }),
+    json: async () => body,
+    text: async () => (Array.isArray(body) ? body.join("\n") : ""),
+  });
+  const many = (n: number, from = 0) =>
+    Array.from({ length: n }, (_, i) =>
+      paper(`P${String(i + from).padStart(7, "0")}`),
+    );
+
+  it("reads again when the library changes while it's being read", async () => {
+    zoteroFetch.mockReset();
+    zoteroFetch
+      // Changed between the two pages: an item could have moved past.
+      .mockResolvedValueOnce(reply(many(100), 10))
+      .mockResolvedValueOnce(reply(many(1, 100), 11))
+      .mockResolvedValueOnce(reply(many(100), 11))
+      .mockResolvedValueOnce(reply(many(2, 100), 11));
+    const m = emptyMirror("1");
+    await syncMirror(m, "key", "1");
+    expect(zoteroFetch).toHaveBeenCalledTimes(4);
+    expect(Object.keys(m.items)).toHaveLength(102);
+    expect(m.version).toBe(11);
+  });
+
+  it("finds an item a sync missed when checked against the library", async () => {
+    const m = emptyMirror("1");
+    applyItems(m, [paper("AAAA0001"), paper("GONE0001")]);
+    m.version = 10;
+    zoteroFetch.mockReset();
+    zoteroFetch
+      .mockResolvedValueOnce(reply([], 10)) // nothing changed
+      .mockResolvedValueOnce(reply(["AAAA0001", "MISS0001"], 10)) // the list
+      .mockResolvedValueOnce(reply([paper("MISS0001")], 10))
+      .mockResolvedValueOnce(reply([pdf("PDF0000M", "MISS0001")], 10));
+    expect(await syncMirror(m, "key", "1", true)).toBe(true);
+    expect(Object.keys(m.items).sort()).toEqual(["AAAA0001", "MISS0001"]);
+    expect(pdfOf(m, "MISS0001")?.key).toBe("PDF0000M");
+  });
 });
