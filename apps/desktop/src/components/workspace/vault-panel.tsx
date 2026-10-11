@@ -14,6 +14,8 @@ import {
   HistoryIcon,
   HomeIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
+  FolderIcon,
   ExternalLinkIcon,
   FolderOpenIcon,
   Loader2Icon,
@@ -68,6 +70,10 @@ import { chooseNoteKind, unlinkProject } from "@/lib/vault/note-changes";
 import { citeKeyAtCursor } from "@/lib/vault/cite-at-cursor";
 import { noteForCitekey } from "@/lib/vault/cite-link";
 import { topicsOf } from "@/lib/vault/topics";
+import type { CitePlace } from "@/lib/vault/project-note";
+import { type PaperFolder, paperFolderTree } from "@/lib/vault/paper-folders";
+import { useZoteroLibrary } from "@/lib/zotero-library";
+import { create } from "zustand";
 import {
   findObsidianVaults,
   type KnownVault,
@@ -733,6 +739,27 @@ function NoteList({
       citedOrder,
     );
   }, [index, query, row, filtering, citedOnly, cited, citedOrder]);
+  // Papers in their Zotero folders, from the library copy (if Zotero is on).
+  const zoteroApiKey = useZoteroStore((s) => s.apiKey);
+  const zoteroUserID = useZoteroStore((s) => s.userID);
+  const mirror = useZoteroLibrary((s) => s.mirror);
+  useEffect(() => {
+    if (zoteroApiKey && zoteroUserID) {
+      void useZoteroLibrary.getState().ensure(zoteroApiKey, zoteroUserID);
+    }
+  }, [zoteroApiKey, zoteroUserID]);
+  const paperTree = useMemo(
+    () =>
+      mirror && mirror.collections.length > 0
+        ? (notes: VaultNote[]) =>
+            paperFolderTree(
+              notes,
+              mirror.collections,
+              (k) => mirror.items[k]?.collections ?? null,
+            )
+        : null,
+    [mirror],
+  );
   // Ordered without a search, the sections stay: papers by year, say.
   const groups = useMemo(() => {
     if (filtering || citedOnly) return [{ group: null, notes: results }];
@@ -825,57 +852,202 @@ function NoteList({
             {query ? "No matching notes" : "No notes in this vault"}
           </p>
         )}
-        {groups.map(({ group, notes }) => (
-          <div key={group ?? "\0results"} className="mb-2">
-            {group !== null && (
-              <p className="px-2 pt-1.5 pb-0.5 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
-                {groupLabel(group)}
-                <span className="ml-1 normal-case">{notes.length}</span>
-              </p>
-            )}
-            {notes.map((n) => {
-              const places = citedOnly ? cited.byNote.get(n.name) : undefined;
-              const row = (
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onOpen(n.name)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onOpen(n.name);
-                    }
-                  }}
-                  className="flex w-full cursor-default items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60"
-                >
-                  <span
-                    className="mt-1.5 size-1.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: noteColor(n) }}
+        {groups.map(({ group, notes }) =>
+          group === null ? (
+            <div key="\0results" className="mb-2">
+              {notes.map((n) => (
+                <NoteRow
+                  key={n.name}
+                  note={n}
+                  index={index}
+                  places={citedOnly ? cited.byNote.get(n.name) : undefined}
+                  onOpen={onOpen}
+                />
+              ))}
+            </div>
+          ) : (
+            <FoldSection
+              key={group}
+              id={`section:${group}`}
+              label={groupLabel(group)}
+              count={notes.length}
+              defaultOpen
+            >
+              {group === PAPERS_GROUP && paperTree ? (
+                <PaperTree
+                  folders={paperTree(notes)}
+                  index={index}
+                  onOpen={onOpen}
+                />
+              ) : (
+                notes.map((n) => (
+                  <NoteRow
+                    key={n.name}
+                    note={n}
+                    index={index}
+                    onOpen={onOpen}
                   />
-                  <span className="min-w-0 flex-1">
-                    <span className="line-clamp-2 block text-sm">
-                      {n.title}
-                    </span>
-                    {noteSubtitle(n) && (
-                      <span className="block truncate text-muted-foreground text-xs">
-                        {noteSubtitle(n)}
-                      </span>
-                    )}
-                    {places && <CitedAt places={places} />}
-                    {places && <TopicChips index={index} note={n} />}
-                  </span>
-                </div>
-              );
-              return (
-                <NoteContextMenu key={n.name} noteName={n.name}>
-                  {row}
-                </NoteContextMenu>
-              );
-            })}
-          </div>
-        ))}
+                ))
+              )}
+            </FoldSection>
+          ),
+        )}
       </div>
     </div>
+  );
+}
+
+/** A note in a list, with its right-click menu. */
+function NoteRow({
+  note: n,
+  index,
+  places,
+  onOpen,
+}: {
+  note: VaultNote;
+  index: VaultIndex;
+  places?: CitePlace[];
+  onOpen: (name: string) => void;
+}) {
+  return (
+    <NoteContextMenu noteName={n.name}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onOpen(n.name)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen(n.name);
+          }
+        }}
+        className="flex w-full cursor-default items-start gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted/60"
+      >
+        <span
+          className="mt-1.5 size-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: noteColor(n) }}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-2 block text-sm">{n.title}</span>
+          {noteSubtitle(n) && (
+            <span className="block truncate text-muted-foreground text-xs">
+              {noteSubtitle(n)}
+            </span>
+          )}
+          {places && <CitedAt places={places} />}
+          {places && <TopicChips index={index} note={n} />}
+        </span>
+      </div>
+    </NoteContextMenu>
+  );
+}
+
+const FOLDS_KEY = "latex4all-vault-folds";
+
+/** Which sections and folders are open, kept between sessions. */
+const useFolds = create<{
+  open: Record<string, boolean>;
+  toggle: (id: string, now: boolean) => void;
+}>((set) => ({
+  open: (() => {
+    try {
+      return JSON.parse(localStorage.getItem(FOLDS_KEY) ?? "{}");
+    } catch {
+      return {};
+    }
+  })(),
+  toggle: (id, now) =>
+    set((s) => {
+      const open = { ...s.open, [id]: !now };
+      try {
+        localStorage.setItem(FOLDS_KEY, JSON.stringify(open));
+      } catch {
+        // Remembered for this session only.
+      }
+      return { open };
+    }),
+}));
+
+/** A section or folder that folds away, with how many notes it holds. */
+function FoldSection({
+  id,
+  label,
+  count,
+  defaultOpen = false,
+  depth = 0,
+  children,
+}: {
+  id: string;
+  label: string;
+  count: number;
+  defaultOpen?: boolean;
+  depth?: number;
+  children: React.ReactNode;
+}) {
+  const open = useFolds((s) => s.open[id] ?? defaultOpen);
+  const toggle = useFolds((s) => s.toggle);
+  const section = depth === 0 && defaultOpen;
+  return (
+    <div className={section ? "mb-1" : undefined}>
+      <button
+        type="button"
+        onClick={() => toggle(id, open)}
+        aria-expanded={open}
+        style={{ paddingLeft: 8 + depth * 12 }}
+        className={cn(
+          "flex w-full items-center gap-1 rounded-md py-1 pr-2 text-left hover:bg-muted/60",
+          section
+            ? "font-medium text-[11px] text-muted-foreground uppercase tracking-wide"
+            : "text-xs",
+        )}
+      >
+        <ChevronRightIcon
+          className={cn(
+            "size-3 shrink-0 text-muted-foreground transition-transform",
+            open && "rotate-90",
+          )}
+        />
+        {!section && (
+          <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
+        )}
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className="shrink-0 font-normal text-muted-foreground normal-case">
+          {count}
+        </span>
+      </button>
+      {open && (
+        <div style={section ? undefined : { paddingLeft: 12 }}>{children}</div>
+      )}
+    </div>
+  );
+}
+
+/** The papers in their Zotero folders, each folder folding away. */
+function PaperTree({
+  folders,
+  index,
+  onOpen,
+}: {
+  folders: PaperFolder[];
+  index: VaultIndex;
+  onOpen: (name: string) => void;
+}) {
+  return (
+    <>
+      {folders.map((f) => (
+        <FoldSection
+          key={f.key}
+          id={`zotero:${f.key}`}
+          label={f.name}
+          count={f.count}
+        >
+          <PaperTree folders={f.folders} index={index} onOpen={onOpen} />
+          {f.notes.map((n) => (
+            <NoteRow key={n.name} note={n} index={index} onOpen={onOpen} />
+          ))}
+        </FoldSection>
+      ))}
+    </>
   );
 }
 

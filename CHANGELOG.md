@@ -19,6 +19,16 @@ URL changed. Branch layout, CI, refactors and tests belong in commit messages.
 Write entries under `## [Unreleased]` and rename it to `## [x.y.z]` when you
 tag.
 
+## [Unreleased]
+
+### Added
+
+- The vault's sections (Papers, Ideas, Topics and your own kinds) fold
+  away, and stay as you left them. Papers are sorted into your Zotero
+  folders: a folder shows up once a paper of yours is in it, a paper in
+  several folders is listed in each, and papers in none are under
+  Unfiled.
+
 ## [2.0.0] - 2026-10-11
 
 ### Added
