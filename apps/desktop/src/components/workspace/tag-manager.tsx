@@ -691,12 +691,28 @@ function SyncStep() {
             ? "Syncing… The first sync reads the whole library."
             : error
               ? error
-              : last
-                ? `Synced at ${new Date(last.at).toLocaleTimeString()}: ${last.written} note${last.written === 1 ? "" : "s"} written`
-                : null}
+              : last?.elsewhere
+                ? `Syncing on another computer (${last.elsewhere}). This one takes over within 5 minutes of that one closing or turning the sync off.`
+                : last
+                  ? `Synced at ${new Date(last.at).toLocaleTimeString()}: ${last.written} note${last.written === 1 ? "" : "s"} written`
+                  : null}
         </span>
-        {!running && !error && last && (
+        {!running && !error && last && !last.elsewhere && (
           <CheckIcon className="size-3.5 text-emerald-600" />
+        )}
+        {!running && last?.elsewhere && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 shrink-0 text-xs"
+            onClick={() =>
+              syncVaultWithZotero({ takeOver: true }).catch((err) =>
+                toast.error(err instanceof Error ? err.message : String(err)),
+              )
+            }
+          >
+            Sync here instead
+          </Button>
         )}
       </div>
 

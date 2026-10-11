@@ -4,6 +4,12 @@ import {
   noteTypesFile,
   readNoteTypesFile,
 } from "@/lib/vault/note-types-file";
+import {
+  readVaultSettingsFile,
+  VAULT_SETTINGS_PATH,
+  type VaultSettings,
+  vaultSettingsFile,
+} from "@/lib/vault/vault-settings-file";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
@@ -88,6 +94,47 @@ function saveNoteTypesSoon() {
   typesTimer = setTimeout(() => {
     void saveNoteTypesFile().finally(() => {
       typesPending = false;
+    });
+  }, 1500);
+}
+
+/** This vault's settings as this computer has them. */
+function vaultSettings(): VaultSettings {
+  const state = useVaultStore.getState();
+  return {
+    paperTag: state.paperTag,
+    papersFolder: state.papersFolder,
+    kindFolders: state.kindFolders[vaultKey(state)] ?? {},
+  };
+}
+
+/** Writes the vault's settings into its own file (see vault-settings-file.ts). */
+async function saveVaultSettingsFile() {
+  const { source } = useVaultStore.getState();
+  if (!source) return;
+  const text = vaultSettingsFile(vaultSettings());
+  try {
+    const current = await source
+      .readNote(VAULT_SETTINGS_PATH)
+      .catch(() => null);
+    if (current?.text === text) return;
+    if (current)
+      await source.writeNote(VAULT_SETTINGS_PATH, text, current.version);
+    else await source.createNote(VAULT_SETTINGS_PATH, text);
+  } catch {
+    // Kept on this computer; written the next time a setting changes.
+  }
+}
+
+let settingsTimer: ReturnType<typeof setTimeout> | null = null;
+/** Changed here and not written yet: the file mustn't undo it meanwhile. */
+let settingsPending = false;
+function saveVaultSettingsSoon() {
+  settingsPending = true;
+  if (settingsTimer) clearTimeout(settingsTimer);
+  settingsTimer = setTimeout(() => {
+    void saveVaultSettingsFile().finally(() => {
+      settingsPending = false;
     });
   }, 1500);
 }
@@ -287,9 +334,14 @@ export const useVaultStore = create<VaultState>()(
           return { linkedProjects: next };
         }),
 
-      setPaperTag: (tag) => set({ paperTag: tag.trim() }),
-      setPapersFolder: (folder) =>
-        set({ papersFolder: folder.trim().replace(/^\/+|\/+$/g, "") }),
+      setPaperTag: (tag) => {
+        set({ paperTag: tag.trim() });
+        saveVaultSettingsSoon();
+      },
+      setPapersFolder: (folder) => {
+        set({ papersFolder: folder.trim().replace(/^\/+|\/+$/g, "") });
+        saveVaultSettingsSoon();
+      },
 
       setProjectsFolder: (folder) =>
         set({ projectsFolder: folder.replace(/^\/+|\/+$/g, "") }),
@@ -347,6 +399,28 @@ export const useVaultStore = create<VaultState>()(
               }
             } else if (!fromFile && customTypes().length > 0) {
               void saveNoteTypesFile();
+            }
+            // Its settings likewise (vault-settings-file.ts).
+            const settingsNote = loaded.notes.find(
+              (n) => n.path === VAULT_SETTINGS_PATH,
+            );
+            const settings = settingsNote
+              ? readVaultSettingsFile(settingsNote.body)
+              : null;
+            if (settings && !settingsPending) {
+              const mine = vaultSettings();
+              if (JSON.stringify(settings) !== JSON.stringify(mine)) {
+                set({
+                  paperTag: settings.paperTag || mine.paperTag,
+                  papersFolder: settings.papersFolder,
+                  kindFolders: {
+                    ...get().kindFolders,
+                    [key]: settings.kindFolders,
+                  },
+                });
+              }
+            } else if (!settings) {
+              void saveVaultSettingsFile();
             }
             set({
               index: buildVaultIndex(
@@ -457,6 +531,7 @@ export const useVaultStore = create<VaultState>()(
         if (clean) mine[kind] = clean;
         else delete mine[kind];
         set({ kindFolders: { ...get().kindFolders, [key]: mine } });
+        saveVaultSettingsSoon();
       },
 
       setGroupColor: (group, color) => {

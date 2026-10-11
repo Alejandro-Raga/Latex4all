@@ -175,7 +175,10 @@ The Zotero sync writes your Obsidian notes from Zotero's tags, so the vault can 
 - The sync writes between the `%% begin zotero %%` and `%% end zotero %%` markers. What you write outside them, such as **My notes**, and frontmatter fields of your own, are kept.
 - A note renamed or moved in Obsidian is followed. A topic or idea note deleted in Obsidian isn't made again.
 - What the sync remembers about the vault is in `Latex4All/Zotero sync.md`, so every computer using the same vault (through Obsidian Sync, iCloud, Seafile…) agrees on it. The copy of the library it works from is kept on each computer.
-- If another Zotero sync writes to this vault, run one of the two.
+- The vault tag and the folders are kept in the vault (`Latex4All/Vault settings.md`), like the note types, so every computer writes the same notes.
+- With the vault on several computers (through Google Drive, OneDrive, iCloud…), one syncs at a time; the others leave the vault to it, and one of them takes over within 5 minutes of it closing or turning the sync off. **Sync here instead** in the tag manager takes over at once.
+- Notes come out the same whichever computer writes them.
+- If another Zotero sync (on a server, say) writes to this vault, run one of the two.
 - Changing the vault tag, a folder or a note type writes every note again on the next run.
 
 [Open Settings → Vault](app:settings/vault)

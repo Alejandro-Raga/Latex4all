@@ -44,7 +44,10 @@ tag.
   in them; a highlight tagged "idea" becomes an idea note named after its
   comment. Runs while Latex4All is open, every minute and when Zotero
   changes. Notes renamed in Obsidian are followed, deleted ones aren't made
-  again, and every computer using the vault agrees on them.
+  again, and every computer using the vault agrees on them. With the vault
+  on several computers at once (Google Drive, OneDrive…), one syncs at a
+  time, and the vault tag and folders are kept in the vault so all of them
+  write the same notes.
 - The tag manager (Settings → Vault → Note types, or ⌘K) sets up the sync
   step by step: the vault tag and papers folder, the note types and their
   Zotero tag words, which of your Zotero tags pair with which notes, and

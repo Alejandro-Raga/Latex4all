@@ -73,6 +73,8 @@ export interface SyncState {
   idea_papers?: Record<string, string[]>;
   /** Types of your own and paired tags: Latex4All's additions. */
   groups?: Record<string, GroupState>;
+  /** The computer syncing the vault now, and until when (see run.ts). */
+  holder?: { id: string; label: string; until: number };
 }
 
 /** A note type of your own with a Zotero tag word. */
@@ -149,6 +151,14 @@ export async function runSync(
   }
   for (const i of changed) cache.set(i.key, { key: i.key, data: i.data });
   for (const k of deleted) cache.delete(k);
+  // A fixed order, whatever order the items came in: every computer and
+  // every run agrees on which PDF comes first and how topics are listed.
+  const ordered = [...cache.values()].sort(
+    (a, b) =>
+      cmp(a.data.dateAdded || "", b.data.dateAdded || "") || cmp(a.key, b.key),
+  );
+  cache.clear();
+  for (const i of ordered) cache.set(i.key, i);
   for (const i of changed) affected.add(topLevelKey(i, cache));
   if (cfg.rebuild) for (const k of cache.keys()) affected.add(k);
 

@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { createLogger } from "@/lib/debug/logger";
-import { syncVaultWithZotero } from "@/lib/vault/zotero-sync/run";
+import { releaseVault, syncVaultWithZotero } from "@/lib/vault/zotero-sync/run";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useVaultStore } from "@/stores/vault-store";
@@ -13,7 +13,7 @@ const EVERY_MS = 60_000;
 /**
  * The Zotero → vault sync (lib/vault/zotero-sync), while it's on: a little
  * after start, after Zotero's library changes, and every minute. Only notes
- * that changed are written.
+ * that changed are written; while another computer syncs the vault, none.
  */
 export function ZoteroTagNotesSync() {
   const on = useSettingsStore((s) => s.zoteroAutoVault);
@@ -23,6 +23,13 @@ export function ZoteroTagNotesSync() {
   const version = useZoteroLibrary(
     (s) => `${s.mirror?.version ?? 0}:${s.mirror?.localVersion ?? 0}`,
   );
+
+  // Turned off here: another computer can take the vault over at once.
+  const wasOn = useRef(on);
+  useEffect(() => {
+    if (wasOn.current && !on) void releaseVault();
+    wasOn.current = on;
+  }, [on]);
 
   // The vault is read at start, not only when a panel needs it.
   useEffect(() => {

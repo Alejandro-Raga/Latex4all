@@ -241,6 +241,19 @@ function pairedTags(): PairedTag[] {
   return out;
 }
 
+/** Lets another computer sync the vault at once (the sync was turned off here). */
+export async function releaseVault() {
+  const { source } = useVaultStore.getState();
+  if (!source) return;
+  const file = await source.readNote(SYNC_STATE_PATH).catch(() => null);
+  const state = file && readSyncStateFile(file.text);
+  if (!file || !state || state.holder?.id !== computerID()) return;
+  delete state.holder;
+  await source
+    .writeNote(SYNC_STATE_PATH, syncStateFile(state), file.version)
+    .catch(() => null);
+}
+
 /** Notes paired by an earlier Latex4All keep their pairing, in the sync's markers. */
 async function upgradePairedNotes() {
   const { source, index } = useVaultStore.getState();
@@ -260,6 +273,40 @@ async function upgradePairedNotes() {
 export interface SyncResult {
   written: number;
   at: number;
+  /** Another computer is syncing the vault (named by its kind): none was done here. */
+  elsewhere?: string;
+}
+
+// ─── One computer at a time ───
+//
+// Two computers with the vault open would both write the same notes, and a
+// sync app (Google Drive, OneDrive…) would keep conflicting copies. So the
+// computer syncing holds the vault for a few minutes at a time, recorded in
+// the state file, and renews it as it runs; the others leave it alone until
+// it lapses (that computer closed, or turned the sync off).
+
+const HOLD_MS = 5 * 60_000;
+const RENEW_MS = 2 * 60_000;
+const ID_STORAGE = "latex4all-computer-id";
+
+function computerID(): string {
+  try {
+    let id = localStorage.getItem(ID_STORAGE);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(ID_STORAGE, id);
+    }
+    return id;
+  } catch {
+    return "this-computer";
+  }
+}
+
+function computerLabel(): string {
+  const ua = navigator.userAgent;
+  if (ua.includes("Macintosh")) return "a Mac";
+  if (ua.includes("Windows")) return "a Windows PC";
+  return "a Linux computer";
 }
 
 /** How the sync is doing, for the tag manager and Settings. */
@@ -274,10 +321,11 @@ let running: Promise<SyncResult> | null = null;
 /**
  * Brings the vault in step with Zotero, as the Python sync does. `rebuild`
  * writes every note again (when the vault tag or the types changed, say).
- * One run at a time; a call during a run waits for it.
+ * One run at a time; a call during a run waits for it. While another
+ * computer holds the vault, nothing is done unless `takeOver`.
  */
 export function syncVaultWithZotero(
-  opts: { rebuild?: boolean } = {},
+  opts: { rebuild?: boolean; takeOver?: boolean } = {},
 ): Promise<SyncResult> {
   if (running) return running;
   useVaultSync.setState({ running: true });
@@ -299,7 +347,13 @@ export function syncVaultWithZotero(
   return running;
 }
 
-async function run({ rebuild }: { rebuild?: boolean }): Promise<SyncResult> {
+async function run({
+  rebuild,
+  takeOver,
+}: {
+  rebuild?: boolean;
+  takeOver?: boolean;
+}): Promise<SyncResult> {
   const { apiKey, userID } = useZoteroStore.getState();
   if (!apiKey || !userID) throw new Error("Connect Zotero first.");
   await useVaultStore.getState().ensureVault();
@@ -308,14 +362,35 @@ async function run({ rebuild }: { rebuild?: boolean }): Promise<SyncResult> {
     throw new Error("Connect your vault first.");
   const { source } = vault;
 
-  await upgradePairedNotes();
-
   const stateFile = await source.readNote(SYNC_STATE_PATH).catch(() => null);
   const state: SyncState = (stateFile && readSyncStateFile(stateFile.text)) ?? {
     version: 0,
     paths: {},
   };
-  const before = stateFile?.text ?? null;
+  let before = stateFile?.text ?? null;
+  let fileVersion = stateFile?.version ?? null;
+  const writeState = async () => {
+    const text = syncStateFile(state);
+    if (text === before) return;
+    if (before !== null)
+      fileVersion = await source.writeNote(SYNC_STATE_PATH, text, fileVersion);
+    else await source.createNote(SYNC_STATE_PATH, text);
+    before = text;
+  };
+
+  // Held by another computer: left to it.
+  const me = computerID();
+  const now = Date.now();
+  const holder = state.holder;
+  if (holder && holder.id !== me && holder.until > now && !takeOver) {
+    return { written: 0, at: now, elsewhere: holder.label };
+  }
+  if (!holder || holder.id !== me || holder.until - now < RENEW_MS) {
+    state.holder = { id: me, label: computerLabel(), until: now + HOLD_MS };
+    await writeState();
+  }
+
+  await upgradePairedNotes();
 
   const saved = await loadCache(userID);
   const cache: Cache = new Map(saved.items);
@@ -352,11 +427,6 @@ async function run({ rebuild }: { rebuild?: boolean }): Promise<SyncResult> {
   saved.items = [...cache];
   saved.setup = signature;
   await saveCache(saved);
-  const text = syncStateFile(state);
-  if (text !== before) {
-    if (stateFile)
-      await source.writeNote(SYNC_STATE_PATH, text, stateFile.version);
-    else await source.createNote(SYNC_STATE_PATH, text);
-  }
+  await writeState();
   return { written, at: Date.now() };
 }
