@@ -845,6 +845,16 @@ export function updateZoteroAnnotation(
   });
 }
 
+/** Changes some of an item's fields in Zotero (the rest stay). */
+export function updateZoteroItem(
+  apiKey: string,
+  userID: string,
+  key: string,
+  change: Record<string, unknown>,
+): Promise<void> {
+  return writeItem(apiKey, userID, key, "PATCH", change);
+}
+
 /** Deletes a highlight (or any item) from Zotero. */
 export function deleteZoteroItem(
   apiKey: string,

@@ -33,6 +33,11 @@ tag.
   the vault") with buttons to add what's missing or check them, the papers
   it cites with where, and the ideas and topics those papers feed. The
   whole vault, as before, is in the All notes tab.
+- Every idea and topic in your vault is a tag in Zotero, so Zotero suggests
+  the exact name as you type "topic:" or "idea:" on a paper or highlight,
+  and near-duplicates aren't made by mistake. A note in your Zotero
+  library, "Ideas and topics in your vault", carries them and lists them;
+  it follows the vault as ideas and topics are added, renamed or removed.
 
 ## [2.0.0] - 2026-10-11
 

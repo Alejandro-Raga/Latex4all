@@ -25,6 +25,7 @@ import { ErrorFallback } from "@/components/error-fallback";
 import { createLogger } from "@/lib/debug/logger";
 import { EnvironmentOnboarding } from "@/components/environment-onboarding";
 import { UpdateManager } from "@/components/updater/update-manager";
+import { ZoteroTagRegistrySync } from "@/components/workspace/zotero-tag-registry-sync";
 
 const log = createLogger("app");
 
@@ -256,6 +257,7 @@ export function App({ onReady }: { onReady?: () => void }) {
           <ZoteroPdfDialog />
           <HelpDialog />
           <UpdateManager />
+          <ZoteroTagRegistrySync />
           {showDebug && (
             <div className="fixed inset-0 z-[9998] flex items-end justify-center">
               <div
