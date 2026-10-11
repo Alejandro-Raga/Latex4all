@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangleIcon,
   Loader2Icon,
   SearchIcon,
   TagsIcon,
@@ -27,7 +26,6 @@ import {
 } from "@/lib/vault/tag-import";
 import {
   BIG_TAG,
-  looksLikeStatus,
   noteNameFor,
   parseTag,
   type TagType,
@@ -337,14 +335,6 @@ export function TagManagerDialog() {
                           >
                             → {r.status.note.name}
                           </button>
-                        ) : looksLikeStatus(r.tag) ? (
-                          <span
-                            className="text-amber-700 dark:text-amber-400"
-                            title="Tags like this say where a paper stands, not what it's about"
-                          >
-                            <AlertTriangleIcon className="mr-1 inline size-3" />
-                            a reading status?
-                          </span>
                         ) : null}
                       </span>
                     </div>
@@ -397,14 +387,12 @@ export function TagManagerDialog() {
                             <option value={NEW_TYPE}>New type…</option>
                           </select>
                         )}
-                        <Input
-                          value={pick.name}
-                          onChange={(e) =>
-                            setPick(r.tag, { name: e.target.value })
-                          }
-                          className="h-7 min-w-0 flex-1 text-xs"
-                          aria-label="Note name"
-                        />
+                        <span
+                          className="min-w-0 flex-1 truncate text-xs"
+                          title="The note's name: the tag's name, without characters a file name can't hold"
+                        >
+                          → {pick.name}
+                        </span>
                         {r.count >= BIG_TAG && (
                           <span className="shrink-0 text-amber-700 text-xs dark:text-amber-400">
                             {r.count} items

@@ -47,7 +47,7 @@ Connect Zotero in **Settings → Zotero**, by signing in or with an API key from
 - **Cite** from the ribbon: "Nelson (1959)" in the sentence, or "(Nelson, 1959)" in parentheses. Pick the paper from the list.
 - **Add to a .bib:** right-click a paper, or a whole collection.
 - **Search** by title or author, or type `author:`, `year:1990-2005`, `year:>2010` or `type:book`. The sliders button filters by year and item type; the menu beside it sorts.
-- **Check citations** (in ⌘K, or the button in the vault's Project tab) finds what you cite that isn't in your bibliography, entries you never cite, and cited papers without a vault note. Only the .bib files your document uses (`\bibliography{…}` or `\addbibresource{…}`) count; others in the folder are listed apart, and so are copies a sync service made of a clash ("SFConflict", "conflicted copy"), which are best compared with the original and deleted.
+- **Check citations** (in ⌘K, or the button in the vault's Project tab) finds what you cite that isn't in your bibliography, entries you never cite, and cited papers without a vault note. Only the .bib files your document uses (`\bibliography{…}` or `\addbibresource{…}`) count; others in the folder are listed apart, and so are copies a sync service made of a clash ("SFConflict", "conflicted copy").
 - **Duplicates** (a tab in Check citations) tidies the bibliography: one paper under several keys (found by DOI, or by title and year), a key written twice, and citations whose key is in no .bib but plainly means an entry that is. Pick the key to keep for each paper; **Clean up** rewrites the citations in every .tex file and removes the extra entries. **Undo** puts it all back.
 - The quote button shows only what this project cites, with the lines where it's cited.
 - **Refresh** (the arrow on the Zotero section) fetches what changed in Zotero since the library was last read.
@@ -127,7 +127,7 @@ With a project open, the Vault panel has two tabs.
 
 ## Ideas and topics
 
-Topics and ideas are vault notes that collect passages, word for word, with a link back to where each came from. A **topic** is a subject ("Corporate science"); an **idea** is a claim you could argue for or against ("Tight budgets favor cost over frontier R&D"). Short names that say the point work best.
+Topics and ideas are vault notes that collect passages, word for word, with a link back to where each came from. A **topic** is a subject ("Corporate science"); an **idea** is a claim you could argue for or against ("Tight budgets favor cost over frontier R&D").
 
 - **From a paper:** select text and choose **Add to idea…** or **Add to topic…**, or right-click a highlight you already have.
 - **From your own writing:** do the same in the editor or the compiled PDF. The link opens the project at that file and line.

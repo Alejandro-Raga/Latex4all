@@ -591,7 +591,7 @@ export function CitationCheckDialog() {
                   {i > 0 && " · "}
                   <span className="font-mono">{f.path}</span>{" "}
                   {f.why === "conflict copy"
-                    ? "(a copy your sync service made of a clash: compare it with the original, then delete it)"
+                    ? "(a copy a sync service made of a clash)"
                     : "(the document doesn't use it)"}
                 </span>
               ))}
