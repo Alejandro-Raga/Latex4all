@@ -91,6 +91,9 @@ interface SettingsState {
   /** Read Zotero's database when neither the app nor zotero.org answers. */
   zoteroDatabaseFallback: boolean;
   setZoteroDatabaseFallback: (use: boolean) => void;
+  /** Keep every vault idea and topic as a tag in Zotero (zotero-tag-registry.ts). */
+  zoteroTagRegistry: boolean;
+  setZoteroTagRegistry: (on: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -130,6 +133,8 @@ export const useSettingsStore = create<SettingsState>()(
       setZoteroAppMode: (mode) => set({ zoteroAppMode: mode }),
       zoteroDatabaseFallback: false,
       setZoteroDatabaseFallback: (use) => set({ zoteroDatabaseFallback: use }),
+      zoteroTagRegistry: false,
+      setZoteroTagRegistry: (on) => set({ zoteroTagRegistry: on }),
       customTheme: DEFAULT_CUSTOM_COLORS,
       setCustomTheme: (colors) => set({ customTheme: colors }),
       pdfThemeMain: "light",

@@ -252,6 +252,7 @@ function ZoteroSettings() {
         </SettingRow>
       )}
       {authenticated && <ZoteroAppSettings />}
+      {authenticated && <ZoteroTagsSettings />}
       {authenticated && <ZoteroOfflineSettings />}
       <ZoteroApiKeyDialog open={keyDialog} onOpenChange={setKeyDialog} />
     </div>
@@ -269,6 +270,35 @@ function ZoteroAppSettings() {
     <div className="px-5 py-3">
       <ZoteroSourceControls />
     </div>
+  );
+}
+
+/**
+ * Ideas and topics as Zotero tags (off unless chosen): it adds one note to
+ * the Zotero library and tags on it, so it's the user's call.
+ */
+function ZoteroTagsSettings() {
+  const on = useSettingsStore((s) => s.zoteroTagRegistry);
+  const setOn = useSettingsStore((s) => s.setZoteroTagRegistry);
+  return (
+    <>
+      <SettingRow
+        label="Ideas and topics as Zotero tags"
+        detail="So Zotero suggests their names as you tag"
+      >
+        <Toggle
+          checked={on}
+          onChange={setOn}
+          label="Ideas and topics as Zotero tags"
+        />
+      </SettingRow>
+      <p className="mx-5 mb-3 text-muted-foreground text-xs">
+        Adds one note to your Zotero library, “Ideas and topics in your vault”,
+        with a tag for each idea and topic (“idea: …”, “topic: …”), kept in step
+        with the vault. Nothing else in Zotero is changed. Zotero's automatic
+        tags are left out.
+      </p>
+    </>
   );
 }
 

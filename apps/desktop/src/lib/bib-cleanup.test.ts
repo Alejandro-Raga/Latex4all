@@ -38,7 +38,7 @@ const refs = String.raw`@article{arora_decline_2018,
   year = {2020},
 }
 `;
-const more = String.raw`@article{marx_reliance_2020,
+const more = `@article{marx_reliance_2020,
   author = {Marx, Matt},
   title = {Reliance on science},
   year = {2020},

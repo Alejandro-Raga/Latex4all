@@ -142,8 +142,10 @@ export async function syncTagRegistry(
         apiKey,
         `/users/${userID}/tags?limit=100&start=${start}`,
       )
-    ).json()) as { tag: string }[];
-    existing.push(...page.map((t) => t.tag));
+    ).json()) as { tag: string; meta?: { type?: number } }[];
+    // Zotero's automatic tags (from publishers and importers) aren't yours:
+    // their spellings aren't followed.
+    existing.push(...page.filter((t) => t.meta?.type !== 1).map((t) => t.tag));
     if (page.length < 100) break;
   }
   const wanted = wantedTags(index, existing);

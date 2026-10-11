@@ -17,7 +17,7 @@ import { useCitedNotes } from "./cited-here";
 import { syncProjectNote } from "./project-note-sync";
 import { FoldSection, NoteRow } from "./vault-panel";
 
-/** Makes or refreshes the project's note, then opens it. */
+/** Makes or refreshes the project's note; the panel stays where it is. */
 function updateProjectNote() {
   const root = useDocumentStore.getState().projectRoot;
   if (!root) return;
@@ -25,8 +25,17 @@ function updateProjectNote() {
   const id = toast.loading("Updating the project note…");
   syncProjectNote()
     .then((name) => {
-      toast.success(name ? `“${name}” is up to date` : "Up to date", { id });
-      if (name) useVaultStore.getState().open(name);
+      toast.success(name ? `“${name}” is up to date` : "Up to date", {
+        id,
+        ...(name
+          ? {
+              action: {
+                label: "Open",
+                onClick: () => useVaultStore.getState().open(name),
+              },
+            }
+          : {}),
+      });
     })
     .catch((err) =>
       toast.error(err instanceof Error ? err.message : String(err), { id }),
@@ -110,6 +119,27 @@ export function ProjectHome({
         papers,
       }));
   }, [citedNotes, index]);
+
+  // Papers in the same ideas and topics that this project doesn't cite yet,
+  // those sharing the most first.
+  const worthCiting = useMemo(() => {
+    const cited = new Set(citedNotes.map((n) => n.name));
+    const shared = new Map<string, number>();
+    for (const { note } of inPlay) {
+      for (const name of note.outgoing) {
+        const n = index.notes.get(name.toLowerCase());
+        if (!n || n.kind !== "paper" || cited.has(n.name)) continue;
+        shared.set(n.name, (shared.get(n.name) ?? 0) + 1);
+      }
+    }
+    return [...shared]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 15)
+      .map(([name, count]) => ({
+        note: index.notes.get(name.toLowerCase()) as VaultNote,
+        count,
+      }));
+  }, [citedNotes, inPlay, index]);
 
   const issues = [
     report.missing.length > 0 && `${report.missing.length} not in a .bib`,
@@ -260,6 +290,35 @@ export function ProjectHome({
               onOpen={onOpen}
             />
           ))
+        )}
+      </FoldSection>
+
+      <FoldSection
+        id="project:worth"
+        label="Worth citing?"
+        count={worthCiting.length}
+        defaultOpen
+      >
+        {worthCiting.length === 0 ? (
+          <p className="px-3 py-2 text-muted-foreground text-xs">
+            Papers in the same ideas and topics as the ones you cite show up
+            here, once they have notes in your vault.
+          </p>
+        ) : (
+          <>
+            <p className="px-3 pb-1 text-[11px] text-muted-foreground">
+              In the same ideas and topics as what you cite, not cited yet.
+            </p>
+            {worthCiting.map(({ note, count }) => (
+              <NoteRow
+                key={note.name}
+                note={note}
+                index={index}
+                aside={count > 1 ? `${count} shared` : "1 shared"}
+                onOpen={onOpen}
+              />
+            ))}
+          </>
         )}
       </FoldSection>
     </div>

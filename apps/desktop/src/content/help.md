@@ -47,7 +47,8 @@ Connect Zotero in **Settings → Zotero**, by signing in or with an API key from
 - **Cite** from the ribbon: "Nelson (1959)" in the sentence, or "(Nelson, 1959)" in parentheses. Pick the paper from the list.
 - **Add to a .bib:** right-click a paper, or a whole collection.
 - **Search** by title or author, or type `author:`, `year:1990-2005`, `year:>2010` or `type:book`. The sliders button filters by year and item type; the menu beside it sorts.
-- **Check citations** (in ⌘K, or the button in the vault's Project tab) finds what you cite that isn't in your bibliography, and entries you never cite.
+- **Check citations** (in ⌘K, or the button in the vault's Project tab) finds what you cite that isn't in your bibliography, entries you never cite, and cited papers without a vault note. Only the .bib files your document uses (`\bibliography{…}` or `\addbibresource{…}`) count; others in the folder are listed apart, and so are copies a sync service made of a clash ("SFConflict", "conflicted copy"), which are best compared with the original and deleted.
+- **Duplicates** (a tab in Check citations) tidies the bibliography: one paper under several keys (found by DOI, or by title and year), a key written twice, and citations whose key is in no .bib but plainly means an entry that is. Pick the key to keep for each paper; **Clean up** rewrites the citations in every .tex file and removes the extra entries. **Undo** puts it all back.
 - The quote button shows only what this project cites, with the lines where it's cited.
 - **Refresh** (the arrow on the Zotero section) fetches what changed in Zotero since the library was last read.
 
@@ -116,10 +117,11 @@ With a project open, the Vault panel has two tabs.
 
 **Project** shows the vault from where your text stands:
 
-- **The project's note:** **Create project note** makes a note with what the project cites, its outline and its highlights, and keeps it up to date as you write. Once it exists, click its name to open it, or **Update**.
+- **The project's note:** **Create project note** makes a note with what the project cites, its outline and its highlights, and keeps it up to date as you write. Once it exists, click its name to open it, or **Update**, which refreshes it without leaving the tab.
 - **Citations at a glance:** how many papers you cite, and how many aren't in a .bib, are never cited, or have no note in the vault. **Add to the vault** makes notes for the missing ones; **Check citations** lists every problem.
 - **Cited in this project:** each paper with the lines where it's cited. Papers without a note have their own **Add to vault** button.
 - **Ideas & topics in play:** the ideas and topics your cited papers belong to, with how many of them each has.
+- **Worth citing?** Papers from your vault in those same ideas and topics that this project doesn't cite yet, those sharing the most first.
 
 **All notes** is the whole vault, as on the Library & Vault page. The panel remembers which tab you used last. Notes open the same way from either tab, and the back arrow returns you.
 
@@ -133,7 +135,11 @@ Topics and ideas are vault notes that collect passages, word for word, with a li
 
 Pick a note from the list, or type a new name. Picking from the list keeps one note per idea, instead of near-duplicates with slightly different names.
 
-**In Zotero**, an idea or topic is a tag: `idea: <name>` or `topic: <name>`, with the note's exact name. Latex4All adds that tag when you connect a paper or file a highlight here. So that Zotero suggests these names while you tag there, Latex4All keeps a note in your Zotero library, **"Ideas and topics in your vault"**, carrying every idea and topic as a tag; it follows the vault as you add, rename or remove them. Other items in Zotero aren't changed.
+**In Zotero**, an idea or topic is a tag: `idea: <name>` or `topic: <name>`, with the note's exact name. Latex4All adds that tag when you connect a paper or file a highlight here; it doesn't change your Zotero library on its own.
+
+If you'd like Zotero to suggest these names while you tag there, turn on **Ideas and topics as Zotero tags** in Settings → Zotero. Latex4All then keeps one note in your Zotero library, **"Ideas and topics in your vault"**, carrying every idea and topic as a tag, and follows the vault as you add, rename or remove them. Nothing else in Zotero is changed. If it can't (a read-only API key, say), a notice says why.
+
+**Zotero's automatic tags** are the ones Zotero adds by itself from publishers' data and importers (shown in a different color in Zotero's tag list). They aren't yours, so Latex4All leaves them out: they don't become topics, and their spellings aren't followed.
 
 Tags you add in Zotero yourself are read when a paper is added to the vault: a paper tagged `topic: <name>` is linked to that topic. Turning tags on highlights into passages as you tag them in Zotero needs a Zotero-to-Obsidian sync running alongside, such as an Obsidian plugin.
 

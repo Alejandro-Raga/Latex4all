@@ -33,11 +33,30 @@ tag.
   the vault") with buttons to add what's missing or check them, the papers
   it cites with where, and the ideas and topics those papers feed. The
   whole vault, as before, is in the All notes tab.
-- Every idea and topic in your vault is a tag in Zotero, so Zotero suggests
-  the exact name as you type "topic:" or "idea:" on a paper or highlight,
-  and near-duplicates aren't made by mistake. A note in your Zotero
-  library, "Ideas and topics in your vault", carries them and lists them;
-  it follows the vault as ideas and topics are added, renamed or removed.
+- Ideas and topics as Zotero tags (Settings → Zotero, off unless you turn
+  it on): Zotero suggests the exact name of each idea and topic as you type
+  "topic:" or "idea:" there, so near-duplicates aren't made by mistake. One
+  note in your Zotero library, "Ideas and topics in your vault", carries
+  them, and follows the vault.
+- The vault's Project tab suggests papers worth citing: those in the same
+  ideas and topics as what you cite, not cited yet. Updating the project
+  note no longer takes you away from the tab.
+- Check citations has a Duplicates tab to tidy the bibliography: one paper
+  under several keys, a key written twice, and citations whose key means an
+  entry under another key. Pick the key to keep; Clean up rewrites the
+  citations and removes the extra entries, with Undo.
+
+### Fixed
+
+- Check citations counted every .bib file in the project folder, including
+  ones the document doesn't use and copies a sync service made of a clash,
+  so "never cited" and duplicate keys came out too high. Only the files the
+  document uses count now; the others are listed apart.
+- A cited paper could show as missing from the vault when its note had
+  another key or a mistyped author; it's now found by DOI, or by title and
+  year, and "Add to vault" doesn't make a second note for it.
+- Citations written with biblatex's \cites{a}{b} (and \parencites…)
+  counted only their first paper.
 
 ## [2.0.0] - 2026-10-11
 
