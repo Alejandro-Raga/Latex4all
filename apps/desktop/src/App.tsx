@@ -26,6 +26,8 @@ import { createLogger } from "@/lib/debug/logger";
 import { EnvironmentOnboarding } from "@/components/environment-onboarding";
 import { UpdateManager } from "@/components/updater/update-manager";
 import { ZoteroTagRegistrySync } from "@/components/workspace/zotero-tag-registry-sync";
+import { ZoteroTagNotesSync } from "@/components/workspace/zotero-tag-notes-sync";
+import { TagManagerDialog } from "@/components/workspace/tag-manager";
 
 const log = createLogger("app");
 
@@ -258,6 +260,8 @@ export function App({ onReady }: { onReady?: () => void }) {
           <HelpDialog />
           <UpdateManager />
           <ZoteroTagRegistrySync />
+          <ZoteroTagNotesSync />
+          <TagManagerDialog />
           {showDebug && (
             <div className="fixed inset-0 z-[9998] flex items-end justify-center">
               <div

@@ -10,8 +10,10 @@ vi.mock("@/lib/zotero-api", () => api);
 
 const { wantedTags, registryNote, syncTagRegistry, REGISTRY_TITLE } =
   await import("./zotero-tag-registry");
+const { tagTypes } = await import("./zotero-tag-notes");
 
-const note = (name: string, kind: string) => ({ name, kind }) as VaultNote;
+const note = (name: string, kind: string, frontmatter = {}) =>
+  ({ name, kind, frontmatter }) as VaultNote;
 const index = (...notes: VaultNote[]) => ({ list: notes }) as VaultIndex;
 
 const vault = index(
@@ -36,6 +38,25 @@ describe("ideas and topics as Zotero tags", () => {
     const w = wantedTags(vault, ["Topic: Geography of Innovation", "obsidian"]);
     expect(w.tags).toContain("Topic: Geography of Innovation");
     expect(w.tags).not.toContain("topic: Geography of innovation");
+  });
+
+  it("covers your own types with a Zotero tag word, and keeps a note's recorded tag", () => {
+    const types = tagTypes([
+      { id: "type-m", label: "Method", color: "#000", zoteroTag: "method" },
+    ]);
+    const w = wantedTags(
+      index(
+        note("Diff-in-diff", "type-m"),
+        note("Renamed in Obsidian", "topic", { zotero_tag: "topic: Old name" }),
+      ),
+      [],
+      types,
+    );
+    expect(w.tags).toEqual(["method: Diff-in-diff", "topic: Old name"]);
+    expect(w.groups).toEqual({
+      Method: ["Diff-in-diff"],
+      Topic: ["Renamed in Obsidian"],
+    });
   });
 
   it("lists the names in the note, escaped", () => {

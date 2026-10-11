@@ -10,6 +10,7 @@ import {
   NotebookTextIcon,
   PaletteIcon,
   QuoteIcon,
+  TagsIcon,
   RefreshCwIcon,
   SettingsIcon,
   CircleHelpIcon,
@@ -35,6 +36,7 @@ import { useCitationCheck } from "./citation-check";
 import { useMemoryDialog } from "@/components/claude-chat/memory-dialog";
 import { useBugReport } from "@/components/bug-report-dialog";
 import { syncProjectNote } from "./project-note-sync";
+import { useTagManager } from "./tag-manager";
 
 export const useCommandPalette = create<{
   open: boolean;
@@ -231,6 +233,12 @@ export function CommandPalette() {
                   }
                 />
               ))}
+              <Item
+                icon={TagsIcon}
+                label="Tag manager"
+                value="Tag manager Zotero tags import notes types ideas topics"
+                onSelect={() => run(() => useTagManager.getState().show())}
+              />
               {projectRoot && (
                 <Item
                   icon={QuoteIcon}

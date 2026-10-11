@@ -15,6 +15,7 @@ import {
 } from "@/lib/zotero-api";
 import { topicId } from "./topics";
 import type { VaultIndex } from "./vault-index";
+import { pairedTag, type TagType, tagTypes } from "./zotero-tag-notes";
 
 export const REGISTRY_TITLE = "Ideas and topics in your vault";
 const KEY_STORAGE = "latex4all-zotero-tag-registry";
@@ -22,38 +23,44 @@ const KEY_STORAGE = "latex4all-zotero-tag-registry";
 export interface Wanted {
   /** Tags to carry, in the library's spelling where it has one. */
   tags: string[];
-  ideas: string[];
-  topics: string[];
+  /** Note names by type label ("Topic", "Idea", "Method"…), for the note's list. */
+  groups: Record<string, string[]>;
 }
 
-/** "topic" or "idea" and the name's id, for matching spellings. */
-function tagId(tag: string): string | null {
-  const m = tag.match(/^\s*(topic|idea)\s*[:/]\s*(.+)$/i);
-  return m ? `${m[1].toLowerCase()}:${topicId(m[2])}` : null;
+/** A tag's word and the name's id, for matching spellings. */
+function tagId(tag: string): string {
+  const m = tag.match(/^\s*([^:/]+?)\s*[:/]\s*(.+)$/);
+  return m ? `${m[1].toLowerCase()}:${topicId(m[2])}` : topicId(tag);
 }
 
-/** The tags the vault's ideas and topics call for. */
-export function wantedTags(index: VaultIndex, existing: string[]): Wanted {
+/**
+ * The tags the vault's notes call for: each note of a type with a Zotero tag
+ * word (ideas, topics, and your own), by the tag it records if it has one,
+ * else "word: name" in the library's spelling where there is one.
+ */
+export function wantedTags(
+  index: VaultIndex,
+  existing: string[],
+  types: TagType[] = tagTypes([]),
+): Wanted {
   const spelling = new Map<string, string>();
   for (const t of existing) {
     const id = tagId(t);
-    if (id && !spelling.has(id)) spelling.set(id, t);
+    if (!spelling.has(id)) spelling.set(id, t);
   }
-  const ideas: string[] = [];
-  const topics: string[] = [];
+  const groups: Record<string, string[]> = {};
   const tags = new Set<string>();
   for (const n of index.list) {
-    if (n.kind !== "idea" && n.kind !== "topic") continue;
-    (n.kind === "idea" ? ideas : topics).push(n.name);
-    const tag = `${n.kind}: ${n.name}`;
-    tags.add(spelling.get(tagId(tag) as string) ?? tag);
+    const type = types.find((t) => t.kind === n.kind);
+    if (!type) continue;
+    (groups[type.label] ??= []).push(n.name);
+    const recorded = pairedTag(n);
+    const tag = recorded ?? `${type.word}: ${n.name}`;
+    tags.add(recorded ?? spelling.get(tagId(tag)) ?? tag);
   }
   const byName = (a: string, b: string) => a.localeCompare(b);
-  return {
-    tags: [...tags].sort(byName),
-    ideas: ideas.sort(byName),
-    topics: topics.sort(byName),
-  };
+  for (const names of Object.values(groups)) names.sort(byName);
+  return { tags: [...tags].sort(byName), groups };
 }
 
 const esc = (s: string) =>
@@ -65,11 +72,18 @@ export function registryNote(w: Wanted): string {
     names.length
       ? `<ul>${names.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>`
       : "<p>None yet.</p>";
+  const order = Object.keys(w.groups).sort(
+    (a, b) =>
+      (a === "Topic" ? 0 : a === "Idea" ? 1 : 2) -
+        (b === "Topic" ? 0 : b === "Idea" ? 1 : 2) || a.localeCompare(b),
+  );
   return (
     `<h1>${REGISTRY_TITLE}</h1>` +
     "<p>Kept by Latex4All, so Zotero suggests these names when you tag a " +
     "paper or a highlight. Changes you make here are replaced.</p>" +
-    `<h2>Topics</h2>${list(w.topics)}<h2>Ideas</h2>${list(w.ideas)}`
+    order
+      .map((label) => `<h2>${esc(label)}</h2>${list(w.groups[label])}`)
+      .join("")
   );
 }
 
@@ -134,6 +148,7 @@ export async function syncTagRegistry(
   apiKey: string,
   userID: string,
   index: VaultIndex,
+  types: TagType[] = tagTypes([]),
 ): Promise<boolean> {
   const existing: string[] = [];
   for (let start = 0; ; start += 100) {
@@ -148,7 +163,7 @@ export async function syncTagRegistry(
     existing.push(...page.filter((t) => t.meta?.type !== 1).map((t) => t.tag));
     if (page.length < 100) break;
   }
-  const wanted = wantedTags(index, existing);
+  const wanted = wantedTags(index, existing, types);
   const note = registryNote(wanted);
   const tags = wanted.tags.map((tag) => ({ tag }));
 

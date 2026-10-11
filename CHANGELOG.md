@@ -33,6 +33,14 @@ tag.
   the vault") with buttons to add what's missing or check them, the papers
   it cites with where, and the ideas and topics those papers feed. The
   whole vault, as before, is in the All notes tab.
+- A tag manager (Settings → Vault → Note types, or ⌘K) turns Zotero tags
+  into vault notes: pick the tags, the type of note (or a new type) and the
+  name, preview, import. Each note lists the papers with the tag and copies
+  their highlights, and follows as you tag in Zotero. Your Zotero tags are
+  never changed, and Zotero's automatic tags are hidden.
+- Note types have a Zotero tag: give your own type one ("method") and its
+  notes pair with Zotero tags like "method: Diff-in-diff". Note types are
+  now kept in the vault, so every computer using it has the same ones.
 - Ideas and topics as Zotero tags (Settings → Zotero, off unless you turn
   it on): Zotero suggests the exact name of each idea and topic as you type
   "topic:" or "idea:" there, so near-duplicates aren't made by mistake. One

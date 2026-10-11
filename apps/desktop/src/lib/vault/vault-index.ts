@@ -21,7 +21,19 @@ export interface CustomNoteType {
   folder?: string;
   /** Notes with this tag (nested parts count) are of this type. */
   tag?: string;
+  /**
+   * The word before the colon of this type's Zotero tags: with "method", a
+   * note "Diff-in-diff" pairs with the Zotero tag "method: Diff-in-diff".
+   * None: the type isn't paired with Zotero.
+   */
+  zoteroTag?: string;
 }
+
+/** The Zotero tag word of the built-in types that pair with Zotero. */
+export const BUILT_IN_ZOTERO_TAGS: Record<string, string> = {
+  idea: "idea",
+  topic: "topic",
+};
 
 export const NOTE_KINDS: { kind: BuiltInKind; label: string }[] = [
   { kind: "paper", label: "Paper" },

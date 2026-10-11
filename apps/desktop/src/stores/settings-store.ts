@@ -94,6 +94,9 @@ interface SettingsState {
   /** Keep every vault idea and topic as a tag in Zotero (zotero-tag-registry.ts). */
   zoteroTagRegistry: boolean;
   setZoteroTagRegistry: (on: boolean) => void;
+  /** Update notes paired with Zotero tags as tags change there (vault only). */
+  zoteroTagNotesLive: boolean;
+  setZoteroTagNotesLive: (on: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -135,6 +138,8 @@ export const useSettingsStore = create<SettingsState>()(
       setZoteroDatabaseFallback: (use) => set({ zoteroDatabaseFallback: use }),
       zoteroTagRegistry: false,
       setZoteroTagRegistry: (on) => set({ zoteroTagRegistry: on }),
+      zoteroTagNotesLive: true,
+      setZoteroTagNotesLive: (on) => set({ zoteroTagNotesLive: on }),
       customTheme: DEFAULT_CUSTOM_COLORS,
       setCustomTheme: (colors) => set({ customTheme: colors }),
       pdfThemeMain: "light",

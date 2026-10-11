@@ -1,3 +1,9 @@
+import {
+  isOwnFile,
+  NOTE_TYPES_PATH,
+  noteTypesFile,
+  readNoteTypesFile,
+} from "@/lib/vault/note-types-file";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
@@ -57,6 +63,35 @@ function customTypes(): CustomNoteType[] {
   return state.noteTypes[vaultKey(state)] ?? [];
 }
 
+/** Writes the vault's note types into its own file (see note-types-file.ts). */
+async function saveNoteTypesFile() {
+  const { source } = useVaultStore.getState();
+  if (!source) return;
+  const text = noteTypesFile(customTypes());
+  try {
+    const current = await source.readNote(NOTE_TYPES_PATH).catch(() => null);
+    if (current?.text === text) return;
+    if (current) await source.writeNote(NOTE_TYPES_PATH, text, current.version);
+    else await source.createNote(NOTE_TYPES_PATH, text);
+  } catch {
+    // Kept on this computer; written the next time the types change.
+  }
+}
+
+let typesTimer: ReturnType<typeof setTimeout> | null = null;
+/** Changed here and not written yet: the file mustn't undo it meanwhile. */
+let typesPending = false;
+/** As you type a type's name, the file is written once you pause. */
+function saveNoteTypesSoon() {
+  typesPending = true;
+  if (typesTimer) clearTimeout(typesTimer);
+  typesTimer = setTimeout(() => {
+    void saveNoteTypesFile().finally(() => {
+      typesPending = false;
+    });
+  }, 1500);
+}
+
 /** The index again, with this vault's kinds and types as they are now. */
 function rebuilt(index: VaultIndex | null): VaultIndex | null {
   return index
@@ -66,6 +101,7 @@ function rebuilt(index: VaultIndex | null): VaultIndex | null {
 
 /** The index with one note replaced (or added), without rereading the vault. */
 function withNote(index: VaultIndex | null, path: string, text: string) {
+  if (isOwnFile(path)) return index;
   const others = (index?.list ?? []).filter((n) => n.path !== path);
   return buildVaultIndex(
     [...others, parseNote(path, text)],
@@ -300,9 +336,21 @@ export const useVaultStore = create<VaultState>()(
         try {
           const loaded = await source.load();
           if (get().source === source) {
+            // The vault's note types, from its own file: the same on every
+            // computer. A vault without one gets this computer's.
+            const file = loaded.notes.find((n) => n.path === NOTE_TYPES_PATH);
+            const fromFile = file ? readNoteTypesFile(file.body) : null;
+            const key = vaultKey(get());
+            if (fromFile && !typesPending) {
+              if (JSON.stringify(fromFile) !== JSON.stringify(customTypes())) {
+                set({ noteTypes: { ...get().noteTypes, [key]: fromFile } });
+              }
+            } else if (!fromFile && customTypes().length > 0) {
+              void saveNoteTypesFile();
+            }
             set({
               index: buildVaultIndex(
-                loaded.notes,
+                loaded.notes.filter((n) => !isOwnFile(n.path)),
                 chosenKinds(),
                 customTypes(),
               ),
@@ -371,6 +419,7 @@ export const useVaultStore = create<VaultState>()(
         const types = [...(get().noteTypes[key] ?? []), { id, label, color }];
         set({ noteTypes: { ...get().noteTypes, [key]: types } });
         set({ index: rebuilt(get().index) });
+        saveNoteTypesSoon();
         return id;
       },
 
@@ -381,6 +430,7 @@ export const useVaultStore = create<VaultState>()(
         );
         set({ noteTypes: { ...get().noteTypes, [key]: types } });
         set({ index: rebuilt(get().index) });
+        saveNoteTypesSoon();
       },
 
       removeNoteType: (id) => {
@@ -397,6 +447,7 @@ export const useVaultStore = create<VaultState>()(
           noteKinds: { ...get().noteKinds, [key]: kinds },
         });
         set({ index: rebuilt(get().index) });
+        saveNoteTypesSoon();
       },
 
       setKindFolder: (kind, folder) => {

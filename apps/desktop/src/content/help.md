@@ -137,11 +137,26 @@ Pick a note from the list, or type a new name. Picking from the list keeps one n
 
 **In Zotero**, an idea or topic is a tag: `idea: <name>` or `topic: <name>`, with the note's exact name. Latex4All adds that tag when you connect a paper or file a highlight here; it doesn't change your Zotero library on its own.
 
-If you'd like Zotero to suggest these names while you tag there, turn on **Ideas and topics as Zotero tags** in Settings → Zotero. Latex4All then keeps one note in your Zotero library, **"Ideas and topics in your vault"**, carrying every idea and topic as a tag, and follows the vault as you add, rename or remove them. Nothing else in Zotero is changed. If it can't (a read-only API key, say), a notice says why.
+If you'd like Zotero to suggest these names while you tag there, turn on **Ideas and topics as Zotero tags** in Settings → Zotero (or in the tag manager). Latex4All then keeps one note in your Zotero library, **"Ideas and topics in your vault"**, carrying a tag for every idea, topic and note of your own types that have a Zotero tag, and follows the vault as you add, rename or remove them. A note you rename in Obsidian keeps its tag, so no second one is made. Nothing else in Zotero is changed. If it can't (a read-only API key, say), a notice says why.
 
 **Zotero's automatic tags** are the ones Zotero adds by itself from publishers' data and importers (shown in a different color in Zotero's tag list). They aren't yours, so Latex4All leaves them out: they don't become topics, and their spellings aren't followed.
 
 Tags you add in Zotero yourself are read when a paper is added to the vault: a paper tagged `topic: <name>` is linked to that topic. Turning tags on highlights into passages as you tag them in Zotero needs a Zotero-to-Obsidian sync running alongside, such as an Obsidian plugin.
+
+## Tag manager
+
+The tag manager turns Zotero tags into vault notes, for when your library is organised with tags already. Open it from **Settings → Vault → Note types → Tag manager…**, or ⌘K.
+
+1. **Pick the tags.** Every tag you made in Zotero is listed, with how many items carry it. Zotero's automatic tags (from publishers and importers) are hidden. Tags that look like a reading status (`read`, `to read`) are marked: they're better left as tags.
+2. **Choose the type and the name** for each: a topic, an idea, one of your own types, or **New type…**, which adds the type to Note types with its folder and Zotero tag. A tag written `method: Diff-in-diff` is recognised as a Method note named "Diff-in-diff".
+3. **Preview** says what will happen: a new note, or your note of that name paired; how many papers it lists and highlights it copies.
+4. **Import** writes the notes.
+
+Each note then lists the papers that carry the tag (linked to their notes; papers without one are listed with a Zotero link, not given notes of their own) and copies the highlights that carry it, word for word, with links back. It records its exact tag (`zotero_tag:`), so it stays paired even if you rename it.
+
+- **Update paired notes as you tag in Zotero** (on by default): tag another paper or highlight in Zotero, and its note follows within minutes. Only the vault is written.
+- **Notes of these types become tags in Zotero** (off by default): see Ideas and topics.
+- Your Zotero tags are never renamed or removed. What you write in a note outside its Zotero section is never touched, and nothing is copied twice: a passage already in the note, put there with "Add to idea" or by a Zotero sync, isn't repeated.
 
 ## Note types
 
@@ -149,9 +164,10 @@ Settings → Vault → **Note types** decides what each kind of note is and wher
 
 - **Built in:** paper, project, topic, idea and plain notes. Each can have a color and a folder.
 - **Your own types:** **Add a type**, name it (say "Method"), and give it a color, a folder and, if you like, an **Obsidian tag**. Choosing the type for a note moves it into that folder. Notes already in the folder, or carrying the Obsidian tag (`#method`), get the type on their own.
+- **Zotero tag:** the word that pairs a type with Zotero. Ideas use `idea` and topics `topic`; give your own type one (say `method`) and its notes pair with Zotero tags written `method: <note name>`. Leave it empty to keep the type out of Zotero.
 - A note's type can also be picked by hand: right-click the note.
 
-Types are kept on this computer: set them up once on each computer you use.
+Types are kept in the vault itself, in `Latex4All/Note types.md`, so every computer using the vault has the same ones. Change them here rather than in that file.
 
 [Open Settings → Vault](app:settings/vault)
 

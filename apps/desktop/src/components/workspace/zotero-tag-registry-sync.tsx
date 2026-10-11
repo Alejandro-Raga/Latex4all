@@ -3,7 +3,8 @@ import { toast } from "sonner";
 import { useSettingsStore } from "@/stores/settings-store";
 import { createLogger } from "@/lib/debug/logger";
 import { syncTagRegistry } from "@/lib/vault/zotero-tag-registry";
-import { useVaultStore } from "@/stores/vault-store";
+import { pairedTag, tagTypes } from "@/lib/vault/zotero-tag-notes";
+import { useNoteTypes, useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 
 const log = createLogger("zotero-tags");
@@ -23,23 +24,23 @@ export function ZoteroTagRegistrySync() {
   const apiKey = useZoteroStore((s) => s.apiKey);
   const userID = useZoteroStore((s) => s.userID);
   const on = useSettingsStore((s) => s.zoteroTagRegistry);
-  const names = useMemo(
-    () =>
-      index
-        ? index.list
-            .filter((n) => n.kind === "idea" || n.kind === "topic")
-            .map((n) => `${n.kind}:${n.name}`)
-            .sort()
-            .join("\n")
-        : null,
-    [index],
-  );
+  const custom = useNoteTypes();
+  const types = useMemo(() => tagTypes(custom), [custom]);
+  const names = useMemo(() => {
+    if (!index) return null;
+    const kinds = new Map(types.map((t) => [t.kind, t.word]));
+    return index.list
+      .filter((n) => kinds.has(n.kind))
+      .map((n) => `${kinds.get(n.kind)}:${n.name}:${pairedTag(n) ?? ""}`)
+      .sort()
+      .join("\n");
+  }, [index, types]);
 
   useEffect(() => {
     if (!on || !index || names === null || !apiKey || !userID) return;
     if (names === synced) return;
     const timer = window.setTimeout(() => {
-      syncTagRegistry(apiKey, userID, index)
+      syncTagRegistry(apiKey, userID, index, types)
         .then((changed) => {
           synced = names;
           warned = false;
@@ -59,7 +60,7 @@ export function ZoteroTagRegistrySync() {
         });
     }, SETTLE_MS);
     return () => window.clearTimeout(timer);
-  }, [on, index, names, apiKey, userID]);
+  }, [on, index, names, apiKey, userID, types]);
 
   return null;
 }
