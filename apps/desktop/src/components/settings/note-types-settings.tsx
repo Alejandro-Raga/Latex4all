@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { PlusIcon, RotateCcwIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { groupColor } from "@/components/workspace/vault-panel";
 import { detectedKindFolder } from "@/lib/vault/kind-folders";
 import { KIND_GROUPS } from "@/lib/vault/vault-index";
@@ -10,6 +11,9 @@ import {
   useNoteTypes,
   useVaultStore,
 } from "@/stores/vault-store";
+
+/** The color column: swatch and reset arrow, the same width on every row. */
+const SWATCH = "w-[46px] shrink-0";
 
 const NEW_TYPE_COLORS = ["#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16"];
 
@@ -28,7 +32,7 @@ function ColorPick({
   // Read afresh each render: it follows picks and type colors.
   const color = groupColor(group, kind);
   return (
-    <span className="flex shrink-0 items-center gap-1">
+    <span className={cn(SWATCH, "flex items-center gap-1")}>
       <input
         type="color"
         value={color}
@@ -36,17 +40,20 @@ function ColorPick({
         aria-label={`Color for ${label}`}
         className="size-6 cursor-pointer rounded border border-border bg-transparent p-0.5"
       />
-      {picked && (
-        <button
-          type="button"
-          onClick={() => setGroupColor(group, null)}
-          className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-          title="Back to its own color"
-          aria-label={`Reset the color for ${label}`}
-        >
-          <RotateCcwIcon className="size-3" />
-        </button>
-      )}
+      {/* Always takes its place, so the names line up either way. */}
+      <button
+        type="button"
+        onClick={() => setGroupColor(group, null)}
+        className={cn(
+          "rounded p-0.5 text-muted-foreground hover:text-foreground",
+          !picked && "invisible",
+        )}
+        title="Back to its own color"
+        aria-label={`Reset the color for ${label}`}
+        tabIndex={picked ? 0 : -1}
+      >
+        <RotateCcwIcon className="size-3" />
+      </button>
     </span>
   );
 }
@@ -125,40 +132,54 @@ export function NoteTypesSettings() {
         <div className="text-sm">Note types</div>
         <div className="text-muted-foreground text-xs">
           A type's folder is where its notes live: choosing the type moves a
-          note there. Notes in it, or with its tag, get the type on their own.
+          note there. Notes in that folder, or with its Obsidian tag, get the
+          type on their own.
         </div>
       </div>
 
+      <div className="flex items-center gap-2 px-5 pt-1 pb-0.5 text-[11px] text-muted-foreground">
+        <span className={SWATCH} />
+        <span className="w-28 shrink-0">Type</span>
+        <span className="min-w-0 flex-1">Folder</span>
+        <span className="w-28 shrink-0">Obsidian tag</span>
+        <span className="size-7 shrink-0" />
+      </div>
       {builtIn.map(([kind, group]) => (
         <div key={kind} className={row}>
           <ColorPick group={group} kind={kind} label={group} />
-          <span className="w-20 shrink-0 text-sm">{group}</span>
+          <span className="w-28 shrink-0 text-sm">{group}</span>
           <BuiltInFolder kind={kind} label={group} />
+          <span className="w-28 shrink-0" />
+          <span className="size-7 shrink-0" />
         </div>
       ))}
       <div className={row}>
-        <span className="size-6 shrink-0" />
-        <span className="w-20 shrink-0 text-sm">Notes</span>
+        <span className={SWATCH} />
+        <span className="w-28 shrink-0 text-sm">Notes</span>
         <BuiltInFolder kind="note" label="Notes" />
+        <span className="w-28 shrink-0" />
+        <span className="size-7 shrink-0" />
       </div>
 
       {types.map((t) => (
-        <div key={t.id} className={`${row} flex-wrap`}>
-          <input
-            type="color"
-            value={t.color}
-            onChange={(e) => {
-              updateNoteType(t.id, { color: e.target.value });
-              // Its own color, not an older pick for the same name.
-              setGroupColor(t.label, null);
-            }}
-            aria-label={`Color for ${t.label}`}
-            className="size-6 shrink-0 cursor-pointer rounded border border-border bg-transparent p-0.5"
-          />
+        <div key={t.id} className={row}>
+          <span className={cn(SWATCH, "flex items-center")}>
+            <input
+              type="color"
+              value={t.color}
+              onChange={(e) => {
+                updateNoteType(t.id, { color: e.target.value });
+                // Its own color, not an older pick for the same name.
+                setGroupColor(t.label, null);
+              }}
+              aria-label={`Color for ${t.label}`}
+              className="size-6 shrink-0 cursor-pointer rounded border border-border bg-transparent p-0.5"
+            />
+          </span>
           <Input
             value={t.label}
             onChange={(e) => updateNoteType(t.id, { label: e.target.value })}
-            className="h-7 w-28 text-xs"
+            className="h-7 w-28 shrink-0 text-xs"
             aria-label="Type name"
           />
           <Input
@@ -175,9 +196,10 @@ export function NoteTypesSettings() {
             onChange={(e) =>
               updateNoteType(t.id, { tag: e.target.value || undefined })
             }
-            placeholder="#tag"
-            className="h-7 w-24 text-xs"
-            aria-label={`Tag for ${t.label}`}
+            placeholder="Obsidian #tag"
+            className="h-7 w-28 shrink-0 text-xs"
+            aria-label={`Obsidian tag for ${t.label}`}
+            title="Notes with this tag in Obsidian get this type"
           />
           <Button
             variant="ghost"
