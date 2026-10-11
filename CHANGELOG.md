@@ -19,7 +19,7 @@ URL changed. Branch layout, CI, refactors and tests belong in commit messages.
 Write entries under `## [Unreleased]` and rename it to `## [x.y.z]` when you
 tag.
 
-## [Unreleased]
+## [2.0.0] - 2026-10-11
 
 ### Added
 
@@ -76,6 +76,23 @@ tag.
   see it there.
 - A refresh button on the Zotero section of the Reference panel fetches
   what changed in Zotero since the library was last read.
+- A Zotero button in the editor's toolbar shows where your Zotero data is
+  coming from (zotero.org, the Zotero app, or Zotero's database), with a
+  coloured dot, and holds the Zotero settings below. A notice says when a
+  fallback takes over and when zotero.org is back. Changes apply right away.
+- Zotero on this computer: Off, As fallback (when zotero.org can't be
+  reached) or Always. Through the Zotero app, your library, highlights and
+  notes load even offline or while zotero.org is down, highlights and tags
+  you save show in Zotero at once, and PDFs that are linked files in Zotero
+  open too. Zotero asks once to let Latex4All save there.
+- Zotero's database as a last resort (off by default): when neither the
+  Zotero app nor zotero.org can be reached, you can still browse, search and
+  open papers with their highlights. Nothing is saved to Zotero until one of
+  them is back.
+- PDFs from Zotero open from the Zotero app's own copy on this computer when
+  there is one, without downloading them.
+- "Connect to idea" in the right-click menu of a vault note, beside
+  "Connect to topic".
 
 ### Fixed
 
@@ -150,6 +167,13 @@ tag.
 - An app left open only looked for updates when it started, so a version
   released meanwhile went unnoticed. It now looks again every few hours,
   and when you come back to it after an hour away.
+- Zotero PDFs could fail to open with "Zotero API error: 503" when
+  zotero.org was busy for a moment. It's now asked again, and when Zotero is
+  down for longer, the message says so instead of showing a code.
+- Zotero showed as disconnected whenever zotero.org couldn't be reached
+  (offline, or down for maintenance), though the account was fine.
+- After merging duplicates in Zotero, the next .bib sync could remove the
+  entry your text cites, once the merged copy left Zotero's trash.
 
 ## [1.2.3] - 2026-10-04
 
