@@ -99,6 +99,7 @@ import {
 } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { MarkdownNoteEditor } from "./markdown-note-editor";
+import { ProjectHome } from "./vault-project-home";
 import { syncProjectNote } from "./project-note-sync";
 import { useCitationCheck } from "./citation-check";
 import {
@@ -219,6 +220,10 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
   }, [ensureVault, reload]);
 
   const note = index && current ? findNote(index, current) : undefined;
+  // In a project, the panel opens on the project; the Library page shows it all.
+  const projectRoot = useDocumentStore((s) => s.projectRoot);
+  const standalone = useVaultStandalone();
+  const tab = useVaultTab((s) => s.tab);
 
   return (
     <div
@@ -290,6 +295,15 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
         <p className="p-4 text-muted-foreground text-xs">
           “{current}” isn't in the vault yet.
         </p>
+      ) : index && projectRoot && !standalone ? (
+        <>
+          <VaultTabs />
+          {tab === "project" ? (
+            <ProjectHome index={index} onOpen={open} />
+          ) : (
+            <NoteList index={index} onOpen={open} />
+          )}
+        </>
       ) : index ? (
         <NoteList index={index} onOpen={open} />
       ) : null}
@@ -897,16 +911,74 @@ function NoteList({
   );
 }
 
+const TAB_KEY = "latex4all-vault-tab";
+
+/** Which of a project's two views the panel shows, kept between sessions. */
+const useVaultTab = create<{
+  tab: "project" | "all";
+  setTab: (tab: "project" | "all") => void;
+}>((set) => ({
+  tab: (() => {
+    try {
+      return localStorage.getItem(TAB_KEY) === "all" ? "all" : "project";
+    } catch {
+      return "project";
+    }
+  })(),
+  setTab: (tab) => {
+    try {
+      localStorage.setItem(TAB_KEY, tab);
+    } catch {
+      // Remembered for this session only.
+    }
+    set({ tab });
+  },
+}));
+
+/** Project | All notes, under the panel's header. */
+function VaultTabs() {
+  const tab = useVaultTab((s) => s.tab);
+  const setTab = useVaultTab((s) => s.setTab);
+  return (
+    <div className="flex gap-1 border-b px-2.5 pt-1.5">
+      {(
+        [
+          ["project", "Project"],
+          ["all", "All notes"],
+        ] as const
+      ).map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          aria-pressed={tab === id}
+          onClick={() => setTab(id)}
+          className={cn(
+            "-mb-px border-b-2 px-2 pb-1.5 text-xs transition-colors",
+            tab === id
+              ? "border-primary font-medium text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** A note in a list, with its right-click menu. */
-function NoteRow({
+export function NoteRow({
   note: n,
   index,
   places,
+  aside,
   onOpen,
 }: {
   note: VaultNote;
   index: VaultIndex;
   places?: CitePlace[];
+  /** A few words at the right, such as a count. */
+  aside?: string;
   onOpen: (name: string) => void;
 }) {
   return (
@@ -937,6 +1009,11 @@ function NoteRow({
           {places && <CitedAt places={places} />}
           {places && <TopicChips index={index} note={n} />}
         </span>
+        {aside && (
+          <span className="mt-0.5 shrink-0 text-[11px] text-muted-foreground">
+            {aside}
+          </span>
+        )}
       </div>
     </NoteContextMenu>
   );
@@ -969,7 +1046,7 @@ const useFolds = create<{
 }));
 
 /** A section or folder that folds away, with how many notes it holds. */
-function FoldSection({
+export function FoldSection({
   id,
   label,
   count,

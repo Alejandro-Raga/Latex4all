@@ -28,6 +28,11 @@ tag.
   folders: a folder shows up once a paper of yours is in it, a paper in
   several folders is listed in each, and papers in none are under
   Unfiled.
+- In a project, the vault panel opens on the project: its note (create or
+  update it with one click), how its citations stand ("42 cited · 3 not in
+  the vault") with buttons to add what's missing or check them, the papers
+  it cites with where, and the ideas and topics those papers feed. The
+  whole vault, as before, is in the All notes tab.
 
 ## [2.0.0] - 2026-10-11
 
