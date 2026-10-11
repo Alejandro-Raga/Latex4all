@@ -37,6 +37,10 @@ tag.
   copy, "Name (copy)", is a project of its own: not shared, with its own
   history and vault note, and its compiled PDF isn't saved over the
   original's.
+- Zotero → vault, automatically (in the tag manager, off unless you turn it
+  on): papers you tag with the vault tag in any Zotero app get a note that
+  follows their highlights, and tags written "type: name" (such as "idea:
+  …") make and fill their notes, while Latex4All is open.
 - A tag manager (Settings → Vault → Note types, or ⌘K) turns Zotero tags
   into vault notes: pick the tags, the type of note (or a new type) and the
   name, preview, import. Each note lists the papers with the tag and copies

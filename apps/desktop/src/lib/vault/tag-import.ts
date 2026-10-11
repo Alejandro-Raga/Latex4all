@@ -8,18 +8,22 @@ import { zoteroFetch } from "@/lib/zotero-api";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
+import { addPaperToVault } from "./add-paper";
 import { kindFolder } from "./kind-folders";
 import { chooseNoteKind } from "./note-changes";
 import type { VaultIndex, VaultNote } from "./vault-index";
 import {
   fetchTagMembers,
   newTagNote,
+  noteNameFor,
   outsideTagSection,
   pairedTag,
+  parseTag,
   TAG_BEGIN,
   type TagMembers,
   type TagType,
   tagSection,
+  tagTypes,
   withField,
   withTagSection,
 } from "./zotero-tag-notes";
@@ -217,4 +221,97 @@ export async function refreshPairedNotes(): Promise<number> {
     refreshing = false;
   }
   return written;
+}
+
+/** Papers refreshed per round, in turn, so a large vault isn't all re-read each time. */
+const REFRESH_BATCH = 15;
+let refreshTurn = 0;
+let automating = false;
+
+/**
+ * Zotero → vault, automatically: papers carrying the vault tag get a note
+ * (and those that have one are refreshed a batch at a time, to follow new
+ * highlights), and every tag written "word: name" for a note type with that
+ * Zotero tag word gets its note, made or paired. Only the vault is written.
+ * Returns what it did.
+ */
+export async function automateVault(): Promise<{
+  papers: number;
+  notes: number;
+}> {
+  const done = { papers: 0, notes: 0 };
+  if (automating) return done;
+  const { apiKey, userID } = useZoteroStore.getState();
+  if (!apiKey || !userID) return done;
+  await useVaultStore.getState().ensureVault();
+  const vault = useVaultStore.getState();
+  if (!vault.source || !vault.index) return done;
+  automating = true;
+  try {
+    // 1. Papers with the vault tag.
+    const tag = vault.paperTag || "obsidian";
+    const keys: string[] = [];
+    for (let start = 0; ; start += 100) {
+      const params = new URLSearchParams({
+        tag,
+        limit: "100",
+        start: String(start),
+      });
+      const page = (await (
+        await zoteroFetch(apiKey, `/users/${userID}/items/top?${params}`)
+      ).json()) as { key: string; data: { itemType: string } }[];
+      keys.push(
+        ...page
+          .filter(
+            (i) =>
+              !["attachment", "note", "annotation"].includes(i.data.itemType),
+          )
+          .map((i) => i.key),
+      );
+      if (page.length < 100) break;
+    }
+    const have = new Set(
+      (useVaultStore.getState().index?.list ?? [])
+        .map((n) => n.zoteroKey)
+        .filter(Boolean),
+    );
+    const missing = keys.filter((k) => !have.has(k));
+    const present = keys.filter((k) => have.has(k)).sort();
+    const batch = present.length
+      ? Array.from(
+          { length: Math.min(REFRESH_BATCH, present.length) },
+          (_, i) => present[(refreshTurn + i) % present.length],
+        )
+      : [];
+    refreshTurn += batch.length;
+    for (const key of [...missing, ...batch]) {
+      try {
+        const result = await addPaperToVault(key);
+        if (result.status === "created" || result.status === "updated")
+          done.papers++;
+      } catch {
+        // Tried again next round.
+      }
+    }
+
+    // 2. "word: name" tags of note types paired with Zotero.
+    const index = useVaultStore.getState().index;
+    if (!index) return done;
+    const types = tagTypes(
+      useVaultStore.getState().noteTypes[vaultKey()] ?? [],
+    );
+    const { tags } = await listZoteroTags();
+    const choices: ImportChoice[] = [];
+    for (const { tag: t } of tags) {
+      const typed = parseTag(t, types);
+      if (!typed || tagStatus(t, index).state !== "free") continue;
+      choices.push({ tag: t, type: typed.type, name: noteNameFor(t, types) });
+    }
+    if (choices.length) {
+      done.notes = (await runImport(await previewImport(choices))).length;
+    }
+  } finally {
+    automating = false;
+  }
+  return done;
 }

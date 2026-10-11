@@ -1,9 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Loader2Icon,
-  SearchIcon,
-  TagsIcon,
-} from "lucide-react";
+import { Loader2Icon, SearchIcon, TagsIcon } from "lucide-react";
 import { toast } from "sonner";
 import { create } from "zustand";
 import { Button } from "@/components/ui/button";
@@ -69,6 +65,9 @@ export function TagManagerDialog() {
   const live = useSettingsStore((s) => s.zoteroTagNotesLive);
   const setLive = useSettingsStore((s) => s.setZoteroTagNotesLive);
   const registry = useSettingsStore((s) => s.zoteroTagRegistry);
+  const auto = useSettingsStore((s) => s.zoteroAutoVault);
+  const setAuto = useSettingsStore((s) => s.setZoteroAutoVault);
+  const vaultTag = useVaultStore((s) => s.paperTag || "obsidian");
   const setRegistry = useSettingsStore((s) => s.setZoteroTagRegistry);
 
   const [tags, setTags] = useState<ZoteroTag[] | null>(null);
@@ -410,6 +409,25 @@ export function TagManagerDialog() {
               )}
             </ul>
             <div className="shrink-0 space-y-1.5 border-t pt-2 text-xs">
+              <label className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-3.5 accent-primary"
+                  checked={auto}
+                  onChange={(e) => setAuto(e.target.checked)}
+                />
+                <span>
+                  <span className="font-medium">
+                    Zotero → vault, automatically
+                  </span>
+                  <span className="block text-muted-foreground">
+                    Papers tagged “{vaultTag}” get a note that follows their
+                    highlights; tags written “type: name” (such as “idea: …”)
+                    get their note. Runs while Latex4All is open. Off if another
+                    tool syncs Zotero into this vault.
+                  </span>
+                </span>
+              </label>
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"

@@ -23,11 +23,17 @@ vi.mock("@/stores/zotero-store", () => ({
   useZoteroStore: { getState: () => ({ apiKey: "k", userID: "1" }) },
 }));
 vi.mock("./kind-folders", () => ({
-  kindFolder: (kind: string) => (kind === "topic" ? "Topics" : null),
+  kindFolder: (kind: string) =>
+    kind === "topic" ? "Topics" : kind === "idea" ? "Ideas" : null,
 }));
 vi.mock("./note-changes", () => ({ chooseNoteKind: vi.fn(async () => null) }));
+const addPaper = vi.hoisted(() =>
+  vi.fn(async () => ({ status: "created", name: "Paper" })),
+);
+vi.mock("./add-paper", () => ({ addPaperToVault: addPaper }));
 
 const vault = vi.hoisted(() => ({
+  paperTag: "vault",
   index: { list: [] as VaultNote[] },
   noteTypes: {},
   mode: "local",
@@ -56,9 +62,8 @@ vi.mock("@/stores/vault-store", () => ({
   },
 }));
 
-const { previewImport, refreshPairedNotes, runImport } = await import(
-  "./tag-import"
-);
+const { automateVault, previewImport, refreshPairedNotes, runImport } =
+  await import("./tag-import");
 const { tagTypes } = await import("./zotero-tag-notes");
 const topic = tagTypes([]).find((t) => t.kind === "topic") as ReturnType<
   typeof tagTypes
@@ -147,5 +152,39 @@ describe("importing a Zotero tag", () => {
     ];
     expect(await refreshPairedNotes()).toBe(1);
     expect(files.get(path)).not.toContain("> A passage.");
+  });
+});
+
+describe("Zotero → vault, automatically", () => {
+  it("gives papers with the vault tag a note, and typed tags theirs", async () => {
+    files.clear();
+    vault.index = { list: [] };
+    addPaper.mockClear();
+    const { zoteroFetch } = await import("@/lib/zotero-api");
+    vi.mocked(zoteroFetch).mockImplementation(
+      async (_k: string, path: string) =>
+        ({
+          json: async () =>
+            path.includes("/tags")
+              ? [
+                  { tag: "idea: Science pays", meta: { numItems: 1 } },
+                  { tag: "Network theory", meta: { numItems: 3 } },
+                  { tag: "topic: Auto", meta: { type: 1, numItems: 9 } },
+                ]
+              : path.includes("/items/top?")
+                ? [
+                    { key: "PAPER001", data: { itemType: "journalArticle" } },
+                    { key: "PDFALONE", data: { itemType: "attachment" } },
+                  ]
+                : path.includes("/items?")
+                  ? [{ key: "PAPER001", data: { itemType: "journalArticle" } }]
+                  : [],
+        }) as unknown as Response,
+    );
+    const done = await automateVault();
+    expect(addPaper).toHaveBeenCalledWith("PAPER001");
+    expect(addPaper).toHaveBeenCalledTimes(1);
+    expect(done.notes).toBe(1);
+    expect([...files.keys()]).toEqual(["Ideas/Science pays.md"]);
   });
 });

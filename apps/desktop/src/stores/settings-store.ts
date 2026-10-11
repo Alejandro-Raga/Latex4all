@@ -97,6 +97,12 @@ interface SettingsState {
   /** Update notes paired with Zotero tags as tags change there (vault only). */
   zoteroTagNotesLive: boolean;
   setZoteroTagNotesLive: (on: boolean) => void;
+  /**
+   * Zotero → vault, automatically: papers with the vault tag get notes (and
+   * follow new highlights), and "type: name" tags get their notes. Vault only.
+   */
+  zoteroAutoVault: boolean;
+  setZoteroAutoVault: (on: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -140,6 +146,8 @@ export const useSettingsStore = create<SettingsState>()(
       setZoteroTagRegistry: (on) => set({ zoteroTagRegistry: on }),
       zoteroTagNotesLive: true,
       setZoteroTagNotesLive: (on) => set({ zoteroTagNotesLive: on }),
+      zoteroAutoVault: false,
+      setZoteroAutoVault: (on) => set({ zoteroAutoVault: on }),
       customTheme: DEFAULT_CUSTOM_COLORS,
       setCustomTheme: (colors) => set({ customTheme: colors }),
       pdfThemeMain: "light",
