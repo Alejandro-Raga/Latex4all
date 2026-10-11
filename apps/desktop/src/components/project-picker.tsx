@@ -17,6 +17,7 @@ import {
   typeMenuOptions,
   normalizeType,
   readProjectType,
+  updateProjectMeta,
   writeProjectType,
 } from "@/lib/project-meta";
 import {
@@ -301,6 +302,49 @@ export function ProjectPicker() {
       toast.success(`Moved to ${destination}`);
     } catch (err) {
       toast.error("Couldn't move the project", {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  /**
+   * A copy of the project beside it, "Name (copy)", as a project of its own:
+   * not shared, without the original's history, its own id (so its own vault
+   * note) and no copy of the compiled PDF saved over the original's.
+   */
+  const handleDuplicateProject = async (project: RecentProject) => {
+    const separator = project.path.includes("\\") ? "\\" : "/";
+    const parent = project.path.replace(/[\\/][^\\/]+[\\/]?$/, "");
+    const base = project.path.split(/[\\/]/).filter(Boolean).pop() ?? "Project";
+    let target = "";
+    for (let n = 1; n < 100; n++) {
+      const candidate = `${parent}${separator}${base} (copy${n > 1 ? ` ${n}` : ""})`;
+      if (!(await exists(candidate).catch(() => false))) {
+        target = candidate;
+        break;
+      }
+    }
+    if (!target) return;
+    const id = toast.loading(`Duplicating ${project.name}…`);
+    try {
+      await invoke("duplicate_project", {
+        srcPath: project.path,
+        dstPath: target,
+      });
+      await invoke("allow_project_directory", { rootPath: target });
+      await updateProjectMeta(target, {
+        id: undefined,
+        compiledCopy: undefined,
+      });
+      addRecentProject(target);
+      const name = target.split(/[\\/]/).pop() ?? target;
+      toast.success(`Made “${name}”`, {
+        id,
+        action: { label: "Open", onClick: () => void handleOpenRecent(target) },
+      });
+    } catch (err) {
+      toast.error("Couldn't duplicate the project", {
+        id,
         description: err instanceof Error ? err.message : String(err),
       });
     }
@@ -702,6 +746,9 @@ export function ProjectPicker() {
                                   setTypePrompt(project.path);
                                 }}
                                 onMove={() => void handleMoveProject(project)}
+                                onDuplicate={() =>
+                                  void handleDuplicateProject(project)
+                                }
                               />
                             ))}
                           </div>
@@ -1144,6 +1191,7 @@ function ProjectPreviewCard({
   onSetType,
   onCustomType,
   onMove,
+  onDuplicate,
 }: {
   project: RecentProject;
   isFavorite: boolean;
@@ -1155,6 +1203,7 @@ function ProjectPreviewCard({
   onSetType: (type: string | null) => void;
   onCustomType: () => void;
   onMove: () => void;
+  onDuplicate: () => void;
 }) {
   const isShared = useProjectStore((s) =>
     Object.values(s.sharedProjects).includes(project.path),
@@ -1292,6 +1341,7 @@ function ProjectPreviewCard({
             </ContextMenuSubContent>
           </ContextMenuSub>
           <ContextMenuSeparator />
+          <ContextMenuItem onSelect={onDuplicate}>Duplicate</ContextMenuItem>
           <ContextMenuItem onSelect={onMove}>Move to…</ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onSelect={onRemove}>

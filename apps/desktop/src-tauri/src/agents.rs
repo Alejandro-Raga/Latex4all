@@ -789,7 +789,10 @@ async fn codex_live_limits() -> Option<serde_json::Value> {
         serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "account/rateLimits/read"}),
     ];
     for request in requests {
-        stdin.write_all(format!("{}\n", request).as_bytes()).await.ok()?;
+        stdin
+            .write_all(format!("{}\n", request).as_bytes())
+            .await
+            .ok()?;
     }
     stdin.flush().await.ok()?;
     let mut lines = BufReader::new(stdout).lines();
@@ -1024,14 +1027,19 @@ mod tests {
         assert_eq!(limits["planType"], "plus");
         assert!(live_limits_in(r#"{"id":0,"result":{}}"#).is_none());
         assert!(live_limits_in(r#"{"method":"account/updated","params":{}}"#).is_none());
-        assert_eq!(live_limits_in(r#"{"id":1,"result":{"rateLimits":null}}"#), Some(None));
+        assert_eq!(
+            live_limits_in(r#"{"id":1,"result":{"rateLimits":null}}"#),
+            Some(None)
+        );
     }
 
     #[test]
     fn keeps_the_main_recorded_limits() {
         assert!(is_main_limit(&serde_json::json!({"limit_id": "codex"})));
         assert!(is_main_limit(&serde_json::json!({"primary": {}})));
-        assert!(!is_main_limit(&serde_json::json!({"limit_id": "codex_bengalfox"})));
+        assert!(!is_main_limit(
+            &serde_json::json!({"limit_id": "codex_bengalfox"})
+        ));
     }
 
     #[test]

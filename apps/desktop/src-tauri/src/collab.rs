@@ -349,7 +349,10 @@ fn device_state_dir(project_root: &Path) -> PathBuf {
     let Some(base) = dirs::data_local_dir() else {
         return state_dir(project_root);
     };
-    let dir = base.join("Latex4All").join("shared-projects").join(&id[..32]);
+    let dir = base
+        .join("Latex4All")
+        .join("shared-projects")
+        .join(&id[..32]);
     leave_project_folder(project_root, &dir);
     dir
 }
@@ -413,7 +416,8 @@ fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
         if is_locked(&err) {
             "another program has it open (Seafile, an editor or an antivirus)".to_string()
         } else {
-            last.map(|e| e.to_string()).unwrap_or_else(|| err.to_string())
+            last.map(|e| e.to_string())
+                .unwrap_or_else(|| err.to_string())
         }
     })
 }
@@ -1055,7 +1059,11 @@ fn handle_frame(
             let Ok(plain) = keys.open(Kind::Chat, sealed) else {
                 return;
             };
-            let entry = ChatEntry { seq, at, data: plain };
+            let entry = ChatEntry {
+                seq,
+                at,
+                data: plain,
+            };
             if chat.add(&entry) {
                 emit(SyncEvent::Chat {
                     seq,
@@ -1120,7 +1128,12 @@ async fn probe(url: &str) -> Probe {
     {
         Ok(client) => client,
         Err(err) => {
-            return Probe { ok: false, status: None, ms: 0, error: Some(err.to_string()) }
+            return Probe {
+                ok: false,
+                status: None,
+                ms: 0,
+                error: Some(err.to_string()),
+            }
         }
     };
     match client.get(url).send().await {
@@ -1369,7 +1382,10 @@ pub fn collab_save_doc(
     buf.extend_from_slice(&(local.len() as u32).to_be_bytes());
     buf.extend_from_slice(local.as_bytes());
     buf.extend_from_slice(&decode(&data)?);
-    write_atomic(&device_state_dir(Path::new(&project_root)).join(DOC_FILE), &buf)
+    write_atomic(
+        &device_state_dir(Path::new(&project_root)).join(DOC_FILE),
+        &buf,
+    )
 }
 
 /// Connects this window to a shared project, replacing any earlier
@@ -1647,8 +1663,16 @@ mod tests {
         let now = now_ms();
         let mut log = ChatLog::load(Some(path.clone()), now);
         assert_eq!(log.after, 0);
-        let old = ChatEntry { seq: 1, at: now - 40 * day, data: b"old".to_vec() };
-        let new = ChatEntry { seq: 2, at: now - day, data: b"new".to_vec() };
+        let old = ChatEntry {
+            seq: 1,
+            at: now - 40 * day,
+            data: b"old".to_vec(),
+        };
+        let new = ChatEntry {
+            seq: 2,
+            at: now - day,
+            data: b"new".to_vec(),
+        };
         assert!(log.add(&old));
         assert!(log.add(&new));
         assert!(!log.add(&new), "already has it");
@@ -1754,10 +1778,16 @@ mod tests {
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
             .collect();
         assert_eq!(names, vec![LINK_FILE.to_string()]);
-        assert_eq!(std::fs::read(device_state_dir(&a).join(CHAT_FILE)).unwrap(), vec![3u8]);
+        assert_eq!(
+            std::fs::read(device_state_dir(&a).join(CHAT_FILE)).unwrap(),
+            vec![3u8]
+        );
 
         collab_save_doc(root_a.clone(), 1, "{}".into(), BASE64.encode([5u8])).unwrap();
-        assert!(collab_load_doc(root_b.clone()).is_none(), "another folder's");
+        assert!(
+            collab_load_doc(root_b.clone()).is_none(),
+            "another folder's"
+        );
         collab_remove_link(root_a).unwrap();
         collab_remove_link(root_b).unwrap();
         let _ = std::fs::remove_dir_all(device_state_dir(&a));
@@ -1947,11 +1977,14 @@ mod tests {
         );
 
         // Chat: confirmed to the sender, passed on to whoever's online.
-        a.send(Command::Chat(b"{\"text\":\"hi\"}".to_vec())).unwrap();
+        a.send(Command::Chat(b"{\"text\":\"hi\"}".to_vec()))
+            .unwrap();
         let mine = wait_for(&mut a_events, |e| matches!(e, SyncEvent::Chat { .. })).await;
         let theirs = wait_for(&mut b_events, |e| matches!(e, SyncEvent::Chat { .. })).await;
         assert_eq!(mine, theirs);
-        let SyncEvent::Chat { seq, data, .. } = mine else { unreachable!() };
+        let SyncEvent::Chat { seq, data, .. } = mine else {
+            unreachable!()
+        };
         assert_eq!(BASE64.decode(data).unwrap(), b"{\"text\":\"hi\"}");
         // Someone opening later gets it too.
         let (_d, mut d_events) = start(&link, 0, Outbox::load(None));

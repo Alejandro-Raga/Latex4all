@@ -8,7 +8,7 @@ On the **All projects** page:
 - **Import** opens a folder that's already on your computer.
 - **Join** opens a project someone shared with you, from the link they sent.
 
-Click a project to open it. Right-click it to star it, give it a type (article, thesis, presentation…) or remove it from the list. Search with ⌘K.
+Click a project to open it. Right-click it to star it, give it a type (article, thesis, presentation…), **duplicate** it, move it, or remove it from the list. A duplicate is a project of its own: it isn't shared even if the original is, and starts its own history. Search with ⌘K.
 
 The window has three parts: your files on the left, the editor in the middle and the PDF on the right. The icons on the far right open the side panels: Reference, Vault and Notes.
 

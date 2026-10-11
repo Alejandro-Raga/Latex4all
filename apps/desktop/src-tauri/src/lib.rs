@@ -419,6 +419,16 @@ async fn move_project(old_path: String, new_path: String) -> Result<(), String> 
     .map_err(|e| format!("Move task panicked: {}", e))?
 }
 
+/// Copies a project folder to a new one, as a project of its own.
+#[tauri::command]
+async fn duplicate_project(src_path: String, dst_path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        projects::duplicate_project_folder(Path::new(&src_path), Path::new(&dst_path))
+    })
+    .await
+    .map_err(|e| format!("Copy task panicked: {}", e))?
+}
+
 #[tauri::command]
 fn allow_project_directory(app: tauri::AppHandle, root_path: String) -> Result<(), String> {
     let fs_scope = app.fs_scope();
@@ -703,6 +713,7 @@ pub fn run() {
             open_devtools,
             allow_project_directory,
             move_project,
+            duplicate_project,
             list_default_projects,
             detect_editors,
             open_in_editor,

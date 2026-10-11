@@ -33,6 +33,10 @@ tag.
   the vault") with buttons to add what's missing or check them, the papers
   it cites with where, and the ideas and topics those papers feed. The
   whole vault, as before, is in the All notes tab.
+- Duplicate a project from its right-click menu on the projects page. The
+  copy, "Name (copy)", is a project of its own: not shared, with its own
+  history and vault note, and its compiled PDF isn't saved over the
+  original's.
 - A tag manager (Settings → Vault → Note types, or ⌘K) turns Zotero tags
   into vault notes: pick the tags, the type of note (or a new type) and the
   name, preview, import. Each note lists the papers with the tag and copies

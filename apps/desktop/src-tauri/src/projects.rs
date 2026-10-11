@@ -1,4 +1,4 @@
-//! Moving a project folder somewhere else on disk.
+//! Moving a project folder somewhere else on disk, and duplicating one.
 
 use std::path::Path;
 
@@ -117,5 +117,116 @@ mod tests {
 
         std::fs::remove_dir_all(old).unwrap();
         std::fs::remove_dir_all(taken).unwrap();
+    }
+}
+
+/// What a duplicate leaves behind: the original's sharing (its link and sync
+/// state, or the copy would join the same shared project), its history, its
+/// AI log, and copies a sync service made of a clash.
+fn skip_in_duplicate(rel: &Path) -> bool {
+    let name = rel
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if name.contains("SFConflict") || name.contains("conflicted copy") {
+        return true;
+    }
+    let mut parts = rel
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().to_string());
+    match (parts.next().as_deref(), parts.next().as_deref()) {
+        (Some(".prism"), _) => true,
+        (Some(".latex4all"), Some(inner)) => {
+            inner == "history.git" || inner == "ai-log.jsonl" || inner.starts_with("collab")
+        }
+        _ => false,
+    }
+}
+
+fn copy_for_duplicate(root: &Path, src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let rel = path.strip_prefix(root).unwrap_or(&path);
+        if skip_in_duplicate(rel) {
+            continue;
+        }
+        let target = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_for_duplicate(root, &path, &target)?;
+        } else {
+            std::fs::copy(&path, &target)?;
+        }
+    }
+    Ok(())
+}
+
+/// Copies the project at `src` to `dst`, a new folder, as a project of its
+/// own (see skip_in_duplicate). Nothing is copied if `dst` exists.
+pub fn duplicate_project_folder(src: &Path, dst: &Path) -> Result<(), String> {
+    if !src.is_dir() {
+        return Err("That project folder no longer exists.".into());
+    }
+    if dst.exists() {
+        return Err("There is already a folder with that name there.".into());
+    }
+    if dst.starts_with(src) {
+        return Err("A project can't be copied inside itself.".into());
+    }
+    copy_for_duplicate(src, src, dst).map_err(|e| {
+        let _ = std::fs::remove_dir_all(dst);
+        format!("Couldn't copy the project: {}", e)
+    })
+}
+
+#[cfg(test)]
+mod duplicate_tests {
+    use super::*;
+
+    #[test]
+    fn copies_the_project_but_not_its_sharing_or_history() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let src = dir.path().join("Paper");
+        std::fs::create_dir_all(src.join(".latex4all/history.git")).expect("mkdir");
+        std::fs::create_dir_all(src.join("figures")).expect("mkdir");
+        for (path, text) in [
+            ("main.tex", "x"),
+            ("refs.bib", "y"),
+            ("refs (SFConflict me 2026).bib", "z"),
+            ("figures/a.png", "png"),
+            (".latex4all/project.json", "{}"),
+            (".latex4all/annotations.json", "[]"),
+            (".latex4all/collab.json", "{}"),
+            (".latex4all/collab-doc.bin", "doc"),
+            (".latex4all/ai-log.jsonl", ""),
+            (".latex4all/history.git/HEAD", "ref"),
+        ] {
+            std::fs::write(src.join(path), text).expect("write");
+        }
+        let dst = dir.path().join("Paper (copy)");
+        duplicate_project_folder(&src, &dst).expect("duplicate");
+        for kept in [
+            "main.tex",
+            "refs.bib",
+            "figures/a.png",
+            ".latex4all/project.json",
+            ".latex4all/annotations.json",
+        ] {
+            assert!(dst.join(kept).exists(), "{kept} should be copied");
+        }
+        for left in [
+            "refs (SFConflict me 2026).bib",
+            ".latex4all/collab.json",
+            ".latex4all/collab-doc.bin",
+            ".latex4all/ai-log.jsonl",
+            ".latex4all/history.git",
+        ] {
+            assert!(!dst.join(left).exists(), "{left} should be left behind");
+        }
+        assert!(
+            duplicate_project_folder(&src, &dst).is_err(),
+            "won't overwrite"
+        );
     }
 }

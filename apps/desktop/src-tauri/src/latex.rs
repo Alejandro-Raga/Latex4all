@@ -341,7 +341,10 @@ pub(crate) fn persistent_build_dir(project_dir: &str) -> PathBuf {
         &ring::digest::SHA256,
         canonical.to_string_lossy().as_bytes(),
     );
-    let id: String = digest.as_ref()[..12].iter().map(|b| format!("{b:02x}")).collect();
+    let id: String = digest.as_ref()[..12]
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     base.join("Latex4All").join("builds").join(id)
 }
 
@@ -403,7 +406,9 @@ fn legacy_build_dir(project_dir: &str) -> PathBuf {
 /// page's thumbnails).
 #[tauri::command]
 pub fn project_build_dir(project_dir: String) -> String {
-    persistent_build_dir(&project_dir).to_string_lossy().to_string()
+    persistent_build_dir(&project_dir)
+        .to_string_lossy()
+        .to_string()
 }
 
 /// Copies a file, trying again for a moment while another program (a sync
@@ -1352,7 +1357,10 @@ mod tests {
         assert_eq!(removed, vec![orphan.clone()]);
         assert!(alive.exists() && unmarked.exists());
         // Half a year unused: its project's next compile remakes it.
-        assert_eq!(cleanup_builds_in(root.path(), now + day * 181), vec![alive.clone()]);
+        assert_eq!(
+            cleanup_builds_in(root.path(), now + day * 181),
+            vec![alive.clone()]
+        );
         // A folder that isn't marked as a build is never touched.
         assert!(unmarked.exists());
         // The project itself is never touched.
