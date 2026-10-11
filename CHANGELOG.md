@@ -23,6 +23,8 @@ tag.
 
 ### Added
 
+- Help is rewritten as a shorter guide to what each part of the app is
+  for.
 - Highlights in a vault note are cards: the passage in its Zotero color
   with its page, and your comment set apart under it. Right-click one to add
   it to an idea or a topic or open it in the PDF; the other notes quoting it
