@@ -420,6 +420,15 @@ if (scenario === "vault") {
       "---\nTitle: A human capability approach to transformative innovation policy\nYear: 2025\nAuthors: Alejandra Boni\n---\n",
     ],
     ["Ideas/My idea.md", "Something to link."],
+    // A paper note as the Zotero sync writes it, and an idea quoting it.
+    [
+      "Papers/Arora2018.md",
+      '---\ntitle: The decline of science in corporate R&D\ncitekey: Arora2018\nzotero_key: ARORA001\nyear: 2018\ntags:\n- paper\n---\n%% begin zotero %%\n# The decline of science in corporate R&D\n\n## Highlights\n\n> Large firms have withdrawn from research.\n> — [p. 3](zotero://open-pdf/library/items/PDF00001?page=3&annotation=ANN00001) #hl/blue\n\n^ann00001\n\n<em style="opacity: 0.6">Fits my argument on budgets</em>\n\n> Publications per firm fell.\n> — [p. 5](zotero://open-pdf/library/items/PDF00001?page=5&annotation=ANN00002) #hl/yellow\n\n^ann00002\n%% end zotero %%\n\n## My notes\n\n',
+    ],
+    [
+      "Ideas/Firms retreat from research.md",
+      "---\ntags:\n- idea\n---\n## The idea\n\n%% begin zotero %%\n## Passages\n\n### [[Arora2018]] The decline of science in corporate R&D\n\n> Large firms have withdrawn from research.\n> — [[Arora2018#^ann00001|Arora2018, p. 3]] · [PDF](zotero://open-pdf/library/items/PDF00001?page=3&annotation=ANN00001)\n%% end zotero %%\n",
+    ],
   ]);
   (window as any).vaultFiles = files;
   const source = {

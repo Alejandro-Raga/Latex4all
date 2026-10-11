@@ -181,7 +181,7 @@ describe("vaultMarkdown", () => {
       "%% begin zotero %%\n> quote\n> — [p. 3](zotero://x) #hl/yellow ^ab12\n\nsee [[Arrow1962#^cd|Arrow]] and [[Idea one]]\n![[ink-ab12.svg]]\n%% end zotero %%",
     );
     expect(out).toBe(
-      "> quote\n> — [p. 3](zotero://x)\n\nsee [Arrow](vault:Arrow1962) and [Idea one](vault:Idea%20one)\n![ink-ab12.svg](vault-embed:ink-ab12.svg)",
+      "> quote\n> — [p. 3](zotero://x) [](hl:yellow)\n\nsee [Arrow](vault:Arrow1962) and [Idea one](vault:Idea%20one)\n![ink-ab12.svg](vault-embed:ink-ab12.svg)",
     );
     expect(noteFromHref("vault:Idea%20one")).toBe("Idea one");
     expect(noteFromHref("https://x")).toBeNull();

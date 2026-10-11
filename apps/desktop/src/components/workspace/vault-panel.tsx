@@ -82,6 +82,7 @@ import {
 } from "@/lib/vault/load";
 import { WebdavConflictError } from "@/lib/vault/webdav";
 import {
+  COLOR_HREF,
   EMBED_SRC,
   FADED_HREF,
   noteFromHref,
@@ -138,6 +139,8 @@ import { openZoteroPdf, zoteroPdfTarget } from "@/components/zotero-pdf-dialog";
 import { followLatex4AllLink } from "@/hooks/use-deep-links";
 import { PanelBoundary } from "@/components/panel-boundary";
 import {
+  attachComments,
+  HighlightComment,
   HighlightQuote,
   notesByHighlight,
   type QuoteNode,
@@ -2157,8 +2160,9 @@ function NoteMarkdown({
     <div className={MARKDOWN_CLASSES}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[attachComments]}
         urlTransform={(url) =>
-          /^(vault:|vault-embed:|faded:|zotero:\/\/|obsidian:\/\/|latex4all:\/\/)/.test(
+          /^(vault:|vault-embed:|faded:|hl:|zotero:\/\/|obsidian:\/\/|latex4all:\/\/)/.test(
             url,
           )
             ? url
@@ -2168,7 +2172,10 @@ function NoteMarkdown({
           a({ href, children }) {
             if (href === FADED_HREF)
               return <em className="opacity-60">{children}</em>;
+            // A highlight's colour: shown by its card, not as a link.
+            if (href?.startsWith(COLOR_HREF)) return null;
             const target = noteFromHref(href);
+            const page = href?.startsWith("zotero://open-pdf");
             return (
               <button
                 type="button"
@@ -2186,10 +2193,22 @@ function NoteMarkdown({
                     toast.error("Couldn't open that link."),
                   );
                 }}
-                className="text-left text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary"
+                className={
+                  page
+                    ? "text-left text-muted-foreground text-xs hover:text-primary hover:underline"
+                    : "text-left text-primary underline decoration-primary/30 underline-offset-2 hover:decoration-primary"
+                }
               >
                 {children}
               </button>
+            );
+          },
+          p({ node, children }) {
+            const kind = node?.properties?.dataComment;
+            return typeof kind === "string" ? (
+              <HighlightComment kind={kind}>{children}</HighlightComment>
+            ) : (
+              <p>{children}</p>
             );
           },
           blockquote({ node, children }) {

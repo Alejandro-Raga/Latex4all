@@ -107,6 +107,7 @@ The vault is your Obsidian vault, opened from the Vault panel. Connect it in **S
 - **Search** takes the same `author:` and `year:` conditions as the library, plus `topic:` and `type:`; the sliders button filters by type and topic, and the menu beside the search sorts. While you search, results are listed flat.
 - **Add a paper to the vault** by right-clicking it in the Zotero library, or with **Add to vault** in the vault's Project tab. Its note lists its details and your highlights, and the paper gets the **vault tag** in Zotero (`obsidian` unless you choose another in Settings → Vault, such as `vault`), so you can see in Zotero which papers have notes.
 - **Right-click a note** to change its type, connect it to an idea or topic, or delete it.
+- **Highlights in a note** are shown as cards: the passage with its highlight color and page, and your comment under it. Right-click one to add it to an idea or topic or open it in the PDF; the other notes quoting it are listed under the card.
 - **The map** shows how notes link. On the Library & Vault page it shows the whole vault.
 
 [Open Settings → Vault](app:settings/vault)
@@ -129,7 +130,7 @@ With a project open, the Vault panel has two tabs.
 
 Topics and ideas are vault notes that collect passages, word for word, with a link back to where each came from. A **topic** is a subject ("Corporate science"); an **idea** is a claim you could argue for or against ("Tight budgets favor cost over frontier R&D").
 
-- **From a paper:** select text and choose **Add to idea…** or **Add to topic…**, or right-click a highlight you already have.
+- **From a paper:** select text and choose **Add to idea…** or **Add to topic…**, or right-click a highlight you already have: in the PDF, in a vault note, or in the Notes panel for your own text. The same menu lists the notes the highlight is already in.
 - **From your own writing:** do the same in the editor or the compiled PDF. The link opens the project at that file and line.
 - **A whole paper:** right-click it in the Zotero library, or its note in the vault, and choose **Connect to topic** or **Connect to idea**.
 

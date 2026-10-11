@@ -9,6 +9,8 @@ import {
 import { addPassage, type PassageGroup } from "@/lib/vault/add-passage";
 import { useDockStore } from "@/stores/dock-store";
 import { filedToast, GroupPicker } from "./group-picker";
+import { notesByHighlight, openInVault } from "../highlight-quote";
+import { useVaultStore } from "@/stores/vault-store";
 import {
   removePassageEverywhere,
   updatePassageComment,
@@ -22,6 +24,7 @@ import {
   MinusIcon,
   PlusIcon,
   LightbulbIcon,
+  Link2Icon,
   TagIcon,
   PanelRightIcon,
   Trash2Icon,
@@ -308,6 +311,9 @@ export function PaperReader({
     group?: PassageGroup;
     confirmDelete?: boolean;
   } | null>(null);
+  // The vault notes quoting each highlight, for its menu.
+  const vaultIndex = useVaultStore((s) => s.index);
+  const quotedIn = useMemo(() => notesByHighlight(vaultIndex), [vaultIndex]);
   // A highlight's note being written or changed.
   const [editingNote, setEditingNote] = useState<{
     annotation: PdfAnnotationRect;
@@ -612,6 +618,35 @@ export function PaperReader({
                 Add to {group}…
               </button>
             ))}
+            {(() => {
+              const quoting = highlightMenu.annotation.key
+                ? (quotedIn.get(highlightMenu.annotation.key) ?? []).filter(
+                    (n) => n.kind !== "paper",
+                  )
+                : [];
+              return quoting.length > 0 ? (
+                <>
+                  <div className="my-1 h-px bg-border" />
+                  <div className="px-2 py-1 text-muted-foreground text-xs">
+                    In your vault
+                  </div>
+                  {quoting.map((n) => (
+                    <button
+                      key={n.path}
+                      type="button"
+                      onClick={() => {
+                        openInVault(n.name);
+                        setHighlightMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
+                    >
+                      <Link2Icon className="size-3.5 shrink-0" />
+                      <span className="truncate">{n.name}</span>
+                    </button>
+                  ))}
+                </>
+              ) : null;
+            })()}
             <div className="my-1 h-px bg-border" />
             <button
               type="button"

@@ -7,6 +7,8 @@ export const NOTE_HREF = "vault:";
 export const EMBED_SRC = "vault-embed:";
 /** A comment under a highlight, written faded by the Zotero sync. */
 export const FADED_HREF = "faded:";
+/** A highlight's Zotero colour (`#hl/yellow`), as an empty link to `hl:yellow`. */
+export const COLOR_HREF = "hl:";
 
 const FADED_RE = /<em style="opacity: ?0?\.6">([\s\S]*?)<\/em>/g;
 const unescapeHtml = (text: string) =>
@@ -15,8 +17,8 @@ const unescapeHtml = (text: string) =>
 const escapeText = (text: string) => text.replace(/([[\]\\])/g, "\\$1");
 
 /**
- * An Obsidian note body as plain Markdown: comments, block ids and highlight
- * colour tags dropped; [[links]] and ![[embeds]] turned into links and images
+ * An Obsidian note body as plain Markdown: comments and block ids dropped,
+ * highlight colour tags kept as links to COLOR_HREF; [[links]] and ![[embeds]] turned into links and images
  * the panel knows how to follow and load; the sync's faded comments into
  * links to FADED_HREF, shown faded.
  */
@@ -27,7 +29,7 @@ export function vaultMarkdown(body: string): string {
       FADED_RE,
       (_, text: string) => `[${escapeText(unescapeHtml(text))}](${FADED_HREF})`,
     )
-    .replace(/[ \t]#hl\/[\w-]+/g, "")
+    .replace(/[ \t]#hl\/([\w-]+)/g, ` [](${COLOR_HREF}$1)`)
     .replace(/[ \t]\^[A-Za-z0-9-]+[ \t]*$/gm, "")
     .replace(
       /!\[\[([^\]|#\n]+)(?:#[^\]|\n]*)?(?:\|[^\]\n]*)?\]\]/g,

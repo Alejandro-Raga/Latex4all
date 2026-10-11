@@ -1,6 +1,32 @@
 import { useMemo, useState } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { CheckIcon, RotateCcwIcon, Trash2Icon, XIcon } from "lucide-react";
+import {
+  CheckIcon,
+  LightbulbIcon,
+  Link2Icon,
+  RotateCcwIcon,
+  TagIcon,
+  Trash2Icon,
+  XIcon,
+} from "lucide-react";
+import { toast } from "sonner";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import type { PassageGroup } from "@/lib/vault/add-passage";
+import {
+  addOwnPassage,
+  latexAsProse,
+  type OwnPassage,
+  ownPassageMarker,
+} from "@/lib/vault/own-passage";
+import { useVaultStore } from "@/stores/vault-store";
+import { AlsoIn, openInVault } from "./highlight-quote";
+import { filedToast, GroupPicker } from "./preview/group-picker";
 import { Button } from "@/components/ui/button";
 import {
   Comment,
@@ -20,6 +46,8 @@ interface Note {
   path: string;
   annotation: Annotation;
   quote: string;
+  /** The passage as it's filed under an idea or topic (no text: none). */
+  passage: OwnPassage | null;
 }
 
 function barClass(annotation: Annotation) {
@@ -71,8 +99,23 @@ function NoteItem({
         }
       : { name: first.author, color: colorOf(first.author, first.authorColor) };
 
-  return (
-    <div className="group relative">
+  const index = useVaultStore((s) => s.index);
+  const quoting = useMemo(() => {
+    if (!note.passage) return [];
+    const marker = ownPassageMarker(note.passage);
+    return (index?.list ?? []).filter((n) => n.body.includes(marker));
+  }, [index, note.passage]);
+  const [filing, setFiling] = useState<{
+    group: PassageGroup;
+    at: { left: number; top: number };
+  } | null>(null);
+  const [at, setAt] = useState({ left: 0, top: 0 });
+
+  const body = (
+    <div
+      className="group relative"
+      onContextMenu={(e) => setAt({ left: e.clientX, top: e.clientY })}
+    >
       <button
         type="button"
         onClick={onOpen}
@@ -247,6 +290,62 @@ function NoteItem({
       )}
     </div>
   );
+
+  if (suggestion || !note.passage) return body;
+  const passage = note.passage;
+  return (
+    <>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
+        <ContextMenuContent className="w-52">
+          <ContextMenuItem onSelect={() => setFiling({ group: "idea", at })}>
+            <LightbulbIcon className="size-4" />
+            Add to idea…
+          </ContextMenuItem>
+          <ContextMenuItem onSelect={() => setFiling({ group: "topic", at })}>
+            <TagIcon className="size-4" />
+            Add to topic…
+          </ContextMenuItem>
+          {quoting.length > 0 && (
+            <>
+              <ContextMenuSeparator />
+              <div className="px-2 py-1 text-muted-foreground text-xs">
+                In your vault
+              </div>
+              {quoting.map((n) => (
+                <ContextMenuItem
+                  key={n.path}
+                  onSelect={() => openInVault(n.name)}
+                >
+                  <Link2Icon className="size-4" />
+                  <span className="truncate">{n.name}</span>
+                </ContextMenuItem>
+              ))}
+            </>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
+      <AlsoIn notes={quoting} onOpen={openInVault} className="px-3 pb-1.5" />
+      {filing && (
+        <GroupPicker
+          group={filing.group}
+          anchor={filing.at}
+          onCancel={() => setFiling(null)}
+          onPick={async (name) => {
+            try {
+              const made = await addOwnPassage(filing.group, name, passage);
+              filedToast(filing.group, made);
+            } catch (err) {
+              toast.error(
+                `Couldn't add it to the ${filing.group}: ${err instanceof Error ? err.message : String(err)}`,
+              );
+            }
+            setFiling(null);
+          }}
+        />
+      )}
+    </>
+  );
 }
 
 /**
@@ -257,6 +356,7 @@ export function NotesPanel({ onClose }: { onClose: () => void }) {
   const source = useAnnotationsStore((s) => s.source);
   const version = useAnnotationsStore((s) => s.version);
   const files = useDocumentStore((s) => s.files);
+  const projectRoot = useDocumentStore((s) => s.projectRoot);
   const [tab, setTab] = useState<"open" | "resolved">("open");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const notes = useMemo<Note[]>(() => {
@@ -269,17 +369,26 @@ export function NotesPanel({ onClose }: { onClose: () => void }) {
       )
       .map(({ path, annotation }) => {
         const content = files.find((f) => f.relativePath === path)?.content;
-        const quote = (content?.slice(annotation.from, annotation.to) ?? "")
-          .replace(/\s+/g, " ")
-          .trim();
-        return { path, annotation, quote };
+        const slice = content?.slice(annotation.from, annotation.to) ?? "";
+        const quote = slice.replace(/\s+/g, " ").trim();
+        const text = latexAsProse(slice);
+        const passage =
+          projectRoot && text && content !== undefined
+            ? {
+                projectRoot,
+                file: path,
+                line: content.slice(0, annotation.from).split("\n").length,
+                text,
+              }
+            : null;
+        return { path, annotation, quote, passage };
       })
       .sort((a, b) =>
         a.path === b.path
           ? a.annotation.from - b.annotation.from
           : a.path.localeCompare(b.path),
       );
-  }, [source, version, files]);
+  }, [source, version, files, projectRoot]);
 
   const open = notes.filter((n) => !n.annotation.resolved);
   const resolved = notes.filter((n) => n.annotation.resolved);

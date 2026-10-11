@@ -55,6 +55,9 @@ function passageId(p: OwnPassage): string {
   return (h >>> 0).toString(36);
 }
 
+/** What a filed passage is found by in the notes quoting it. */
+export const ownPassageMarker = (p: OwnPassage) => `passage=${passageId(p)}`;
+
 const projectName = (root: string) =>
   root
     .replace(/[\\/]+$/, "")
@@ -96,7 +99,7 @@ export async function addOwnPassage(
     headingKey: `### ${heading}`,
     literature: null,
   };
-  const marker = `passage=${passageId(passage)}`;
+  const marker = ownPassageMarker(passage);
   const markdown = ownPassageMarkdown(passage);
   const write = async (
     path: string,

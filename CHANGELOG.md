@@ -23,9 +23,13 @@ tag.
 
 ### Added
 
-- Highlights in a vault note have a right-click menu: add to an idea or a
-  topic, or open in the PDF. Under each, the other notes quoting it are
-  listed, one click away.
+- Highlights in a vault note are cards: the passage in its Zotero color
+  with its page, and your comment set apart under it. Right-click one to add
+  it to an idea or a topic or open it in the PDF; the other notes quoting it
+  are listed under it, one click away.
+- The same everywhere highlights are shown: a PDF highlight's menu lists
+  the vault notes it's in, and your own notes in the Notes panel can be
+  added to an idea or topic with a right-click.
 - The vault's sections (Papers, Ideas, Topics and your own kinds) fold
   away, and stay as you left them. Papers are sorted into your Zotero
   folders: a folder shows up once a paper of yours is in it, a paper in
