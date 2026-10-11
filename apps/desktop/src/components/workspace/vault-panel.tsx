@@ -81,7 +81,12 @@ import {
   LocalVaultSource,
 } from "@/lib/vault/load";
 import { WebdavConflictError } from "@/lib/vault/webdav";
-import { EMBED_SRC, noteFromHref, vaultMarkdown } from "@/lib/vault/render";
+import {
+  EMBED_SRC,
+  FADED_HREF,
+  noteFromHref,
+  vaultMarkdown,
+} from "@/lib/vault/render";
 import {
   findNote,
   KIND_GROUPS,
@@ -132,6 +137,11 @@ import {
 import { openZoteroPdf, zoteroPdfTarget } from "@/components/zotero-pdf-dialog";
 import { followLatex4AllLink } from "@/hooks/use-deep-links";
 import { PanelBoundary } from "@/components/panel-boundary";
+import {
+  HighlightQuote,
+  notesByHighlight,
+  type QuoteNode,
+} from "./highlight-quote";
 
 const REFRESH_MS = 30_000;
 
@@ -1445,7 +1455,12 @@ function NoteView({
       <Connections index={index} note={note} onOpen={onOpen} />
 
       <div className="border-border border-t px-3 py-3">
-        <NoteMarkdown markdown={markdown} onOpen={onOpen} title={note.title} />
+        <NoteMarkdown
+          markdown={markdown}
+          onOpen={onOpen}
+          title={note.title}
+          note={note}
+        />
       </div>
     </div>
   );
@@ -2126,19 +2141,24 @@ function NoteMarkdown({
   markdown,
   onOpen,
   title = "Paper",
+  note = null,
 }: {
   markdown: string;
   onOpen: (name: string) => void;
   /** Names the PDF a highlight link opens. */
   title?: string;
+  /** The note shown, for its highlights' menus. */
+  note?: VaultNote | null;
 }) {
   const shown = useMemo(() => withoutBlockIds(markdown), [markdown]);
+  const index = useVaultStore((s) => s.index);
+  const quotedIn = useMemo(() => notesByHighlight(index), [index]);
   return (
     <div className={MARKDOWN_CLASSES}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         urlTransform={(url) =>
-          /^(vault:|vault-embed:|zotero:\/\/|obsidian:\/\/|latex4all:\/\/)/.test(
+          /^(vault:|vault-embed:|faded:|zotero:\/\/|obsidian:\/\/|latex4all:\/\/)/.test(
             url,
           )
             ? url
@@ -2146,6 +2166,8 @@ function NoteMarkdown({
         }
         components={{
           a({ href, children }) {
+            if (href === FADED_HREF)
+              return <em className="opacity-60">{children}</em>;
             const target = noteFromHref(href);
             return (
               <button
@@ -2168,6 +2190,20 @@ function NoteMarkdown({
               >
                 {children}
               </button>
+            );
+          },
+          blockquote({ node, children }) {
+            return (
+              <HighlightQuote
+                node={node as QuoteNode | undefined}
+                index={index}
+                current={note}
+                quotedIn={quotedIn}
+                title={title}
+                onOpen={onOpen}
+              >
+                {children}
+              </HighlightQuote>
             );
           },
           img({ src }) {

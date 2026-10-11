@@ -23,6 +23,9 @@ tag.
 
 ### Added
 
+- Highlights in a vault note have a right-click menu: add to an idea or a
+  topic, or open in the PDF. Under each, the other notes quoting it are
+  listed, one click away.
 - The vault's sections (Papers, Ideas, Topics and your own kinds) fold
   away, and stay as you left them. Papers are sorted into your Zotero
   folders: a folder shows up once a paper of yours is in it, a paper in
@@ -71,6 +74,8 @@ tag.
 
 ### Fixed
 
+- Comments under highlights in paper notes showed as raw HTML in the vault
+  panel; they're shown faded, as in Obsidian.
 - Check citations counted every .bib file in the project folder, including
   ones the document doesn't use and copies a sync service made of a clash,
   so "never cited" and duplicate keys came out too high. Only the files the
