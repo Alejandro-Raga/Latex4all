@@ -315,6 +315,13 @@ export function NoteMenuItems({ noteName }: { noteName: string }) {
       {note.kind !== "topic" && (
         <TopicMenu noteName={note.name} resolve={async () => note.name} />
       )}
+      {note.kind !== "topic" && note.kind !== "idea" && (
+        <TopicMenu
+          group="idea"
+          noteName={note.name}
+          resolve={async () => note.name}
+        />
+      )}
       <ContextMenuSeparator />
       <DeleteNoteItem noteName={note.name} />
     </>
