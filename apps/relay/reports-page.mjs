@@ -65,7 +65,10 @@ export function createReportsPage({
   function setPaused(paused) {
     fs.mkdirSync(dir, { recursive: true });
     const tmp = `${syncFile}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify({ paused, changedAt: new Date(now()).toISOString() }));
+    fs.writeFileSync(
+      tmp,
+      JSON.stringify({ paused, changedAt: new Date(now()).toISOString() }),
+    );
     fs.renameSync(tmp, syncFile);
   }
 
@@ -217,14 +220,21 @@ ${items || "<p>No reports.</p>"}</main></body></html>`;
         res.end(syncPage());
         return true;
       }
-      if (parts.length === 4 && req.method === "POST" && (parts[3] === "pause" || parts[3] === "resume")) {
+      if (
+        parts.length === 4 &&
+        req.method === "POST" &&
+        (parts[3] === "pause" || parts[3] === "resume")
+      ) {
         setPaused(parts[3] === "pause");
         res.writeHead(303, { Location: "/reports/admin/sync" });
         res.end();
         return true;
       }
       if (parts.length === 4 && req.method === "GET" && parts[3] === "state") {
-        lastSeen = { at: now(), note: (url.searchParams.get("note") ?? "").slice(0, 120) };
+        lastSeen = {
+          at: now(),
+          note: (url.searchParams.get("note") ?? "").slice(0, 120),
+        };
         res.writeHead(200, { ...headers, "Content-Type": "application/json" });
         res.end(JSON.stringify(syncState()));
         return true;
