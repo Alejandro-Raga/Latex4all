@@ -474,6 +474,68 @@ if (scenario === "vault") {
   );
 }
 
+if (scenario === "zotero-sync") {
+  // Settings → Zotero sync, with Zotero's tags answered here.
+  const tags = [
+    { tag: "obsidian", meta: { type: 0, numItems: 40 } },
+    { tag: "idea", meta: { type: 0, numItems: 6 } },
+    { tag: "topic: Renewable energy", meta: { type: 0, numItems: 12 } },
+    {
+      tag: "idea: Remote work raises productivity",
+      meta: { type: 0, numItems: 3 },
+    },
+    { tag: "survey data", meta: { type: 0, numItems: 8 } },
+    { tag: "Economics", meta: { type: 1, numItems: 90 } },
+  ];
+  window.fetch = (async (url: string) =>
+    String(url).includes("/tags")
+      ? new Response(JSON.stringify(tags), { status: 200 })
+      : new Response("[]", { status: 200 })) as typeof fetch;
+  useZoteroStore.setState({ apiKey: "k", userID: "1" } as never);
+  const files = new Map<string, string>();
+  const source = {
+    kind: "local",
+    label: "Vault",
+    load: async () => ({
+      notes: [],
+      attachments: new Map(),
+      versions: new Map(),
+      templates: [],
+      newNoteFolder: null,
+    }),
+    readAttachment: async () => new Uint8Array(),
+    readNote: async (p: string) => {
+      if (!files.has(p)) throw new Error("missing");
+      return { text: files.get(p) ?? "", version: null };
+    },
+    writeNote: async (p: string, t: string) => {
+      files.set(p, t);
+      return null;
+    },
+    createNote: async (p: string, t: string) => {
+      files.set(p, t);
+    },
+  };
+  useVaultStore.setState({
+    source,
+    index: buildVaultIndex([]),
+  } as never);
+  import("@/components/settings/zotero-sync-settings").then(
+    ({ ZoteroSyncSettings }) =>
+      root.render(
+        <ThemeProvider attribute="class" themes={THEME_IDS}>
+          <ThemeBridge />
+          <div
+            style={{ ...chrome, width: 720 }}
+            className="h-full overflow-y-auto"
+          >
+            <ZoteroSyncSettings />
+          </div>
+        </ThemeProvider>,
+      ),
+  );
+}
+
 if (scenario === "join") {
   import("@/components/collab/join-dialog").then(({ JoinDialog }) =>
     root.render(

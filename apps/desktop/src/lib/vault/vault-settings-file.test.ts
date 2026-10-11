@@ -10,6 +10,7 @@ describe("the vault's settings file", () => {
       paperTag: "vault",
       papersFolder: "Literature",
       kindFolders: { topic: "Subjects" },
+      ignoredTags: ["topic: Old"],
     };
     expect(readVaultSettingsFile(vaultSettingsFile(s))).toEqual(s);
   });
@@ -20,6 +21,11 @@ describe("the vault's settings file", () => {
       readVaultSettingsFile(
         '```json\n{"paperTag": 3, "kindFolders": {"idea": 1}}\n```',
       ),
-    ).toEqual({ paperTag: "", papersFolder: "", kindFolders: {} });
+    ).toEqual({
+      paperTag: "",
+      papersFolder: "",
+      kindFolders: {},
+      ignoredTags: [],
+    });
   });
 });

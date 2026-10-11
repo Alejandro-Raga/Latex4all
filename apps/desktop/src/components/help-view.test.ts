@@ -11,6 +11,7 @@ const SETTINGS = [
   "pdf",
   "zotero",
   "vault",
+  "zotero-sync",
   "environment",
   "languages",
   "updates",

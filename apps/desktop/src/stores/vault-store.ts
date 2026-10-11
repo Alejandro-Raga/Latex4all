@@ -104,6 +104,7 @@ function vaultSettings(): VaultSettings {
   return {
     paperTag: state.paperTag,
     papersFolder: state.papersFolder,
+    ignoredTags: state.ignoredTags,
     kindFolders: state.kindFolders[vaultKey(state)] ?? {},
   };
 }
@@ -171,6 +172,10 @@ interface VaultState {
   paperTag: string;
   /** Where Latex4All puts paper notes; "" finds where the vault keeps them. */
   papersFolder: string;
+  /** Zotero tags the Zotero sync leaves alone (kept in the vault's settings). */
+  ignoredTags: string[];
+  /** Stops (or, with false, resumes) syncing a Zotero tag. */
+  ignoreTag: (tag: string, ignore: boolean) => void;
   /** Note kinds picked by hand, per vault, by lower-cased note name. */
   noteKinds: Record<string, KindOverrides>;
   /** The user's own note types, per vault. */
@@ -269,6 +274,7 @@ export const useVaultStore = create<VaultState>()(
       projectsFolder: "My work",
       paperTag: "obsidian",
       papersFolder: "",
+      ignoredTags: [],
       noteKinds: {},
       noteTypes: {},
       groupColors: {},
@@ -342,6 +348,11 @@ export const useVaultStore = create<VaultState>()(
         set({ papersFolder: folder.trim().replace(/^\/+|\/+$/g, "") });
         saveVaultSettingsSoon();
       },
+      ignoreTag: (tag, ignore) => {
+        const rest = get().ignoredTags.filter((t) => t !== tag);
+        set({ ignoredTags: ignore ? [...rest, tag].sort() : rest });
+        saveVaultSettingsSoon();
+      },
 
       setProjectsFolder: (folder) =>
         set({ projectsFolder: folder.replace(/^\/+|\/+$/g, "") }),
@@ -413,6 +424,7 @@ export const useVaultStore = create<VaultState>()(
                 set({
                   paperTag: settings.paperTag || mine.paperTag,
                   papersFolder: settings.papersFolder,
+                  ignoredTags: settings.ignoredTags,
                   kindFolders: {
                     ...get().kindFolders,
                     [key]: settings.kindFolders,
@@ -616,6 +628,7 @@ export const useVaultStore = create<VaultState>()(
         projectsFolder: state.projectsFolder,
         paperTag: state.paperTag,
         papersFolder: state.papersFolder,
+        ignoredTags: state.ignoredTags,
         noteKinds: state.noteKinds,
         noteTypes: state.noteTypes,
         groupColors: state.groupColors,

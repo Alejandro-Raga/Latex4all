@@ -66,6 +66,8 @@ interface SavedCache {
   items: [string, Item][];
   /** The setup the notes were last written for (see `run`). */
   setup?: string;
+  /** The tags left out of the copy (see `run`). */
+  ignored?: string[];
 }
 
 async function cachePath(userID: string) {
@@ -100,10 +102,21 @@ async function saveCache(saved: SavedCache) {
 
 // ─── Zotero and the vault, as the engine asks for them ───
 
+/** An item without the tags the sync leaves alone. */
+function withoutTags(item: Item, ignored: Set<string>): Item {
+  const tags = item.data.tags as { tag: string }[] | undefined;
+  if (!ignored.size || !tags?.some((t) => ignored.has(t.tag))) return item;
+  return {
+    key: item.key,
+    data: { ...item.data, tags: tags.filter((t) => !ignored.has(t.tag)) },
+  };
+}
+
 function zoteroFor(
   apiKey: string,
   userID: string,
   source: ZoteroSource,
+  ignored: Set<string>,
 ): SyncZotero {
   const get = (path: string) =>
     zoteroFetch(apiKey, `/users/${userID}${path}`, undefined, source);
@@ -124,7 +137,9 @@ function zoteroFor(
         response.headers.get("Last-Modified-Version") ?? version,
       );
       const page = (await response.json()) as Item[];
-      items.push(...page.map(({ key, data }) => ({ key, data })));
+      items.push(
+        ...page.map(({ key, data }) => withoutTags({ key, data }, ignored)),
+      );
       if (page.length < 100) break;
     }
     return { items, version };
@@ -393,6 +408,15 @@ async function run({
   await upgradePairedNotes();
 
   const saved = await loadCache(userID);
+  // Tags left alone are taken out of the copy as items come in; when that
+  // list changes, the library is read again in full.
+  const ignored = [...(vault.ignoredTags ?? [])].sort();
+  if (JSON.stringify(saved.ignored ?? []) !== JSON.stringify(ignored)) {
+    saved.web = 0;
+    saved.local = 0;
+    saved.items = [];
+    saved.ignored = ignored;
+  }
   const cache: Cache = new Map(saved.items);
   const store = vaultStore();
   const setup = {
@@ -414,7 +438,7 @@ async function run({
     state.version = via === "local" ? saved.local : saved.web;
     const n = await runSync(
       store,
-      zoteroFor(apiKey, userID, via),
+      zoteroFor(apiKey, userID, via, new Set(ignored)),
       state,
       cache,
       { ...setup, today: today(), now: new Date(), rebuild: again },

@@ -155,6 +155,19 @@ export async function fetchTagMembers(
   return { papers: [...papers], passages };
 }
 
+/** A frontmatter field removed, the rest of the note as it was. */
+export function withoutField(text: string, key: string): string {
+  if (!text.startsWith("---\n")) return text;
+  const close = text.indexOf("\n---", 4);
+  if (close < 0) return text;
+  const head = text
+    .slice(4, close)
+    .split("\n")
+    .filter((l) => !l.startsWith(`${key}:`))
+    .join("\n");
+  return `---\n${head}${text.slice(close)}`;
+}
+
 /** A frontmatter field set (or added), the rest of the note as it was. */
 export function withField(text: string, key: string, value: string): string {
   const line = `${key}: ${JSON.stringify(value)}`;

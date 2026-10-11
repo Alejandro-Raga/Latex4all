@@ -9,6 +9,7 @@ export type SettingsSection =
   | "pdf"
   | "zotero"
   | "vault"
+  | "zotero-sync"
   | "environment"
   | "languages"
   | "updates";

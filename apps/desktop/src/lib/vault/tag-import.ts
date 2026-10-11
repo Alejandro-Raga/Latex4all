@@ -20,6 +20,7 @@ import {
   type TagMembers,
   type TagType,
   withField,
+  withoutField,
 } from "./zotero-tag-notes";
 
 export interface ZoteroTag {
@@ -174,4 +175,15 @@ export async function runImport(
 function vaultKey() {
   const s = useVaultStore.getState();
   return s.mode === "server" ? "server" : (s.vaultPath ?? "");
+}
+
+/** Unpairs a note from its Zotero tag: the note stays, and isn't filled any more. */
+export async function unpairTag(note: VaultNote): Promise<void> {
+  const { source } = useVaultStore.getState();
+  if (!source) throw new Error("Connect your vault first.");
+  const { text, version } = await source.readNote(note.path);
+  const next = withoutField(text, "zotero_tag");
+  if (next === text) return;
+  await source.writeNote(note.path, next, version);
+  useVaultStore.getState().noteWritten(note.path, next);
 }

@@ -57,11 +57,11 @@ tag.
   on several computers at once (Google Drive, OneDrive…), one syncs at a
   time, and the vault tag and folders are kept in the vault so all of them
   write the same notes.
-- The tag manager (Settings → Vault → Note types, or ⌘K) sets up the sync
-  step by step: the vault tag and papers folder, the note types and their
-  Zotero tag words, which of your Zotero tags pair with which notes, and
-  turning it on. Your Zotero tags are never changed, and Zotero's automatic
-  tags are hidden.
+- Settings → Zotero sync sets up the sync on one page: how to tag in
+  Zotero, the vault tag and folders, your own kinds of note, and which of
+  your Zotero tags make notes. A tag can be stopped (its notes stay, no more
+  are made) and resumed, and any tag you already use can be paired with a
+  note or unpaired.
 - Note types have a Zotero tag: give your own type one ("method") and its
   notes pair with Zotero tags like "method: Diff-in-diff". Note types are
   now kept in the vault, so every computer using it has the same ones.

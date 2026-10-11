@@ -426,3 +426,52 @@ function StatusRowButton({ action }: { action: StatusRowAction }) {
     </Button>
   );
 }
+
+/** A setting: its name and what it does, its controls on the right. */
+export function SettingRow({
+  label,
+  detail,
+  children,
+}: {
+  label: string;
+  detail?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-5 py-3">
+      <div className="min-w-0">
+        <div className="text-sm">{label}</div>
+        {detail && (
+          <div className="truncate text-muted-foreground text-xs">{detail}</div>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+/** An on/off switch. */
+export function Toggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative h-5 w-9 rounded-full transition-colors ${checked ? "bg-primary" : "bg-muted-foreground/30"}`}
+    >
+      <span
+        className={`absolute top-0.5 size-4 rounded-full bg-background shadow transition-all ${checked ? "left-[18px]" : "left-0.5"}`}
+      />
+    </button>
+  );
+}

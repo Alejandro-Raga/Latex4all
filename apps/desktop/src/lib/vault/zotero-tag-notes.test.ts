@@ -5,6 +5,7 @@ import {
   parseTag,
   tagTypes,
   withField,
+  withoutField,
 } from "./zotero-tag-notes";
 
 const types = tagTypes([
@@ -59,5 +60,17 @@ describe("writing the note", () => {
     expect(text).toContain('zotero_tag: "method: Diff-in-diff"');
     expect(text).toContain("## About this method");
     expect(text).toContain("%% begin zotero %%");
+  });
+});
+
+describe("unpairing", () => {
+  it("removes only the tag from the frontmatter", () => {
+    expect(
+      withoutField(
+        '---\ntags:\n- topic\nzotero_tag: "a"\n---\nBody',
+        "zotero_tag",
+      ),
+    ).toBe("---\ntags:\n- topic\n---\nBody");
+    expect(withoutField("No frontmatter", "zotero_tag")).toBe("No frontmatter");
   });
 });

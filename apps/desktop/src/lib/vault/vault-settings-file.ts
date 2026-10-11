@@ -1,7 +1,8 @@
 /**
  * The vault's own settings, kept in the vault itself like its note types
  * (note-types-file.ts), so every computer using it writes the same notes:
- * the vault tag in Zotero, the papers folder, and the folder of each kind.
+ * the vault tag in Zotero, the papers folder, the folder of each kind, and
+ * the Zotero tags the sync leaves alone.
  * A small note, "Latex4All/Vault settings.md"; not listed among the notes.
  */
 import { LATEX4ALL_FOLDER } from "./note-types-file";
@@ -13,6 +14,8 @@ export interface VaultSettings {
   papersFolder: string;
   /** Folders picked for built-in kinds (topic, idea…). */
   kindFolders: Record<string, string>;
+  /** Zotero tags the sync leaves alone. */
+  ignoredTags: string[];
 }
 
 export function vaultSettingsFile(s: VaultSettings): string {
@@ -43,6 +46,9 @@ export function readVaultSettingsFile(text: string): VaultSettings | null {
     return {
       paperTag: typeof p.paperTag === "string" ? p.paperTag : "",
       papersFolder: typeof p.papersFolder === "string" ? p.papersFolder : "",
+      ignoredTags: Array.isArray(p.ignoredTags)
+        ? p.ignoredTags.filter((t: unknown) => typeof t === "string")
+        : [],
       kindFolders: Object.fromEntries(
         Object.entries(folders).filter(
           (e): e is [string, string] => typeof e[1] === "string",

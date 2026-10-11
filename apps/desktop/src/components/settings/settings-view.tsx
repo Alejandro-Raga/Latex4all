@@ -46,6 +46,7 @@ import { useZoteroLibrary } from "@/lib/zotero-library";
 import { clearPdfCache, pdfCacheSize } from "@/lib/zotero-pdf-cache";
 import { ZoteroSourceControls } from "@/components/zotero-source-controls";
 import { NoteTypesSettings } from "./note-types-settings";
+import { ZoteroSyncSettings } from "./zotero-sync-settings";
 import { AiUsageSettings } from "./ai-usage-settings";
 import { AgentAccounts } from "./agent-accounts";
 import { SkillsSettings } from "./skills-settings";
@@ -53,61 +54,16 @@ import { startOfToday, summarize, useAiUsage } from "@/lib/ai-usage";
 import { unlinkProject } from "@/lib/vault/note-changes";
 import {
   EnvironmentStatus,
+  SettingRow,
   SettingsDetailButton,
   SettingsPanel,
+  Toggle,
 } from "./settings-parts";
 import { PanelBoundary } from "@/components/panel-boundary";
 
 export type { SettingsSection };
 
 /** A labelled setting: name and one line of context on the left, control on the right. */
-function SettingRow({
-  label,
-  detail,
-  children,
-}: {
-  label: string;
-  detail?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 px-5 py-3">
-      <div className="min-w-0">
-        <div className="text-sm">{label}</div>
-        {detail && (
-          <div className="truncate text-muted-foreground text-xs">{detail}</div>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center gap-2">{children}</div>
-    </div>
-  );
-}
-
-function Toggle({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={`relative h-5 w-9 rounded-full transition-colors ${checked ? "bg-primary" : "bg-muted-foreground/30"}`}
-    >
-      <span
-        className={`absolute top-0.5 size-4 rounded-full bg-background shadow transition-all ${checked ? "left-[18px]" : "left-0.5"}`}
-      />
-    </button>
-  );
-}
-
 function EditorSettings() {
   const vimMode = useSettingsStore((s) => s.vimMode);
   const setVimMode = useSettingsStore((s) => s.setVimMode);
@@ -383,8 +339,6 @@ function VaultSettings() {
   const useLocalFolder = useVaultStore((s) => s.useLocalFolder);
   const useServer = useVaultStore((s) => s.useServer);
   const disconnectServer = useVaultStore((s) => s.disconnectServer);
-  const paperTag = useVaultStore((s) => s.paperTag);
-  const setPaperTag = useVaultStore((s) => s.setPaperTag);
   const linkProject = useVaultStore((s) => s.linkProject);
   const projectRoot = useDocumentStore((s) => s.projectRoot);
   const projectLinked = useVaultStore((s) =>
@@ -471,19 +425,6 @@ function VaultSettings() {
         )}
       </SettingRow>
       <NoteTypesSettings />
-      <SettingRow
-        label="Vault tag in Zotero"
-        detail="Marks the papers in your vault; “Add to vault” adds it"
-      >
-        <Input
-          value={paperTag}
-          onChange={(e) => setPaperTag(e.target.value)}
-          placeholder="obsidian"
-          className="h-7 w-44 text-xs"
-          aria-label="Vault tag in Zotero"
-          title="The Zotero tag that says a paper belongs in your vault, such as “obsidian” or “vault”. Pick the one a Zotero-to-Obsidian sync you use expects."
-        />
-      </SettingRow>
       {projectRoot && (
         <SettingRow
           label="Keep this project's note in the vault"
@@ -526,6 +467,7 @@ export function SettingsView({
     s.isAuthenticated ? s.username : null,
   );
   const vaultKind = useVaultStore((s) => s.source?.kind ?? null);
+  const zoteroSync = useSettingsStore((s) => s.zoteroAutoVault);
   const languagePacks = useLanguagePacksStore((s) => s.packs);
   const refreshLanguagePacks = useLanguagePacksStore((s) => s.refresh);
 
@@ -621,6 +563,14 @@ export function SettingsView({
             : "Not set",
       icon: NotebookTextIcon,
       body: <VaultSettings />,
+      flush: true,
+    },
+    {
+      id: "zotero-sync",
+      label: "Zotero sync",
+      meta: zoteroSync ? "On" : "Off",
+      icon: RefreshCwIcon,
+      body: <ZoteroSyncSettings />,
       flush: true,
     },
     {

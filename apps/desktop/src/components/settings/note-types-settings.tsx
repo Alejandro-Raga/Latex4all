@@ -1,17 +1,16 @@
 import { useMemo } from "react";
-import { PlusIcon, RotateCcwIcon, TagsIcon, Trash2Icon } from "lucide-react";
+import { PlusIcon, RotateCcwIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { groupColor } from "@/components/workspace/vault-panel";
 import { detectedKindFolder } from "@/lib/vault/kind-folders";
-import { BUILT_IN_ZOTERO_TAGS, KIND_GROUPS } from "@/lib/vault/vault-index";
+import { KIND_GROUPS } from "@/lib/vault/vault-index";
 import {
   useGroupColors,
   useNoteTypes,
   useVaultStore,
 } from "@/stores/vault-store";
-import { useTagManager } from "@/components/workspace/tag-manager";
 
 /** The color column: swatch and reset arrow, the same width on every row. */
 const SWATCH = "w-[46px] shrink-0";
@@ -132,11 +131,9 @@ export function NoteTypesSettings() {
       <div className="px-5 pt-1 pb-2">
         <div className="text-sm">Note types</div>
         <div className="text-muted-foreground text-xs">
-          A type's folder is where its notes live: choosing the type moves a
-          note there. Notes in that folder, or with its Obsidian tag, get the
-          type on their own. Its Zotero tag pairs its notes with Zotero: with
-          “method”, the note “Diff-in-diff” goes with the Zotero tag “method:
-          Diff-in-diff”.
+          Each type keeps its notes in its own folder. Notes in that folder, or
+          with its Obsidian tag, get the type on their own. Zotero tags for each
+          type are set in Zotero sync.
         </div>
       </div>
 
@@ -145,12 +142,6 @@ export function NoteTypesSettings() {
         <span className="w-28 shrink-0">Type</span>
         <span className="min-w-0 flex-1">Folder</span>
         <span className="w-28 shrink-0">Obsidian tag</span>
-        <span
-          className="w-24 shrink-0"
-          title="Pairs a note of this type with a Zotero tag: with “method”, the note “Diff-in-diff” goes with “method: Diff-in-diff”"
-        >
-          Zotero tag
-        </span>
         <span className="size-7 shrink-0" />
       </div>
       {builtIn.map(([kind, group]) => (
@@ -159,9 +150,6 @@ export function NoteTypesSettings() {
           <span className="w-28 shrink-0 text-sm">{group}</span>
           <BuiltInFolder kind={kind} label={group} />
           <span className="w-28 shrink-0" />
-          <span className="w-24 shrink-0 font-mono text-muted-foreground text-xs">
-            {BUILT_IN_ZOTERO_TAGS[kind] ?? "—"}
-          </span>
           <span className="size-7 shrink-0" />
         </div>
       ))}
@@ -170,7 +158,6 @@ export function NoteTypesSettings() {
         <span className="w-28 shrink-0 text-sm">Notes</span>
         <BuiltInFolder kind="note" label="Notes" />
         <span className="w-28 shrink-0" />
-        <span className="w-24 shrink-0 text-muted-foreground text-xs">—</span>
         <span className="size-7 shrink-0" />
       </div>
 
@@ -214,19 +201,6 @@ export function NoteTypesSettings() {
             aria-label={`Obsidian tag for ${t.label}`}
             title="Notes with this tag in Obsidian get this type"
           />
-          <Input
-            value={t.zoteroTag ?? ""}
-            onChange={(e) =>
-              updateNoteType(t.id, {
-                zoteroTag:
-                  e.target.value.replace(/:\s*$/, "").trim() || undefined,
-              })
-            }
-            placeholder="none"
-            className="h-7 w-24 shrink-0 font-mono text-xs"
-            aria-label={`Zotero tag for ${t.label}`}
-            title={`Notes of this type pair with Zotero tags “${t.zoteroTag || "word"}: <note name>”`}
-          />
           <Button
             variant="ghost"
             size="icon"
@@ -254,16 +228,6 @@ export function NoteTypesSettings() {
         >
           <PlusIcon className="size-3.5" />
           Add a type
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="ml-2 h-7 gap-1.5 text-xs"
-          onClick={() => useTagManager.getState().show()}
-          title="Turn Zotero tags into notes of these types"
-        >
-          <TagsIcon className="size-3.5" />
-          Tag manager…
         </Button>
       </div>
 

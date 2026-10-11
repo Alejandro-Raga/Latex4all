@@ -114,15 +114,15 @@ The Zotero sync lets you build your vault from any Zotero app, including on a ta
 - **Tags written `type: name`**, such as `topic: Renewable energy`, file a paper or highlight in that note, and make the note if it's new.
 - **A highlight tagged `idea`** becomes an idea note named after your comment on it.
 
-To set it up, open the **Tag manager** (⌘K). It walks through four steps: the vault tag, your note types, which existing Zotero tags go with which notes, and turning the sync on.
+To set it up, open **Settings → Zotero sync** and turn it on. The page shows how to tag in Zotero, the vault tag and folders, and your own kinds of note. **Choose which tags make notes** lists your Zotero tags: pair a tag you already use with a note, or stop one you no longer want notes from (its notes stay).
 
 The sync runs while Latex4All is open and only reads from Zotero. What you write in a note outside its Zotero section is kept. A note you rename is followed; one you delete isn't made again. With the vault on several computers, one of them syncs at a time.
 
-[Open Settings → Vault](app:settings/vault)
+[Open Settings → Zotero sync](app:settings/zotero-sync)
 
 ## Note types
 
-**Settings → Vault → Note types** decides what kinds of notes your vault has and where each lives. Besides the built-in types (paper, project, topic, idea and plain notes), you can add your own, such as "Method", with a color and a folder. Give a type a **Zotero tag** word and tags written `word: name` in Zotero make notes of that type.
+**Settings → Vault → Note types** decides what kinds of notes your vault has and where each lives. Besides the built-in types (paper, project, topic, idea and plain notes), you can add your own, such as "Method", with a color and a folder. Its Zotero tag word, set in **Settings → Zotero sync**, makes tags written `word: name` in Zotero create notes of that type.
 
 Note types are saved in the vault, so every computer using it has the same ones.
 
