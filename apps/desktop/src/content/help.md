@@ -145,32 +145,38 @@ Tags you add in Zotero yourself work too: see **Your vault from Zotero**, where 
 
 ## Your vault from Zotero
 
-Your Obsidian notes can be managed from Zotero with tags, in any Zotero app (desktop, iPad, web), and with the tags your library already has:
+The Zotero sync writes your Obsidian notes from Zotero's tags, so the vault can be run from any Zotero app (desktop, iPad, web):
 
-- **The vault tag** (`obsidian` unless you choose another in Settings → Vault) puts a paper in the vault: it gets a note with its details and your highlights, and the note follows new highlights.
-- **Tags written `type: name`** make notes of that type: `idea: Tight budgets favor cost over frontier R&D` makes that idea, `topic: Corporate science` that topic, `method: Diff-in-diff` a note of your own type Method. Papers carrying the tag are listed in the note, and highlights carrying it are copied into it, word for word, with links back.
+- **One vault tag puts a paper in the vault** (`obsidian` unless you choose another). The paper gets a note with its details, its highlights (your comment on each, in italics, under it), ink, images and Zotero notes, and the note follows new highlights.
+- **Tags written `type: name` make notes and file things in them.** `topic: Corporate science` on a paper or highlight files it under that topic, `idea: Tight budgets favor cost over frontier R&D` under that idea, `method: Diff-in-diff` under a note of your own type Method. The note is made the first time the tag is used, and lists every paper carrying the tag and every highlight, word for word, with links back. A paper filed this way gets a note too.
+- **A highlight tagged just `idea`** makes an idea note named after its comment. The note follows the comment until you edit it.
+- **`[[Name]]` typed in a highlight's comment or a Zotero note** links that note; when the name is a paper of your library (an author and year, or a title), that paper gets a note as well.
 
 **Setting it up**
 
-1. **Connect Zotero** in Settings → Zotero. Latex4All reads your library with your API key, through zotero.org.
-2. **Let the Zotero app in** (Zotero → Settings → Advanced → "Allow other applications on this computer to communicate with Zotero", and **Zotero on this computer** set to *As fallback* or *Always* in Latex4All). Latex4All then also reads the library from the Zotero app, offline and without limits. When Latex4All writes to Zotero through the app, Zotero asks once for permission: **Always Allow**.
-3. **Set up the note types** in Settings → Vault → Note types: each type with a **Zotero tag** word (`idea`, `topic`, or one of your own such as `method`) pairs with tags written `word: name`.
-4. **Import the tags you already have** with the **Tag manager** (⌘K, or Settings → Vault → Note types): tick the tags, choose the type for each, **Preview**, **Import**. The note is named after the tag. Zotero's automatic tags (from publishers and importers) aren't listed.
-5. **Turn on Zotero → vault, automatically** in the tag manager.
+1. **Connect Zotero** in Settings → Zotero.
+2. **Open the Tag manager** (⌘K, or Settings → Vault → Note types). It sets up the sync in four steps:
+   - **Papers:** the vault tag, and the folder for paper notes.
+   - **Note types:** the folder of topics and ideas, and your own types with their Zotero tag word (a type Method with the word `method` pairs with tags written `method: name`).
+   - **Your tags:** the tags in your library. Tags already written `type: name` are synced as they are. Any other tag can be paired with a note of a type: its papers and highlights go in that note. Zotero's automatic tags (from publishers and importers) aren't listed.
+   - **Sync:** turn on **Sync Zotero into the vault**, or **Sync now** for one run.
+3. **Optional: the Zotero app.** With Zotero → Settings → Advanced → "Allow other applications on this computer to communicate with Zotero" on, and **Zotero on this computer** set to *As fallback* or *Always* in Settings → Zotero, the sync also reads the library from the Zotero app, without going through zotero.org.
 
 **Using it**
 
 - **Put a paper in the vault:** give it the vault tag in Zotero.
-- **File a paper or a highlight under an idea or topic:** give it that idea's or topic's tag, such as `idea: Tight budgets favor cost over frontier R&D`.
-- **Make a new idea, topic or note of your own type:** tag a paper or highlight with a new `type: name` tag; the note is made with that name.
+- **File a paper or a highlight:** give it the note's tag, such as `topic: Corporate science`.
+- **Make a new note:** tag a paper or highlight with a new `type: name` tag.
 
-Notes are made and updated while Latex4All is open: a few seconds after it starts, after Zotero's library changes, and every ten minutes. A note made from a tag records it (`zotero_tag:`), so it stays paired when renamed. Papers in a tag's note that don't carry the vault tag are listed with a link to Zotero, without notes of their own.
+**How it runs**
 
-- Your Zotero tags are never renamed or removed; only the vault is written (and, if you turn it on, the note "Ideas and topics in your vault" in Zotero, see Ideas and topics).
-- What you write in a note outside its Zotero section is kept, and a passage already in the note isn't copied again.
-- **Update paired notes as you tag in Zotero** (in the tag manager) keeps imported notes updated without the rest of the automatic mode.
-- With another tool syncing Zotero into the same vault (an Obsidian plugin, a script on a server), both write the same notes; Zotero → vault, automatically is then left off.
-- The notes and the note types are in the vault, so another computer using the same vault (through Obsidian Sync, iCloud, Dropbox…) has them too.
+- While Latex4All is open: at start, when Zotero's library changes, and every minute. The first sync reads the whole library; after that only what changed. Only notes that changed are written.
+- Zotero is only read: your tags and items are never changed by the sync.
+- The sync writes between the `%% begin zotero %%` and `%% end zotero %%` markers. What you write outside them, such as **My notes**, and frontmatter fields of your own, are kept.
+- A note renamed or moved in Obsidian is followed. A topic or idea note deleted in Obsidian isn't made again.
+- What the sync remembers about the vault is in `Latex4All/Zotero sync.md`, so every computer using the same vault (through Obsidian Sync, iCloud, Seafile…) agrees on it. The copy of the library it works from is kept on each computer.
+- If another Zotero sync writes to this vault, run one of the two.
+- Changing the vault tag, a folder or a note type writes every note again on the next run.
 
 [Open Settings → Vault](app:settings/vault)
 

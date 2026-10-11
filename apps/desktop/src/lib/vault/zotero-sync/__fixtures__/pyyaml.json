@@ -1,0 +1,145 @@
+[
+  {
+    "input": {
+      "title": "Science: The Endless Frontier",
+      "authors": ["Vannevar Bush"],
+      "year": 1945
+    },
+    "yaml": "title: 'Science: The Endless Frontier'\nauthors:\n- Vannevar Bush\nyear: 1945\n"
+  },
+  {
+    "input": {
+      "title": "What (Exactly) Is Novelty in Networks? Unpacking",
+      "doi": "10.1287/mnsc.2022.4377"
+    },
+    "yaml": "title: What (Exactly) Is Novelty in Networks? Unpacking\ndoi: 10.1287/mnsc.2022.4377\n"
+  },
+  {
+    "input": {
+      "title": "R&D, firms #1 and 'quotes'",
+      "url": "https://x.org/a?b=c#d"
+    },
+    "yaml": "title: 'R&D, firms #1 and ''quotes'''\nurl: https://x.org/a?b=c#d\n"
+  },
+  {
+    "input": {
+      "a": "2020",
+      "b": "yes",
+      "c": "no",
+      "d": "null",
+      "e": "~",
+      "f": "1.5",
+      "g": "0x1F",
+      "h": "1_000",
+      "i": "on",
+      "j": "True"
+    },
+    "yaml": "a: '2020'\nb: 'yes'\nc: 'no'\nd: 'null'\ne: '~'\nf: '1.5'\ng: '0x1F'\nh: '1_000'\ni: 'on'\nj: 'True'\n"
+  },
+  {
+    "input": {
+      "a": "2026-10-11",
+      "b": {
+        "__date__": "2026-10-11"
+      },
+      "c": "12:30",
+      "d": "1:20:30"
+    },
+    "yaml": "a: '2026-10-11'\nb: 2026-10-11\nc: '12:30'\nd: '1:20:30'\n"
+  },
+  {
+    "input": {
+      "a": "- dash",
+      "b": "-dash",
+      "c": "#hash",
+      "d": "a # b",
+      "e": "a#b",
+      "f": "key: value",
+      "g": "key:value",
+      "h": "ends with:"
+    },
+    "yaml": "a: '- dash'\nb: -dash\nc: '#hash'\nd: 'a # b'\ne: a#b\nf: 'key: value'\ng: key:value\nh: 'ends with:'\n"
+  },
+  {
+    "input": {
+      "a": "[bracket",
+      "b": "{brace",
+      "c": "a, b",
+      "d": "@at",
+      "e": "`tick",
+      "f": "%pct",
+      "g": "&amp",
+      "h": "*star",
+      "i": "!bang",
+      "j": "|pipe",
+      "k": ">gt",
+      "l": "?q",
+      "m": "? q",
+      "n": ":colon"
+    },
+    "yaml": "a: '[bracket'\nb: '{brace'\nc: a, b\nd: '@at'\ne: '`tick'\nf: '%pct'\ng: '&amp'\nh: '*star'\ni: '!bang'\nj: '|pipe'\nk: '>gt'\nl: ?q\nm: '? q'\nn: :colon\n"
+  },
+  {
+    "input": {
+      "a": " lead",
+      "b": "trail ",
+      "c": "",
+      "d": "it's",
+      "e": "\"dq\"",
+      "f": "Ünïcödé — ñ",
+      "g": "💡 idea",
+      "h": "tab\there"
+    },
+    "yaml": "a: ' lead'\nb: 'trail '\nc: ''\nd: it's\ne: '\"dq\"'\nf: Ünïcödé — ñ\ng: 💡 idea\nh: \"tab\\there\"\n"
+  },
+  {
+    "input": {
+      "tags": ["paper"],
+      "status": "to-process",
+      "zotero_tags": [
+        "obsidian",
+        "topic: Corporate Science",
+        "idea: Science builds firms' reputation"
+      ]
+    },
+    "yaml": "tags:\n- paper\nstatus: to-process\nzotero_tags:\n- obsidian\n- 'topic: Corporate Science'\n- 'idea: Science builds firms'' reputation'\n"
+  },
+  {
+    "input": {
+      "aliases": ["The decline of science in corporate R&D"],
+      "created": "2026-10-11",
+      "source": "[[Arora2018]]",
+      "zotero_annotation": "ABCD1234"
+    },
+    "yaml": "aliases:\n- The decline of science in corporate R&D\ncreated: '2026-10-11'\nsource: '[[Arora2018]]'\nzotero_annotation: ABCD1234\n"
+  },
+  {
+    "input": {
+      "nested": {
+        "x": 1,
+        "y": ["a", "b"]
+      },
+      "flag": true,
+      "none": null,
+      "float": 1.5,
+      "neg": -3
+    },
+    "yaml": "nested:\n  x: 1\n  y:\n  - a\n  - b\nflag: true\nnone: null\nfloat: 1.5\nneg: -3\n"
+  },
+  {
+    "input": {
+      "a": "---",
+      "b": "...",
+      "c": "a: b: c",
+      "d": "multi\nline"
+    },
+    "yaml": "a: '---'\nb: '...'\nc: 'a: b: c'\nd: 'multi\n\n  line'\n"
+  },
+  {
+    "input": {
+      "publication": "Journal of Economic Behavior & Organization",
+      "item_type": "journalArticle"
+    },
+    "yaml": "publication: Journal of Economic Behavior & Organization\nitem_type: journalArticle\n"
+  }
+]

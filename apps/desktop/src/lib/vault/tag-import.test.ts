@@ -27,10 +27,6 @@ vi.mock("./kind-folders", () => ({
     kind === "topic" ? "Topics" : kind === "idea" ? "Ideas" : null,
 }));
 vi.mock("./note-changes", () => ({ chooseNoteKind: vi.fn(async () => null) }));
-const addPaper = vi.hoisted(() =>
-  vi.fn(async () => ({ status: "created", name: "Paper" })),
-);
-vi.mock("./add-paper", () => ({ addPaperToVault: addPaper }));
 
 const vault = vi.hoisted(() => ({
   paperTag: "vault",
@@ -62,8 +58,14 @@ vi.mock("@/stores/vault-store", () => ({
   },
 }));
 
-const { automateVault, previewImport, refreshPairedNotes, runImport } =
-  await import("./tag-import");
+const sync = vi.hoisted(() => vi.fn(async () => ({ written: 1, at: 0 })));
+vi.mock("./zotero-sync/run", () => ({ syncVaultWithZotero: sync }));
+const settings = vi.hoisted(() => ({ zoteroAutoVault: false }));
+vi.mock("@/stores/settings-store", () => ({
+  useSettingsStore: { getState: () => settings },
+}));
+
+const { previewImport, runImport } = await import("./tag-import");
 const { tagTypes } = await import("./zotero-tag-notes");
 const topic = tagTypes([]).find((t) => t.kind === "topic") as ReturnType<
   typeof tagTypes
@@ -89,7 +91,7 @@ describe("importing a Zotero tag", () => {
     ];
   });
 
-  it("makes a note of the type, in its folder, with the papers and highlights", async () => {
+  it("makes a note of the type, in its folder, for the sync to fill", async () => {
     const preview = await previewImport([
       { tag: "Network theory", type: topic, name: "Network theory" },
     ]);
@@ -98,8 +100,19 @@ describe("importing a Zotero tag", () => {
     await runImport(preview);
     const text = files.get("Topics/Network theory.md") as string;
     expect(text).toContain('zotero_tag: "Network theory"');
-    expect(text).toContain("- A paper (2020)");
-    expect(text).toContain("> A passage.");
+    expect(text).toContain("%% begin zotero %%\n%% end zotero %%");
+    expect(sync).not.toHaveBeenCalled();
+  });
+
+  it("fills the notes at once when the sync is on", async () => {
+    settings.zoteroAutoVault = true;
+    await runImport(
+      await previewImport([
+        { tag: "Network theory", type: topic, name: "Network theory" },
+      ]),
+    );
+    expect(sync).toHaveBeenCalledOnce();
+    settings.zoteroAutoVault = false;
   });
 
   it("pairs a note of that name instead of making another, keeping its text", async () => {
@@ -127,64 +140,5 @@ describe("importing a Zotero tag", () => {
     expect(text).toContain("My definition.");
     expect(text).toContain('zotero_tag: "Network theory"');
     expect([...files.keys()]).toEqual(["Topics/Network theory.md"]);
-  });
-
-  it("updates paired notes when Zotero changes, and writes nothing when it hasn't", async () => {
-    const preview = await previewImport([
-      { tag: "Network theory", type: topic, name: "Network theory" },
-    ]);
-    await runImport(preview);
-    const path = "Topics/Network theory.md";
-    vault.index = {
-      list: [
-        {
-          name: "Network theory",
-          kind: "topic",
-          path,
-          frontmatter: { zotero_tag: "Network theory" },
-          body: files.get(path),
-        } as unknown as VaultNote,
-      ],
-    };
-    expect(await refreshPairedNotes()).toBe(0);
-    zoteroItems.value = [
-      { key: "PAPER001", data: { itemType: "journalArticle" } },
-    ];
-    expect(await refreshPairedNotes()).toBe(1);
-    expect(files.get(path)).not.toContain("> A passage.");
-  });
-});
-
-describe("Zotero → vault, automatically", () => {
-  it("gives papers with the vault tag a note, and typed tags theirs", async () => {
-    files.clear();
-    vault.index = { list: [] };
-    addPaper.mockClear();
-    const { zoteroFetch } = await import("@/lib/zotero-api");
-    vi.mocked(zoteroFetch).mockImplementation(
-      async (_k: string, path: string) =>
-        ({
-          json: async () =>
-            path.includes("/tags")
-              ? [
-                  { tag: "idea: Science pays", meta: { numItems: 1 } },
-                  { tag: "Network theory", meta: { numItems: 3 } },
-                  { tag: "topic: Auto", meta: { type: 1, numItems: 9 } },
-                ]
-              : path.includes("/items/top?")
-                ? [
-                    { key: "PAPER001", data: { itemType: "journalArticle" } },
-                    { key: "PDFALONE", data: { itemType: "attachment" } },
-                  ]
-                : path.includes("/items?")
-                  ? [{ key: "PAPER001", data: { itemType: "journalArticle" } }]
-                  : [],
-        }) as unknown as Response,
-    );
-    const done = await automateVault();
-    expect(addPaper).toHaveBeenCalledWith("PAPER001");
-    expect(addPaper).toHaveBeenCalledTimes(1);
-    expect(done.notes).toBe(1);
-    expect([...files.keys()]).toEqual(["Ideas/Science pays.md"]);
   });
 });

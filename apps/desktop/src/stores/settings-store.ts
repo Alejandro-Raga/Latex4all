@@ -94,12 +94,9 @@ interface SettingsState {
   /** Keep every vault idea and topic as a tag in Zotero (zotero-tag-registry.ts). */
   zoteroTagRegistry: boolean;
   setZoteroTagRegistry: (on: boolean) => void;
-  /** Update notes paired with Zotero tags as tags change there (vault only). */
-  zoteroTagNotesLive: boolean;
-  setZoteroTagNotesLive: (on: boolean) => void;
   /**
-   * Zotero → vault, automatically: papers with the vault tag get notes (and
-   * follow new highlights), and "type: name" tags get their notes. Vault only.
+   * The Zotero → vault sync (lib/vault/zotero-sync): papers with the vault
+   * tag, and "type: name" tags, get their notes, kept up to date. Vault only.
    */
   zoteroAutoVault: boolean;
   setZoteroAutoVault: (on: boolean) => void;
@@ -144,8 +141,6 @@ export const useSettingsStore = create<SettingsState>()(
       setZoteroDatabaseFallback: (use) => set({ zoteroDatabaseFallback: use }),
       zoteroTagRegistry: false,
       setZoteroTagRegistry: (on) => set({ zoteroTagRegistry: on }),
-      zoteroTagNotesLive: true,
-      setZoteroTagNotesLive: (on) => set({ zoteroTagNotesLive: on }),
       zoteroAutoVault: false,
       setZoteroAutoVault: (on) => set({ zoteroAutoVault: on }),
       customTheme: DEFAULT_CUSTOM_COLORS,

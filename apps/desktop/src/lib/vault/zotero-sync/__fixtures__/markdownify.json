@@ -1,0 +1,98 @@
+[
+  {
+    "html": "",
+    "md": ""
+  },
+  {
+    "html": "<p>Plain paragraph.</p>",
+    "md": "Plain paragraph."
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><p>First paragraph. </p>\n<p>Second paragraph</p>\n<p></p></div>",
+    "md": "First paragraph.\n\nSecond paragraph"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><h1>Summary</h1>\n<p>Text under it.</p>\n<h2>Method</h2>\n<h3>Data</h3><p>More</p></div>",
+    "md": "# Summary\n\nText under it.\n\n## Method\n\n### Data\n\nMore"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><p><strong>Bold</strong>, <em>italic</em>, <b>b</b> and <i>i</i> and <u>under</u>.</p></div>",
+    "md": "**Bold**, *italic*, **b** and *i* and under."
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><p>Stars * and under_scores in snake_case_names.</p></div>",
+    "md": "Stars \\* and under\\_scores in snake\\_case\\_names."
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><ul>\n<li>One</li>\n<li>Two</li>\n<li><p>Three as paragraph</p></li>\n</ul>\n<p>After list</p></div>",
+    "md": "- One\n- Two\n- Three as paragraph\n\nAfter list"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><ol>\n<li>First</li>\n<li>Second<ul><li>Nested a</li><li>Nested b</li></ul></li>\n<li>Third</li>\n</ol></div>",
+    "md": "1. First\n2. Second\n   - Nested a\n   - Nested b\n3. Third"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><ol start=\"4\"><li>Four</li><li>Five</li></ol></div>",
+    "md": "4. Four\n5. Five"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><p>See <a href=\"https://example.org/a_b\">the site</a> and <a href=\"https://x.org\" title=\"A &quot;title&quot;\">x</a>.</p></div>",
+    "md": "See [the site](https://example.org/a_b) and [x](https://x.org \"A \\\"title\\\"\")."
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><blockquote><p>Quoted line one.</p><p>Quoted line two.</p></blockquote><p>After quote.</p></div>",
+    "md": "> Quoted line one.\n>\n> Quoted line two.\n\nAfter quote."
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><p>Line one<br>Line two<br/>Line three</p></div>",
+    "md": "Line one  \nLine two  \nLine three"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><p>Inline <code>code_here</code> and H<sub>2</sub>O and x<sup>2</sup>.</p></div>",
+    "md": "Inline `code_here` and H2O and x2."
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><pre>preformatted   text\n  indented *star*</pre><p>After pre</p></div>",
+    "md": "```\npreformatted   text\n  indented *star*\n```\n\nAfter pre"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><p><span class=\"highlight\" data-annotation=\"%7B%7D\">“A highlighted passage”</span> <span class=\"citation\" data-citation=\"%7B%7D\">(<span class=\"citation-item\">Smith, 2020, p. 4</span>)</span></p></div>",
+    "md": "“A highlighted passage” (Smith, 2020, p. 4)"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><table><tr><th>Head A</th><th>Head B</th></tr><tr><td>Cell 1</td><td>Cell 2</td></tr></table></div>",
+    "md": "| Head A | Head B |\n| --- | --- |\n| Cell 1 | Cell 2 |"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><p>Acentos: investigación, señal, über, café — y “comillas”.</p></div>",
+    "md": "Acentos: investigación, señal, über, café — y “comillas”."
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><p>   Leading and trailing spaces   </p>\n\n\n<p>Gap above</p></div>",
+    "md": "Leading and trailing spaces\n\nGap above"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><h2>Heading with <em>emphasis</em></h2><ul><li><strong>Key:</strong> value</li><li>Plain</li></ul><ol><li>Next list</li></ol></div>",
+    "md": "## Heading with *emphasis*\n\n- **Key:** value\n- Plain\n\n1. Next list"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><p>Text with <a href=\"zotero://select/library/items/ABCD1234\">a Zotero link</a> and [[Wiki link]].</p></div>",
+    "md": "Text with [a Zotero link](zotero://select/library/items/ABCD1234) and [[Wiki link]]."
+  },
+  {
+    "html": "Just text with no tags",
+    "md": "Just text with no tags"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><div><p>Nested div paragraph</p></div><hr><p>After rule</p></div>",
+    "md": "Nested div paragraph\n\n---\n\nAfter rule"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><ul><li></li><li>Non-empty</li></ul></div>",
+    "md": "- Non-empty"
+  },
+  {
+    "html": "<div data-schema-version=\"9\"><p>1. Not a list</p><p># Not a heading</p><p>- not a bullet</p></div>",
+    "md": "1. Not a list\n\n# Not a heading\n\n- not a bullet"
+  }
+]

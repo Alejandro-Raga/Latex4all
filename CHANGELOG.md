@@ -37,15 +37,19 @@ tag.
   copy, "Name (copy)", is a project of its own: not shared, with its own
   history and vault note, and its compiled PDF isn't saved over the
   original's.
-- Zotero → vault, automatically (in the tag manager, off unless you turn it
-  on): papers you tag with the vault tag in any Zotero app get a note that
-  follows their highlights, and tags written "type: name" (such as "idea:
-  …") make and fill their notes, while Latex4All is open.
-- A tag manager (Settings → Vault → Note types, or ⌘K) turns Zotero tags
-  into vault notes: pick the tags, the type of note (or a new type) and the
-  name, preview, import. Each note lists the papers with the tag and copies
-  their highlights, and follows as you tag in Zotero. Your Zotero tags are
-  never changed, and Zotero's automatic tags are hidden.
+- The Zotero sync (off unless you turn it on): papers you tag with the
+  vault tag in any Zotero app get a note with their highlights, comments,
+  ink and Zotero notes, kept up to date; tags written "type: name" (such as
+  "topic: …" or "idea: …") make their notes and file papers and highlights
+  in them; a highlight tagged "idea" becomes an idea note named after its
+  comment. Runs while Latex4All is open, every minute and when Zotero
+  changes. Notes renamed in Obsidian are followed, deleted ones aren't made
+  again, and every computer using the vault agrees on them.
+- The tag manager (Settings → Vault → Note types, or ⌘K) sets up the sync
+  step by step: the vault tag and papers folder, the note types and their
+  Zotero tag words, which of your Zotero tags pair with which notes, and
+  turning it on. Your Zotero tags are never changed, and Zotero's automatic
+  tags are hidden.
 - Note types have a Zotero tag: give your own type one ("method") and its
   notes pair with Zotero tags like "method: Diff-in-diff". Note types are
   now kept in the vault, so every computer using it has the same ones.
