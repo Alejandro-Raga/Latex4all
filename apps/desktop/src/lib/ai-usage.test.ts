@@ -243,6 +243,15 @@ describe("a chat's size", () => {
     ];
     expect(lastCallContext(messages).context).toBe(30_000);
   });
+
+  it("reads a chat whose messages are plain text", () => {
+    const messages = [
+      { type: "user", message: { content: "Hello" } },
+      { type: "result", usage: { input_tokens: 5_000, output_tokens: 10 } },
+      { type: "user", message: { content: "And again" } },
+    ];
+    expect(lastCallContext(messages).context).toBe(5_000);
+  });
 });
 
 describe("Claude Code's /usage", () => {

@@ -626,6 +626,15 @@ interface CallUsage {
   cache_creation_input_tokens?: number;
 }
 
+/** Whether a message has a block of this type; a plain-text message has none. */
+function hasBlock(
+  m: { message?: { content?: string | { type: string }[] } },
+  type: string,
+): boolean {
+  const c = m.message?.content;
+  return Array.isArray(c) && c.some((b) => b.type === type);
+}
+
 /**
  * What one model call in this chat reads now: the conversation's size.
  * From the last call's own usage when the stream gives it (Claude Code);
@@ -635,16 +644,13 @@ interface CallUsage {
 export function lastCallContext(
   messages: {
     type: string;
-    message?: { usage?: CallUsage; content?: { type: string }[] };
+    message?: { usage?: CallUsage; content?: string | { type: string }[] };
     usage?: CallUsage;
   }[],
 ): { context: number; output: number } {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (
-      m.type === "user" &&
-      !m.message?.content?.some((b) => b.type === "tool_result")
-    ) {
+    if (m.type === "user" && !hasBlock(m, "tool_result")) {
       break;
     }
     const u = m.type === "assistant" ? m.message?.usage : undefined;
@@ -665,13 +671,10 @@ export function lastCallContext(
     if (m.type === "result" && m.usage) {
       for (let j = i - 1; j >= 0; j--) {
         const b = messages[j];
-        if (
-          b.type === "user" &&
-          !b.message?.content?.some((c) => c.type === "tool_result")
-        ) {
+        if (b.type === "user" && !hasBlock(b, "tool_result")) {
           break;
         }
-        if (b.message?.content?.some((c) => c.type === "tool_use")) steps++;
+        if (hasBlock(b, "tool_use")) steps++;
       }
       const u = m.usage;
       const total =

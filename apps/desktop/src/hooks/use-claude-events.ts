@@ -296,8 +296,9 @@ export function useClaudeEvents() {
       lastMsgTimeRef.current.set(tabId, now);
 
       // Log ALL message types with gap detection
-      const contentTypes =
-        msg.message?.content?.map((b: any) => b.type).join(",") ?? "";
+      const contentTypes = Array.isArray(msg.message?.content)
+        ? msg.message.content.map((b: any) => b.type).join(",")
+        : "";
       const gapWarning = Number(gap) > 10 ? ` GAP ${gap}s` : "";
       log.debug(
         `[${tabId}] ${elapsed(tabId)} #${count} type=${msg.type} sub=${msg.subtype ?? ""} content=[${contentTypes}] gap=${gap}s${gapWarning}`,
