@@ -1,4 +1,79 @@
 use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+
+/// More than a long session's worth; past this they're dropped, and those
+/// calls go back with `SKIP_THOUGHT_SIGNATURE`.
+const MAX_THOUGHT_SIGNATURES: usize = 10_000;
+/// Google's stand-in for a call Gemini has no signature for: an earlier AI's,
+/// or one from before the app restarted.
+const SKIP_THOUGHT_SIGNATURE: &str = "skip_thought_signature_validator";
+
+/// Gemini signs its tool calls and wants each signature back with the call.
+/// Claude Code only hands back the id, so they wait here, by call id.
+fn thought_signatures() -> &'static Mutex<HashMap<String, String>> {
+    static SIGNATURES: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+    SIGNATURES.get_or_init(Default::default)
+}
+
+pub(super) fn thought_signature_of(call: &Value) -> Option<&str> {
+    call.pointer("/extra_content/google/thought_signature")
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.is_empty())
+}
+
+pub(super) fn remember_thought_signature(id: &str, signature: &str) {
+    let mut signatures = thought_signatures()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if signatures.len() >= MAX_THOUGHT_SIGNATURES {
+        signatures.clear();
+    }
+    signatures.insert(id.to_string(), signature.to_string());
+}
+
+/// Puts signatures back on the assistant's tool calls. For Gemini, a step
+/// whose first call has none gets the stand-in, or the request is refused.
+pub(super) fn restore_thought_signatures(openai_request: &mut Value, is_gemini: bool) {
+    let Some(messages) = openai_request
+        .get_mut("messages")
+        .and_then(|value| value.as_array_mut())
+    else {
+        return;
+    };
+    let signatures = thought_signatures()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    for message in messages {
+        let Some(calls) = message
+            .get_mut("tool_calls")
+            .and_then(|value| value.as_array_mut())
+        else {
+            continue;
+        };
+        for call in calls.iter_mut() {
+            let signature = call
+                .get("id")
+                .and_then(|value| value.as_str())
+                .and_then(|id| signatures.get(id))
+                .cloned();
+            if let Some(signature) = signature {
+                set_thought_signature(call, &signature);
+            }
+        }
+        if is_gemini {
+            if let Some(first) = calls.first_mut() {
+                if thought_signature_of(first).is_none() {
+                    set_thought_signature(first, SKIP_THOUGHT_SIGNATURE);
+                }
+            }
+        }
+    }
+}
+
+fn set_thought_signature(call: &mut Value, signature: &str) {
+    call["extra_content"] = json!({ "google": { "thought_signature": signature } });
+}
 
 pub(super) fn repaired_tool_arguments_value(arguments: &str) -> Value {
     serde_json::from_str::<Value>(&repair_tool_arguments(arguments)).unwrap_or_else(|_| json!({}))
@@ -544,6 +619,46 @@ mod tests {
     #[test]
     fn falls_back_to_empty_object_for_unrepairable_arguments() {
         assert_eq!(repair_tool_arguments("not json at all"), "{}");
+    }
+
+    fn step(ids: &[&str]) -> Value {
+        let calls = ids
+            .iter()
+            .map(|id| json!({ "id": id, "type": "function" }))
+            .collect::<Vec<_>>();
+        json!({ "messages": [{ "role": "assistant", "tool_calls": calls }] })
+    }
+
+    #[test]
+    fn gemini_gets_the_stand_in_only_on_a_first_call_without_a_signature() {
+        let mut request = step(&["call_unsigned_a", "call_unsigned_b"]);
+        restore_thought_signatures(&mut request, true);
+        let calls = &request["messages"][0]["tool_calls"];
+        assert_eq!(
+            thought_signature_of(&calls[0]),
+            Some(SKIP_THOUGHT_SIGNATURE)
+        );
+        assert_eq!(thought_signature_of(&calls[1]), None);
+    }
+
+    #[test]
+    fn a_known_signature_wins_over_the_stand_in() {
+        remember_thought_signature("call_signed", "sig_1");
+        let mut request = step(&["call_signed"]);
+        restore_thought_signatures(&mut request, true);
+        assert_eq!(
+            thought_signature_of(&request["messages"][0]["tool_calls"][0]),
+            Some("sig_1")
+        );
+    }
+
+    #[test]
+    fn other_providers_get_no_stand_in() {
+        let mut request = step(&["call_other_provider"]);
+        restore_thought_signatures(&mut request, false);
+        assert!(request["messages"][0]["tool_calls"][0]
+            .get("extra_content")
+            .is_none());
     }
 
     #[test]

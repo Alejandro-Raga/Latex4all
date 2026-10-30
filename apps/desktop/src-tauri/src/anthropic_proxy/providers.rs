@@ -1,3 +1,4 @@
+use super::tools::restore_thought_signatures;
 use super::transformers::ProxyTransformerChain;
 use super::OpenAiProxyCredential;
 use serde_json::{json, Value};
@@ -23,6 +24,10 @@ pub(super) fn apply_provider_request_transforms(
         cap_number_field(openai_request, "max_tokens", DEEPSEEK_MAX_TOKENS);
     }
 
+    restore_thought_signatures(
+        openai_request,
+        credential.model.to_ascii_lowercase().contains("gemini"),
+    );
     apply_reasoning_budget(openai_request, anthropic_request);
     apply_max_completion_tokens_compat(openai_request, credential);
     clean_null_optional_fields(openai_request);

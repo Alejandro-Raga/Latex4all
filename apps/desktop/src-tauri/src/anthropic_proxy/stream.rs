@@ -1,4 +1,7 @@
-use super::tools::{normalized_tool_call_id, repair_tool_arguments};
+use super::tools::{
+    normalized_tool_call_id, remember_thought_signature, repair_tool_arguments,
+    thought_signature_of,
+};
 use super::{http_response, OpenAiProxyCredential};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -29,6 +32,7 @@ struct StreamToolBlock {
     id: Option<String>,
     name: Option<String>,
     buffered_arguments: String,
+    thought_signature: Option<String>,
 }
 
 pub(super) async fn stream_openai_sse_to_anthropic(
@@ -378,6 +382,9 @@ fn push_stream_tool_delta(state: &mut OpenAiStreamState, call: &Value) {
     if let Some(id) = call.get("id").and_then(|value| value.as_str()) {
         block.id = Some(normalized_tool_call_id(Some(id)));
     }
+    if let Some(signature) = thought_signature_of(call) {
+        block.thought_signature = Some(signature.to_string());
+    }
     let function = call.get("function").unwrap_or(&Value::Null);
     if let Some(name) = function.get("name").and_then(|value| value.as_str()) {
         if !name.is_empty() {
@@ -476,6 +483,13 @@ fn finish_anthropic_stream(state: &mut OpenAiStreamState) -> String {
     for (_, block) in tool_blocks {
         let index = state.next_block_index;
         state.next_block_index += 1;
+        let id = block
+            .id
+            .clone()
+            .unwrap_or_else(|| normalized_tool_call_id(None));
+        if let Some(signature) = &block.thought_signature {
+            remember_thought_signature(&id, signature);
+        }
         push_sse(
             &mut body,
             "content_block_start",
@@ -484,7 +498,7 @@ fn finish_anthropic_stream(state: &mut OpenAiStreamState) -> String {
                 "index": index,
                 "content_block": {
                     "type": "tool_use",
-                    "id": block.id.clone().unwrap_or_else(|| normalized_tool_call_id(None)),
+                    "id": id,
                     "name": block.name.clone().unwrap_or_else(|| "unknown".to_string()),
                     "input": {},
                 },
@@ -770,6 +784,7 @@ fn usage_token(usage: &Value, keys: &[&str]) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use super::super::tools::restore_thought_signatures;
     use super::*;
 
     fn credential() -> OpenAiProxyCredential {
@@ -860,6 +875,42 @@ mod tests {
         assert!(rendered.contains("\"thinking\":\"I should inspect files.\""));
         let done = finish_anthropic_stream(&mut state);
         assert!(done.contains("\"type\":\"signature_delta\""));
+    }
+
+    #[test]
+    fn a_streamed_thought_signature_goes_back_with_its_call() {
+        let request = json!({ "model": "claude-sonnet-4" });
+        let mut state = OpenAiStreamState::default();
+        let chunk = json!({
+            "id": "chatcmpl_1",
+            "choices": [{
+                "delta": {
+                    "tool_calls": [{
+                        "index": 0,
+                        "id": "call_streamed_signature",
+                        "type": "function",
+                        "function": { "name": "Bash", "arguments": "{}" },
+                        "extra_content": { "google": { "thought_signature": "sig_stream" } }
+                    }]
+                },
+                "finish_reason": "tool_calls"
+            }]
+        });
+
+        openai_stream_chunk_to_anthropic(&mut state, &chunk, &request, &credential());
+        let done = finish_anthropic_stream(&mut state);
+        assert!(done.contains("\"id\":\"call_streamed_signature\""));
+        assert!(!done.contains("sig_stream"));
+
+        let mut next = json!({ "messages": [{
+            "role": "assistant",
+            "tool_calls": [{ "id": "call_streamed_signature", "type": "function" }]
+        }] });
+        restore_thought_signatures(&mut next, true);
+        assert_eq!(
+            next["messages"][0]["tool_calls"][0]["extra_content"]["google"]["thought_signature"],
+            "sig_stream"
+        );
     }
 
     #[test]

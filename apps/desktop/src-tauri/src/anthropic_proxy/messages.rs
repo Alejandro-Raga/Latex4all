@@ -1,4 +1,7 @@
-use super::tools::{normalized_tool_call_id, repair_tool_arguments, repaired_tool_arguments_value};
+use super::tools::{
+    normalized_tool_call_id, remember_thought_signature, repair_tool_arguments,
+    repaired_tool_arguments_value, thought_signature_of,
+};
 use super::transformers::ProxyTransformerChain;
 use super::OpenAiProxyCredential;
 use serde_json::{json, Value};
@@ -100,6 +103,9 @@ pub(super) fn openai_to_anthropic_message(
             }
             let input = repaired_tool_arguments_value(arguments);
             let id = normalized_tool_call_id(call.get("id").and_then(|value| value.as_str()));
+            if let Some(signature) = thought_signature_of(call) {
+                remember_thought_signature(&id, signature);
+            }
             content.push(json!({
                 "type": "tool_use",
                 "id": id,
