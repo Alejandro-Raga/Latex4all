@@ -30,6 +30,11 @@ tag.
   .tex, syncs live. Collaborators keep their copies; ticking a file again
   shares the copy on this computer. Joining, **Choose which files to
   download** does the same before anything is downloaded.
+- Joining a shared project into a folder you already have (its copy in
+  Dropbox or similar): tick **I already have its folder** and pick it.
+  Its files are compared with the shared ones instead of a second copy
+  being made, and a folder that's already this project just opens.
+
 - Help is rewritten as a shorter guide to what each part of the app is
   for.
 - Highlights in a vault note are cards: the passage in its Zotero color
@@ -86,6 +91,13 @@ tag.
   under several keys, a key written twice, and citations whose key means an
   entry under another key. Pick the key to keep; Clean up rewrites the
   citations and removes the extra entries, with Undo.
+
+### Changed
+
+- Fewer "(conflicted copy)" files: when a text file on this computer
+  differs from the shared one the first time they meet (a folder brought
+  by Dropbox, or joined into), the shared version stays and yours is
+  attached as conflict notes where they differ, to accept or reject.
 
 ### Fixed
 

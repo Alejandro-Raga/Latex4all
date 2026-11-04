@@ -23,7 +23,10 @@ import {
   type SyncEvent,
 } from "@/lib/collab/shared-session";
 import { settleConcurrentEdits } from "@/lib/collab/concurrent-edits";
-import { SharedAnnotations } from "@/lib/annotations/shared-annotations";
+import {
+  SharedAnnotations,
+  annotationsMap,
+} from "@/lib/annotations/shared-annotations";
 
 // ─── A relay and devices, in memory ───
 
@@ -256,6 +259,8 @@ class Device {
   synced: string[] = [];
   /** Where overlapping edits were found on catching up. */
   conflicts: Array<{ path: string; from: number }> = [];
+  /** Where a file here differed from the shared one, met for the first time. */
+  differences: Array<{ path: string; from: number }> = [];
   private buffered: SyncEvent[] | null = null;
 
   constructor(
@@ -331,6 +336,8 @@ class Device {
       {
         onError: (message) => this.errors.push(message),
         onSynced: (path) => this.synced.push(path),
+        me: () => ({ name: this.name, color: "#000" }),
+        onDifferences: (found) => this.differences.push(...found),
       },
       notSynced,
     );
@@ -419,6 +426,40 @@ describe("shared projects", () => {
     expect(b.workspace.snapshot()).toEqual(files);
     expect(a.workspace.snapshot()).toEqual(files);
     expect(b.errors).toEqual([]);
+  });
+
+  it("a folder with a different copy of a text file gets notes, not a copy", async () => {
+    const relay = new FakeRelay();
+    const a = new Device(
+      relay,
+      new FakeWorkspace(relay, { "main.tex": "The cat sat on the mat." }),
+    );
+    await a.open();
+    await settleAll(a);
+    // The same project arrived by Dropbox, with an older sentence.
+    const b = new Device(
+      relay,
+      new FakeWorkspace(relay, { "main.tex": "The dog sat on the mat." }),
+      "B",
+    );
+    await b.open();
+    await settleAll(a, b);
+    expect(b.workspace.snapshot()).toEqual({
+      "main.tex": "The cat sat on the mat.",
+    });
+    expect(a.workspace.snapshot()).toEqual(b.workspace.snapshot());
+    expect(b.differences).toEqual([{ path: "main.tex", from: 4 }]);
+    const notes = [...annotationsMap(a.session!.doc).values()].map(
+      (e) =>
+        e.get("suggestion") as {
+          text: string;
+          conflict: boolean;
+          author: string;
+        },
+    );
+    expect(notes).toEqual([
+      expect.objectContaining({ text: "dog", conflict: true, author: "B" }),
+    ]);
   });
 
   it("removes mistaken copies identical to their file, keeps differing ones", async () => {

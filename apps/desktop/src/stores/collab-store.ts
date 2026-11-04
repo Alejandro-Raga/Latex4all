@@ -39,7 +39,7 @@ import {
   sendAwareness,
   writeLink,
 } from "@/lib/tauri/collab";
-import { join } from "@/lib/tauri/fs";
+import { join, scanProjectFolder } from "@/lib/tauri/fs";
 import { useDocumentStore } from "@/stores/document-store";
 import { useHistoryStore } from "@/stores/history-store";
 import { useProjectStore } from "@/stores/project-store";
@@ -90,6 +90,22 @@ export interface CollabPeer {
   file: string | null;
 }
 
+export interface JoinOptions {
+  /** Where to make the project's folder (default: the usual place). */
+  destParent?: string;
+  /**
+   * A folder of yours to join into instead, such as the project's copy in
+   * Dropbox: its files are compared with the shared ones rather than
+   * downloaded next to them.
+   */
+  into?: string;
+  /**
+   * Shown the files before anything is written; answers which to leave out
+   * of the sync here (null: don't join after all).
+   */
+  chooseFiles?: (paths: string[]) => Promise<string[] | null>;
+}
+
 interface CollabState {
   /** `none` when the open project isn't shared. */
   status: "none" | SessionStatus;
@@ -114,15 +130,7 @@ interface CollabState {
   setColor: (color: string) => void;
   share: () => Promise<void>;
   /** `destParent` is the folder to save it in; defaults to the usual one. */
-  /**
-   * `chooseFiles`, if given, is shown the project's files before anything is
-   * written, and answers which to leave out (null: don't join after all).
-   */
-  join: (
-    link: string,
-    destParent?: string,
-    chooseFiles?: (paths: string[]) => Promise<string[] | null>,
-  ) => Promise<void>;
+  join: (link: string, options?: JoinOptions) => Promise<void>;
   stopSyncing: () => Promise<void>;
 }
 
@@ -314,27 +322,27 @@ function describeError(code: string) {
 }
 
 /** Points the user to text two people changed at once. */
-function showConflicts(found: Array<{ path: string; from: number }>) {
+function showConflicts(
+  found: Array<{ path: string; from: number }>,
+  message = found.length === 1
+    ? "You and someone else edited the same text."
+    : `You and someone else edited the same text in ${found.length} places.`,
+) {
   useSettingsStore.getState().setShowAnnotations(true);
   const [first] = found;
-  toast.warning(
-    found.length === 1
-      ? "You and someone else edited the same text."
-      : `You and someone else edited the same text in ${found.length} places.`,
-    {
-      duration: 10_000,
-      action: {
-        label: "Show",
-        onClick: () => {
-          const documents = useDocumentStore.getState();
-          if (documents.activeFileId !== first.path) {
-            documents.setActiveFile(first.path);
-          }
-          documents.requestJumpToPosition(first.from);
-        },
+  toast.warning(message, {
+    duration: 10_000,
+    action: {
+      label: "Show",
+      onClick: () => {
+        const documents = useDocumentStore.getState();
+        if (documents.activeFileId !== first.path) {
+          documents.setActiveFile(first.path);
+        }
+        documents.requestJumpToPosition(first.from);
       },
     },
-  );
+  });
 }
 
 function announce(warning: SyncWarning) {
@@ -596,6 +604,20 @@ export const useCollabStore = create<CollabState>()(
           {
             onLayoutChanged: bumpRevision,
             onError: warnAbout,
+            me: () => ({
+              name: get().displayName.trim() || "Anonymous",
+              color: get().color || peerColor(session.doc.clientID),
+            }),
+            onDifferences: (found) => {
+              if (active !== target) return;
+              const files = new Set(found.map((f) => f.path)).size;
+              showConflicts(
+                found,
+                files === 1
+                  ? `Your copy of ${found[0].path} differs from the shared one: the differences are notes in it.`
+                  : `Your copies of ${files} files differ from the shared ones: the differences are notes in them.`,
+              );
+            },
             onSynced: (path) => {
               const { warnings } = useCollabStore.getState();
               const ids = [`share:${path}`, `get:${path}`];
@@ -718,10 +740,26 @@ export const useCollabStore = create<CollabState>()(
           }
         },
 
-        join: async (text, destParent, chooseFiles) => {
+        join: async (text, { destParent, into, chooseFiles } = {}) => {
           if (get().progress) return;
           const info = await parseLink(text);
           const projects = useProjectStore.getState();
+          if (into) {
+            // Already this project (its folder came by Dropbox or similar,
+            // link and all): it's opened, not joined again.
+            const there = await readLink(into).catch(() => null);
+            if (there?.projectId === info.projectId) {
+              projects.rememberSharedProject(info.projectId, into);
+              await useDocumentStore.getState().openProject(into);
+              projects.addRecentProject(into);
+              return;
+            }
+            if (there) {
+              throw new Error(
+                "This folder is already shared as another project. Choose another folder.",
+              );
+            }
+          }
           const existing = projects.sharedProjects[info.projectId];
           if (existing) {
             const there = await readLink(existing).catch(() => null);
@@ -775,19 +813,46 @@ export const useCollabStore = create<CollabState>()(
               await connect(info.link, 0, null);
               await caughtUp;
               clearTimeout(timeout);
+              // A folder with none of the project's files isn't a copy of it,
+              // and joining would share everything in it with everyone.
+              if (into) {
+                const shared = new Set(layout(session.doc).keys());
+                const mine = (await scanProjectFolder(into)).files;
+                if (
+                  shared.size > 0 &&
+                  !mine.some((f) => shared.has(f.relativePath))
+                ) {
+                  throw new Error(
+                    "This folder has none of the project's files. Choose the project's own folder, or join into a new one.",
+                  );
+                }
+              }
               // Nothing is on disk yet: what's left out is never downloaded.
               let notSynced: string[] = [];
               if (chooseFiles) {
-                const paths = [...layout(session.doc).keys()];
+                // The folder's own files too, or those only there would be
+                // shared with everyone without a say.
+                const paths = new Set(layout(session.doc).keys());
+                if (into) {
+                  for (const f of (await scanProjectFolder(into)).files) {
+                    paths.add(f.relativePath);
+                  }
+                }
                 set({ progress: "Choosing files…" });
-                const chosen = await chooseFiles(paths);
+                const chosen = await chooseFiles([...paths]);
                 if (chosen === null) return;
                 notSynced = chosen;
                 set({ progress: "Downloading…" });
               }
               const name = metaMap(session.doc).get("name") || "Shared project";
-              const parent = destParent ?? (await defaultProjectFolder());
-              path = await createProjectFolder(parent, name);
+              // Into a folder of your own, its files are compared with the
+              // shared ones as they're opened: the same stay, others differ.
+              path =
+                into ??
+                (await createProjectFolder(
+                  destParent ?? (await defaultProjectFolder()),
+                  name,
+                ));
               if (notSynced.length) {
                 useSettingsStore.getState().setNotSynced(path, notSynced);
               }

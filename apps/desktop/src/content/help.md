@@ -153,7 +153,9 @@ The chat opens from the round button at the bottom of the editor. The assistant 
 
 Click **Share** above the editor for an invite link. Whoever opens it with **Join** works on the same project with you, and you see each other's cursors. Changes made offline are merged when you reconnect, and everything is encrypted before it leaves your computer. To work on a project from two computers, share it and join it from the other one.
 
-**Share → Files to sync** chooses which files sync on this computer, before you share or at any time after. Untick the ones you keep in step another way, such as figures in Dropbox, and only the rest syncs live. Ticking a file again shares your copy. When joining, **Choose which files to download** does the same before anything is downloaded.
+**Share → Files to sync** chooses which files sync on this computer, before you share or at any time after. Untick the ones you keep in step another way, such as figures in Dropbox, and only the rest syncs live. Ticking a file again shares your copy. When joining, **Choose which files to download** does the same before anything is downloaded. If you already have the project's folder, for example in Dropbox, tick **I already have its folder** and pick it: its files are compared with the shared ones instead of being downloaded next to them.
+
+Where a text file on your computer differs from the shared one the first time they meet, the shared version stays and yours is attached as notes where they differ, to accept or reject. Only a file that differs almost everywhere, or a binary file such as an image, is kept as a "(conflicted copy)".
 
 ## Updates and bug reports
 

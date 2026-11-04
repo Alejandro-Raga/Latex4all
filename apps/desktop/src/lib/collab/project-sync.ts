@@ -9,6 +9,8 @@ import {
   layout,
   textHash,
 } from "./project-doc";
+import type { Author } from "@/lib/annotations/types";
+import { noteDifferences } from "./concurrent-edits";
 import { isUnder, rejoined } from "./sync-choices";
 
 /** A file in the open project, as the sync sees it. */
@@ -61,6 +63,14 @@ interface Hooks {
   onError?: (message: string) => void;
   /** A file went through after all (sent or received): its warning goes. */
   onSynced?: (path: string) => void;
+  /**
+   * Who's here, to sign differences between a file here and the shared one
+   * met for the first time: with it, they're kept as conflict notes in the
+   * file rather than as a "(conflicted copy)".
+   */
+  me?: () => Author;
+  /** Where such differences were noted. */
+  onDifferences?: (found: Array<{ path: string; from: number }>) => void;
 }
 
 function conflictPath(path: string, taken: (path: string) => boolean) {
@@ -474,6 +484,7 @@ export class ProjectSync {
       }
     }
     let stillComingBack = false;
+    const noted: Array<{ path: string; from: number }> = [];
     for (const shared of placed.values()) {
       if (this.known.has(shared.fileId)) continue;
       if (this.isNotSynced(shared.path)) continue;
@@ -502,6 +513,38 @@ export class ProjectSync {
         if (!kept) stillComingBack = true;
         continue;
       }
+      // Text that differs: the shared version stays, and this one's
+      // differences go on it as notes, rather than a whole copy beside it.
+      const me = this.hooks.me;
+      if (
+        !identical &&
+        me &&
+        existing?.kind === "text" &&
+        existing.content !== undefined &&
+        !existing.dirty &&
+        shared.kind === "text"
+      ) {
+        const found = noteDifferences(
+          this.doc,
+          shared.fileId,
+          shared.text,
+          existing.content,
+          me(),
+        );
+        if (found !== null) {
+          const written = await guard(`Couldn't get ${shared.path}`, () =>
+            this.workspace.writeText(shared.path, text),
+          );
+          if (!written) continue;
+          for (const from of found) noted.push({ path: shared.path, from });
+          this.known.set(shared.fileId, {
+            path: shared.path,
+            hash: textHash(text),
+          });
+          this.hooks.onSynced?.(shared.path);
+          continue;
+        }
+      }
       if (!identical) {
         if (existing && !(await setAside(shared.path))) continue;
         const written = await guard(`Couldn't get ${shared.path}`, () =>
@@ -520,6 +563,7 @@ export class ProjectSync {
       );
     }
     if (!stillComingBack) this.comingBack = [];
+    if (noted.length) this.hooks.onDifferences?.(noted);
     if (wrote) {
       await this.workspace.refresh();
       local = this.localFiles();

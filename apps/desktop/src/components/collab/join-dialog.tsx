@@ -51,6 +51,9 @@ export function JoinDialog({
   const [folder, setFolder] = useState<string | null>(lastProjectFolder);
   const [home, setHome] = useState<string | null>(null);
   const [pickFiles, setPickFiles] = useState(false);
+  // Into a folder you already have (the project's copy in Dropbox), rather
+  // than a new one made in `folder`.
+  const [into, setInto] = useState<string | null>(null);
   const [choosing, setChoosing] = useState<Choosing | null>(null);
   const joining = progress !== null;
   const invalid = link.trim() !== "" && !looksLikeLink(link);
@@ -95,7 +98,11 @@ export function JoinDialog({
               }),
             )
         : undefined;
-      await join(link.trim(), folder ?? undefined, chooseFiles);
+      await join(link.trim(), {
+        destParent: folder ?? undefined,
+        into: into ?? undefined,
+        chooseFiles,
+      });
       setLink("");
       onOpenChange(false);
     } catch (err) {
@@ -105,10 +112,20 @@ export function JoinDialog({
     }
   };
 
-  const shownFolder =
-    folder && home && folder.startsWith(home)
-      ? `~${folder.slice(home.length)}`
-      : folder;
+  const chooseInto = async () => {
+    const selected = await openDialog({
+      directory: true,
+      multiple: false,
+      title: "Choose the project's folder",
+    });
+    if (typeof selected === "string" && selected) setInto(selected);
+  };
+
+  const shown = (path: string | null) =>
+    path && home && path.startsWith(home)
+      ? `~${path.slice(home.length)}`
+      : path;
+  const shownFolder = shown(into ?? folder);
 
   return (
     <Dialog open={open} onOpenChange={(next) => !joining && onOpenChange(next)}>
@@ -195,12 +212,12 @@ export function JoinDialog({
             </div>
 
             <div className="space-y-1.5">
-              <Label>Save in</Label>
+              <Label>{into ? "Join into" : "Save in"}</Label>
               <div className="flex items-center gap-2 rounded-md border border-input px-3 py-1.5">
                 <FolderOpenIcon className="size-4 shrink-0 text-muted-foreground" />
                 <span
                   className="min-w-0 flex-1 truncate text-sm"
-                  title={folder ?? undefined}
+                  title={into ?? folder ?? undefined}
                   dir="rtl"
                 >
                   {/* rtl keeps the end of a long path in view */}
@@ -211,12 +228,25 @@ export function JoinDialog({
                   variant="ghost"
                   size="sm"
                   className="h-7 shrink-0 px-2 text-xs"
-                  onClick={chooseFolder}
+                  onClick={into ? chooseInto : chooseFolder}
                   disabled={joining}
                 >
                   Change
                 </Button>
               </div>
+              <label className="flex cursor-pointer items-center gap-2 text-muted-foreground text-xs">
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-primary"
+                  checked={into !== null}
+                  onChange={(e) => {
+                    if (e.currentTarget.checked) void chooseInto();
+                    else setInto(null);
+                  }}
+                  disabled={joining}
+                />
+                I already have its folder (Dropbox or similar)
+              </label>
             </div>
 
             <label className="flex cursor-pointer items-center gap-2 text-sm">
