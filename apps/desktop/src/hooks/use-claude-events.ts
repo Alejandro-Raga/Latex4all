@@ -398,7 +398,7 @@ export function useClaudeEvents() {
 
       // Track tool_use blocks for file change detection
       const tabToolUses = pendingToolUsesRef.current.get(tabId) ?? new Map();
-      if (msg.type === "assistant" && msg.message?.content) {
+      if (msg.type === "assistant" && Array.isArray(msg.message?.content)) {
         for (const block of msg.message.content) {
           if (block.type === "tool_use" && block.id && block.name) {
             tabToolUses.set(block.id, {
@@ -450,7 +450,7 @@ export function useClaudeEvents() {
 
       // When a UI-pause tool is detected, cancel the process so the user
       // can interact with the widget before Claude continues.
-      if (msg.type === "assistant" && msg.message?.content) {
+      if (msg.type === "assistant" && Array.isArray(msg.message?.content)) {
         const hasUiPauseTool = msg.message.content.some(
           (b: any) =>
             b.type === "tool_use" &&

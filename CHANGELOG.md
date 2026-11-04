@@ -101,6 +101,9 @@ tag.
 
 ### Fixed
 
+- A project whose chat had a message saved as plain text crashed on
+  opening ("r.message?.content?.some is not a function"); it opens
+  again.
 - A Zotero item changed while the library was being read could be left out
   of it for good, so a paper in Zotero didn't show in Latex4All even after
   refreshing. The library is read again when it changes mid-read, and the
