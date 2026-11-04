@@ -23,6 +23,9 @@ import {
   PEER_COLORS,
   useCollabStore,
 } from "@/stores/collab-store";
+import { useDocumentStore } from "@/stores/document-store";
+import { useSettingsStore } from "@/stores/settings-store";
+import { SyncFilesDialog } from "./sync-files-dialog";
 
 function initials(name: string) {
   return (
@@ -215,6 +218,11 @@ export function CollabButton() {
   const warnings = useCollabStore((s) => s.warnings);
   const usage = useCollabStore((s) => s.usage);
   const [copied, setCopied] = useState(false);
+  const [choosingFiles, setChoosingFiles] = useState(false);
+  const projectRoot = useDocumentStore((s) => s.projectRoot);
+  const leftOut = useSettingsStore(
+    (s) => (projectRoot && s.notSynced[projectRoot]?.length) || 0,
+  );
 
   const shared = status !== "none";
   const failing = warnings.some((w) => w.level === "error");
@@ -369,6 +377,19 @@ export function CollabButton() {
               variant="outline"
               size="sm"
               className="w-full"
+              onClick={() => setChoosingFiles(true)}
+            >
+              Files to sync
+              {leftOut > 0 && (
+                <span className="text-muted-foreground">
+                  · {leftOut} left out
+                </span>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
               onClick={() => void stopSyncing()}
             >
               Stop syncing on this device
@@ -376,6 +397,7 @@ export function CollabButton() {
           </>
         )}
       </PopoverContent>
+      <SyncFilesDialog open={choosingFiles} onOpenChange={setChoosingFiles} />
     </Popover>
   );
 }

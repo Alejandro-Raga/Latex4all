@@ -277,9 +277,11 @@ class Device {
   async open({
     online = true,
     name,
+    notSynced = [],
   }: {
     online?: boolean;
     name?: string;
+    notSynced?: string[];
   } = {}) {
     const relay = this.relay;
     const session = new SharedSession(
@@ -322,10 +324,16 @@ class Device {
     session.connecting();
     if (online) relay.connect(this);
     if (name) metaMap(session.doc).set("name", name);
-    this.sync = new ProjectSync(session.doc, this.workspace, known, {
-      onError: (message) => this.errors.push(message),
-      onSynced: (path) => this.synced.push(path),
-    });
+    this.sync = new ProjectSync(
+      session.doc,
+      this.workspace,
+      known,
+      {
+        onError: (message) => this.errors.push(message),
+        onSynced: (path) => this.synced.push(path),
+      },
+      notSynced,
+    );
     await this.sync.start();
     for (const event of this.buffered?.splice(0) ?? []) session.handle(event);
     this.buffered = null;
@@ -908,6 +916,125 @@ describe("edits to the same text made out of sync", () => {
       "The results are mediocre.",
     );
     expect(conflictsOn(b)[0]?.suggestion?.text).toBe("excellent");
+  });
+});
+
+describe("files left out of the sync on one computer", () => {
+  it("aren't sent to anyone", async () => {
+    const relay = new FakeRelay();
+    const a = new Device(
+      relay,
+      new FakeWorkspace(relay, {
+        "main.tex": "text",
+        "refs.bib": "@book{x}",
+        "figures/plot.png": "PNG",
+      }),
+    );
+    await a.open({ notSynced: ["figures", "refs.bib"] });
+    const b = new Device(relay, new FakeWorkspace(relay));
+    await b.open();
+    await settleAll(a, b);
+    expect(b.workspace.snapshot()).toEqual({ "main.tex": "text" });
+    expect(a.workspace.snapshot()).toEqual({
+      "figures/plot.png": "PNG",
+      "main.tex": "text",
+      "refs.bib": "@book{x}",
+    });
+  });
+
+  it("are neither changed nor deleted by others, and don't change theirs", async () => {
+    const relay = new FakeRelay();
+    const files = { "main.tex": "text", "refs.bib": "old", "fig.png": "PNG" };
+    const a = new Device(relay, new FakeWorkspace(relay, files));
+    await a.open();
+    const b = new Device(relay, new FakeWorkspace(relay));
+    await b.open();
+    await settleAll(a, b);
+
+    a.sync!.setNotSynced(["fig.png", "refs.bib"]);
+    await settleAll(a, b);
+    expect(a.sync!.textAt("refs.bib")).toBeNull();
+    expect(a.sync!.textAt("main.tex")).not.toBeNull();
+
+    // B's changes stay with B…
+    b.workspace.setText("refs.bib", "edited by B");
+    await b.workspace.userDeletes("fig.png");
+    // …and A's with A.
+    a.workspace.setText("refs.bib", "edited by A");
+    await settleAll(a, b);
+    expect(a.workspace.snapshot()).toEqual({
+      "fig.png": "PNG",
+      "main.tex": "text",
+      "refs.bib": "edited by A",
+    });
+    expect(b.workspace.snapshot()).toEqual({
+      "main.tex": "text",
+      "refs.bib": "edited by B",
+    });
+
+    await a.workspace.userDeletes("refs.bib");
+    await settleAll(a, b);
+    expect(b.workspace.snapshot()["refs.bib"]).toBe("edited by B");
+
+    // main.tex still syncs both ways.
+    b.workspace.setText("main.tex", "text, more");
+    await settleAll(a, b);
+    expect(a.workspace.snapshot()["main.tex"]).toBe("text, more");
+  });
+
+  it("come back with this computer's copy, not a conflicted copy", async () => {
+    const relay = new FakeRelay();
+    const files = { "main.tex": "text", "refs.bib": "v1", "fig.png": "PNG1" };
+    const a = new Device(relay, new FakeWorkspace(relay, files));
+    await a.open();
+    const b = new Device(relay, new FakeWorkspace(relay));
+    await b.open();
+    await settleAll(a, b);
+
+    a.sync!.setNotSynced(["fig.png", "refs.bib"]);
+    await settleAll(a, b);
+    // Kept up to date by Dropbox meanwhile.
+    await a.workspace.userWrites("refs.bib", "v2 from Dropbox");
+    await a.workspace.userWrites("fig.png", "PNG2");
+    await settleAll(a, b);
+    expect(b.workspace.snapshot()["refs.bib"]).toBe("v1");
+
+    a.sync!.setNotSynced([]);
+    await settleAll(a, b);
+    const expected = {
+      "fig.png": "PNG2",
+      "main.tex": "text",
+      "refs.bib": "v2 from Dropbox",
+    };
+    expect(a.workspace.snapshot()).toEqual(expected);
+    expect(b.workspace.snapshot()).toEqual(expected);
+    expect(a.errors).toEqual([]);
+
+    // Followed again: B's edits reach A.
+    b.workspace.setText("refs.bib", "v3");
+    await settleAll(a, b);
+    expect(a.workspace.snapshot()["refs.bib"]).toBe("v3");
+  });
+
+  it("are left alone across a restart", async () => {
+    const relay = new FakeRelay();
+    const files = { "main.tex": "text", "refs.bib": "v1" };
+    const a = new Device(relay, new FakeWorkspace(relay, files));
+    await a.open();
+    const b = new Device(relay, new FakeWorkspace(relay));
+    await b.open();
+    await settleAll(a, b);
+    a.sync!.setNotSynced(["refs.bib"]);
+    await settleAll(a, b);
+    await a.close();
+
+    b.workspace.setText("refs.bib", "edited by B");
+    await settleAll(b);
+    await a.workspace.userWrites("refs.bib", "edited by A");
+    await a.open({ notSynced: ["refs.bib"] });
+    await settleAll(a, b);
+    expect(a.workspace.snapshot()["refs.bib"]).toBe("edited by A");
+    expect(b.workspace.snapshot()["refs.bib"]).toBe("edited by B");
   });
 });
 

@@ -100,6 +100,13 @@ interface SettingsState {
    */
   zoteroAutoVault: boolean;
   setZoteroAutoVault: (on: boolean) => void;
+  /**
+   * Per shared project (by its folder on this computer): the files and
+   * folders left out of the sync here, kept in step some other way
+   * (lib/collab/sync-choices.ts).
+   */
+  notSynced: Record<string, string[]>;
+  setNotSynced: (projectRoot: string, paths: string[]) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -143,6 +150,14 @@ export const useSettingsStore = create<SettingsState>()(
       setZoteroTagRegistry: (on) => set({ zoteroTagRegistry: on }),
       zoteroAutoVault: false,
       setZoteroAutoVault: (on) => set({ zoteroAutoVault: on }),
+      notSynced: {},
+      setNotSynced: (projectRoot, paths) =>
+        set((state) => {
+          const next = { ...state.notSynced };
+          if (paths.length) next[projectRoot] = paths;
+          else delete next[projectRoot];
+          return { notSynced: next };
+        }),
       customTheme: DEFAULT_CUSTOM_COLORS,
       setCustomTheme: (colors) => set({ customTheme: colors }),
       pdfThemeMain: "light",

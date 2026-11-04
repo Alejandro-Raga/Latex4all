@@ -153,6 +153,8 @@ The chat opens from the round button at the bottom of the editor. The assistant 
 
 Click **Share** above the editor for an invite link. Whoever opens it with **Join** works on the same project with you, and you see each other's cursors. Changes made offline are merged when you reconnect, and everything is encrypted before it leaves your computer. To work on a project from two computers, share it and join it from the other one.
 
+**Share → Files to sync** chooses which files sync on this computer. Untick the ones you keep in step another way, such as figures in Dropbox, and only the rest syncs live. Ticking a file again shares your copy.
+
 ## Updates and bug reports
 
 Updates install after you agree. **Settings → Updates** chooses between **Release**, finished versions, and **Test**, the newest work.

@@ -18,7 +18,7 @@ function parentOf(path: string) {
  * A compiled PDF sitting next to its .tex file changes on every compile and
  * anyone can rebuild it, so it isn't shared.
  */
-function isCompiledOutput(file: ProjectFile, texStems: Set<string>) {
+export function isCompiledOutput(file: ProjectFile, texStems: Set<string>) {
   return (
     file.type === "pdf" &&
     texStems.has(file.relativePath.replace(/\.pdf$/i, ""))

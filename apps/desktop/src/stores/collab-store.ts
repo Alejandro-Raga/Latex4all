@@ -579,6 +579,8 @@ export const useCollabStore = create<CollabState>()(
         if (!meta.get("name")) {
           meta.set("name", root.split(/[\\/]/).filter(Boolean).pop() ?? "");
         }
+        const notSynced = () =>
+          useSettingsStore.getState().notSynced[root] ?? [];
         target.sync = new ProjectSync(
           session.doc,
           documentStoreWorkspace(root, info.link),
@@ -596,6 +598,14 @@ export const useCollabStore = create<CollabState>()(
               }
             },
           },
+          notSynced(),
+        );
+        target.cleanup.push(
+          useSettingsStore.subscribe((state, prev) => {
+            if (state.notSynced[root] !== prev.notSynced[root]) {
+              target.sync?.setNotSynced(notSynced());
+            }
+          }),
         );
         await target.sync.start();
         if (active !== target) return;
