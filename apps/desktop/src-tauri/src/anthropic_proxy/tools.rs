@@ -32,9 +32,14 @@ pub(super) fn remember_thought_signature(id: &str, signature: &str) {
     signatures.insert(id.to_string(), signature.to_string());
 }
 
-/// Puts signatures back on the assistant's tool calls. For Gemini, a step
-/// whose first call has none gets the stand-in, or the request is refused.
+/// Puts signatures back on the assistant's tool calls, for Gemini only: other
+/// providers may refuse the unknown field, so a chat that started on Gemini
+/// and moved to another model keeps working. A step whose first call has
+/// none gets the stand-in, or Gemini refuses the request.
 pub(super) fn restore_thought_signatures(openai_request: &mut Value, is_gemini: bool) {
+    if !is_gemini {
+        return;
+    }
     let Some(messages) = openai_request
         .get_mut("messages")
         .and_then(|value| value.as_array_mut())
@@ -61,11 +66,9 @@ pub(super) fn restore_thought_signatures(openai_request: &mut Value, is_gemini: 
                 set_thought_signature(call, &signature);
             }
         }
-        if is_gemini {
-            if let Some(first) = calls.first_mut() {
-                if thought_signature_of(first).is_none() {
-                    set_thought_signature(first, SKIP_THOUGHT_SIGNATURE);
-                }
+        if let Some(first) = calls.first_mut() {
+            if thought_signature_of(first).is_none() {
+                set_thought_signature(first, SKIP_THOUGHT_SIGNATURE);
             }
         }
     }
@@ -655,6 +658,16 @@ mod tests {
     #[test]
     fn other_providers_get_no_stand_in() {
         let mut request = step(&["call_other_provider"]);
+        restore_thought_signatures(&mut request, false);
+        assert!(request["messages"][0]["tool_calls"][0]
+            .get("extra_content")
+            .is_none());
+    }
+
+    #[test]
+    fn other_providers_get_no_remembered_signature() {
+        remember_thought_signature("call_from_gemini", "sig_2");
+        let mut request = step(&["call_from_gemini"]);
         restore_thought_signatures(&mut request, false);
         assert!(request["messages"][0]["tool_calls"][0]
             .get("extra_content")

@@ -153,13 +153,54 @@ fn copy_for_duplicate(root: &Path, src: &Path, dst: &Path) -> std::io::Result<()
             continue;
         }
         let target = dst.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
+        let kind = entry.file_type()?;
+        if kind.is_symlink() {
+            copy_link_for_duplicate(root, &path, &target)?;
+        } else if kind.is_dir() {
             copy_for_duplicate(root, &path, &target)?;
         } else {
             std::fs::copy(&path, &target)?;
         }
     }
     Ok(())
+}
+
+/// A link in the project (`styles -> ~/latex/styles`) is a link in the copy
+/// too. Where one can't be made (Windows without the right to), what it
+/// points to is copied instead, unless that's the project or a folder
+/// holding it, which would copy forever. A broken link is left out.
+fn copy_link_for_duplicate(root: &Path, path: &Path, target: &Path) -> std::io::Result<()> {
+    let link = std::fs::read_link(path)?;
+    let points_to_dir = path.is_dir();
+    if make_link(&link, target, points_to_dir).is_ok() {
+        return Ok(());
+    }
+    let Ok(resolved) = path.canonicalize() else {
+        return Ok(());
+    };
+    if points_to_dir {
+        let root = root.canonicalize()?;
+        if root.starts_with(&resolved) || resolved.starts_with(&root) {
+            return Ok(());
+        }
+        copy_for_duplicate(&resolved, &resolved, target)
+    } else {
+        std::fs::copy(&resolved, target).map(|_| ())
+    }
+}
+
+#[cfg(unix)]
+fn make_link(link: &Path, target: &Path, _dir: bool) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(link, target)
+}
+
+#[cfg(windows)]
+fn make_link(link: &Path, target: &Path, dir: bool) -> std::io::Result<()> {
+    if dir {
+        std::os::windows::fs::symlink_dir(link, target)
+    } else {
+        std::os::windows::fs::symlink_file(link, target)
+    }
 }
 
 /// Copies the project at `src` to `dst`, a new folder, as a project of its
@@ -183,6 +224,34 @@ pub fn duplicate_project_folder(src: &Path, dst: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod duplicate_tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn keeps_a_linked_folder_as_a_link() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let styles = dir.path().join("styles");
+        std::fs::create_dir_all(&styles).expect("mkdir");
+        std::fs::write(styles.join("my.sty"), "sty").expect("write");
+        let src = dir.path().join("Paper");
+        std::fs::create_dir_all(&src).expect("mkdir");
+        std::fs::write(src.join("main.tex"), "x").expect("write");
+        std::os::unix::fs::symlink(&styles, src.join("styles")).expect("link");
+        let dst = dir.path().join("Paper (copy)");
+        duplicate_project_folder(&src, &dst).expect("duplicate");
+        let copied = dst.join("styles");
+        assert!(std::fs::symlink_metadata(&copied)
+            .expect("there")
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            std::fs::read_to_string(copied.join("my.sty")).expect("read"),
+            "sty"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dst.join("main.tex")).expect("read"),
+            "x"
+        );
+    }
 
     #[test]
     fn copies_the_project_but_not_its_sharing_or_history() {
