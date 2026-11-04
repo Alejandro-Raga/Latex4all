@@ -200,7 +200,10 @@ export function ZoteroSyncSettings() {
       </div>
 
       <ul className="mt-4 space-y-1 px-5 text-muted-foreground text-xs">
-        <li>Your Zotero library is only read, never changed.</li>
+        <li>
+          The sync only reads your Zotero library. It's changed only when you
+          agree, as when renaming the vault tag on your items.
+        </li>
         <li>What you write in a note outside its Zotero part is kept.</li>
         <li>With the vault on more than one computer, one of them syncs.</li>
       </ul>

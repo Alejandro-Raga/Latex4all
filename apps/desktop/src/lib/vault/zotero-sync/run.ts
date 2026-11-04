@@ -154,7 +154,9 @@ function zoteroFor(
       );
       if (page.length < 100) break;
     }
-    return { items, version, steady };
+    // Still changing after every try: up to date only as of the first page,
+    // so whatever changed during the reading is read again next time.
+    return { items, version: steady ? version : (first ?? since), steady };
   };
   return {
     async itemsSince(since) {
@@ -165,7 +167,9 @@ function zoteroFor(
       const anns = await pages(since, { itemType: "annotation" });
       return {
         items: [...all.items, ...anns.items.filter((i) => !seen.has(i.key))],
-        version: Math.max(all.version, anns.version),
+        // Up to date as of the earlier of the two readings: anything changed
+        // between them is read again next time, not skipped.
+        version: Math.min(all.version, anns.version),
       };
     },
     async deletedSince(since) {
@@ -396,13 +400,23 @@ async function run({
   };
   let before = stateFile?.text ?? null;
   let fileVersion = stateFile?.version ?? null;
-  const writeState = async () => {
-    const text = syncStateFile(state);
-    if (text === before) return;
-    if (before !== null)
-      fileVersion = await source.writeNote(SYNC_STATE_PATH, text, fileVersion);
-    else await source.createNote(SYNC_STATE_PATH, text);
-    before = text;
+  // One write at a time: the hold is renewed while the sync is writing too.
+  let writing: Promise<void> = Promise.resolve();
+  const writeState = () => {
+    const next = writing.then(async () => {
+      const text = syncStateFile(state);
+      if (text === before) return;
+      if (before !== null)
+        fileVersion = await source.writeNote(
+          SYNC_STATE_PATH,
+          text,
+          fileVersion,
+        );
+      else await source.createNote(SYNC_STATE_PATH, text);
+      before = text;
+    });
+    writing = next.catch(() => {});
+    return next;
   };
 
   // Held by another computer: left to it.
@@ -417,52 +431,73 @@ async function run({
     await writeState();
   }
 
-  await upgradePairedNotes();
-
-  const saved = await loadCache(userID);
-  // Tags left alone are taken out of the copy as items come in; when that
-  // list changes, the library is read again in full.
-  const ignored = [...(vault.ignoredTags ?? [])].sort();
-  if (JSON.stringify(saved.ignored ?? []) !== JSON.stringify(ignored)) {
-    saved.web = 0;
-    saved.local = 0;
-    saved.items = [];
-    saved.ignored = ignored;
+  // A long run (a first sync of a large library) keeps the vault held, or
+  // another computer would take over halfway and write the same notes. What
+  // it saves meanwhile is the notes written so far; the library's version
+  // only moves on at the end, so a run cut short is done again.
+  const renew = setInterval(() => {
+    const until = state.holder?.until ?? 0;
+    if (state.holder?.id === me && until - Date.now() < RENEW_MS) {
+      state.holder.until = Date.now() + HOLD_MS;
+      writeState().catch(() => {});
+    }
+  }, 30_000);
+  try {
+    return await held();
+  } finally {
+    clearInterval(renew);
   }
-  const cache: Cache = new Map(saved.items);
-  const store = vaultStore();
-  const setup = {
-    papersDir: papersFolderOf(null, vault.papersFolder),
-    ideasDir: kindFolder("idea") || "Ideas",
-    topicsDir: kindFolder("topic") || "Topics",
-    forceTag: vault.paperTag || "obsidian",
-    custom: customGroups(),
-    paired: pairedTags(),
-  };
-  // A new vault tag, folder or type changes which notes there are and what
-  // they say: all of them are written again.
-  const signature = JSON.stringify(setup);
-  const again =
-    rebuild || (saved.setup !== undefined && saved.setup !== signature);
-  const written = await withZoteroSource(async (via) => {
-    // The library's changes since this computer's copy, in the numbering of
-    // where they come from: the copy, not the vault, knows what it has.
-    state.version = via === "local" ? saved.local : saved.web;
-    const n = await runSync(
-      store,
-      zoteroFor(apiKey, userID, via, new Set(ignored)),
-      state,
-      cache,
-      { ...setup, today: today(), now: new Date(), rebuild: again },
-    );
-    if (via === "local") saved.local = state.version;
-    else saved.web = state.version;
-    return n;
-  });
 
-  saved.items = [...cache];
-  saved.setup = signature;
-  await saveCache(saved);
-  await writeState();
-  return { written, at: Date.now() };
+  async function held(): Promise<SyncResult> {
+    // Checked above; repeated for the type checker inside this function.
+    if (!apiKey || !userID) throw new Error("Connect Zotero first.");
+    await upgradePairedNotes();
+
+    const saved = await loadCache(userID);
+    // Tags left alone are taken out of the copy as items come in; when that
+    // list changes, the library is read again in full.
+    const ignored = [...(vault.ignoredTags ?? [])].sort();
+    if (JSON.stringify(saved.ignored ?? []) !== JSON.stringify(ignored)) {
+      saved.web = 0;
+      saved.local = 0;
+      saved.items = [];
+      saved.ignored = ignored;
+    }
+    const cache: Cache = new Map(saved.items);
+    const store = vaultStore();
+    const setup = {
+      papersDir: papersFolderOf(null, vault.papersFolder),
+      ideasDir: kindFolder("idea") || "Ideas",
+      topicsDir: kindFolder("topic") || "Topics",
+      forceTag: vault.paperTag || "obsidian",
+      custom: customGroups(),
+      paired: pairedTags(),
+    };
+    // A new vault tag, folder or type changes which notes there are and what
+    // they say: all of them are written again.
+    const signature = JSON.stringify(setup);
+    const again =
+      rebuild || (saved.setup !== undefined && saved.setup !== signature);
+    const written = await withZoteroSource(async (via) => {
+      // The library's changes since this computer's copy, in the numbering of
+      // where they come from: the copy, not the vault, knows what it has.
+      state.version = via === "local" ? saved.local : saved.web;
+      const n = await runSync(
+        store,
+        zoteroFor(apiKey, userID, via, new Set(ignored)),
+        state,
+        cache,
+        { ...setup, today: today(), now: new Date(), rebuild: again },
+      );
+      if (via === "local") saved.local = state.version;
+      else saved.web = state.version;
+      return n;
+    });
+
+    saved.items = [...cache];
+    saved.setup = signature;
+    await saveCache(saved);
+    await writeState();
+    return { written, at: Date.now() };
+  }
 }

@@ -845,7 +845,6 @@ export function updateZoteroAnnotation(
   });
 }
 
-/** Changes some of an item's fields in Zotero (the rest stay). */
 /** How many items carry a tag. */
 export async function countZoteroTag(
   apiKey: string,
@@ -932,6 +931,7 @@ export async function renameZoteroTag(
   });
 }
 
+/** Changes some of an item's fields in Zotero (the rest stay). */
 export function updateZoteroItem(
   apiKey: string,
   userID: string,

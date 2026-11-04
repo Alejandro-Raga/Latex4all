@@ -35,25 +35,26 @@ const vault = vi.hoisted(() => ({
   mode: "local",
   vaultPath: "/v",
 }));
+const source = vi.hoisted(() => ({
+  readNote: async (path: string) => ({
+    text: files.get(path) ?? "",
+    version: "1",
+  }),
+  writeNote: vi.fn(async (path: string, text: string) => {
+    files.set(path, text);
+    return "2";
+  }),
+  createNote: vi.fn(async (path: string, text: string) => {
+    files.set(path, text);
+  }),
+}));
 vi.mock("@/stores/vault-store", () => ({
   useVaultStore: {
     getState: () => ({
       ...vault,
       ensureVault: async () => {},
       noteWritten: vi.fn(),
-      source: {
-        readNote: async (path: string) => ({
-          text: files.get(path) ?? "",
-          version: "1",
-        }),
-        writeNote: vi.fn(async (path: string, text: string) => {
-          files.set(path, text);
-          return "2";
-        }),
-        createNote: vi.fn(async (path: string, text: string) => {
-          files.set(path, text);
-        }),
-      },
+      source,
     }),
   },
 }));
@@ -140,5 +141,44 @@ describe("importing a Zotero tag", () => {
     expect(text).toContain("My definition.");
     expect(text).toContain('zotero_tag: "Network theory"');
     expect([...files.keys()]).toEqual(["Topics/Network theory.md"]);
+  });
+
+  it("pairs a note of another kind where the new one would go", async () => {
+    files.set("Topics/Networks.md", "---\ntags: [method]\n---\nMine.\n");
+    vault.index = {
+      list: [
+        {
+          name: "Networks",
+          kind: "method",
+          path: "Topics/Networks.md",
+          frontmatter: {},
+          body: "",
+        } as unknown as VaultNote,
+      ],
+    };
+    await runImport(
+      await previewImport([{ tag: "Networks", type: topic, name: "Networks" }]),
+    );
+    const text = files.get("Topics/Networks.md") as string;
+    expect(text).toContain("Mine.");
+    expect(text).toContain('zotero_tag: "Networks"');
+  });
+
+  it("pairs the rest when one tag fails, and says which", async () => {
+    const preview = await previewImport([
+      { tag: "One", type: topic, name: "One" },
+      { tag: "Two", type: topic, name: "Two" },
+      { tag: "Three", type: topic, name: "Three" },
+    ]);
+    source.createNote.mockImplementationOnce(async () => {
+      files.set("Topics/One.md", "x");
+    });
+    source.createNote.mockImplementationOnce(async () => {
+      throw new Error("disk full");
+    });
+    await expect(runImport(preview)).rejects.toThrow(
+      "2 paired; couldn't pair Two: disk full",
+    );
+    expect(files.has("Topics/Three.md")).toBe(true);
   });
 });

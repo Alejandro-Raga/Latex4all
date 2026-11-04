@@ -224,8 +224,10 @@ export async function runSync(
     groups.push(g);
     patterns.set(g, groupPattern(c.word));
   }
-  const pairedTags = new Set((cfg.paired ?? []).map((p) => p.tag));
   for (const p of cfg.paired ?? []) {
+    // A typed tag ("topic: X") makes its own note already; paired too, it
+    // would be written twice, and listed twice on its papers.
+    if ([...patterns.values()].some((re) => re.exec(p.tag))) continue;
     groups.push({
       id: `tag:${p.tag}`,
       kind: "tag",
@@ -536,7 +538,6 @@ export async function runSync(
       for (const k of keys) if (!now?.has(k)) affected.add(k);
     }
   }
-  void pairedTags;
 
   // Links typed in Zotero bring the paper they point to into the vault.
   reserved.clear();

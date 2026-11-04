@@ -214,4 +214,21 @@ describe("the sync over time", () => {
       "Method: [[Diff-in-diff]]",
     );
   });
+
+  it("a typed tag paired by hand is filled once, as its type", async () => {
+    library = [
+      paper("PAPER001", {
+        tags: [{ tag: "obsidian" }, { tag: "topic: Networks" }],
+      }),
+    ];
+    await runSync(store, zot, state, cache, {
+      ...cfg,
+      paired: [
+        { tag: "topic: Networks", path: "Topics/Networks.md", label: "Topics" },
+      ],
+    });
+    const note = files.get("Papers/Author2020.md") ?? "";
+    expect(note.match(/\[\[Networks\]\]/g)).toHaveLength(1);
+    expect(files.get("Topics/Networks.md")).toContain("zotero_topic:");
+  });
 });

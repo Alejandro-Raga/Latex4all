@@ -52,6 +52,12 @@ export interface LibraryMirror {
   items: Record<string, LibraryItem>;
   attachments: Record<string, Attachment>;
   collections: ZoteroCollection[];
+  /**
+   * Top-level items that aren't papers (standalone notes and files): the
+   * copy leaves them out, and checking it against the library would
+   * otherwise take them for missing and fetch them again every time.
+   */
+  others?: string[];
 }
 
 export function emptyMirror(userID: string): LibraryMirror {
@@ -222,7 +228,9 @@ async function readChanges(
     items.push(...page);
     if (page.length < 100) break;
   }
-  return { items, version, steady };
+  // Still changing after every try: up to date only as of the first page,
+  // so whatever changed during the reading is read again next time.
+  return { items, version: steady ? version : (first ?? since), steady };
 }
 
 /**
@@ -254,9 +262,11 @@ async function verifyMirror(
       changed = true;
     }
   }
-  // Standalone notes and files are top-level too; they come back, and are
-  // left out of the copy again.
-  const missing = [...keys].filter((k) => !mirror.items[k]);
+  // Standalone notes and files are top-level too: fetched once to learn what
+  // they are, then remembered as such.
+  const others = new Set((mirror.others ?? []).filter((k) => keys.has(k)));
+  if (others.size !== (mirror.others ?? []).length) changed = true;
+  const missing = [...keys].filter((k) => !mirror.items[k] && !others.has(k));
   for (let i = 0; i < missing.length; i += 50) {
     const params = new URLSearchParams({
       format: "json",
@@ -275,6 +285,12 @@ async function verifyMirror(
     ).json()) as ApiItem[];
     const before = Object.keys(mirror.items).length;
     applyItems(mirror, found);
+    for (const item of found) {
+      if (!mirror.items[item.key]) {
+        others.add(item.key);
+        changed = true;
+      }
+    }
     // Their PDFs too, which the copy needs to open them.
     for (const item of found) {
       if (!mirror.items[item.key]) continue;
@@ -290,6 +306,7 @@ async function verifyMirror(
     }
     if (Object.keys(mirror.items).length !== before) changed = true;
   }
+  mirror.others = [...others].sort();
   return changed;
 }
 

@@ -125,51 +125,83 @@ export async function runImport(
   if (!source) throw new Error("Connect your vault first.");
   const today = new Date().toISOString().slice(0, 10);
   const made: string[] = [];
-  for (const [i, { choice, existing }] of previews.entries()) {
-    let path: string;
-    let text: string;
-    let version: string | null | undefined;
-    if (existing) {
-      path = existing.path;
-      const read = await source.readNote(path);
-      text = withField(read.text, "zotero_tag", choice.tag);
-      version = read.version;
-    } else {
-      const folder = kindFolder(choice.type.kind);
-      path = folder ? `${folder}/${choice.name}.md` : `${choice.name}.md`;
-      const custom = useVaultStore
-        .getState()
-        .noteTypes[vaultKey()]?.find((t) => t.id === choice.type.kind);
-      text = newTagNote(
-        {
-          kind: choice.type.kind,
-          label: choice.type.label,
-          obsidianTag: custom?.tag,
-        },
-        choice.name,
-        choice.tag,
-        today,
+  const failed: string[] = [];
+  for (const [i, preview] of previews.entries()) {
+    try {
+      await importOne(preview, today);
+      made.push(preview.choice.name);
+    } catch (err) {
+      failed.push(
+        `${preview.choice.tag}: ${err instanceof Error ? err.message : String(err)}`,
       );
-      version = undefined;
     }
-    if (existing) await source.writeNote(path, text, version);
-    else await source.createNote(path, text);
-    useVaultStore.getState().noteWritten(path, text);
-    // A type of your own with no folder or tag to find it by: chosen by hand.
-    if (
-      !existing &&
-      choice.type.kind !== "topic" &&
-      choice.type.kind !== "idea"
-    ) {
-      await chooseNoteKind(choice.name, choice.type.kind).catch(() => null);
-    }
-    made.push(choice.name);
     onProgress?.(i + 1);
   }
-  if (useSettingsStore.getState().zoteroAutoVault) {
+  if (made.length && useSettingsStore.getState().zoteroAutoVault) {
     await syncVaultWithZotero().catch(() => null);
   }
+  if (failed.length) {
+    throw new Error(
+      `${made.length ? `${made.length} paired; couldn't` : "Couldn't"} pair ${failed.join("; ")}`,
+    );
+  }
   return made;
+}
+
+async function importOne(
+  { choice, existing: found }: ImportPreview,
+  today: string,
+) {
+  const { source } = useVaultStore.getState();
+  if (!source) throw new Error("Connect your vault first.");
+  const folder = kindFolder(choice.type.kind);
+  const newPath = folder ? `${folder}/${choice.name}.md` : `${choice.name}.md`;
+  // A note already where the new one would go (of another type, or made by
+  // hand) is paired rather than written over.
+  const existing =
+    found ??
+    useVaultStore
+      .getState()
+      .index?.list.find(
+        (n) => n.path.toLowerCase() === newPath.toLowerCase(),
+      ) ??
+    null;
+  let path: string;
+  let text: string;
+  let version: string | null | undefined;
+  if (existing) {
+    path = existing.path;
+    const read = await source.readNote(path);
+    text = withField(read.text, "zotero_tag", choice.tag);
+    version = read.version;
+  } else {
+    path = newPath;
+    const custom = useVaultStore
+      .getState()
+      .noteTypes[vaultKey()]?.find((t) => t.id === choice.type.kind);
+    text = newTagNote(
+      {
+        kind: choice.type.kind,
+        label: choice.type.label,
+        obsidianTag: custom?.tag,
+      },
+      choice.name,
+      choice.tag,
+      today,
+    );
+    version = undefined;
+  }
+  if (existing) await source.writeNote(path, text, version);
+  else await source.createNote(path, text);
+  useVaultStore.getState().noteWritten(path, text);
+  // A type of your own with no folder or tag to find it by: chosen by hand.
+  if (
+    !existing &&
+    choice.type.kind !== "topic" &&
+    choice.type.kind !== "idea"
+  ) {
+    await chooseNoteKind(choice.name, choice.type.kind).catch(() => null);
+  }
 }
 
 function vaultKey() {

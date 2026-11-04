@@ -149,6 +149,41 @@ describe("the saved Zotero library", () => {
     expect(m.version).toBe(11);
   });
 
+  it("still changing after every try, reads what changed again next time", async () => {
+    zoteroFetch.mockReset();
+    for (let attempt = 0; attempt < 4; attempt++) {
+      zoteroFetch
+        .mockResolvedValueOnce(reply(many(100), 20 + attempt * 2))
+        .mockResolvedValueOnce(reply(many(1, 100), 21 + attempt * 2));
+    }
+    const m = emptyMirror("1");
+    await syncMirror(m, "key", "1");
+    expect(zoteroFetch).toHaveBeenCalledTimes(8);
+    // As of the last try's first page, not its last.
+    expect(m.version).toBe(26);
+  });
+
+  it("fetches standalone notes and files once, not at every check", async () => {
+    const m = emptyMirror("1");
+    applyItems(m, [paper("AAAA0001")]);
+    m.version = 10;
+    const note = { key: "NOTE0001", data: { itemType: "note" } } as ApiItem;
+    zoteroFetch.mockReset();
+    zoteroFetch
+      .mockResolvedValueOnce(reply([], 10))
+      .mockResolvedValueOnce(reply(["AAAA0001", "NOTE0001"], 10))
+      .mockResolvedValueOnce(reply([note], 10));
+    await syncMirror(m, "key", "1", true);
+    expect(m.others).toEqual(["NOTE0001"]);
+
+    zoteroFetch.mockReset();
+    zoteroFetch
+      .mockResolvedValueOnce(reply([], 10))
+      .mockResolvedValueOnce(reply(["AAAA0001", "NOTE0001"], 10));
+    expect(await syncMirror(m, "key", "1", true)).toBe(false);
+    expect(zoteroFetch).toHaveBeenCalledTimes(2);
+  });
+
   it("finds an item a sync missed when checked against the library", async () => {
     const m = emptyMirror("1");
     applyItems(m, [paper("AAAA0001"), paper("GONE0001")]);
