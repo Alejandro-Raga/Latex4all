@@ -16,6 +16,7 @@ import { syncProjectTypes } from "@/lib/project-type-sync";
 import {
   typeMenuOptions,
   normalizeType,
+  UNTYPED_LABEL,
   readProjectType,
   updateProjectMeta,
   writeProjectType,
@@ -49,9 +50,34 @@ import {
   GithubIcon,
   UsersIcon,
   CircleHelpIcon,
+  ArrowUpDownIcon,
+  ChevronDownIcon,
+  CopyIcon,
+  FolderXIcon,
+  LayoutGridIcon,
+  ListIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
 } from "lucide-react";
+import * as Y from "yjs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { editedLabel } from "@/lib/edited-label";
+import { openConflicts } from "@/lib/collab/open-conflicts";
+import { loadDoc } from "@/lib/tauri/collab";
+import { revealInFileManager, revealLabel } from "@/lib/reveal";
 import type { LucideIcon } from "lucide-react";
-import { useProjectStore } from "@/stores/project-store";
+import {
+  CARD_SIZE_MAX,
+  CARD_SIZE_MIN,
+  useProjectStore,
+} from "@/stores/project-store";
 import { projectRelocated, useDocumentStore } from "@/stores/document-store";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -101,7 +127,7 @@ const SORTS: Array<{ value: ProjectSort; label: string }> = [
   { value: "recent", label: "Recent" },
   { value: "added", label: "Date added" },
   { value: "created", label: "Date created" },
-  { value: "type", label: "Type" },
+  { value: "type", label: "Grouped by type" },
 ];
 
 type ProjectPickerSection = "projects" | "library" | "settings" | "help";
@@ -450,7 +476,14 @@ export function ProjectPicker() {
     [cacheProjectType],
   );
 
-  const visibleProjects = useMemo(() => {
+  const projectView = useProjectStore((s) => s.projectView);
+  const setProjectView = useProjectStore((s) => s.setProjectView);
+  const cardSize = useProjectStore((s) => s.cardSize);
+  const setCardSize = useProjectStore((s) => s.setCardSize);
+  const typeFilter = useProjectStore((s) => s.typeFilter);
+  const setTypeFilter = useProjectStore((s) => s.setTypeFilter);
+
+  const searchedProjects = useMemo(() => {
     if (!normalizedSearch) return recentProjects;
     return recentProjects.filter(
       (project) =>
@@ -458,6 +491,69 @@ export function ProjectPicker() {
         project.path.toLowerCase().includes(normalizedSearch),
     );
   }, [normalizedSearch, recentProjects]);
+
+  // One chip per type in use, with how many; the chosen one filters. A type
+  // no project has any more (its last one removed) shows everything.
+  const typeChips = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of searchedProjects) {
+      const t = projectTypes[p.path] ?? UNTYPED_LABEL;
+      counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+    const types = [...counts.keys()].sort((a, b) =>
+      a === UNTYPED_LABEL ? 1 : b === UNTYPED_LABEL ? -1 : a.localeCompare(b),
+    );
+    return [
+      {
+        label: "All",
+        value: null as string | null,
+        count: searchedProjects.length,
+      },
+      ...(types.length > 1 || types[0] !== UNTYPED_LABEL
+        ? types.map((t) => ({ label: t, value: t, count: counts.get(t) ?? 0 }))
+        : []),
+    ];
+  }, [searchedProjects, projectTypes]);
+  const activeType = typeChips.some((c) => c.value === typeFilter)
+    ? typeFilter
+    : null;
+
+  const visibleProjects = useMemo(
+    () =>
+      activeType === null
+        ? searchedProjects
+        : searchedProjects.filter(
+            (p) => (projectTypes[p.path] ?? UNTYPED_LABEL) === activeType,
+          ),
+    [searchedProjects, activeType, projectTypes],
+  );
+
+  /** A project whose folder moved outside the app: pointed at it again. */
+  const handleLocateProject = async (project: RecentProject) => {
+    const found = await open({
+      directory: true,
+      multiple: false,
+      title: `Where is "${project.name}" now?`,
+    });
+    if (typeof found !== "string" || !found) return;
+    renameRecentProject(project.path, found);
+    projectRelocated(project.path, found);
+    toast.success(`Found “${project.name}”`);
+  };
+
+  const actionsFor = (project: RecentProject): ProjectActions => ({
+    onOpen: () => void handleOpenRecent(project.path),
+    onRemove: () => setRemoveProjectTarget(project),
+    onToggleFavorite: () => toggleFavorite(project.path),
+    onSetType: (type) => void setProjectType(project.path, type),
+    onCustomType: () => {
+      setCustomType(projectTypes[project.path] ?? "");
+      setTypePrompt(project.path);
+    },
+    onMove: () => void handleMoveProject(project),
+    onDuplicate: () => void handleDuplicateProject(project),
+    onLocate: () => void handleLocateProject(project),
+  });
 
   // Types the user has already made, offered alongside the built-in ones.
   const typeOptions = useMemo(
@@ -646,22 +742,31 @@ export function ProjectPicker() {
                     </kbd>
                   </div>
 
-                  <Button
-                    onClick={() => setShowJoinDialog(true)}
-                    variant="secondary"
-                    className="h-9 shrink-0 gap-1.5 rounded-lg px-3.5"
-                  >
-                    <UsersIcon className="size-4" />
-                    Join
-                  </Button>
-                  <Button
-                    onClick={handleOpenFolder}
-                    variant="secondary"
-                    className="h-9 shrink-0 gap-1.5 rounded-lg px-3.5"
-                  >
-                    <FolderOpenIcon className="size-4" />
-                    Import
-                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="secondary"
+                        className="h-9 shrink-0 gap-1 rounded-lg px-3"
+                      >
+                        Add
+                        <ChevronDownIcon className="size-3.5 opacity-70" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onSelect={() => setShowJoinDialog(true)}
+                      >
+                        <UsersIcon className="size-4" />
+                        Join a shared project…
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => void handleOpenFolder()}
+                      >
+                        <FolderOpenIcon className="size-4" />
+                        Import a folder…
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <Button
                     onClick={() => setShowModeDialog(true)}
                     className="h-9 shrink-0 gap-1.5 rounded-lg px-4"
@@ -702,66 +807,160 @@ export function ProjectPicker() {
                     </div>
                   ) : (
                     <>
-                      <div className="flex items-center gap-1">
-                        {SORTS.map(({ value, label }) => (
-                          <button
-                            key={value}
-                            type="button"
-                            onClick={() => setProjectSort(value)}
-                            className={cn(
-                              "rounded-md px-2.5 py-1 text-xs transition-colors",
-                              projectSort === value
-                                ? "bg-accent font-medium text-accent-foreground"
-                                : "text-muted-foreground hover:bg-muted/60",
-                            )}
-                          >
-                            {label}
-                          </button>
-                        ))}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                          {typeChips.map((chip) => (
+                            <button
+                              key={chip.label}
+                              type="button"
+                              onClick={() => setTypeFilter(chip.value)}
+                              className={cn(
+                                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors",
+                                activeType === chip.value
+                                  ? "border-foreground/20 bg-accent font-medium text-accent-foreground"
+                                  : "border-transparent text-muted-foreground hover:bg-muted/60",
+                              )}
+                            >
+                              {chip.label}
+                              <span className="text-muted-foreground/70 tabular-nums">
+                                {chip.count}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 gap-1 px-2 text-muted-foreground text-xs"
+                              >
+                                <ArrowUpDownIcon className="size-3.5" />
+                                {SORTS.find((x) => x.value === projectSort)
+                                  ?.label ?? "Sort"}
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuRadioGroup
+                                value={projectSort}
+                                onValueChange={(v) =>
+                                  setProjectSort(v as ProjectSort)
+                                }
+                              >
+                                {SORTS.map(({ value, label }) => (
+                                  <DropdownMenuRadioItem
+                                    key={value}
+                                    value={value}
+                                  >
+                                    {label}
+                                  </DropdownMenuRadioItem>
+                                ))}
+                              </DropdownMenuRadioGroup>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          {projectView === "grid" && (
+                            <label
+                              className="flex items-center gap-1.5 text-muted-foreground"
+                              title="Card size"
+                            >
+                              <ZoomOutIcon className="size-3.5" />
+                              <input
+                                type="range"
+                                min={CARD_SIZE_MIN}
+                                max={CARD_SIZE_MAX}
+                                step={10}
+                                value={cardSize}
+                                onChange={(e) =>
+                                  setCardSize(Number(e.currentTarget.value))
+                                }
+                                className="h-1 w-24 accent-primary"
+                                aria-label="Card size"
+                              />
+                              <ZoomInIcon className="size-3.5" />
+                            </label>
+                          )}
+                          <div className="flex rounded-md border p-0.5">
+                            {(
+                              [
+                                ["grid", LayoutGridIcon, "Cards"],
+                                ["list", ListIcon, "List"],
+                              ] as const
+                            ).map(([view, Icon, label]) => (
+                              <button
+                                key={view}
+                                type="button"
+                                title={label}
+                                aria-label={label}
+                                aria-pressed={projectView === view}
+                                onClick={() => setProjectView(view)}
+                                className={cn(
+                                  "rounded p-1 transition-colors",
+                                  projectView === view
+                                    ? "bg-muted text-foreground"
+                                    : "text-muted-foreground hover:text-foreground",
+                                )}
+                              >
+                                <Icon className="size-3.5" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
 
+                      {projectView === "list" && <ProjectListHeader />}
                       {projectGroups.map((group) => (
-                        <div key={group.key} className="flex flex-col gap-3">
+                        <section
+                          key={group.key}
+                          className="flex flex-col gap-3"
+                        >
                           {group.label && (
                             <div className="flex items-center gap-2">
+                              {group.key === "favorites" && (
+                                <StarIcon className="size-3.5 fill-current text-amber-500" />
+                              )}
                               <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
                                 {group.label}
                               </span>
                               <span className="text-muted-foreground/60 text-xs tabular-nums">
                                 {group.projects.length}
                               </span>
+                              <span className="h-px flex-1 bg-border/60" />
                             </div>
                           )}
-                          <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-x-6 gap-y-6">
-                            {group.projects.map((project) => (
-                              <ProjectPreviewCard
-                                key={project.path}
-                                project={project}
-                                isFavorite={favorites.includes(project.path)}
-                                type={projectTypes[project.path] ?? null}
-                                typeOptions={typeOptions}
-                                onOpen={() => handleOpenRecent(project.path)}
-                                onRemove={() => setRemoveProjectTarget(project)}
-                                onToggleFavorite={() =>
-                                  toggleFavorite(project.path)
-                                }
-                                onSetType={(type) =>
-                                  void setProjectType(project.path, type)
-                                }
-                                onCustomType={() => {
-                                  setCustomType(
-                                    projectTypes[project.path] ?? "",
-                                  );
-                                  setTypePrompt(project.path);
-                                }}
-                                onMove={() => void handleMoveProject(project)}
-                                onDuplicate={() =>
-                                  void handleDuplicateProject(project)
-                                }
-                              />
-                            ))}
-                          </div>
-                        </div>
+                          {projectView === "list" ? (
+                            <div role="table" className="flex flex-col">
+                              {group.projects.map((project) => (
+                                <ProjectRow
+                                  key={project.path}
+                                  project={project}
+                                  isFavorite={favorites.includes(project.path)}
+                                  type={projectTypes[project.path] ?? null}
+                                  typeOptions={typeOptions}
+                                  actions={actionsFor(project)}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <div
+                              className="grid gap-5"
+                              style={{
+                                gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))`,
+                              }}
+                            >
+                              {group.projects.map((project) => (
+                                <ProjectPreviewCard
+                                  key={project.path}
+                                  project={project}
+                                  isFavorite={favorites.includes(project.path)}
+                                  type={projectTypes[project.path] ?? null}
+                                  typeOptions={typeOptions}
+                                  actions={actionsFor(project)}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </section>
                       ))}
                     </>
                   )}
@@ -1306,23 +1505,100 @@ async function computeProjectPreview(
   }
 }
 
-function ProjectPreviewCard({
-  project,
-  isFavorite,
-  type,
-  typeOptions,
-  onOpen,
-  onRemove,
-  onToggleFavorite,
-  onSetType,
-  onCustomType,
-  onMove,
-  onDuplicate,
-}: {
-  project: RecentProject;
-  isFavorite: boolean;
-  type: string | null;
-  typeOptions: string[];
+/** What the page says about a project besides its preview. */
+interface ProjectFacts {
+  /** Its folder is gone (moved or deleted outside the app). */
+  missing: boolean;
+  /** When one of its own files last changed. */
+  editedAt: number | null;
+  /** Conflicts waiting in a shared project's document. */
+  conflicts: number;
+}
+
+const projectFactsCache = new Map<string, ProjectFacts>();
+
+/** The newest change among the project's own files (not the folder's date,
+ *  which only moves when a file is added or removed). */
+async function projectEditedAt(path: string): Promise<number | null> {
+  let newest = await getProjectModifiedAt(path);
+  try {
+    for (const entry of await readDir(path)) {
+      if (!entry.isFile || !/\.(tex|bib|sty|cls|md)$/i.test(entry.name)) {
+        continue;
+      }
+      const info = (await stat(await join(path, entry.name))) as {
+        mtime?: unknown;
+      };
+      const at = statDateToMs(info.mtime);
+      if (at !== null && (newest === null || at > newest)) newest = at;
+    }
+  } catch {
+    // Unreadable: the folder's own date stands.
+  }
+  return newest;
+}
+
+async function readProjectFacts(
+  project: RecentProject,
+  shared: boolean,
+): Promise<ProjectFacts> {
+  if (!(await exists(project.path).catch(() => false))) {
+    return { missing: true, editedAt: null, conflicts: 0 };
+  }
+  const editedAt = await projectEditedAt(project.path);
+  let conflicts = 0;
+  if (shared) {
+    const saved = await loadDoc(project.path).catch(() => null);
+    if (saved) {
+      const doc = new Y.Doc();
+      Y.applyUpdate(doc, saved.data);
+      conflicts = openConflicts(doc);
+      doc.destroy();
+    }
+  }
+  return { missing: false, editedAt, conflicts };
+}
+
+function useProjectFacts(project: RecentProject, shared: boolean) {
+  const key = `${project.path}:${project.lastOpened}:${shared}`;
+  const [facts, setFacts] = useState<ProjectFacts | null>(
+    () => projectFactsCache.get(key) ?? null,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    const cached = projectFactsCache.get(key);
+    if (cached) {
+      setFacts(cached);
+      return;
+    }
+    readProjectFacts(project, shared)
+      .then((read) => {
+        projectFactsCache.set(key, read);
+        if (!cancelled) setFacts(read);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [key, project, shared]);
+  return facts;
+}
+
+/** Opens the project's compiled PDF in the system's viewer. */
+async function openProjectPdf(project: RecentProject) {
+  const pdf =
+    (await builtPdf(project.path)) ??
+    (await firstExistingPath(project.path, [["main.pdf"], ["document.pdf"]]));
+  if (!pdf) {
+    toast.info(`“${project.name}” has no PDF yet. Compile it first.`);
+    return;
+  }
+  await invoke("open_pdf_externally", { path: pdf }).catch((err) =>
+    toast.error(String(err)),
+  );
+}
+
+interface ProjectActions {
   onOpen: () => void;
   onRemove: () => void;
   onToggleFavorite: () => void;
@@ -1330,28 +1606,119 @@ function ProjectPreviewCard({
   onCustomType: () => void;
   onMove: () => void;
   onDuplicate: () => void;
+  onLocate: () => void;
+}
+
+/** The right-click menu, the same on a card and on a row. */
+function ProjectMenu({
+  project,
+  isFavorite,
+  type,
+  typeOptions,
+  missing,
+  actions,
+}: {
+  project: RecentProject;
+  isFavorite: boolean;
+  type: string | null;
+  typeOptions: string[];
+  missing: boolean;
+  actions: ProjectActions;
 }) {
-  const isShared = useProjectStore((s) =>
-    Object.values(s.sharedProjects).includes(project.path),
+  if (missing) {
+    return (
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={actions.onLocate}>Locate…</ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={actions.onRemove}>Remove…</ContextMenuItem>
+      </ContextMenuContent>
+    );
+  }
+  return (
+    <ContextMenuContent>
+      <ContextMenuItem onSelect={actions.onOpen}>Open</ContextMenuItem>
+      <ContextMenuItem onSelect={() => void openProjectPdf(project)}>
+        Open PDF
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={() => revealInFileManager(project.path)}>
+        {revealLabel()}
+      </ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuItem onSelect={actions.onToggleFavorite}>
+        {isFavorite ? "Remove from favourites" : "Add to favourites"}
+      </ContextMenuItem>
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>Type</ContextMenuSubTrigger>
+        <ContextMenuSubContent>
+          {typeOptions.map((suggestion) => (
+            <ContextMenuItem
+              key={suggestion}
+              onSelect={() => actions.onSetType(suggestion)}
+            >
+              {suggestion}
+              {type === suggestion && (
+                <CheckIcon className="ml-auto size-3.5" />
+              )}
+            </ContextMenuItem>
+          ))}
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={actions.onCustomType}>
+            Something else…
+          </ContextMenuItem>
+          {type && (
+            <ContextMenuItem onSelect={() => actions.onSetType(null)}>
+              Clear
+            </ContextMenuItem>
+          )}
+        </ContextMenuSubContent>
+      </ContextMenuSub>
+      <ContextMenuSeparator />
+      <ContextMenuItem onSelect={actions.onDuplicate}>
+        Duplicate
+      </ContextMenuItem>
+      <ContextMenuItem onSelect={actions.onMove}>Move to…</ContextMenuItem>
+      <ContextMenuSeparator />
+      <ContextMenuItem onSelect={actions.onRemove}>Remove…</ContextMenuItem>
+    </ContextMenuContent>
   );
+}
+
+/** "Shared", or what's waiting in it. */
+function SharedBadge({ conflicts }: { conflicts: number }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex w-fit shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 font-medium text-[10px]",
+        conflicts > 0
+          ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+          : "bg-muted text-muted-foreground",
+      )}
+      title={
+        conflicts > 0
+          ? `${conflicts} ${conflicts === 1 ? "conflict" : "conflicts"} to resolve`
+          : "Shared"
+      }
+    >
+      <UsersIcon className="size-3" />
+      {conflicts > 0 ? `${conflicts} to resolve` : "Shared"}
+    </span>
+  );
+}
+
+/** A project's preview, loaded once and kept for the session. */
+function useProjectPreview(project: RecentProject, enabled = true) {
   const [preview, setPreview] = useState<ProjectPreviewState>(() => {
     const cached = projectPreviewCache.get(projectPreviewCacheKey(project));
     return cached ? { status: "ready", data: cached } : { status: "loading" };
   });
-  const createdDateLabel =
-    preview.status === "ready"
-      ? formatProjectCreatedDate(preview.data.createdAt)
-      : "";
-
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
-    const cacheKey = projectPreviewCacheKey(project);
-    const cached = projectPreviewCache.get(cacheKey);
+    const cached = projectPreviewCache.get(projectPreviewCacheKey(project));
     if (cached) {
       setPreview({ status: "ready", data: cached });
       return;
     }
-
     setPreview({ status: "loading" });
     loadProjectPreview(project)
       .then((data) => {
@@ -1361,12 +1728,63 @@ function ProjectPreviewCard({
         log.warn(`Failed to load preview for ${project.path}: ${String(err)}`);
         if (!cancelled) setPreview({ status: "error" });
       });
-
     return () => {
       cancelled = true;
     };
-  }, [project]);
+  }, [project, enabled]);
+  return preview;
+}
 
+/** A small round button over a card's preview, shown on hover. */
+function CardButton({
+  label,
+  onClick,
+  className,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        "flex size-7 items-center justify-center rounded-full bg-background/90 text-foreground/80 shadow-sm ring-1 ring-border/60 backdrop-blur-sm transition-colors hover:bg-background hover:text-foreground",
+        className,
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ProjectPreviewCard({
+  project,
+  isFavorite,
+  type,
+  typeOptions,
+  actions,
+}: {
+  project: RecentProject;
+  isFavorite: boolean;
+  type: string | null;
+  typeOptions: string[];
+  actions: ProjectActions;
+}) {
+  const isShared = useProjectStore((s) =>
+    Object.values(s.sharedProjects).includes(project.path),
+  );
+  const facts = useProjectFacts(project, isShared);
+  const missing = facts?.missing ?? false;
+  const preview = useProjectPreview(project, !missing);
   const aspectRatio = previewAspectRatio(preview);
   const deck =
     preview.status === "ready" &&
@@ -1374,67 +1792,78 @@ function ProjectPreviewCard({
     isWide(preview.data.aspectRatio)
       ? preview.data
       : null;
+  const edited =
+    editedLabel(facts?.editedAt ?? null) ||
+    (preview.status === "ready"
+      ? formatProjectCreatedDate(preview.data.createdAt)
+      : "");
 
   return (
-    <div className="group min-w-0">
-      {/* The card is one uniform shape for the whole grid; the page inside it
-          is the part that varies. Letting the card itself take the page's
-          ratio was honest but restless to look at — an A4 card is 1.41x its
-          width and a 16:9 deck only 0.56x, so a mixed row was 2.5x apart in
-          height however it was aligned. A 3:4 card is near enough to A4 that
-          an ordinary document still fills it edge to edge. */}
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          className={cn(
+            "group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-xs transition-all duration-200",
+            "focus-within:ring-2 focus-within:ring-ring/40 hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-lg",
+            missing && "opacity-80",
+          )}
+        >
+          {/* The preview keeps one 3:4 shape for the whole grid; what's in it
+              varies. A page sits on the card like paper on a desk; a deck
+              shows its first two slides (DeckSurface). */}
           <div className="relative aspect-[3/4] w-full">
             <button
-              className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-muted/20 text-left transition-all duration-200 hover:border-foreground/20 hover:shadow-md"
-              onClick={onOpen}
+              type="button"
+              className="absolute inset-0 overflow-hidden bg-muted/40 text-left outline-none"
+              onClick={missing ? actions.onLocate : actions.onOpen}
+              aria-label={
+                missing ? `Locate ${project.name}` : `Open ${project.name}`
+              }
             >
-              {deck ? (
+              {missing ? (
+                <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center text-muted-foreground">
+                  <FolderXIcon className="size-6" />
+                  <span className="font-medium text-xs">Folder not found</span>
+                  <span className="rounded-md border bg-background px-2 py-1 text-[11px] text-foreground">
+                    Locate…
+                  </span>
+                </div>
+              ) : deck ? (
                 <DeckSurface
                   deck={deck}
                   slides={type === "Presentation" || deck.aspectRatio > 1.5}
                   projectName={project.name}
                 />
               ) : (
-                <div
-                  className={cn(
-                    "overflow-hidden",
-                    pageFit(aspectRatio) === "height" ? "h-full" : "w-full",
-                  )}
-                  style={{ aspectRatio }}
-                >
-                  <ProjectPreviewSurface
-                    preview={preview}
-                    projectName={project.name}
-                  />
+                <div className="absolute inset-3 flex items-center justify-center">
+                  <div
+                    className={cn(
+                      "overflow-hidden rounded-[3px] bg-background shadow-sm ring-1 ring-border/50",
+                      pageFit(aspectRatio) === "height" ? "h-full" : "w-full",
+                    )}
+                    style={{ aspectRatio }}
+                  >
+                    <ProjectPreviewSurface
+                      preview={preview}
+                      projectName={project.name}
+                    />
+                  </div>
                 </div>
               )}
             </button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-2 right-2 size-7 bg-background/80 opacity-0 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
-              onClick={onRemove}
-              aria-label={`Remove ${project.name}`}
-            >
-              <XIcon className="size-3.5" />
-            </Button>
-            {/* A star stays visible once set — it is the state, not a hover
-            affordance. Unstarred, it appears on hover like the remove button. */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "absolute top-2 left-2 size-7 bg-background/80 shadow-sm backdrop-blur-sm transition-opacity focus-visible:opacity-100 group-hover:opacity-100",
-                isFavorite ? "opacity-100" : "opacity-0",
-              )}
-              onClick={onToggleFavorite}
-              aria-label={
+
+            {/* Star stays once set: it's the state, not a hover affordance. */}
+            <CardButton
+              label={
                 isFavorite
                   ? `Remove ${project.name} from favourites`
                   : `Add ${project.name} to favourites`
               }
+              onClick={actions.onToggleFavorite}
+              className={cn(
+                "absolute top-2 left-2 transition-opacity group-hover:opacity-100",
+                isFavorite ? "opacity-100" : "opacity-0",
+              )}
             >
               <StarIcon
                 className={cn(
@@ -1442,67 +1871,212 @@ function ProjectPreviewCard({
                   isFavorite && "fill-current text-amber-500",
                 )}
               />
-            </Button>
-            {isShared && (
-              <span className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-background/85 px-1.5 py-0.5 font-medium text-[10px] text-muted-foreground shadow-sm backdrop-blur-sm">
-                <UsersIcon className="size-3" />
-                Shared
-              </span>
+            </CardButton>
+            <CardButton
+              label={`Remove ${project.name}`}
+              onClick={actions.onRemove}
+              className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100"
+            >
+              <XIcon className="size-3.5" />
+            </CardButton>
+            {!missing && (
+              <div className="absolute right-2 bottom-2 flex gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <CardButton
+                  label="Open PDF"
+                  onClick={() => void openProjectPdf(project)}
+                >
+                  <FileTextIcon className="size-3.5" />
+                </CardButton>
+                <CardButton
+                  label={revealLabel()}
+                  onClick={() => revealInFileManager(project.path)}
+                >
+                  <FolderOpenIcon className="size-3.5" />
+                </CardButton>
+                <CardButton label="Duplicate" onClick={actions.onDuplicate}>
+                  <CopyIcon className="size-3.5" />
+                </CardButton>
+              </div>
             )}
           </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem onSelect={onToggleFavorite}>
-            {isFavorite ? "Remove from favourites" : "Add to favourites"}
-          </ContextMenuItem>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>Type</ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-              {typeOptions.map((suggestion) => (
-                <ContextMenuItem
-                  key={suggestion}
-                  onSelect={() => onSetType(suggestion)}
-                >
-                  {suggestion}
-                  {type === suggestion && (
-                    <CheckIcon className="ml-auto size-3.5" />
-                  )}
-                </ContextMenuItem>
-              ))}
-              <ContextMenuSeparator />
-              <ContextMenuItem onSelect={onCustomType}>
-                Something else…
-              </ContextMenuItem>
+
+          <div className="flex h-14 flex-col justify-center gap-0.5 border-border/60 border-t px-3">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <button
+                type="button"
+                className="min-w-0 flex-1 truncate text-left font-medium text-sm leading-tight hover:underline"
+                onClick={missing ? actions.onLocate : actions.onOpen}
+                title={project.path}
+              >
+                {project.name}
+              </button>
+              {isShared && <SharedBadge conflicts={facts?.conflicts ?? 0} />}
+            </div>
+            <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
+              <span className="truncate">
+                {missing ? "Folder not found" : edited}
+              </span>
               {type && (
-                <ContextMenuItem onSelect={() => onSetType(null)}>
-                  Clear
-                </ContextMenuItem>
+                <>
+                  <span className="text-muted-foreground/40">·</span>
+                  <span className="truncate">{type}</span>
+                </>
               )}
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <ContextMenuSeparator />
-          <ContextMenuItem onSelect={onDuplicate}>Duplicate</ContextMenuItem>
-          <ContextMenuItem onSelect={onMove}>Move to…</ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem onSelect={onRemove}>Remove…</ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
-      <button
-        className="mt-2 block w-full truncate text-left font-medium text-sm leading-tight hover:underline"
-        onClick={onOpen}
-      >
-        {project.name}
-      </button>
-      <div className="mt-1 flex h-4 items-center gap-1.5 text-left text-muted-foreground text-xs">
-        <span className="truncate">{createdDateLabel}</span>
-        {type && (
-          <>
-            <span className="text-muted-foreground/40">·</span>
-            <span className="truncate">{type}</span>
-          </>
-        )}
-      </div>
+            </div>
+          </div>
+        </div>
+      </ContextMenuTrigger>
+      <ProjectMenu
+        project={project}
+        isFavorite={isFavorite}
+        type={type}
+        typeOptions={typeOptions}
+        missing={missing}
+        actions={actions}
+      />
+    </ContextMenu>
+  );
+}
+
+/** The list view's columns, the same on every row and its headings. */
+const LIST_COLUMNS =
+  "grid-cols-[2.25rem_minmax(0,1fr)_8rem_9rem_7.5rem_6.5rem]";
+
+/** The list view's column headings. */
+function ProjectListHeader() {
+  return (
+    <div
+      role="row"
+      className={cn(
+        "grid items-center gap-3 border-border/60 border-b px-2 pb-1.5 font-medium text-muted-foreground text-xs",
+        LIST_COLUMNS,
+      )}
+    >
+      <span />
+      <span>Name</span>
+      <span>Type</span>
+      <span>Edited</span>
+      <span>Sharing</span>
+      <span />
     </div>
+  );
+}
+
+/** A project as a row of the list view. */
+function ProjectRow({
+  project,
+  isFavorite,
+  type,
+  typeOptions,
+  actions,
+}: {
+  project: RecentProject;
+  isFavorite: boolean;
+  type: string | null;
+  typeOptions: string[];
+  actions: ProjectActions;
+}) {
+  const isShared = useProjectStore((s) =>
+    Object.values(s.sharedProjects).includes(project.path),
+  );
+  const facts = useProjectFacts(project, isShared);
+  const missing = facts?.missing ?? false;
+  const preview = useProjectPreview(project, !missing);
+  const thumb =
+    preview.status === "ready" && preview.data.kind === "pdf"
+      ? preview.data.url
+      : null;
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          role="row"
+          className={cn(
+            "group grid h-14 cursor-pointer items-center gap-3 rounded-lg px-2 hover:bg-muted/60",
+            LIST_COLUMNS,
+          )}
+          onClick={missing ? actions.onLocate : actions.onOpen}
+          onKeyDown={(e) => {
+            if (e.key === "Enter")
+              (missing ? actions.onLocate : actions.onOpen)();
+          }}
+          tabIndex={0}
+        >
+          <div className="flex h-11 w-9 items-center justify-center overflow-hidden rounded-[3px] bg-muted ring-1 ring-border/60">
+            {missing ? (
+              <FolderXIcon className="size-4 text-muted-foreground" />
+            ) : thumb ? (
+              <img
+                src={thumb}
+                alt=""
+                className="h-full w-full bg-white object-cover object-top"
+              />
+            ) : (
+              <FileTextIcon className="size-4 text-muted-foreground" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-1.5">
+              {isFavorite && (
+                <StarIcon className="size-3 shrink-0 fill-current text-amber-500" />
+              )}
+              <span className="truncate font-medium text-sm">
+                {project.name}
+              </span>
+            </div>
+            <div
+              className="truncate text-muted-foreground text-xs"
+              title={project.path}
+            >
+              {project.path}
+            </div>
+          </div>
+          <span className="truncate text-muted-foreground text-xs">
+            {type ?? ""}
+          </span>
+          <span className="truncate text-muted-foreground text-xs">
+            {missing
+              ? "Folder not found"
+              : editedLabel(facts?.editedAt ?? null)}
+          </span>
+          <span>
+            {isShared && <SharedBadge conflicts={facts?.conflicts ?? 0} />}
+          </span>
+          <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            {!missing && (
+              <>
+                <CardButton
+                  label="Open PDF"
+                  onClick={() => void openProjectPdf(project)}
+                >
+                  <FileTextIcon className="size-3.5" />
+                </CardButton>
+                <CardButton
+                  label={revealLabel()}
+                  onClick={() => revealInFileManager(project.path)}
+                >
+                  <FolderOpenIcon className="size-3.5" />
+                </CardButton>
+              </>
+            )}
+            <CardButton
+              label={`Remove ${project.name}`}
+              onClick={actions.onRemove}
+            >
+              <XIcon className="size-3.5" />
+            </CardButton>
+          </div>
+        </div>
+      </ContextMenuTrigger>
+      <ProjectMenu
+        project={project}
+        isFavorite={isFavorite}
+        type={type}
+        typeOptions={typeOptions}
+        missing={missing}
+        actions={actions}
+      />
+    </ContextMenu>
   );
 }
 

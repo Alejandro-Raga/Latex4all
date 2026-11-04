@@ -43,6 +43,8 @@ import { BugReportDialog, useBugReport } from "@/components/bug-report-dialog";
 import { useAiUsage } from "@/lib/ai-usage";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 import { DeckSurface } from "@/components/deck-surface";
+import { ProjectPicker } from "@/components/project-picker";
+import { useProjectStore } from "@/stores/project-store";
 
 // As the app does at startup.
 installWheelSideways();
@@ -207,7 +209,39 @@ function mountEditor(el: HTMLDivElement | null) {
   });
 }
 
-if (scenario === "deck-cards") {
+if (scenario === "projects") {
+  const now = Date.now();
+  const projects = [
+    ["Conference talk", "Presentation"],
+    ["Paper on corporate science", "Article"],
+    ["Old thesis", "Thesis"],
+    ["Grant proposal", null],
+    ["Reading notes", null],
+  ] as const;
+  useProjectStore.setState({
+    recentProjects: projects.map(([name], i) => ({
+      path: `/Users/me/Projects/${name}`,
+      name,
+      lastOpened: now - i * 3_600_000,
+    })),
+    projectTypes: Object.fromEntries(
+      projects
+        .filter(([, type]) => type)
+        .map(([name, type]) => [`/Users/me/Projects/${name}`, type as string]),
+    ),
+    favorites: ["/Users/me/Projects/Paper on corporate science"],
+    sharedProjects: { abc: "/Users/me/Projects/Conference talk" },
+    projectView: (params.get("view") as "grid" | "list") ?? "grid",
+    typeFilter: null,
+  });
+  root.render(
+    <ThemeProvider attribute="class" defaultTheme="light">
+      <div style={{ height: "100vh", ...chrome }}>
+        <ProjectPicker />
+      </div>
+    </ThemeProvider>,
+  );
+} else if (scenario === "deck-cards") {
   // A slide of each shape, drawn here: what MuPDF would hand the card.
   const slide = (aspect: number, label: string) => {
     const canvas = document.createElement("canvas");

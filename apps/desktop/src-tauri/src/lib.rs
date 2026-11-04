@@ -171,6 +171,37 @@ fn reveal_in_file_manager(path: String) -> Result<(), String> {
         .map_err(|e| format!("Couldn't open the file manager: {}", e))
 }
 
+/// Opens a PDF in the system's PDF viewer. PDFs only: this is for a
+/// project's compiled document, and must not run anything.
+#[tauri::command]
+fn open_pdf_externally(path: String) -> Result<(), String> {
+    let target = Path::new(&path);
+    let is_pdf = target
+        .extension()
+        .map(|e| e.eq_ignore_ascii_case("pdf"))
+        .unwrap_or(false);
+    if !is_pdf || !target.is_file() {
+        return Err("There's no PDF there.".into());
+    }
+    #[cfg(target_os = "macos")]
+    let result = std::process::Command::new("open").arg(target).spawn();
+    #[cfg(target_os = "windows")]
+    let result = {
+        // `start` is a cmd builtin; the empty "" is its window title.
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("cmd")
+            .args(["/C", "start", ""])
+            .arg(target)
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+            .spawn()
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let result = std::process::Command::new("xdg-open").arg(target).spawn();
+    result
+        .map(|_| ())
+        .map_err(|e| format!("Couldn't open the PDF: {}", e))
+}
+
 #[tauri::command]
 fn open_in_editor(
     editor_id: String,
@@ -728,6 +759,7 @@ pub fn run() {
             open_in_editor,
             latex::project_build_dir,
             reveal_in_file_manager,
+            open_pdf_externally,
             js_log,
             read_clipboard_file_paths,
             dictionary::lookup_dictionary_definition,

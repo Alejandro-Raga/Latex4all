@@ -23,6 +23,13 @@ tag.
 
 ### Added
 
+- The projects page, redone: cards that read as one piece, with when
+  each project was last edited ("Edited 2 h ago"); type chips to show
+  one type at a time; a sort menu, a list view and a card-size slider;
+  Open PDF, Show in Finder and Duplicate on hover; shared projects say
+  when they have conflicts to resolve; a project whose folder is gone
+  says so and can be found again with Locate…; and Join and Import are
+  under one Add menu next to New.
 - Remove… on a project in All Projects (right-click, or its ×) can also
   move its folder to the Trash, from where it can be put back, and stop
   syncing a shared project on this computer. Collaborators keep their

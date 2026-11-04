@@ -30,6 +30,15 @@ interface ProjectState {
   /** Shared project id → the folder it lives in on this device, so joining a
    *  project that's already here opens it rather than downloading a copy. */
   sharedProjects: Record<string, string>;
+  /** Cards or a list, on the projects page. */
+  projectView: "grid" | "list";
+  /** The cards' width in pixels (the zoom slider). */
+  cardSize: number;
+  /** The type the page is showing ("No type" for untyped), or null for all. */
+  typeFilter: string | null;
+  setProjectView: (view: "grid" | "list") => void;
+  setCardSize: (size: number) => void;
+  setTypeFilter: (type: string | null) => void;
   /**
    * `times` is for projects the app discovered rather than watched being
    * opened: without it every one is stamped with the same instant and ordering
@@ -58,6 +67,11 @@ interface ProjectState {
  * Favourites are held outside this limit.
  */
 export const MAX_RECENT = 500;
+
+/** The zoom slider's range for the project cards, in pixels wide. */
+export const CARD_SIZE_MIN = 140;
+export const CARD_SIZE_MAX = 320;
+export const CARD_SIZE_DEFAULT = 190;
 
 function normalizeRecentPath(path: string): string {
   return path.replace(/[\\/]+$/, "");
@@ -118,6 +132,17 @@ export const useProjectStore = create<ProjectState>()(
       createdAt: {},
       projectSort: "recent",
       sharedProjects: {},
+      projectView: "grid",
+      cardSize: CARD_SIZE_DEFAULT,
+      typeFilter: null,
+      setProjectView: (view) => set({ projectView: view }),
+      setCardSize: (size) =>
+        set({
+          cardSize: Math.round(
+            Math.min(CARD_SIZE_MAX, Math.max(CARD_SIZE_MIN, size)),
+          ),
+        }),
+      setTypeFilter: (type) => set({ typeFilter: type }),
 
       rememberSharedProject: (projectId, path) =>
         set((state) => ({
@@ -273,6 +298,9 @@ export const useProjectStore = create<ProjectState>()(
         createdAt: state.createdAt,
         projectSort: state.projectSort,
         sharedProjects: state.sharedProjects,
+        projectView: state.projectView,
+        cardSize: state.cardSize,
+        typeFilter: state.typeFilter,
       }),
     },
   ),

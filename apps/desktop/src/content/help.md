@@ -5,10 +5,12 @@ Latex4All is for writing research in LaTeX with your sources close at hand. Your
 Everything starts on the **All projects** page:
 
 - **New** starts a project, blank or from a template.
-- **Import** opens a folder already on your computer.
-- **Join** opens a project someone shared with you.
+- **Add → Import a folder** opens a folder already on your computer.
+- **Add → Join a shared project** opens a project someone shared with you.
 
-Right-click a project to star it, set its type, duplicate it, move it or remove it from the list. ⌘K searches projects, files, notes and commands.
+The chips above the projects show one type at a time. Next to them you can change the order, switch between cards and a list, and make the cards bigger or smaller. Each project says when it was last edited; a shared one says if it has conflicts to resolve. A project whose folder was moved or deleted outside Latex4All says so: click it to find it again.
+
+Hover a card for Open PDF, Show in Finder and Duplicate. Right-click a project for those and to star it, set its type, move it or remove it. **Remove…** can also move the folder to the Trash and stop syncing a shared project on this computer. ⌘K searches projects, files, notes and commands.
 
 Inside a project, your files are on the left, the editor in the middle and the PDF on the right. The icons on the far right open three side panels: **Reference** (your Zotero library), **Vault** (your notes) and **Notes** (comments on your text).
 

@@ -27,6 +27,33 @@
             if (cmd.startsWith("plugin:event")) return 0;
             return null;
           }
+          // The projects page: folders that exist (but one), edited at
+          // different times, nothing to preview.
+          if (location.search.includes("scenario=projects")) {
+            if (cmd.startsWith("plugin:event")) return 0;
+            if (cmd === "plugin:app|version") return "3.0.0";
+            if (cmd === "plugin:fs|exists") {
+              return !String(args?.path ?? "").includes("Old thesis");
+            }
+            if (cmd === "plugin:fs|stat") {
+              const path = String(args?.path ?? "");
+              const hours = path.includes("talk") ? 2 : path.includes("Paper") ? 30 : 200;
+              const at = Date.now() - hours * 3_600_000;
+              return { mtime: at, birthtime: at - 86_400_000 * 40, isFile: false, isDirectory: true };
+            }
+            if (cmd === "plugin:fs|read_dir") return [];
+            if (cmd === "plugin:fs|read_text_file") {
+              const path = String(args?.path ?? "");
+              const type = path.includes("talk") ? "Presentation"
+                : path.includes("Paper") ? "Article"
+                : path.includes("thesis") ? "Thesis" : null;
+              if (!path.endsWith("project.json") || !type) throw new Error("no file");
+              return Array.from(new TextEncoder().encode(JSON.stringify({ type })));
+            }
+            if (cmd === "collab_load_doc") return null;
+            if (/^(list|check|detect)/.test(cmd)) return [];
+            throw new Error("no native side in tests");
+          }
           if (workspace) {
             if (cmd.startsWith("plugin:event")) return 0;
             return /^(list|check|get_spelling|detect|history_list|slash)/.test(cmd)
