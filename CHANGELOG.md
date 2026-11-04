@@ -24,10 +24,12 @@ tag.
 ### Added
 
 - Shared projects: **Share → Files to sync** picks which files sync on
-  this computer. Leave out the ones you keep in step with Dropbox or
-  similar (a folder covers everything in it), and only the rest, such as
-  the main .tex, syncs live. Collaborators keep their copies; ticking a
-  file again shares the copy on this computer.
+  this computer, before you share (so they're never sent) or at any time
+  after. Leave out the ones you keep in step with Dropbox or similar (a
+  folder covers everything in it), and only the rest, such as the main
+  .tex, syncs live. Collaborators keep their copies; ticking a file again
+  shares the copy on this computer. Joining, **Choose which files to
+  download** does the same before anything is downloaded.
 - Help is rewritten as a shorter guide to what each part of the app is
   for.
 - Highlights in a vault note are cards: the passage in its Zotero color

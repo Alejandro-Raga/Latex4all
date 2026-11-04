@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { homeDir } from "@tauri-apps/api/path";
 import * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
-import { metaMap } from "@/lib/collab/project-doc";
+import { layout, metaMap } from "@/lib/collab/project-doc";
 import { type Known, ProjectSync } from "@/lib/collab/project-sync";
 import {
   type SessionStatus,
@@ -114,7 +114,15 @@ interface CollabState {
   setColor: (color: string) => void;
   share: () => Promise<void>;
   /** `destParent` is the folder to save it in; defaults to the usual one. */
-  join: (link: string, destParent?: string) => Promise<void>;
+  /**
+   * `chooseFiles`, if given, is shown the project's files before anything is
+   * written, and answers which to leave out (null: don't join after all).
+   */
+  join: (
+    link: string,
+    destParent?: string,
+    chooseFiles?: (paths: string[]) => Promise<string[] | null>,
+  ) => Promise<void>;
   stopSyncing: () => Promise<void>;
 }
 
@@ -710,7 +718,7 @@ export const useCollabStore = create<CollabState>()(
           }
         },
 
-        join: async (text, destParent) => {
+        join: async (text, destParent, chooseFiles) => {
           if (get().progress) return;
           const info = await parseLink(text);
           const projects = useProjectStore.getState();
@@ -766,9 +774,23 @@ export const useCollabStore = create<CollabState>()(
             try {
               await connect(info.link, 0, null);
               await caughtUp;
+              clearTimeout(timeout);
+              // Nothing is on disk yet: what's left out is never downloaded.
+              let notSynced: string[] = [];
+              if (chooseFiles) {
+                const paths = [...layout(session.doc).keys()];
+                set({ progress: "Choosing files…" });
+                const chosen = await chooseFiles(paths);
+                if (chosen === null) return;
+                notSynced = chosen;
+                set({ progress: "Downloading…" });
+              }
               const name = metaMap(session.doc).get("name") || "Shared project";
               const parent = destParent ?? (await defaultProjectFolder());
               path = await createProjectFolder(parent, name);
+              if (notSynced.length) {
+                useSettingsStore.getState().setNotSynced(path, notSynced);
+              }
               await writeLink(path, info.link);
               await saveDoc(
                 path,

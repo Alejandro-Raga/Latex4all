@@ -225,6 +225,21 @@ export function CollabButton() {
   );
 
   const shared = status !== "none";
+  // Before sharing too: what's left out is never sent.
+  const filesButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      className="w-full"
+      onClick={() => setChoosingFiles(true)}
+      disabled={progress !== null}
+    >
+      Files to sync
+      {leftOut > 0 && (
+        <span className="text-muted-foreground">· {leftOut} left out</span>
+      )}
+    </Button>
+  );
   const failing = warnings.some((w) => w.level === "error");
   const warningColor = failing ? "text-red-500" : "text-amber-500";
 
@@ -276,6 +291,7 @@ export function CollabButton() {
         {!shared ? (
           <>
             <YouRow />
+            {filesButton}
             <Button
               className="w-full"
               size="sm"
@@ -373,19 +389,7 @@ export function CollabButton() {
             )}
             <YouRow />
             <ConnectionDetails />
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() => setChoosingFiles(true)}
-            >
-              Files to sync
-              {leftOut > 0 && (
-                <span className="text-muted-foreground">
-                  · {leftOut} left out
-                </span>
-              )}
-            </Button>
+            {filesButton}
             <Button
               variant="outline"
               size="sm"

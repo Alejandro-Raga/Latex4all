@@ -19,6 +19,14 @@ import {
   useCollabStore,
 } from "@/stores/collab-store";
 import { useProjectStore } from "@/stores/project-store";
+import { FileChoices } from "./sync-files-dialog";
+
+/** The project's files, shown before downloading, and the answer to give. */
+interface Choosing {
+  paths: string[];
+  notSynced: string[];
+  answer: (notSynced: string[] | null) => void;
+}
 
 /** A shared project link: the relay, /p/<32 hex>, and #<key>. */
 const LINK =
@@ -42,6 +50,8 @@ export function JoinDialog({
   const [link, setLink] = useState("");
   const [folder, setFolder] = useState<string | null>(lastProjectFolder);
   const [home, setHome] = useState<string | null>(null);
+  const [pickFiles, setPickFiles] = useState(false);
+  const [choosing, setChoosing] = useState<Choosing | null>(null);
   const joining = progress !== null;
   const invalid = link.trim() !== "" && !looksLikeLink(link);
 
@@ -72,7 +82,20 @@ export function JoinDialog({
 
   const handleJoin = async () => {
     try {
-      await join(link.trim(), folder ?? undefined);
+      const chooseFiles = pickFiles
+        ? (paths: string[]) =>
+            new Promise<string[] | null>((resolve) =>
+              setChoosing({
+                paths,
+                notSynced: [],
+                answer: (notSynced) => {
+                  setChoosing(null);
+                  resolve(notSynced);
+                },
+              }),
+            )
+        : undefined;
+      await join(link.trim(), folder ?? undefined, chooseFiles);
       setLink("");
       onOpenChange(false);
     } catch (err) {
@@ -96,87 +119,127 @@ export function JoinDialog({
             Paste the invite link you were sent.
           </DialogDescription>
         </DialogHeader>
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (looksLikeLink(link) && !joining) handleJoin();
-          }}
-        >
-          <div className="space-y-1.5">
-            <Label htmlFor="join-link">Invite link</Label>
-            {/* Pasted with ⌘V into the box, which has focus: reading the
-                clipboard from the page would make macOS ask first. */}
-            <Input
-              id="join-link"
-              autoFocus
-              value={link}
-              onChange={(e) => setLink(e.target.value)}
-              placeholder="Paste it here (⌘V)"
-              aria-invalid={invalid}
-              className="font-mono text-xs"
-              disabled={joining}
+        {choosing ? (
+          <div className="space-y-4">
+            <p className="text-muted-foreground text-sm">
+              Untick the files you'll get another way, such as Dropbox. They
+              aren't downloaded or synced on this computer.
+            </p>
+            <FileChoices
+              paths={choosing.paths}
+              notSynced={choosing.notSynced}
+              onChange={(notSynced) => setChoosing({ ...choosing, notSynced })}
             />
-            {invalid && (
-              <p className="text-destructive text-xs">
-                That isn't a shared project link.
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="join-name">Your name</Label>
-            <div className="relative">
-              <span
-                className="absolute top-1/2 left-3 size-2.5 -translate-y-1/2 rounded-full"
-                style={{ backgroundColor: color || PEER_COLORS[0] }}
-                aria-hidden="true"
-              />
-              <Input
-                id="join-name"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="How others see you"
-                className="pl-7"
-                disabled={joining}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Save in</Label>
-            <div className="flex items-center gap-2 rounded-md border border-input px-3 py-1.5">
-              <FolderOpenIcon className="size-4 shrink-0 text-muted-foreground" />
-              <span
-                className="min-w-0 flex-1 truncate text-sm"
-                title={folder ?? undefined}
-                dir="rtl"
-              >
-                {/* rtl keeps the end of a long path in view */}
-                <bdi>{shownFolder ?? "…"}</bdi>
-              </span>
+            <div className="flex gap-2">
               <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 shrink-0 px-2 text-xs"
-                onClick={chooseFolder}
-                disabled={joining}
+                variant="outline"
+                className="flex-1"
+                onClick={() => choosing.answer(null)}
               >
-                Change
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => choosing.answer(choosing.notSynced)}
+              >
+                Download
               </Button>
             </div>
           </div>
-
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={!looksLikeLink(link) || joining}
+        ) : (
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (looksLikeLink(link) && !joining) handleJoin();
+            }}
           >
-            {joining && <Loader2Icon className="size-4 animate-spin" />}
-            {progress ?? "Join"}
-          </Button>
-        </form>
+            <div className="space-y-1.5">
+              <Label htmlFor="join-link">Invite link</Label>
+              {/* Pasted with ⌘V into the box, which has focus: reading the
+                clipboard from the page would make macOS ask first. */}
+              <Input
+                id="join-link"
+                autoFocus
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                placeholder="Paste it here (⌘V)"
+                aria-invalid={invalid}
+                className="font-mono text-xs"
+                disabled={joining}
+              />
+              {invalid && (
+                <p className="text-destructive text-xs">
+                  That isn't a shared project link.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="join-name">Your name</Label>
+              <div className="relative">
+                <span
+                  className="absolute top-1/2 left-3 size-2.5 -translate-y-1/2 rounded-full"
+                  style={{ backgroundColor: color || PEER_COLORS[0] }}
+                  aria-hidden="true"
+                />
+                <Input
+                  id="join-name"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="How others see you"
+                  className="pl-7"
+                  disabled={joining}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Save in</Label>
+              <div className="flex items-center gap-2 rounded-md border border-input px-3 py-1.5">
+                <FolderOpenIcon className="size-4 shrink-0 text-muted-foreground" />
+                <span
+                  className="min-w-0 flex-1 truncate text-sm"
+                  title={folder ?? undefined}
+                  dir="rtl"
+                >
+                  {/* rtl keeps the end of a long path in view */}
+                  <bdi>{shownFolder ?? "…"}</bdi>
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 shrink-0 px-2 text-xs"
+                  onClick={chooseFolder}
+                  disabled={joining}
+                >
+                  Change
+                </Button>
+              </div>
+            </div>
+
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-3.5 accent-primary"
+                checked={pickFiles}
+                onChange={(e) => setPickFiles(e.currentTarget.checked)}
+                disabled={joining}
+              />
+              Choose which files to download
+            </label>
+
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={!looksLikeLink(link) || joining}
+            >
+              {joining && <Loader2Icon className="size-4 animate-spin" />}
+              {progress ?? "Join"}
+            </Button>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );
