@@ -94,6 +94,9 @@ tag.
 
 ### Changed
 
+- Presentations on the projects page show their first two slides, one
+  above the other, and how many slides there are, instead of a thin
+  strip in a tall card.
 - Fewer "(conflicted copy)" files: when a text file on this computer
   differs from the shared one the first time they meet (a folder brought
   by Dropbox, or joined into), the shared version stays and yours is

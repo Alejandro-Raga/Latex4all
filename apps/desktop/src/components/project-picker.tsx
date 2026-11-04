@@ -60,6 +60,7 @@ import {
   pageFit,
   texSourceAspectRatio,
 } from "@/lib/preview-aspect-ratio";
+import { DeckSurface, isWide } from "@/components/deck-surface";
 import { compileLatex } from "@/lib/latex-compiler";
 import { getMupdfClient } from "@/lib/mupdf/mupdf-client";
 import { exists, join } from "@/lib/tauri/fs";
@@ -113,7 +114,14 @@ type RecentProject = {
 type ProjectPreviewData = {
   createdAt: number | null;
 } & (
-  | { kind: "pdf"; url: string; aspectRatio: number }
+  | {
+      kind: "pdf";
+      url: string;
+      aspectRatio: number;
+      pages: number;
+      /** A wide document's second page, shown under the first. */
+      nextUrl?: string;
+    }
   | { kind: "tex"; fileName: string; lines: string[]; aspectRatio: number }
   | { kind: "empty" }
 );
@@ -966,7 +974,12 @@ async function builtPdf(projectPath: string): Promise<string | null> {
   }
 }
 
-type RenderedThumbnail = { url: string; aspectRatio: number };
+type RenderedThumbnail = {
+  url: string;
+  aspectRatio: number;
+  pages: number;
+  nextUrl?: string;
+};
 
 async function renderPdfThumbnailFromBytes(
   bytes: Uint8Array,
@@ -982,12 +995,21 @@ async function renderPdfThumbnailFromBytes(
     // before rendering: both need the document open, and this is the cheaper
     // of the two if the render throws.
     const { width, height } = await client.getPageSize(docId, 0);
-    const pngBuffer = await client.renderThumbnail(docId, 0, 420);
-    const blob = new Blob([new Uint8Array(pngBuffer)], { type: "image/png" });
-    return {
-      url: URL.createObjectURL(blob),
-      aspectRatio: pageAspectRatio(width, height),
+    const aspectRatio = pageAspectRatio(width, height);
+    const pages = await client.countPages(docId).catch(() => 1);
+    const render = async (page: number) => {
+      const png = await client.renderThumbnail(docId as number, page, 420);
+      return URL.createObjectURL(
+        new Blob([new Uint8Array(png)], { type: "image/png" }),
+      );
     };
+    const url = await render(0);
+    // A deck shows its first two slides, one above the other.
+    const nextUrl =
+      isWide(aspectRatio) && pages > 1
+        ? await render(1).catch(() => undefined)
+        : undefined;
+    return { url, aspectRatio, pages, nextUrl };
   } finally {
     if (docId !== null) {
       await client.closeDocument(docId).catch(() => {});
@@ -1242,6 +1264,12 @@ function ProjectPreviewCard({
   }, [project]);
 
   const aspectRatio = previewAspectRatio(preview);
+  const deck =
+    preview.status === "ready" &&
+    preview.data.kind === "pdf" &&
+    isWide(preview.data.aspectRatio)
+      ? preview.data
+      : null;
 
   return (
     <div className="group min-w-0">
@@ -1258,18 +1286,26 @@ function ProjectPreviewCard({
               className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-muted/20 text-left transition-all duration-200 hover:border-foreground/20 hover:shadow-md"
               onClick={onOpen}
             >
-              <div
-                className={cn(
-                  "overflow-hidden",
-                  pageFit(aspectRatio) === "height" ? "h-full" : "w-full",
-                )}
-                style={{ aspectRatio }}
-              >
-                <ProjectPreviewSurface
-                  preview={preview}
+              {deck ? (
+                <DeckSurface
+                  deck={deck}
+                  slides={type === "Presentation" || deck.aspectRatio > 1.5}
                   projectName={project.name}
                 />
-              </div>
+              ) : (
+                <div
+                  className={cn(
+                    "overflow-hidden",
+                    pageFit(aspectRatio) === "height" ? "h-full" : "w-full",
+                  )}
+                  style={{ aspectRatio }}
+                >
+                  <ProjectPreviewSurface
+                    preview={preview}
+                    projectName={project.name}
+                  />
+                </div>
+              )}
             </button>
             <Button
               variant="ghost"

@@ -42,6 +42,7 @@ import { HelpDialog, useHelp } from "@/components/help-view";
 import { BugReportDialog, useBugReport } from "@/components/bug-report-dialog";
 import { useAiUsage } from "@/lib/ai-usage";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
+import { DeckSurface } from "@/components/deck-surface";
 
 // As the app does at startup.
 installWheelSideways();
@@ -206,7 +207,50 @@ function mountEditor(el: HTMLDivElement | null) {
   });
 }
 
-if (scenario === "theme") {
+if (scenario === "deck-cards") {
+  // A slide of each shape, drawn here: what MuPDF would hand the card.
+  const slide = (aspect: number, label: string) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 420;
+    canvas.height = Math.round(420 / aspect);
+    const g = canvas.getContext("2d") as CanvasRenderingContext2D;
+    g.fillStyle = "#1e3a8a";
+    g.fillRect(0, 0, canvas.width, canvas.height);
+    g.fillStyle = "#fff";
+    g.font = "bold 40px sans-serif";
+    g.fillText(label, 30, canvas.height / 2);
+    return canvas.toDataURL();
+  };
+  const decks = [
+    { name: "16:9", aspectRatio: 16 / 9, pages: 14, two: true },
+    { name: "16:10", aspectRatio: 1.6, pages: 9, two: true },
+    { name: "4:3", aspectRatio: 4 / 3, pages: 22, two: true },
+    { name: "one slide", aspectRatio: 16 / 9, pages: 1, two: false },
+  ];
+  root.render(
+    <div className="flex gap-6 bg-background p-6" style={{ width: 1000 }}>
+      {decks.map((d) => (
+        <div
+          key={d.name}
+          data-card={d.name}
+          className="relative aspect-[3/4] overflow-hidden rounded-lg border"
+          style={{ width: 200 }}
+        >
+          <DeckSurface
+            deck={{
+              url: slide(d.aspectRatio, `${d.name} title`),
+              nextUrl: d.two ? slide(d.aspectRatio, "Slide 2") : undefined,
+              aspectRatio: d.aspectRatio,
+              pages: d.pages,
+            }}
+            slides
+            projectName={d.name}
+          />
+        </div>
+      ))}
+    </div>,
+  );
+} else if (scenario === "theme") {
   const theme = params.get("theme") ?? "light";
   root.render(
     <ThemeProvider attribute="class" themes={THEME_IDS} forcedTheme={theme}>
