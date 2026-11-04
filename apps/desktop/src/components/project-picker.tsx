@@ -31,6 +31,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { toast } from "sonner";
+import { leaveSharedProject } from "@/stores/collab-store";
 import {
   BugIcon,
   CheckIcon,
@@ -856,42 +857,145 @@ export function ProjectPicker() {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={!!removeProjectTarget}
-        onOpenChange={(open) => {
-          if (!open) setRemoveProjectTarget(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Remove project</DialogTitle>
-            <DialogDescription>
-              Remove "{removeProjectTarget?.name ?? "this project"}" from All
-              Projects? The project files will stay on disk.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRemoveProjectTarget(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (!removeProjectTarget) return;
-                removeRecentProject(removeProjectTarget.path);
-                setRemoveProjectTarget(null);
-              }}
-              disabled={!removeProjectTarget}
-            >
-              Remove
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <RemoveProjectDialog
+        project={removeProjectTarget}
+        onClose={() => setRemoveProjectTarget(null)}
+        onRemoved={(path) => removeRecentProject(path)}
+      />
     </div>
+  );
+}
+
+/**
+ * Removing a project from All Projects: from the list only (its files stay),
+ * or its folder moved to the Trash. A shared project can also stop syncing
+ * here; moved to the Trash, it always does. Collaborators keep their copies.
+ */
+function RemoveProjectDialog({
+  project,
+  onClose,
+  onRemoved,
+}: {
+  project: RecentProject | null;
+  onClose: () => void;
+  onRemoved: (path: string) => void;
+}) {
+  const isShared = useProjectStore((s) =>
+    project ? Object.values(s.sharedProjects).includes(project.path) : false,
+  );
+  const [trash, setTrash] = useState(false);
+  const [stopSync, setStopSync] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  // Each time it opens, the safe choice.
+  useEffect(() => {
+    if (project) {
+      setTrash(false);
+      setStopSync(false);
+    }
+  }, [project]);
+
+  const remove = async () => {
+    if (!project) return;
+    setBusy(true);
+    try {
+      if (isShared && (trash || stopSync)) {
+        await leaveSharedProject(project.path, { keepNotes: !trash });
+      }
+      if (trash) {
+        await invoke("trash_project", { path: project.path });
+        toast.success(`“${project.name}” is in the Trash`);
+      } else if (isShared && stopSync) {
+        toast.success(`“${project.name}” no longer syncs on this computer`);
+      }
+      onRemoved(project.path);
+      onClose();
+    } catch (err) {
+      toast.error("Couldn't remove the project", {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const choice = (value: boolean, title: string, detail: string) => (
+    <label
+      className={cn(
+        "flex cursor-pointer gap-2.5 rounded-md border p-2.5 text-sm",
+        trash === value ? "border-foreground/30 bg-muted/40" : "border-border",
+      )}
+    >
+      <input
+        type="radio"
+        name="remove-project"
+        className="mt-0.5 accent-primary"
+        checked={trash === value}
+        onChange={() => setTrash(value)}
+        disabled={busy}
+      />
+      <span>
+        <span className="block font-medium">{title}</span>
+        <span className="block text-muted-foreground text-xs">{detail}</span>
+      </span>
+    </label>
+  );
+
+  return (
+    <Dialog
+      open={!!project}
+      onOpenChange={(open) => {
+        if (!open && !busy) onClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Remove “{project?.name ?? "this project"}”</DialogTitle>
+          <DialogDescription>
+            {isShared
+              ? "It's shared. Collaborators keep their copies whatever you choose."
+              : "Choose whether its files stay on this computer."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          {choice(
+            false,
+            "Remove from the list",
+            "Its files stay on this computer.",
+          )}
+          {choice(
+            true,
+            "Move to the Trash",
+            "Its folder goes to the Trash, from where you can put it back.",
+          )}
+          {isShared && (
+            <label className="flex cursor-pointer items-center gap-2 pt-1 text-sm">
+              <input
+                type="checkbox"
+                className="size-3.5 accent-primary"
+                checked={trash || stopSync}
+                disabled={trash || busy}
+                onChange={(e) => setStopSync(e.currentTarget.checked)}
+              />
+              Stop syncing it on this computer
+            </label>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => void remove()}
+            disabled={!project || busy}
+          >
+            {busy && <Loader2Icon className="size-3.5 animate-spin" />}
+            {trash ? "Move to Trash" : "Remove"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1380,9 +1484,7 @@ function ProjectPreviewCard({
           <ContextMenuItem onSelect={onDuplicate}>Duplicate</ContextMenuItem>
           <ContextMenuItem onSelect={onMove}>Move to…</ContextMenuItem>
           <ContextMenuSeparator />
-          <ContextMenuItem onSelect={onRemove}>
-            Remove from list
-          </ContextMenuItem>
+          <ContextMenuItem onSelect={onRemove}>Remove…</ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
       <button

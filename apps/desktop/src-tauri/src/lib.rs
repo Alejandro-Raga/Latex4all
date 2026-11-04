@@ -429,6 +429,14 @@ async fn duplicate_project(src_path: String, dst_path: String) -> Result<(), Str
     .map_err(|e| format!("Copy task panicked: {}", e))?
 }
 
+/// Moves a project folder to the Trash.
+#[tauri::command]
+async fn trash_project(path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || projects::trash_project_folder(Path::new(&path)))
+        .await
+        .map_err(|e| format!("Delete task panicked: {}", e))?
+}
+
 #[tauri::command]
 fn allow_project_directory(app: tauri::AppHandle, root_path: String) -> Result<(), String> {
     let fs_scope = app.fs_scope();
@@ -714,6 +722,7 @@ pub fn run() {
             allow_project_directory,
             move_project,
             duplicate_project,
+            trash_project,
             list_default_projects,
             detect_editors,
             open_in_editor,

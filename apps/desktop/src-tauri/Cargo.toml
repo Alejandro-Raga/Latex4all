@@ -57,6 +57,7 @@ tar = "0.4"
 spellbook = "0.4"
 # LanguageTool and the Adoptium JRE are both distributed as zips (see languagetool.rs).
 zip = { version = "2", default-features = false, features = ["deflate"] }
+trash = "5.2"
 
 [lints.clippy]
 unwrap_used = "deny"

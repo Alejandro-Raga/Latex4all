@@ -204,10 +204,15 @@ export async function moveAnnotationsIntoShared(
 }
 
 /** When this device stops syncing: keep the annotations, in the local file. */
-export async function moveAnnotationsOutOfShared(doc: Y.Doc, root: string) {
+export async function moveAnnotationsOutOfShared(
+  doc: Y.Doc,
+  root: string,
+  /** A file's text; by default the open project's. */
+  contentOf: (path: string) => string | undefined = (path) =>
+    projectText().contentOf(path),
+) {
   const shared = new SharedAnnotations(doc);
-  const text = projectText();
-  const items = shared.exportLocal((path) => text.contentOf(path));
+  const items = shared.exportLocal(contentOf);
   shared.destroy();
   if (items.length === 0) return;
   await annotationFile(root).write(

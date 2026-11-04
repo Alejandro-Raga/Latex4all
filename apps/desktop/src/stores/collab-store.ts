@@ -188,6 +188,45 @@ export function followOpenProject() {
   };
 }
 
+/**
+ * Stops syncing the project at `root` on this computer, open or not: its
+ * link and this computer's sync record go, and collaborators keep theirs.
+ * With `keepNotes`, the shared highlights and notes are kept in the
+ * project, as when it's stopped from the Share popover.
+ */
+export async function leaveSharedProject(
+  root: string,
+  { keepNotes }: { keepNotes: boolean },
+) {
+  if (active?.root === root) {
+    await useCollabStore.getState().stopSyncing();
+    return;
+  }
+  const info = await readLink(root).catch(() => null);
+  if (keepNotes) {
+    const saved = await loadDoc(root).catch(() => null);
+    if (saved) {
+      const doc = new Y.Doc();
+      Y.applyUpdate(doc, saved.data);
+      const files = layout(doc);
+      await moveAnnotationsOutOfShared(doc, root, (path) => {
+        const file = files.get(path);
+        return file?.kind === "text" ? file.text.toString() : undefined;
+      }).catch((err) =>
+        log.warn("Couldn't keep annotations", { error: String(err) }),
+      );
+      doc.destroy();
+    }
+  }
+  await removeLink(root);
+  const projects = useProjectStore.getState();
+  for (const [projectId, path] of Object.entries(projects.sharedProjects)) {
+    if (path === root || projectId === info?.projectId) {
+      projects.forgetSharedProject(projectId);
+    }
+  }
+}
+
 /** The shared text for a file, while its project is open and shared. */
 export function getSharedText(relativePath: string): Y.Text | null {
   return active?.sync?.textAt(relativePath)?.text ?? null;

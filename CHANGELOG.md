@@ -23,6 +23,10 @@ tag.
 
 ### Added
 
+- Remove… on a project in All Projects (right-click, or its ×) can also
+  move its folder to the Trash, from where it can be put back, and stop
+  syncing a shared project on this computer. Collaborators keep their
+  copies.
 - Shared projects: **Share → Files to sync** picks which files sync on
   this computer, before you share (so they're never sent) or at any time
   after. Leave out the ones you keep in step with Dropbox or similar (a

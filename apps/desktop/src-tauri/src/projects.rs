@@ -221,6 +221,22 @@ pub fn duplicate_project_folder(src: &Path, dst: &Path) -> Result<(), String> {
     })
 }
 
+/// Moves a project folder to the Trash (the Recycle Bin on Windows), from
+/// where it can be put back. Refuses anything that isn't a project-sized
+/// folder: the disk's root, the home folder or a path with no parent.
+pub fn trash_project_folder(path: &Path) -> Result<(), String> {
+    if !path.is_absolute() || !path.is_dir() {
+        return Err("That project folder no longer exists.".into());
+    }
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(std::path::PathBuf::from);
+    if path.parent().is_none() || home.as_deref() == Some(path) {
+        return Err("That folder can't be deleted from here.".into());
+    }
+    trash::delete(path).map_err(|e| format!("Couldn't move it to the Trash: {}", e))
+}
+
 #[cfg(test)]
 mod duplicate_tests {
     use super::*;
