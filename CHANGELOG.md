@@ -19,7 +19,7 @@ URL changed. Branch layout, CI, refactors and tests belong in commit messages.
 Write entries under `## [Unreleased]` and rename it to `## [x.y.z]` when you
 tag.
 
-## [Unreleased]
+## [3.0.0] - 2026-11-05
 
 ### Added
 
