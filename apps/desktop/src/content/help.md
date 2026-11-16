@@ -85,7 +85,7 @@ The vault is your Obsidian vault: a folder on your computer, or one on a WebDAV 
 - **Add a paper** by right-clicking it in the library. Its note holds the paper's details and your highlights.
 - **Highlights in a note** show the passage, its color and page, with your comment beneath. Right-click one to add it to an idea or topic, or open it in the PDF. The other notes that quote it are listed below it.
 - **New notes** (the + above the list) can be a topic, an idea or a plain note. A topic or idea gets its usual sections, or your vault's own template for it.
-- **Right-click a note** to change its type, connect it to an idea or topic, or delete it. **Connect to note…** links it with any other note, a topic with a related topic for example. Each lists the other under **Related**.
+- **Right-click a note** to change its type, connect it to an idea or topic, or delete it. **Connect to note** links it with any other note, picked by type, a topic with a related topic for example. Each lists the other under **Related**.
 - **The map** shows how your notes link to each other.
 
 [Open Settings → Vault](app:settings/vault)
@@ -103,7 +103,7 @@ With a project open, the Vault panel has two tabs.
 Ideas and topics are notes that collect passages, word for word, each with a link back to where it came from. A **topic** is a subject, such as "Renewable energy". An **idea** is a claim you could argue, such as "Remote work raises productivity". Gathering passages this way builds the material for an argument as you read.
 
 - **From a paper or your own text:** select a passage, or right-click a highlight, and choose **Add to idea…** or **Add to topic…**.
-- **A whole paper:** right-click it and choose **Connect to idea**, **Connect to topic** or **Connect to note…**.
+- **A whole paper:** right-click it and choose **Connect to idea**, **Connect to topic** or **Connect to note**.
 
 Pick an existing note from the list or type a new name.
 

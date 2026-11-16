@@ -720,7 +720,10 @@ if (scenario === "library") {
           text: files.get(p) ?? "",
           version: null,
         }),
-        writeNote: async () => null,
+        writeNote: async (p: string, t: string) => {
+          files.set(p, t);
+          return null;
+        },
         createNote: async () => {},
       },
       index: null,

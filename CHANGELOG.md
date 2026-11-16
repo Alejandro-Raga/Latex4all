@@ -27,9 +27,9 @@ tag.
   the vault, and swaps their sides. The layout is remembered.
 - Reading a paper in Library & Vault: put the PDF beside the list
   instead of below it, or hide the list to read across the whole pane.
-- **Connect to note…** on any note, and on papers in the Zotero
-  library, links it with any other note, a topic with a related topic
-  for example. Both notes list each other under Related.
+- **Connect to note** in the right-click menu of any note, and of papers
+  in the Zotero library, links it with any other note, picked by type
+  (papers, topics, ideas…). Both notes list each other under Related.
 - New notes can be a topic, an idea or a plain note, not only what the
   vault's templates offer. A topic or idea gets its usual sections.
 

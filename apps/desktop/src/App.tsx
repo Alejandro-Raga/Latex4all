@@ -16,10 +16,7 @@ import { BugReportDialog } from "@/components/bug-report-dialog";
 import { HelpDialog } from "@/components/help-view";
 import { ZoteroPdfDialog } from "@/components/zotero-pdf-dialog";
 import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
-import {
-  ConnectNoteDialog,
-  NewTopicDialog,
-} from "@/components/workspace/topic-menu";
+import { NewTopicDialog } from "@/components/workspace/topic-menu";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -262,7 +259,6 @@ export function App({ onReady }: { onReady?: () => void }) {
           <ZoteroPdfDialog />
           <HelpDialog />
           <NewTopicDialog />
-          <ConnectNoteDialog />
           <UpdateManager />
           <ZoteroTagRegistrySync />
           <ZoteroTagNotesSync />

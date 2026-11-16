@@ -119,7 +119,7 @@ import {
   addCitekeysToVault,
   addCitekeysToZoteroWithToast,
 } from "./citation-check";
-import { ConnectNoteItem, TopicMenu } from "./topic-menu";
+import { ConnectNoteMenu, TopicMenu } from "./topic-menu";
 import { groupProjects } from "@/lib/project-grouping";
 import { LibraryFilterRow } from "./library-filter";
 import { FilterToggle } from "./vault-filter";
@@ -1624,7 +1624,8 @@ function ZoteroItemRow({
             vaultNoteName ?? (await addPaperToVault(item.key)).name
           }
         />
-        <ConnectNoteItem
+        <ConnectNoteMenu
+          noteName={vaultNoteName}
           resolve={async () =>
             vaultNoteName ?? (await addPaperToVault(item.key)).name
           }

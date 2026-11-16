@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   CheckIcon,
   HashIcon,
@@ -31,7 +31,12 @@ import { Input } from "@/components/ui/input";
 import { connectNotes } from "@/lib/vault/connect-notes";
 import { connectToIdea, connectToTopic } from "@/lib/vault/connect-topic";
 import { chooseNoteKind, deleteNote } from "@/lib/vault/note-changes";
-import { findNote, type NoteKind } from "@/lib/vault/vault-index";
+import {
+  findNote,
+  KIND_GROUPS,
+  type NoteKind,
+  type VaultNote,
+} from "@/lib/vault/vault-index";
 import { topicNotes, topicsOf } from "@/lib/vault/topics";
 import { useKindChoices, useVaultStore } from "@/stores/vault-store";
 
@@ -125,7 +130,7 @@ export function TopicMenu({
             ) : (
               <Icon className="size-3.5 opacity-40" />
             )}
-            <span className="truncate">{t.name}</span>
+            <span className="truncate">{t.title}</span>
           </ContextMenuItem>
         ))}
         {topics.length > 0 && <ContextMenuSeparator />}
@@ -324,7 +329,7 @@ export function NoteMenuItems({ noteName }: { noteName: string }) {
           resolve={async () => note.name}
         />
       )}
-      <ConnectNoteItem resolve={async () => note.name} />
+      <ConnectNoteMenu noteName={note.name} resolve={async () => note.name} />
       <ContextMenuSeparator />
       <DeleteNoteItem noteName={note.name} />
     </>
@@ -349,134 +354,110 @@ export function NoteContextMenu({
   );
 }
 
-const useConnectNote = create<{
-  resolve: Resolve | null;
-  ask: (resolve: Resolve) => void;
-  close: () => void;
-}>((set) => ({
-  resolve: null,
-  ask: (resolve) => set({ resolve }),
-  close: () => set({ resolve: null }),
-}));
-
-/** "Connect to note…": links the note with any other in the vault. */
-export function ConnectNoteItem({ resolve }: { resolve: Resolve }) {
-  return (
-    <ContextMenuItem onClick={() => useConnectNote.getState().ask(resolve)}>
-      <LinkIcon className="size-3.5" />
-      Connect to note…
-    </ContextMenuItem>
-  );
+/** A paper's first author and year, as the vault lists show them. */
+function byline(note: VaultNote): string {
+  if (note.kind !== "paper") return "";
+  const author = note.authors[0]?.split(",")[0].split(" ").pop();
+  return [author, note.year].filter(Boolean).join(" · ");
 }
 
-/** Picks the other note; mounted once, opened from any ConnectNoteItem. */
-export function ConnectNoteDialog() {
-  const resolve = useConnectNote((s) => s.resolve);
-  const close = useConnectNote((s) => s.close);
+async function connectTo(resolve: Resolve, other: VaultNote) {
+  const id = toast.loading(`Connecting to ${other.title}…`);
+  try {
+    await connectNotes(await resolve(), other.name);
+    toast.success(`Connected to ${other.title}`, { id });
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : String(err), { id });
+  }
+}
+
+/**
+ * "Connect to note ▸": the vault's notes by type (Papers, Topics, …), ticked
+ * where the two link already. Either note lists the other under Related.
+ */
+export function ConnectNoteMenu({
+  noteName,
+  resolve,
+}: {
+  /** Known when the note exists already, to tick its links. */
+  noteName?: string;
+  resolve: Resolve;
+}) {
   const index = useVaultStore((s) => s.index);
-  const [query, setQuery] = useState("");
-  const [from, setFrom] = useState<string | null>(null);
-
-  // The note may not exist yet (a paper from Zotero): made on opening.
-  const [resolving, setResolving] = useState(false);
-  const opened = resolve !== null;
-  useEffect(() => {
-    setFrom(null);
-    setQuery("");
-    if (!resolve) return;
-    let cancelled = false;
-    setResolving(true);
-    resolve()
-      .then((name) => !cancelled && setFrom(name))
-      .catch((err) => {
-        toast.error(err instanceof Error ? err.message : String(err));
-        close();
-      })
-      .finally(() => !cancelled && setResolving(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [resolve, close]);
-
-  const source = index && from ? findNote(index, from) : undefined;
-  const matches = useMemo(() => {
+  const choices = useKindChoices();
+  const source = index && noteName ? findNote(index, noteName) : undefined;
+  const groups = useMemo(() => {
     if (!index) return [];
-    const q = query.trim().toLowerCase();
-    return index.list
-      .filter((n) => n.path !== source?.path)
-      .filter((n) => !q || n.name.toLowerCase().includes(q))
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(0, 60);
-  }, [index, query, source?.path]);
-
-  const pick = (name: string) => {
-    if (!from) return;
-    close();
-    const id = toast.loading(`Connecting to ${name}…`);
-    connectNotes(from, name)
-      .then((to) => toast.success(`${from} and ${to} are connected`, { id }))
-      .catch((err) =>
-        toast.error(err instanceof Error ? err.message : String(err), { id }),
-      );
-  };
-
+    const byKind = new Map<string, VaultNote[]>();
+    for (const n of index.list) {
+      if (n.path === source?.path) continue;
+      const list = byKind.get(n.kind) ?? [];
+      list.push(n);
+      byKind.set(n.kind, list);
+    }
+    return choices
+      .map(({ kind, label }) => ({
+        kind,
+        label:
+          kind === "note"
+            ? "Notes"
+            : ((KIND_GROUPS as Record<string, string>)[kind] ?? label),
+        notes: (byKind.get(kind) ?? []).sort((a, b) =>
+          a.title.localeCompare(b.title),
+        ),
+      }))
+      .filter((g) => g.notes.length > 0);
+  }, [index, choices, source?.path]);
+  const linked = (n: VaultNote) =>
+    !!source &&
+    (source.outgoing.includes(n.name) || n.outgoing.includes(source.name));
   return (
-    <Dialog open={opened} onOpenChange={(open) => !open && close()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="truncate">
-            Connect {from ? `“${from}”` : "note"} to…
-          </DialogTitle>
-        </DialogHeader>
-        <form
-          className="space-y-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (matches[0]) pick(matches[0].name);
-          }}
-        >
-          <Input
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search notes…"
-            aria-label="Note to connect to"
-            disabled={resolving}
-          />
-          <div className="max-h-72 overflow-y-auto">
-            {matches.map((n) => {
-              const linked =
-                !!source &&
-                (source.outgoing.includes(n.name) ||
-                  n.outgoing.includes(source.name));
-              return (
-                <button
-                  key={n.path}
-                  type="button"
-                  disabled={linked || resolving}
-                  onClick={() => pick(n.name)}
-                  className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent"
-                >
-                  {linked ? (
-                    <CheckIcon className="size-3.5 shrink-0" />
-                  ) : (
-                    <LinkIcon className="size-3.5 shrink-0 opacity-40" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">{n.name}</span>
-                  <span className="shrink-0 text-muted-foreground text-xs">
-                    {n.kind}
-                  </span>
-                </button>
-              );
-            })}
-            {matches.length === 0 && (
-              <p className="px-2 py-1 text-muted-foreground text-sm">
-                No notes match.
-              </p>
-            )}
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <ContextMenuSub>
+      <ContextMenuSubTrigger>
+        <LinkIcon className="size-3.5" />
+        <span className="flex-1 text-left">Connect to note</span>
+      </ContextMenuSubTrigger>
+      <ContextMenuSubContent className="w-44">
+        {groups.length === 0 && (
+          <ContextMenuItem disabled>No other notes yet</ContextMenuItem>
+        )}
+        {groups.map((g) => (
+          <ContextMenuSub key={g.kind}>
+            <ContextMenuSubTrigger>
+              <span className="flex-1 text-left">{g.label}</span>
+              <span className="text-muted-foreground text-xs">
+                {g.notes.length}
+              </span>
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="max-h-80 w-72 overflow-y-auto">
+              {g.notes.map((n) => {
+                const done = linked(n);
+                return (
+                  <ContextMenuItem
+                    key={n.path}
+                    disabled={done}
+                    onClick={() => connectTo(resolve, n)}
+                  >
+                    {done ? (
+                      <CheckIcon className="size-3.5" />
+                    ) : (
+                      <LinkIcon className="size-3.5 opacity-40" />
+                    )}
+                    <span className="min-w-0 flex-1" title={n.title}>
+                      <span className="block truncate">{n.title}</span>
+                      {byline(n) && (
+                        <span className="block truncate text-muted-foreground text-xs">
+                          {byline(n)}
+                        </span>
+                      )}
+                    </span>
+                  </ContextMenuItem>
+                );
+              })}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        ))}
+      </ContextMenuSubContent>
+    </ContextMenuSub>
   );
 }
