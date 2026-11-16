@@ -431,3 +431,26 @@
   opacity: 0.3;
 }
 
+
+/*
+ * Menus as frosted glass: the theme's own menu color, partly clear, over a
+ * strong blur that lifts the colors behind; a faint light edge on top.
+ * Unlayered, so it wins over the bg-popover the menus start from.
+ */
+.glass-menu {
+  background-color: color-mix(in oklab, var(--popover) 64%, transparent);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  border-color: color-mix(in oklab, var(--border) 70%, transparent);
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, white 45%, transparent),
+    0 10px 30px -8px rgb(0 0 0 / 0.28),
+    0 2px 6px -2px rgb(0 0 0 / 0.12);
+}
+:is(.dark, .theme-dark) .glass-menu {
+  background-color: color-mix(in oklab, var(--popover) 58%, transparent);
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, white 12%, transparent),
+    0 12px 32px -8px rgb(0 0 0 / 0.55),
+    0 2px 6px -2px rgb(0 0 0 / 0.3);
+}

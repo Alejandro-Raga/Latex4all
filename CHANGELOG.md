@@ -42,7 +42,7 @@ tag.
   Notes panel: the passage can go in any note, picked by type.
 - Each type in these menus ends with **New …**, to make a note of that
   type on the spot.
-- Right-click menus are slightly see-through.
+- Right-click menus are frosted glass: the theme's color, partly clear, over a blur of what's behind.
 - New notes can be a topic, an idea or a plain note, not only what the
   vault's templates offer. A topic or idea gets its usual sections.
 

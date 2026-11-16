@@ -556,7 +556,7 @@ export function PaperReader({
             }}
           />
           <div
-            className="fixed z-50 w-52 rounded-md border border-border bg-popover/85 p-1 text-sm shadow-lg backdrop-blur-md"
+            className="fixed z-50 w-52 rounded-md border border-border bg-popover p-1 text-sm shadow-lg glass-menu"
             style={{
               left: Math.min(highlightMenu.at.left, window.innerWidth - 220),
               top: Math.min(highlightMenu.at.top, window.innerHeight - 200),
