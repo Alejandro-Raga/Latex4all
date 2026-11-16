@@ -276,56 +276,54 @@ export function HighlightQuote({
   };
 
   return (
-    <>
-      <ContextMenu>
-        <ContextMenuTrigger asChild>
-          <figure className="my-3 overflow-hidden rounded-md border border-border/70 bg-background">
-            <div
-              className="border-l-[3px] px-3 py-2 text-[13.5px] text-foreground leading-relaxed [&>p]:my-0"
-              style={{ borderLeftColor: h.color ?? HIGHLIGHT_COLORS.yellow }}
-            >
-              {children}
-            </div>
-            {others.length > 0 && (
-              <AlsoIn
-                notes={others}
-                onOpen={onOpen}
-                className="border-border/60 border-t px-3 py-1.5"
-              />
-            )}
-          </figure>
-        </ContextMenuTrigger>
-        <ContextMenuContent className="w-56">
-          <AddToNoteMenu
-            marker={`annotation=${h.annotationKey}`}
-            exclude={current?.path}
-            onPick={(name) => void file(name)}
-          />
-          <ContextMenuItem
-            onSelect={() => {
-              const pdf = zoteroPdfTarget(h.href, paper?.title ?? title);
-              if (pdf) void openZoteroPdf(pdf);
-            }}
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <figure className="my-3 overflow-hidden rounded-md border border-border/70 bg-background">
+          <div
+            className="border-l-[3px] px-3 py-2 text-[13.5px] text-foreground leading-relaxed [&>p]:my-0"
+            style={{ borderLeftColor: h.color ?? HIGHLIGHT_COLORS.yellow }}
           >
-            <FileTextIcon className="size-4" />
-            Open in the PDF
-          </ContextMenuItem>
+            {children}
+          </div>
           {others.length > 0 && (
-            <>
-              <ContextMenuSeparator />
-              <div className="px-2 py-1 text-muted-foreground text-xs">
-                Also in
-              </div>
-              {others.map((n) => (
-                <ContextMenuItem key={n.path} onSelect={() => onOpen(n.name)}>
-                  <Link2Icon className="size-4" />
-                  <span className="truncate">{n.title}</span>
-                </ContextMenuItem>
-              ))}
-            </>
+            <AlsoIn
+              notes={others}
+              onOpen={onOpen}
+              className="border-border/60 border-t px-3 py-1.5"
+            />
           )}
-        </ContextMenuContent>
-      </ContextMenu>
-    </>
+        </figure>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-56">
+        <AddToNoteMenu
+          marker={`annotation=${h.annotationKey}`}
+          exclude={current?.path}
+          onPick={(name) => void file(name)}
+        />
+        <ContextMenuItem
+          onSelect={() => {
+            const pdf = zoteroPdfTarget(h.href, paper?.title ?? title);
+            if (pdf) void openZoteroPdf(pdf);
+          }}
+        >
+          <FileTextIcon className="size-4" />
+          Open in the PDF
+        </ContextMenuItem>
+        {others.length > 0 && (
+          <>
+            <ContextMenuSeparator />
+            <div className="px-2 py-1 text-muted-foreground text-xs">
+              Also in
+            </div>
+            {others.map((n) => (
+              <ContextMenuItem key={n.path} onSelect={() => onOpen(n.name)}>
+                <Link2Icon className="size-4" />
+                <span className="truncate">{n.title}</span>
+              </ContextMenuItem>
+            ))}
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
