@@ -2,8 +2,11 @@ import { type CSSProperties, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
   ArrowLeftRightIcon,
+  ArrowUpDownIcon,
+  Columns2Icon,
   LibraryIcon,
   NotebookTextIcon,
+  Rows2Icon,
 } from "lucide-react";
 import { PanelBoundary } from "@/components/panel-boundary";
 import { QuickReferencePanel } from "@/components/workspace/quick-reference-panel";
@@ -17,12 +20,19 @@ type Side = "reference" | "vault";
 interface Layout {
   reference: boolean;
   vault: boolean;
-  /** The vault on the left, the Zotero library on the right. */
+  /** The vault first (left or top), the Zotero library second. */
   swapped: boolean;
+  /** One above the other instead of side by side. */
+  stacked: boolean;
 }
 
 const LAYOUT_KEY = "library-view-layout";
-const DEFAULT_LAYOUT: Layout = { reference: true, vault: true, swapped: false };
+const DEFAULT_LAYOUT: Layout = {
+  reference: true,
+  vault: true,
+  swapped: false,
+  stacked: false,
+};
 
 function loadLayout(): Layout {
   try {
@@ -65,7 +75,7 @@ export function LibraryView() {
       id="reference"
       order={layout.swapped ? 2 : 1}
       minSize={25}
-      className="min-w-0"
+      className="min-h-0 min-w-0"
     >
       <PanelBoundary name="Library">
         <QuickReferencePanel
@@ -81,7 +91,7 @@ export function LibraryView() {
       id="vault"
       order={layout.swapped ? 1 : 2}
       minSize={25}
-      className="min-w-0"
+      className="min-h-0 min-w-0"
     >
       <PanelBoundary name="Vault">
         <VaultStandalone.Provider value>
@@ -93,9 +103,15 @@ export function LibraryView() {
   const handle = both && (
     <PanelResizeHandle
       key="handle"
-      className="w-px bg-border transition-colors hover:bg-ring"
+      className={cn(
+        "bg-border transition-colors hover:bg-ring",
+        layout.stacked ? "h-px" : "w-px",
+      )}
     />
   );
+  const Swap = layout.stacked ? ArrowUpDownIcon : ArrowLeftRightIcon;
+  const Arrange = layout.stacked ? Columns2Icon : Rows2Icon;
+  const arrangeLabel = layout.stacked ? "Side by side" : "One above the other";
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar">
@@ -114,21 +130,35 @@ export function LibraryView() {
           label="Vault"
         />
         {both && (
-          <button
-            type="button"
-            onClick={() => setLayout({ ...layout, swapped: !layout.swapped })}
-            className="ml-1 flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="Swap sides"
-            aria-label="Swap sides"
-          >
-            <ArrowLeftRightIcon className="size-3.5" />
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => setLayout({ ...layout, swapped: !layout.swapped })}
+              className="ml-1 flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="Swap sides"
+              aria-label="Swap sides"
+            >
+              <Swap className="size-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setLayout({ ...layout, stacked: !layout.stacked })}
+              className="flex size-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+              title={arrangeLabel}
+              aria-label={arrangeLabel}
+            >
+              <Arrange className="size-3.5" />
+            </button>
+          </>
         )}
       </div>
       <PanelGroup
-        direction="horizontal"
+        key={layout.stacked ? "stacked" : "side"}
+        direction={layout.stacked ? "vertical" : "horizontal"}
         autoSaveId={
-          both ? `library-view${layout.swapped ? "-swapped" : ""}` : undefined
+          both
+            ? `library-view${layout.stacked ? "-stacked" : ""}${layout.swapped ? "-swapped" : ""}`
+            : undefined
         }
         className="min-h-0 flex-1"
         // The bar sits under the drag strip, so the panes' headers needn't.

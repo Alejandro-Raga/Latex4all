@@ -65,6 +65,7 @@ import {
   useBibEntryByKey,
   useItemKeyByCitekey,
 } from "./cited-here";
+import { ConnectionPills } from "./connection-pills";
 import { NoteContextMenu, NoteMenuItems } from "./topic-menu";
 import { kindFolder } from "@/lib/vault/kind-folders";
 import { kindFromTemplate } from "@/lib/vault/new-note";
@@ -92,7 +93,6 @@ import {
 } from "@/lib/vault/render";
 import {
   findNote,
-  KIND_GROUPS,
   neighbourhood,
   PAPERS_GROUP,
   type NoteKind,
@@ -194,8 +194,7 @@ function noteSubtitle(note: VaultNote): string {
     const author = note.authors[0]?.split(",")[0].split(" ").pop();
     return [author, note.year].filter(Boolean).join(" · ");
   }
-  const links = note.outgoing.length + note.incoming.length;
-  return links ? `${links} link${links === 1 ? "" : "s"}` : "";
+  return "";
 }
 
 /** The citation key under the editor's cursor, if any. */
@@ -1026,7 +1025,13 @@ export function NoteRow({
             </span>
           )}
           {places && <CitedAt places={places} />}
-          {places && <TopicChips index={index} note={n} />}
+          <ConnectionPills
+            index={index}
+            note={n}
+            colorOf={groupColor}
+            onOpen={onOpen}
+          />
+          {places && <NoTopicHint index={index} note={n} />}
         </span>
         {aside && (
           <span className="mt-0.5 shrink-0 text-[11px] text-muted-foreground">
@@ -1148,29 +1153,12 @@ function PaperTree({
 }
 
 /** The topics a note is filed under, or a nudge when it has none. */
-function TopicChips({ index, note }: { index: VaultIndex; note: VaultNote }) {
-  if (note.kind === "topic") return null;
-  const topics = [...topicsOf(index, note)];
+/** In the project's list: a paper filed under no topic yet, said quietly. */
+function NoTopicHint({ index, note }: { index: VaultIndex; note: VaultNote }) {
+  if (note.kind === "topic" || topicsOf(index, note).size > 0) return null;
   return (
-    <span className="flex flex-wrap gap-1 pt-0.5">
-      {topics.length === 0 ? (
-        <span className="text-[10px] text-muted-foreground/70 italic">
-          no topic
-        </span>
-      ) : (
-        topics.map((t) => (
-          <span
-            key={t}
-            className="rounded px-1.5 py-px text-[10px]"
-            style={{
-              color: groupColor(KIND_GROUPS.topic, "topic"),
-              backgroundColor: `color-mix(in srgb, ${groupColor(KIND_GROUPS.topic, "topic")} 14%, transparent)`,
-            }}
-          >
-            {findNote(index, t)?.title ?? t}
-          </span>
-        ))
-      )}
+    <span className="block pt-0.5 text-[10px] text-muted-foreground/70 italic">
+      no topic
     </span>
   );
 }

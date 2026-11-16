@@ -363,7 +363,7 @@ function NotesByType({
             ? "Notes"
             : ((KIND_GROUPS as Record<string, string>)[kind] ?? label),
         notes: (byKind.get(kind) ?? []).sort((a, b) =>
-          a.title.localeCompare(b.title),
+          a.title.localeCompare(b.title, undefined, { numeric: true }),
         ),
       }))
       .filter((g) => g.notes.length > 0 || canCreate(g.kind));

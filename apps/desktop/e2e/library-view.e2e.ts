@@ -25,6 +25,22 @@ test("library and vault side by side without a project", async ({ page }) => {
   await bar("Vault").click();
   await expect(bar("Vault")).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Swap sides" }).click();
+  // One above the other, and back.
+  const group = page.locator("[data-panel-group-direction]").first();
+  await expect(group).toHaveAttribute(
+    "data-panel-group-direction",
+    "horizontal",
+  );
+  await page.getByRole("button", { name: "One above the other" }).click();
+  await expect(group).toHaveAttribute("data-panel-group-direction", "vertical");
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/library-stacked.png` });
+  }
+  await page.getByRole("button", { name: "Side by side" }).click();
+  await expect(group).toHaveAttribute(
+    "data-panel-group-direction",
+    "horizontal",
+  );
   expect(errors).toEqual([]);
 });
 

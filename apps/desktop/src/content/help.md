@@ -12,7 +12,9 @@ The chips above the projects show one type at a time. Next to them you can chang
 
 Hover a card for Open PDF, Show in Finder and Duplicate. Right-click a project for those and to star it, set its type, move it or remove it. **Remove…** can also move the folder to the Trash and stop syncing a shared project on this computer. ⌘K searches projects, files, notes and commands.
 
-Inside a project, your files are on the left, the editor in the middle and the PDF on the right. The icons on the far right open three side panels: **Reference** (your Zotero library), **Vault** (your notes) and **Notes** (comments on your text).
+Inside a project, your files are on the left, the editor in the middle and the PDF on the right. The icons on the far right open three side panels: **Zotero library**, **Vault** (your notes) and **Notes** (comments on your text).
+
+Without a project open, **Library & Vault** shows your Zotero library and your vault together. The bar on top hides either one, swaps them, and puts them side by side or one above the other.
 
 [Open the projects page](app:projects)
 
@@ -42,7 +44,7 @@ Latex4All keeps snapshots of your project as you work. Open **History** (the clo
 
 ## References and Zotero
 
-Connect your Zotero library in **Settings → Zotero**, by signing in or with an API key from zotero.org. A key with write access lets the highlights, notes and tags you make here reach Zotero. The library then appears in the **Reference** panel, and a copy is kept on your computer so it opens at once and works offline.
+Connect your Zotero library in **Settings → Zotero**, by signing in or with an API key from zotero.org. A key with write access lets the highlights, notes and tags you make here reach Zotero. The library then appears in the **Zotero library** panel, and a copy is kept on your computer so it opens at once and works offline.
 
 - **Cite** from the ribbon, in the text or in parentheses.
 - **Add to a .bib file:** right-click a paper or a whole collection.
@@ -86,6 +88,7 @@ The vault is your Obsidian vault: a folder on your computer, or one on a WebDAV 
 - **Highlights in a note** show the passage, its color and page, with your comment beneath. Right-click one to add it to any note, or open it in the PDF. The other notes that quote it are listed below it.
 - **New notes** (the + above the list) can be a topic, an idea or a plain note. A topic or idea gets its usual sections, or your vault's own template for it.
 - **Right-click a note** to change its type, connect it to another note, or delete it. **Connect to note** lists the notes by type, with **New …** at the end of each to make one. A paper connected to an idea or topic goes into its Literature; other notes list each other under **Related**.
+- **Pills under each note** show what it is connected to, by type: Papers 12, Topics 3. Click one to list those notes; a long list has a search box.
 - **The map** shows how your notes link to each other.
 
 [Open Settings → Vault](app:settings/vault)

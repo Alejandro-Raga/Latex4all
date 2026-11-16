@@ -24,7 +24,11 @@ tag.
 ### Added
 
 - Library & Vault: a bar on top shows or hides the Zotero library and
-  the vault, and swaps their sides. The layout is remembered.
+  the vault, swaps them, and puts them side by side or one above the
+  other. The layout is remembered.
+- Notes in the vault lists show what they're connected to as small
+  pills by type (Papers 12, Topics 3…). Click one to see those notes,
+  with a search box when there are many.
 - Reading a paper in Library & Vault: put the PDF beside the list
   instead of below it, or hide the list to read across the whole pane.
 - **Connect to note** in the right-click menu of any note, and of papers
