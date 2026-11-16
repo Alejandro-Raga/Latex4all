@@ -494,3 +494,52 @@
 .glass input {
   text-shadow: none;
 }
+
+/*
+ * Settings → Appearance → Background → Gradient: a soft wash of the theme's
+ * own colors over the window's backgrounds. Fixed to the window, so a
+ * panel, a card and the page behind them show one continuous wash.
+ */
+:root {
+  --surface-wash:
+    radial-gradient(
+      90vw 70vh at 0% 0%,
+      color-mix(in oklab, var(--primary) 9%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      80vw 70vh at 100% 100%,
+      color-mix(in oklab, var(--chart-2) 9%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      60vw 50vh at 100% 0%,
+      color-mix(in oklab, var(--chart-4) 6%, transparent),
+      transparent 70%
+    );
+}
+:is(.dark, .theme-dark) {
+  --surface-wash:
+    radial-gradient(
+      90vw 70vh at 0% 0%,
+      color-mix(in oklab, var(--primary) 14%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      80vw 70vh at 100% 100%,
+      color-mix(in oklab, var(--chart-2) 12%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      60vw 50vh at 100% 0%,
+      color-mix(in oklab, var(--chart-4) 8%, transparent),
+      transparent 70%
+    );
+}
+[data-background="gradient"] body,
+[data-background="gradient"] .bg-background,
+[data-background="gradient"] .bg-sidebar,
+[data-background="gradient"] .bg-frame {
+  background-image: var(--surface-wash);
+  background-attachment: fixed;
+}

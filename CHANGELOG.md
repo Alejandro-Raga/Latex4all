@@ -41,6 +41,8 @@ tag.
   another project or the Inbox, or make it a subtask. Drag a task onto
   another to nest it. Subtasks show as a tree. Headings divide a project,
   and can be added, renamed and deleted (on the board too).
+- Settings → Appearance → Background: Gradient gives the window a soft
+  wash of the theme's own colors, for depth; Flat keeps single colors.
 - Planner colors come from the theme, one per kind of project: every
   article the same color, every thesis another, in any theme.
 - Reading lists: right-click a paper to open it and read it. Statuses

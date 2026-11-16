@@ -14,6 +14,13 @@ export type UpdateChannel = "release" | "test";
 
 /** Menus and popovers: mostly clear, blurred, or plain. */
 export type GlassLevel = "clear" | "frosted" | "solid";
+/** The window's backgrounds: one color each, or a soft wash of the theme's. */
+export type BackgroundStyle = "flat" | "gradient";
+export const BACKGROUND_STYLES: { id: BackgroundStyle; label: string }[] = [
+  { id: "flat", label: "Flat" },
+  { id: "gradient", label: "Gradient" },
+];
+
 export const GLASS_LEVELS: { id: GlassLevel; label: string }[] = [
   { id: "clear", label: "Clear" },
   { id: "frosted", label: "Frosted" },
@@ -77,6 +84,8 @@ interface SettingsState {
   /** How menus, popovers and notifications show what's behind them. */
   glass: GlassLevel;
   setGlass: (level: GlassLevel) => void;
+  background: BackgroundStyle;
+  setBackground: (style: BackgroundStyle) => void;
   pdfThemeMain: PdfTheme;
   setPdfThemeMain: (theme: PdfTheme) => void;
   pdfThemeReference: PdfTheme;
@@ -173,6 +182,8 @@ export const useSettingsStore = create<SettingsState>()(
       setCustomTheme: (colors) => set({ customTheme: colors }),
       glass: "clear",
       setGlass: (level) => set({ glass: level }),
+      background: "flat",
+      setBackground: (style) => set({ background: style }),
       pdfThemeMain: "light",
       setPdfThemeMain: (theme) => set({ pdfThemeMain: theme }),
       pdfThemeReference: "light",

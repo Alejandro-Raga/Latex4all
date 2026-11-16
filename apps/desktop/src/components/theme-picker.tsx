@@ -17,6 +17,7 @@ import {
 } from "@/lib/app-themes";
 import { cn } from "@/lib/utils";
 import {
+  BACKGROUND_STYLES,
   GLASS_LEVELS,
   type GlassLevel,
   useSettingsStore,
@@ -208,6 +209,8 @@ export function ThemeGrid() {
   const { theme = "system", setTheme } = useTheme();
   const custom = useSettingsStore((s) => s.customTheme);
   const glass = useSettingsStore((s) => s.glass);
+  const background = useSettingsStore((s) => s.background);
+  const setBackground = useSettingsStore((s) => s.setBackground);
   const setGlass = useSettingsStore((s) => s.setGlass);
   const option = (active: boolean) =>
     cn(
@@ -270,6 +273,34 @@ export function ThemeGrid() {
             </div>
           </div>
         ))}
+        <div>
+          <p className="mb-1.5 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
+            Background
+          </p>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+            {BACKGROUND_STYLES.map((style) => (
+              <button
+                key={style.id}
+                type="button"
+                onClick={() => setBackground(style.id)}
+                className={option(background === style.id)}
+                aria-pressed={background === style.id}
+              >
+                <span
+                  className="block h-10 rounded border border-border"
+                  style={{
+                    backgroundColor: "var(--background)",
+                    backgroundImage:
+                      style.id === "gradient"
+                        ? "radial-gradient(120% 120% at 0% 0%, color-mix(in oklab, var(--primary) 22%, transparent), transparent 60%), radial-gradient(120% 120% at 100% 100%, color-mix(in oklab, var(--chart-2) 22%, transparent), transparent 60%)"
+                        : undefined,
+                  }}
+                />
+                {style.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div>
           <p className="mb-1.5 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
             Menus

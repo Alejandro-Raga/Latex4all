@@ -21,6 +21,7 @@ export function ThemeBridge() {
   const resolvedTheme = forcedTheme ?? resolved;
   const custom = useSettingsStore((s) => s.customTheme);
   const glass = useSettingsStore((s) => s.glass);
+  const background = useSettingsStore((s) => s.background);
 
   useEffect(() => {
     if (document.getElementById(STYLE_ID)) return;
@@ -45,6 +46,11 @@ export function ThemeBridge() {
   useEffect(() => {
     document.documentElement.dataset.glass = glass;
   }, [glass]);
+
+  // Backgrounds: flat, or the theme's colors in a soft wash.
+  useEffect(() => {
+    document.documentElement.dataset.background = background;
+  }, [background]);
 
   return null;
 }
