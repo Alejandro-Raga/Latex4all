@@ -16,7 +16,7 @@ import {
   type ThemeColors,
 } from "@/lib/app-themes";
 import { cn } from "@/lib/utils";
-import { useSettingsStore } from "@/stores/settings-store";
+import { GLASS_LEVELS, useSettingsStore } from "@/stores/settings-store";
 
 const GROUPS: AppTheme["group"][] = ["Classic", "Colorful", "Retro"];
 
@@ -203,6 +203,8 @@ function CustomThemeEditor() {
 export function ThemeGrid() {
   const { theme = "system", setTheme } = useTheme();
   const custom = useSettingsStore((s) => s.customTheme);
+  const glass = useSettingsStore((s) => s.glass);
+  const setGlass = useSettingsStore((s) => s.setGlass);
   const option = (active: boolean) =>
     cn(
       "flex flex-col gap-1.5 rounded-lg border p-2 text-left text-xs transition-colors",
@@ -250,6 +252,34 @@ export function ThemeGrid() {
                   <span className="truncate">{t.label}</span>
                 </button>
               ))}
+              <div>
+                <p className="mb-1.5 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
+                  Menus
+                </p>
+                <div
+                  className="inline-flex rounded-lg border border-border p-0.5"
+                  role="radiogroup"
+                  aria-label="Menus"
+                >
+                  {GLASS_LEVELS.map((level) => (
+                    <button
+                      key={level.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={glass === level.id}
+                      onClick={() => setGlass(level.id)}
+                      className={cn(
+                        "rounded-md px-3 py-1 text-xs transition-colors",
+                        glass === level.id
+                          ? "bg-muted font-medium text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {level.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               {group === "Retro" && (
                 <button
                   type="button"

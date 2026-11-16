@@ -95,7 +95,7 @@ export function SelectionToolbar({
   return createPortal(
     <div
       ref={toolbarRef}
-      className="fixed z-50 rounded-lg border border-border bg-background shadow-xl"
+      className="glass fixed z-50 rounded-lg border border-border bg-popover shadow-xl"
       style={{
         width: TOOLBAR_WIDTH,
         top: coords ? coords.top : anchor.y,

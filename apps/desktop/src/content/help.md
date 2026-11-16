@@ -14,6 +14,8 @@ Hover a card for Open PDF, Show in Finder and Duplicate. Right-click a project f
 
 Inside a project, your files are on the left, the editor in the middle and the PDF on the right. The icons on the far right open three side panels: **Zotero library**, **Vault** (your notes) and **Notes** (comments on your text).
 
+Menus, popovers and notifications are see-through glass; **Settings → Appearance → Menus** makes them **Clear**, **Frosted** or **Solid**.
+
 Without a project open, **Library & Vault** shows your Zotero library and your vault together. The bar on top hides either one, swaps them, and puts them side by side or one above the other.
 
 [Open the projects page](app:projects)

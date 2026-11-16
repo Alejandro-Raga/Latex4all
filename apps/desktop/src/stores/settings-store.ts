@@ -12,6 +12,14 @@ type CompilerBackend = "tectonic" | "texlive";
  *  off this, so it must stay distinct from a real choice. */
 export type UpdateChannel = "release" | "test";
 
+/** Menus and popovers: mostly clear, blurred, or plain. */
+export type GlassLevel = "clear" | "frosted" | "solid";
+export const GLASS_LEVELS: { id: GlassLevel; label: string }[] = [
+  { id: "clear", label: "Clear" },
+  { id: "frosted", label: "Frosted" },
+  { id: "solid", label: "Solid" },
+];
+
 /** Codes match LanguageTool's format; converted to NSSpellChecker's
  * underscored form on the Rust side.
  *
@@ -66,6 +74,9 @@ interface SettingsState {
   /** Colors of the custom app theme. */
   customTheme: ThemeColors;
   setCustomTheme: (colors: ThemeColors) => void;
+  /** How menus, popovers and notifications show what's behind them. */
+  glass: GlassLevel;
+  setGlass: (level: GlassLevel) => void;
   pdfThemeMain: PdfTheme;
   setPdfThemeMain: (theme: PdfTheme) => void;
   pdfThemeReference: PdfTheme;
@@ -160,6 +171,8 @@ export const useSettingsStore = create<SettingsState>()(
         }),
       customTheme: DEFAULT_CUSTOM_COLORS,
       setCustomTheme: (colors) => set({ customTheme: colors }),
+      glass: "clear",
+      setGlass: (level) => set({ glass: level }),
       pdfThemeMain: "light",
       setPdfThemeMain: (theme) => set({ pdfThemeMain: theme }),
       pdfThemeReference: "light",

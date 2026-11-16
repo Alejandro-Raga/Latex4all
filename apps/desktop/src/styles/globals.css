@@ -433,24 +433,64 @@
 
 
 /*
- * Menus as glass: the theme's own menu color, half clear, over a light blur
- * that keeps what's behind recognisable; a faint light edge on top.
- * Unlayered, so it wins over the bg-popover the menus start from.
+ * Liquid glass, for what floats over the work (menus, popovers, the
+ * selection toolbar, notifications): the theme's own color, mostly clear,
+ * over a slight blur that lifts the colors behind, with a bright rim like a
+ * lens's edge. The text keeps a soft halo of the glass's color, so it reads
+ * over busy content. Unlayered, so it wins over the bg-* they start from.
  */
-.glass-menu {
-  background-color: color-mix(in oklab, var(--popover) 52%, transparent);
-  -webkit-backdrop-filter: blur(8px) saturate(1.5);
-  backdrop-filter: blur(8px) saturate(1.5);
-  border-color: color-mix(in oklab, var(--border) 70%, transparent);
+.glass {
+  --glass-tint: color-mix(in oklab, var(--popover) 50%, transparent);
+  --glass-blur: blur(4px) saturate(1.8) brightness(1.06);
+  --glass-rim: color-mix(in oklab, white 70%, transparent);
+  --glass-rim-low: color-mix(in oklab, white 22%, transparent);
+  --glass-outline: color-mix(in oklab, white 18%, transparent);
+  background-color: var(--glass-tint);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-color: color-mix(in oklab, var(--popover-foreground) 12%, transparent);
   box-shadow:
-    inset 0 1px 0 0 color-mix(in oklab, white 45%, transparent),
-    0 10px 30px -8px rgb(0 0 0 / 0.28),
-    0 2px 6px -2px rgb(0 0 0 / 0.12);
+    inset 0 1px 0.5px 0 var(--glass-rim),
+    inset 0 -1px 0.5px 0 var(--glass-rim-low),
+    inset 0 0 0 1px var(--glass-outline),
+    0 14px 34px -10px rgb(0 0 0 / 0.26),
+    0 2px 8px -2px rgb(0 0 0 / 0.12);
+  text-shadow: 0 0 6px var(--popover), 0 0 2px var(--popover);
 }
-:is(.dark, .theme-dark) .glass-menu {
-  background-color: color-mix(in oklab, var(--popover) 48%, transparent);
+:is(.dark, .theme-dark) .glass {
+  --glass-tint: color-mix(in oklab, var(--popover) 54%, transparent);
+  --glass-blur: blur(4px) saturate(1.6) brightness(1.12);
+  --glass-rim: color-mix(in oklab, white 24%, transparent);
+  --glass-rim-low: color-mix(in oklab, white 8%, transparent);
+  --glass-outline: color-mix(in oklab, white 7%, transparent);
   box-shadow:
-    inset 0 1px 0 0 color-mix(in oklab, white 12%, transparent),
-    0 12px 32px -8px rgb(0 0 0 / 0.55),
-    0 2px 6px -2px rgb(0 0 0 / 0.3);
+    inset 0 1px 0.5px 0 var(--glass-rim),
+    inset 0 -1px 0.5px 0 var(--glass-rim-low),
+    inset 0 0 0 1px var(--glass-outline),
+    0 16px 36px -10px rgb(0 0 0 / 0.55),
+    0 2px 8px -2px rgb(0 0 0 / 0.3);
+}
+/* Notifications: Sonner's own background and shadow, outranked. */
+[data-sonner-toast][data-styled="true"].glass {
+  background: var(--glass-tint);
+  box-shadow:
+    inset 0 1px 0.5px 0 var(--glass-rim),
+    inset 0 -1px 0.5px 0 var(--glass-rim-low),
+    inset 0 0 0 1px var(--glass-outline),
+    0 14px 34px -10px rgb(0 0 0 / 0.3);
+}
+/* Settings → Appearance → Menus: frosted (more blur, more color)… */
+[data-glass="frosted"] .glass {
+  --glass-tint: color-mix(in oklab, var(--popover) 66%, transparent);
+  --glass-blur: blur(14px) saturate(1.6);
+}
+/* …or solid: the plain menu color, the rim kept. */
+[data-glass="solid"] .glass {
+  --glass-tint: var(--popover);
+  --glass-blur: none;
+  text-shadow: none;
+}
+/* Inputs inside glass stay solid enough to type in. */
+.glass input {
+  text-shadow: none;
 }

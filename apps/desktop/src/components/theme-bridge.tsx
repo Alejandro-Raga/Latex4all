@@ -14,12 +14,13 @@ const STYLE_ID = "latex4all-blended-themes";
 /**
  * Keeps <html> in step with the chosen theme: the blended themes' styles,
  * the custom theme's colors, and the `theme-dark` class that switches
- * Tailwind's dark variant for every dark theme.
+ * Tailwind's dark variant for every dark theme, and how glassy menus are.
  */
 export function ThemeBridge() {
   const { resolvedTheme: resolved, forcedTheme } = useTheme();
   const resolvedTheme = forcedTheme ?? resolved;
   const custom = useSettingsStore((s) => s.customTheme);
+  const glass = useSettingsStore((s) => s.glass);
 
   useEffect(() => {
     if (document.getElementById(STYLE_ID)) return;
@@ -39,6 +40,11 @@ export function ThemeBridge() {
     }
     root.classList.toggle("theme-dark", isDarkTheme(resolvedTheme));
   }, [resolvedTheme, custom]);
+
+  // Menus and popovers: clear, frosted or solid (see .glass).
+  useEffect(() => {
+    document.documentElement.dataset.glass = glass;
+  }, [glass]);
 
   return null;
 }

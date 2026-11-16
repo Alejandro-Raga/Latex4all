@@ -16,6 +16,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
     <Sonner
       theme={isDarkTheme(resolvedTheme) ? "dark" : "light"}
       className="toaster group"
+      toastOptions={{ classNames: { toast: "glass" } }}
       icons={{
         success: <CircleCheckIcon className="size-4" />,
         info: <InfoIcon className="size-4" />,

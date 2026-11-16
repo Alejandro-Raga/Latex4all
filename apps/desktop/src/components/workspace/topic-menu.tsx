@@ -374,7 +374,7 @@ function NotesByType({
         <span className="flex-1 text-left">{g.plural}</span>
         <span className="text-muted-foreground text-xs">{g.notes.length}</span>
       </SubTrigger>
-      <SubContent className="glass-menu max-h-80 w-72 overflow-y-auto">
+      <SubContent className="glass max-h-80 w-72 overflow-y-auto">
         {g.notes.map((n) => {
           const linked = done(n);
           return (
@@ -509,7 +509,7 @@ export function NoteMenuAt({
           style={{ left: anchor.left, top: anchor.top }}
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="glass-menu w-44">
+      <DropdownMenuContent align="start" className="glass w-44">
         <DropdownMenuLabel className="text-muted-foreground text-xs">
           Add to note
         </DropdownMenuLabel>
