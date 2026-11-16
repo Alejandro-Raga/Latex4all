@@ -13,7 +13,22 @@
           currentWindow: { label: "main" },
           currentWebview: { windowLabel: "main", label: "main" },
         },
-        invoke: async (cmd, args) => {
+        invoke: async (cmd, args, options) => {
+          // The Planner: a disk held in memory, for projects' Plan.md.
+          if (location.search.includes("scenario=planner")) {
+            const disk = (window.__disk ??= new Map());
+            if (cmd === "plugin:fs|read_text_file") {
+              if (!disk.has(args.path)) throw new Error("not found");
+              return Array.from(new TextEncoder().encode(disk.get(args.path)));
+            }
+            if (cmd === "plugin:fs|write_text_file") {
+              const path = decodeURIComponent(options.headers.path);
+              disk.set(path, new TextDecoder().decode(args));
+              return null;
+            }
+            if (cmd.startsWith("plugin:event")) return 0;
+            return null;
+          }
           // The bug report window: its system details, and the report sent
           // kept for the test to read.
           if (location.search.includes("scenario=bug")) {

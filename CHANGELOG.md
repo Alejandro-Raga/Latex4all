@@ -23,6 +23,15 @@ tag.
 
 ### Added
 
+- **Planner**, on the start screen: tasks for each project and an Inbox,
+  with Today, Next 7 days and All gathered from all of them, as a list
+  or a board. Add tasks as you'd say them ("Revise the intro friday
+  !high #writing"); click one for its date, priority, section and
+  subtasks. In a project, the Plan panel (⌘⌥4) shows its plan beside the
+  writing. A project's plan is Plan.md in its folder, shared with
+  collaborators; the Inbox is Tasks/Inbox.md in the vault; both open in
+  Obsidian.
+
 - Library & Vault: a bar on top shows or hides the Zotero library and
   the vault, swaps them, and puts them side by side or one above the
   other. The layout is remembered.

@@ -146,6 +146,18 @@ Note types are saved in the vault, so every computer using it has the same ones.
 
 [Open Settings → Zotero](app:settings/zotero)
 
+## Planner
+
+The **Planner**, on the start screen, keeps your tasks: one list per project, and an **Inbox** for the rest.
+
+- **Today** and **Next 7 days** gather what's due from every project and the Inbox. **All** shows every open task.
+- **Add a task as you'd say it:** "Revise the intro friday !high #writing". Dates (today, tomorrow, friday, next week, in 3 days, 20 nov), priority (!high, !medium, !low) and tags are picked out. Spanish works too: mañana, el viernes.
+- **Click a task** to change its date, priority or section, add subtasks, or delete it.
+- **List or Board:** a project's sections (To do, In progress, Waiting…) show as columns on the board. Drag tasks between them, and add sections of your own.
+- **In a project**, the **Plan** panel (⌘⌥4) shows its plan beside your writing.
+
+A project's plan is **Plan.md** in the project folder, so in a shared project everyone sees the same plan. The Inbox is **Tasks/Inbox.md** in your vault. Both are plain Markdown, in the format of Obsidian's Tasks plugin, so they also open and check off in Obsidian.
+
 ## Chat assistant
 
 The chat opens from the round button at the bottom of the editor. The assistant can read your project and edit it; every change appears in the editor for you to keep or undo.
@@ -191,7 +203,7 @@ On Windows and Linux, use Ctrl where it says ⌘.
 | ⌘⌥E | Suggest an edit |
 | ⌘Y / ⌘N | Keep / undo all of the assistant's changes |
 | ⌘⇧X | Ask about part of the PDF |
-| ⌘⌥1, 2, 3 | Reference, Vault, Notes panels |
+| ⌘⌥1, 2, 3, 4 | Zotero library, Vault, Notes, Plan panels |
 | ⌘⇧[ / ⌘⇧] | Previous / next PDF tab |
 | ⌘[ | Back after following a link in a PDF |
 | ⌘T / ⌘W | New / close chat |

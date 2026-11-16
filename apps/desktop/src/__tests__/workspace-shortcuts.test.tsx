@@ -33,9 +33,13 @@ it("drives the palette, side panels and PDF tabs from the keyboard", async () =>
   await press({ key: "k" });
   expect(useCommandPalette.getState().open).toBe(false);
 
-  useDockStore.setState({ open: { reference: false, vault: false } });
+  useDockStore.setState({
+    open: { reference: false, vault: false, plan: false },
+  });
   await press({ altKey: true, key: "™", code: "Digit2" });
   expect(useDockStore.getState().open.vault).toBe(true);
+  await press({ altKey: true, key: "¢", code: "Digit4" });
+  expect(useDockStore.getState().open.plan).toBe(true);
 
   const r = useReadingStore.getState();
   r.open({ id: "a", label: "a", data: new Uint8Array() });

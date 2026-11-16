@@ -5,11 +5,11 @@ import { usePreviewStore } from "./preview-store";
 import { useReadingStore } from "./reading-store";
 
 /** Panels that live in the right-hand dock, top to bottom. */
-export const DOCK_PANELS = ["reference", "vault", "notes"] as const;
+export const DOCK_PANELS = ["reference", "vault", "plan", "notes"] as const;
 export type DockPanel = (typeof DOCK_PANELS)[number];
 
 interface DockState {
-  /** Reference and Vault; Notes/Chat opens through the annotations store. */
+  /** Zotero library, Vault and Plan; Notes/Chat opens through the annotations store. */
   open: Record<Exclude<DockPanel, "notes">, boolean>;
   /** Folded down to their header. */
   collapsed: Record<DockPanel, boolean>;
@@ -28,8 +28,8 @@ interface DockState {
 export const useDockStore = create<DockState>()(
   persist(
     (set, get) => ({
-      open: { reference: false, vault: false },
-      collapsed: { reference: false, vault: false, notes: false },
+      open: { reference: false, vault: false, plan: false },
+      collapsed: { reference: false, vault: false, plan: false, notes: false },
       wide: null,
       setWide: (panel) => {
         const reading = useReadingStore.getState();

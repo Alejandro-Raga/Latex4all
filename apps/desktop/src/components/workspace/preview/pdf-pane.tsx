@@ -3,6 +3,7 @@ import {
   BookOpenIcon,
   FileTextIcon,
   LibraryIcon,
+  ListTodoIcon,
   type LucideIcon,
   MessageSquareIcon,
   NotebookTextIcon,
@@ -17,8 +18,9 @@ import { PdfPreview } from "./pdf-preview";
 import { PanelBoundary } from "@/components/panel-boundary";
 
 const WIDE_TAB: Record<DockPanel, { label: string; icon: LucideIcon }> = {
-  reference: { label: "Reference", icon: LibraryIcon },
+  reference: { label: "Zotero library", icon: LibraryIcon },
   vault: { label: "Vault", icon: NotebookTextIcon },
+  plan: { label: "Plan", icon: ListTodoIcon },
   notes: { label: "Notes", icon: MessageSquareIcon },
 };
 

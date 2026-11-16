@@ -64,6 +64,7 @@ function snapshot(root: string) {
     dock: {
       reference: dock.open.reference,
       vault: dock.open.vault,
+      plan: dock.open.plan,
       notes: useAnnotationsStore.getState().panelOpen,
     },
     collapsed: dock.collapsed,
@@ -93,7 +94,11 @@ export function WorkspaceMemory() {
       return;
     }
     useDockStore.setState({
-      open: { reference: saved.dock.reference, vault: saved.dock.vault },
+      open: {
+        reference: saved.dock.reference,
+        vault: saved.dock.vault,
+        plan: saved.dock.plan,
+      },
       collapsed: saved.collapsed,
     });
     useAnnotationsStore.getState().setPanelOpen(saved.dock.notes);

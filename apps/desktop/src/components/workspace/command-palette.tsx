@@ -6,6 +6,7 @@ import {
   FileIcon,
   FileTextIcon,
   LibraryIcon,
+  ListTodoIcon,
   MessageSquareIcon,
   NotebookTextIcon,
   PaletteIcon,
@@ -42,9 +43,10 @@ export const useCommandPalette = create<{
 }>((set) => ({ open: false, setOpen: (open) => set({ open }) }));
 
 const PANELS: { panel: DockPanel; label: string; key: string }[] = [
-  { panel: "reference", label: "Reference", key: "1" },
+  { panel: "reference", label: "Zotero library", key: "1" },
   { panel: "vault", label: "Vault", key: "2" },
   { panel: "notes", label: "Notes", key: "3" },
+  { panel: "plan", label: "Plan", key: "4" },
 ];
 
 const SETTINGS: { id: SettingsSection; label: string }[] = [
@@ -222,7 +224,9 @@ export function CommandPalette() {
                       ? LibraryIcon
                       : panel === "vault"
                         ? NotebookTextIcon
-                        : MessageSquareIcon
+                        : panel === "plan"
+                          ? ListTodoIcon
+                          : MessageSquareIcon
                   }
                   label={`${isDockPanelOpen(panel) ? "Hide" : "Show"} ${label}`}
                   hint={`⌘⌥${key}`}

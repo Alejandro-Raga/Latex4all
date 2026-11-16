@@ -756,6 +756,63 @@ if (scenario === "bug") {
   );
 }
 
+if (scenario === "planner") {
+  // The Planner: one project with a plan on disk, and the Inbox in a vault
+  // held in memory.
+  const disk = new Map<string, string>([
+    [
+      "/papers/Paper 2/Plan.md",
+      "# Paper 2\n\n## To do\n\n- [ ] Draft the discussion ⏫ 📅 2020-01-01 #writing\n    - [ ] Compare with Cohen\n- [ ] Reply to reviewers\n\n## In progress\n\n## Waiting\n\n- [ ] Comments from María\n",
+    ],
+  ]);
+  (window as any).__disk = disk;
+  const files = new Map<string, string>();
+  (window as any).vaultFiles = files;
+  useVaultStore.setState({
+    source: {
+      kind: "local",
+      label: "Vault",
+      load: async () => ({
+        notes: [...files].map(([p, t]) => parseNote(p, t)),
+        attachments: new Map(),
+        versions: new Map(),
+        templates: [],
+        newNoteFolder: null,
+      }),
+      readAttachment: async () => new Uint8Array(),
+      readNote: async (p: string) => {
+        if (!files.has(p)) throw new Error("not found");
+        return { text: files.get(p) ?? "", version: null };
+      },
+      writeNote: async (p: string, t: string) => {
+        files.set(p, t);
+        return null;
+      },
+      createNote: async (p: string, t: string) => {
+        if (files.has(p)) throw new Error(`exists: ${p}`);
+        files.set(p, t);
+      },
+    },
+    index: null,
+  } as never);
+  useProjectStore.setState({
+    recentProjects: [
+      { path: "/papers/Paper 2", name: "Paper 2", lastOpened: 1 },
+      { path: "/papers/Thesis", name: "Thesis", lastOpened: 2 },
+    ],
+  } as never);
+  import("@/components/planner/planner-view").then(({ PlannerView }) =>
+    root.render(
+      <ThemeProvider attribute="class" themes={THEME_IDS}>
+        <ThemeBridge />
+        <div className="h-full" style={chrome}>
+          <PlannerView />
+        </div>
+      </ThemeProvider>,
+    ),
+  );
+}
+
 if (scenario === "appearance") {
   // Settings → Appearance: the themes and how glassy menus are.
   import("@/components/theme-picker").then(({ ThemeGrid }) =>

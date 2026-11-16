@@ -42,6 +42,7 @@ import {
   FileTextIcon,
   LayoutTemplateIcon,
   LibraryIcon,
+  ListTodoIcon,
   Loader2Icon,
   SearchIcon,
   PanelLeftIcon,
@@ -111,6 +112,7 @@ import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
 import { ThemeMenuButton } from "@/components/theme-picker";
 import { LibraryView } from "@/components/library-view";
+import { PlannerView } from "@/components/planner/planner-view";
 import { HelpView } from "@/components/help-view";
 import { useBugReport } from "@/components/bug-report-dialog";
 
@@ -130,7 +132,12 @@ const SORTS: Array<{ value: ProjectSort; label: string }> = [
   { value: "type", label: "Grouped by type" },
 ];
 
-type ProjectPickerSection = "projects" | "library" | "settings" | "help";
+type ProjectPickerSection =
+  | "projects"
+  | "library"
+  | "planner"
+  | "settings"
+  | "help";
 
 type RecentProject = {
   path: string;
@@ -644,6 +651,14 @@ export function ProjectPicker() {
             Library & Vault
           </ProjectNavButton>
           <ProjectNavButton
+            active={activeSection === "planner"}
+            collapsed={isSidebarCollapsed}
+            icon={ListTodoIcon}
+            onClick={() => setActiveSection("planner")}
+          >
+            Planner
+          </ProjectNavButton>
+          <ProjectNavButton
             active={activeSection === "settings"}
             collapsed={isSidebarCollapsed}
             icon={SettingsIcon}
@@ -701,6 +716,8 @@ export function ProjectPicker() {
       <main className="flex min-w-0 flex-1 flex-col">
         {activeSection === "library" ? (
           <LibraryView />
+        ) : activeSection === "planner" ? (
+          <PlannerView />
         ) : activeSection === "help" ? (
           <div className="flex h-full min-h-0 flex-col">
             <header className="flex h-[calc(48px+var(--titlebar-height))] shrink-0 items-center border-border/70 border-b bg-background px-5 pt-[var(--titlebar-height)]">

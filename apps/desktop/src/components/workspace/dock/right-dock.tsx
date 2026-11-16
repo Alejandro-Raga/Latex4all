@@ -7,6 +7,7 @@ import {
 } from "react-resizable-panels";
 import {
   LibraryIcon,
+  ListTodoIcon,
   type LucideIcon,
   MessageSquareIcon,
   NotebookTextIcon,
@@ -25,6 +26,7 @@ import { confirmLeaveVaultEdit } from "@/stores/vault-store";
 import { ChatPanel } from "../chat-panel";
 import { NotesPanel } from "../notes-panel";
 import { QuickReferencePanel } from "../quick-reference-panel";
+import { PlanPanel } from "../plan-panel";
 import { VaultPanel } from "../vault-panel";
 import { DockSectionProvider } from "./dock-section";
 import { PanelBoundary } from "@/components/panel-boundary";
@@ -35,8 +37,9 @@ const HEADER_PX = 40;
 const MIN_BODY_PX = 90;
 
 const DOCK_INFO: Record<DockPanel, { label: string; icon: LucideIcon }> = {
-  reference: { label: "Reference", icon: LibraryIcon },
+  reference: { label: "Zotero library", icon: LibraryIcon },
   vault: { label: "Vault", icon: NotebookTextIcon },
+  plan: { label: "Plan", icon: ListTodoIcon },
   notes: { label: "Notes", icon: MessageSquareIcon },
 };
 
@@ -52,6 +55,7 @@ function DockPanelContent({ panel }: { panel: DockPanel }) {
   const onClose = () => closeDockPanel(panel);
   if (panel === "reference") return <QuickReferencePanel onClose={onClose} />;
   if (panel === "vault") return <VaultPanel onClose={onClose} />;
+  if (panel === "plan") return <PlanPanel onClose={onClose} />;
   return panelTab === "chat" && chatDays > 0 ? (
     <ChatPanel onClose={onClose} />
   ) : (

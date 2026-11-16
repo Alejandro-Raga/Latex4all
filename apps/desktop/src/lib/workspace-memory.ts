@@ -14,7 +14,7 @@ export interface SavedTab {
 }
 
 export interface SavedWorkspace {
-  dock: { reference: boolean; vault: boolean; notes: boolean };
+  dock: { reference: boolean; vault: boolean; plan: boolean; notes: boolean };
   collapsed: Record<DockPanel, boolean>;
   wide: DockPanel | null;
   tabs: SavedTab[];
@@ -77,11 +77,13 @@ export function loadWorkspace(root: string): SavedWorkspace | null {
       dock: {
         reference: !!w.dock.reference,
         vault: !!w.dock.vault,
+        plan: !!w.dock.plan,
         notes: !!w.dock.notes,
       },
       collapsed: {
         reference: !!w.collapsed?.reference,
         vault: !!w.collapsed?.vault,
+        plan: !!w.collapsed?.plan,
         notes: !!w.collapsed?.notes,
       },
       wide: w.wide ?? null,
