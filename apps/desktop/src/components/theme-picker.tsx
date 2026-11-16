@@ -16,7 +16,11 @@ import {
   type ThemeColors,
 } from "@/lib/app-themes";
 import { cn } from "@/lib/utils";
-import { GLASS_LEVELS, useSettingsStore } from "@/stores/settings-store";
+import {
+  GLASS_LEVELS,
+  type GlassLevel,
+  useSettingsStore,
+} from "@/stores/settings-store";
 
 const GROUPS: AppTheme["group"][] = ["Classic", "Colorful", "Retro"];
 
@@ -252,34 +256,6 @@ export function ThemeGrid() {
                   <span className="truncate">{t.label}</span>
                 </button>
               ))}
-              <div>
-                <p className="mb-1.5 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
-                  Menus
-                </p>
-                <div
-                  className="inline-flex rounded-lg border border-border p-0.5"
-                  role="radiogroup"
-                  aria-label="Menus"
-                >
-                  {GLASS_LEVELS.map((level) => (
-                    <button
-                      key={level.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={glass === level.id}
-                      onClick={() => setGlass(level.id)}
-                      className={cn(
-                        "rounded-md px-3 py-1 text-xs transition-colors",
-                        glass === level.id
-                          ? "bg-muted font-medium text-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {level.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
               {group === "Retro" && (
                 <button
                   type="button"
@@ -294,8 +270,71 @@ export function ThemeGrid() {
             </div>
           </div>
         ))}
+        <div>
+          <p className="mb-1.5 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
+            Menus
+          </p>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+            {GLASS_LEVELS.map((level) => (
+              <button
+                key={level.id}
+                type="button"
+                onClick={() => setGlass(level.id)}
+                className={option(glass === level.id)}
+                aria-pressed={glass === level.id}
+              >
+                <GlassPreview level={level.id} />
+                {level.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       <CustomThemeEditor />
     </div>
+  );
+}
+
+/** A menu over a page of text, drawn at one glass level, for its tile. */
+function GlassPreview({ level }: { level: GlassLevel }) {
+  const menu: React.CSSProperties =
+    level === "solid"
+      ? { background: "var(--popover)" }
+      : level === "frosted"
+        ? {
+            background: "color-mix(in oklab, var(--popover) 66%, transparent)",
+            backdropFilter: "blur(3px) saturate(1.6)",
+            WebkitBackdropFilter: "blur(3px) saturate(1.6)",
+          }
+        : {
+            background: "color-mix(in oklab, var(--popover) 50%, transparent)",
+            backdropFilter: "blur(0.6px) saturate(1.8)",
+            WebkitBackdropFilter: "blur(0.6px) saturate(1.8)",
+          };
+  return (
+    <span className="relative block h-10 overflow-hidden rounded border border-border bg-background">
+      {/* The page: lines of text and a highlight. */}
+      <span className="absolute inset-x-1.5 top-1.5 flex flex-col gap-1">
+        <span className="h-1 w-4/5 rounded-full bg-foreground/50" />
+        <span className="h-1 w-3/5 rounded-full bg-amber-400" />
+        <span className="h-1 w-11/12 rounded-full bg-foreground/50" />
+        <span className="h-1 w-2/3 rounded-full bg-sky-400" />
+        <span className="h-1 w-4/5 rounded-full bg-foreground/50" />
+      </span>
+      {/* The menu over it. */}
+      <span
+        className="absolute top-2.5 right-1.5 bottom-1 left-1/3 flex flex-col gap-1 rounded-[3px] border border-border p-1"
+        style={{
+          ...menu,
+          boxShadow:
+            level === "solid"
+              ? "0 2px 4px -1px rgb(0 0 0 / 0.2)"
+              : "inset 0 1px 0 0 color-mix(in oklab, white 55%, transparent), 0 2px 4px -1px rgb(0 0 0 / 0.2)",
+        }}
+      >
+        <span className="h-0.5 w-3/4 rounded-full bg-popover-foreground/70" />
+        <span className="h-0.5 w-1/2 rounded-full bg-popover-foreground/70" />
+      </span>
+    </span>
   );
 }

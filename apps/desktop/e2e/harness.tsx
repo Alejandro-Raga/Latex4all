@@ -756,6 +756,24 @@ if (scenario === "bug") {
   );
 }
 
+if (scenario === "appearance") {
+  // Settings → Appearance: the themes and how glassy menus are.
+  import("@/components/theme-picker").then(({ ThemeGrid }) =>
+    root.render(
+      <ThemeProvider
+        attribute="class"
+        themes={THEME_IDS}
+        forcedTheme={params.get("theme") ?? undefined}
+      >
+        <ThemeBridge />
+        <div className="h-full w-[720px] overflow-auto bg-background text-foreground">
+          <ThemeGrid />
+        </div>
+      </ThemeProvider>,
+    ),
+  );
+}
+
 if (scenario === "help") {
   useHelp.getState().show();
   root.render(
