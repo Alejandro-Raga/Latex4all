@@ -7,7 +7,7 @@ test("a lone panel can't fold, and folding survives neighbours coming and going"
   errors,
 }) => {
   await open(page, "scenario=dock");
-  await expect(page.getByText("Quick reference")).toBeVisible();
+  await expect(page.getByText("Zotero library")).toBeVisible();
   await expect(page.locator(arrows)).toHaveCount(0);
 
   await page.evaluate(() =>
