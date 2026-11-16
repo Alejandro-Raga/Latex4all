@@ -41,6 +41,8 @@ tag.
   another project or the Inbox, or make it a subtask. Drag a task onto
   another to nest it. Subtasks show as a tree. Headings divide a project,
   and can be added, renamed and deleted (on the board too).
+- Planner colors come from the theme, one per kind of project: every
+  article the same color, every thesis another, in any theme.
 - Reading lists: right-click a paper to open it and read it. Statuses
   say what they mean (Highlighted, Quoted), and cited papers stay listed.
 - Library & Vault: a bar on top shows or hides the Zotero library and

@@ -807,11 +807,36 @@ if (scenario === "planner") {
     recentProjects: [
       { path: "/papers/Paper 2", name: "Paper 2", lastOpened: 1 },
       { path: "/papers/Thesis", name: "Thesis", lastOpened: 2 },
+      ...(params.get("types")
+        ? [
+            { path: "/papers/Paper 3", name: "Paper 3", lastOpened: 3 },
+            { path: "/papers/Talk", name: "Conference talk", lastOpened: 4 },
+            { path: "/papers/Poster", name: "Poster", lastOpened: 5 },
+            { path: "/papers/Chapter", name: "Book chapter", lastOpened: 6 },
+            { path: "/papers/Grant", name: "Grant", lastOpened: 7 },
+            { path: "/papers/Notes", name: "Loose notes", lastOpened: 8 },
+          ]
+        : []),
     ],
+    projectTypes: params.get("types")
+      ? {
+          "/papers/Paper 2": "Article",
+          "/papers/Paper 3": "Article",
+          "/papers/Thesis": "Thesis",
+          "/papers/Talk": "Presentation",
+          "/papers/Poster": "Poster",
+          "/papers/Chapter": "Book chapter",
+          "/papers/Grant": "Grant proposal",
+        }
+      : {},
   } as never);
   import("@/components/planner/planner-view").then(({ PlannerView }) =>
     root.render(
-      <ThemeProvider attribute="class" themes={THEME_IDS}>
+      <ThemeProvider
+        attribute="class"
+        themes={THEME_IDS}
+        forcedTheme={params.get("theme") ?? undefined}
+      >
         <ThemeBridge />
         <div className="h-full" style={chrome}>
           <PlannerView />

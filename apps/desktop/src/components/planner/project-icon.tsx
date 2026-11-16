@@ -35,22 +35,42 @@ export function typeIcon(type?: string): LucideIcon {
   return FolderIcon;
 }
 
-/** A project type's color, from the theme: every thesis looks alike. */
+/** Two theme colors blended: more distinct colors, still the theme's. */
+const blend = (a: number, b: number) =>
+  `color-mix(in oklab, var(--chart-${a}) 55%, var(--chart-${b}))`;
+
+/**
+ * Each kind of project has its color, from the theme: every article looks
+ * like every other article, in any theme, and differs from a thesis.
+ */
+const TYPE_COLORS: [RegExp, string][] = [
+  [/article|paper|artículo/, "var(--chart-1)"],
+  [/thesis|tesis|dissertation/, "var(--chart-2)"],
+  [/presentation|talk|slides|presentación/, "var(--chart-3)"],
+  [/poster|póster/, "var(--chart-4)"],
+  [/chapter|capítulo/, "var(--chart-5)"],
+  [/book|libro/, blend(5, 2)],
+  [/report|grant|proposal|informe/, blend(1, 3)],
+  [/cv|résumé|resume/, blend(4, 2)],
+  [/letter|carta/, blend(3, 4)],
+];
+
+/** Your own types: a color of the theme's picked by the name, always the same. */
+const OWN_COLORS = [
+  blend(1, 4),
+  blend(2, 3),
+  blend(3, 5),
+  blend(4, 1),
+  blend(5, 3),
+];
+
 export function typeColor(type?: string): string {
-  const t = (type ?? "").toLowerCase();
+  const t = (type ?? "").trim().toLowerCase();
   if (!t) return "var(--muted-foreground)";
-  if (t.includes("thesis") || t.includes("tesis")) return "var(--chart-1)";
-  if (
-    t.includes("presentation") ||
-    t.includes("talk") ||
-    t.includes("slides")
-  ) {
-    return "var(--chart-2)";
-  }
-  if (t.includes("poster")) return "var(--chart-3)";
-  if (t.includes("book")) return "var(--chart-4)";
-  if (t.includes("article") || t.includes("paper")) return "var(--primary)";
-  return "var(--chart-5)";
+  for (const [re, color] of TYPE_COLORS) if (re.test(t)) return color;
+  let hash = 0;
+  for (const ch of t) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return OWN_COLORS[hash % OWN_COLORS.length];
 }
 
 export function ProjectIcon({

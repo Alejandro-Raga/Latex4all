@@ -60,17 +60,28 @@ const SORT_LABEL: Record<ProjectSort, string> = {
 };
 
 /** Each smart list's color, and its icon. */
-/** Calm, in the theme's colors: only Today stands out. */
-const MUTED = "var(--muted-foreground)";
+/** Each list its own color, from the theme. */
 const SMART: Record<SmartFilter, { color: string; icon: ReactNode }> = {
   today: { color: "var(--primary)", icon: <TodayIcon /> },
-  tomorrow: { color: MUTED, icon: <SunIcon className="size-4" /> },
-  week: { color: MUTED, icon: <CalendarRangeIcon className="size-4" /> },
-  reading: { color: MUTED, icon: <BookOpenIcon className="size-4" /> },
-  all: { color: MUTED, icon: <LayersIcon className="size-4" /> },
-  completed: { color: MUTED, icon: <CheckCircle2Icon className="size-4" /> },
+  tomorrow: { color: "var(--chart-4)", icon: <SunIcon className="size-4" /> },
+  week: {
+    color: "var(--chart-3)",
+    icon: <CalendarRangeIcon className="size-4" />,
+  },
+  reading: {
+    color: "color-mix(in oklab, var(--chart-4) 50%, var(--chart-5))",
+    icon: <BookOpenIcon className="size-4" />,
+  },
+  all: {
+    color: "var(--muted-foreground)",
+    icon: <LayersIcon className="size-4" />,
+  },
+  completed: {
+    color: "var(--chart-2)",
+    icon: <CheckCircle2Icon className="size-4" />,
+  },
 };
-const INBOX_COLOR = MUTED;
+const INBOX_COLOR = "color-mix(in oklab, var(--chart-3) 55%, var(--chart-1))";
 
 /** Today's icon: a calendar page showing today's date. */
 function TodayIcon() {
