@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CheckIcon,
   HashIcon,
   LightbulbIcon,
+  LinkIcon,
   PlusIcon,
   ShapesIcon,
   Trash2Icon,
@@ -27,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { connectNotes } from "@/lib/vault/connect-notes";
 import { connectToIdea, connectToTopic } from "@/lib/vault/connect-topic";
 import { chooseNoteKind, deleteNote } from "@/lib/vault/note-changes";
 import { findNote, type NoteKind } from "@/lib/vault/vault-index";
@@ -322,6 +324,7 @@ export function NoteMenuItems({ noteName }: { noteName: string }) {
           resolve={async () => note.name}
         />
       )}
+      <ConnectNoteItem resolve={async () => note.name} />
       <ContextMenuSeparator />
       <DeleteNoteItem noteName={note.name} />
     </>
@@ -343,5 +346,137 @@ export function NoteContextMenu({
         <NoteMenuItems noteName={noteName} />
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+const useConnectNote = create<{
+  resolve: Resolve | null;
+  ask: (resolve: Resolve) => void;
+  close: () => void;
+}>((set) => ({
+  resolve: null,
+  ask: (resolve) => set({ resolve }),
+  close: () => set({ resolve: null }),
+}));
+
+/** "Connect to note…": links the note with any other in the vault. */
+export function ConnectNoteItem({ resolve }: { resolve: Resolve }) {
+  return (
+    <ContextMenuItem onClick={() => useConnectNote.getState().ask(resolve)}>
+      <LinkIcon className="size-3.5" />
+      Connect to note…
+    </ContextMenuItem>
+  );
+}
+
+/** Picks the other note; mounted once, opened from any ConnectNoteItem. */
+export function ConnectNoteDialog() {
+  const resolve = useConnectNote((s) => s.resolve);
+  const close = useConnectNote((s) => s.close);
+  const index = useVaultStore((s) => s.index);
+  const [query, setQuery] = useState("");
+  const [from, setFrom] = useState<string | null>(null);
+
+  // The note may not exist yet (a paper from Zotero): made on opening.
+  const [resolving, setResolving] = useState(false);
+  const opened = resolve !== null;
+  useEffect(() => {
+    setFrom(null);
+    setQuery("");
+    if (!resolve) return;
+    let cancelled = false;
+    setResolving(true);
+    resolve()
+      .then((name) => !cancelled && setFrom(name))
+      .catch((err) => {
+        toast.error(err instanceof Error ? err.message : String(err));
+        close();
+      })
+      .finally(() => !cancelled && setResolving(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [resolve, close]);
+
+  const source = index && from ? findNote(index, from) : undefined;
+  const matches = useMemo(() => {
+    if (!index) return [];
+    const q = query.trim().toLowerCase();
+    return index.list
+      .filter((n) => n.path !== source?.path)
+      .filter((n) => !q || n.name.toLowerCase().includes(q))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .slice(0, 60);
+  }, [index, query, source?.path]);
+
+  const pick = (name: string) => {
+    if (!from) return;
+    close();
+    const id = toast.loading(`Connecting to ${name}…`);
+    connectNotes(from, name)
+      .then((to) => toast.success(`${from} and ${to} are connected`, { id }))
+      .catch((err) =>
+        toast.error(err instanceof Error ? err.message : String(err), { id }),
+      );
+  };
+
+  return (
+    <Dialog open={opened} onOpenChange={(open) => !open && close()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="truncate">
+            Connect {from ? `“${from}”` : "note"} to…
+          </DialogTitle>
+        </DialogHeader>
+        <form
+          className="space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (matches[0]) pick(matches[0].name);
+          }}
+        >
+          <Input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search notes…"
+            aria-label="Note to connect to"
+            disabled={resolving}
+          />
+          <div className="max-h-72 overflow-y-auto">
+            {matches.map((n) => {
+              const linked =
+                !!source &&
+                (source.outgoing.includes(n.name) ||
+                  n.outgoing.includes(source.name));
+              return (
+                <button
+                  key={n.path}
+                  type="button"
+                  disabled={linked || resolving}
+                  onClick={() => pick(n.name)}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent"
+                >
+                  {linked ? (
+                    <CheckIcon className="size-3.5 shrink-0" />
+                  ) : (
+                    <LinkIcon className="size-3.5 shrink-0 opacity-40" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate">{n.name}</span>
+                  <span className="shrink-0 text-muted-foreground text-xs">
+                    {n.kind}
+                  </span>
+                </button>
+              );
+            })}
+            {matches.length === 0 && (
+              <p className="px-2 py-1 text-muted-foreground text-sm">
+                No notes match.
+              </p>
+            )}
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

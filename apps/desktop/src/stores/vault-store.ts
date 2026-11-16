@@ -256,6 +256,8 @@ interface VaultState {
     folder: string,
     title: string,
     template: string | null,
+    /** Written when there's no template: a topic's or idea's sections. */
+    blank?: (name: string) => string,
   ) => Promise<string>;
   open: (name: string) => void;
   back: () => void;
@@ -561,14 +563,14 @@ export const useVaultStore = create<VaultState>()(
         get().reload();
       },
 
-      createNote: async (folder, title, template) => {
+      createNote: async (folder, title, template, blank) => {
         const { source } = get();
         if (!source) throw new Error("No vault is open.");
         const name = title.replace(/[\\/:*?"<>|#^[\]]/g, "").trim();
         if (!name) throw new Error("Give the note a title.");
         const text = template
           ? fillTemplate((await source.readNote(template)).text, name)
-          : "";
+          : (blank?.(name) ?? "");
         set({ lastNoteFolder: folder, lastTemplate: template ?? "" });
         const path = folder ? `${folder}/${name}.md` : `${name}.md`;
         await source.createNote(path, text);

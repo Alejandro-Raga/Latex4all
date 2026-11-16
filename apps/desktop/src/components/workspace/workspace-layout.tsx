@@ -20,7 +20,6 @@ import { ProjectNoteSync } from "./project-note-sync";
 import { CitationCheckDialog } from "./citation-check";
 import { WorkspaceMemory } from "./workspace-memory";
 import { CommandPalette, useWorkspaceShortcuts } from "./command-palette";
-import { NewTopicDialog } from "./topic-menu";
 import { ZoteroTargetDialog } from "./zotero-target-dialog";
 import { MemoryDialog } from "@/components/claude-chat/memory-dialog";
 import {
@@ -283,7 +282,6 @@ export function WorkspaceLayout() {
       <CitationCheckDialog />
       <WorkspaceMemory />
       <CommandPalette />
-      <NewTopicDialog />
       <ZoteroTargetDialog />
       <MemoryDialog />
     </div>

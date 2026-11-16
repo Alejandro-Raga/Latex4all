@@ -24,6 +24,9 @@ import {
   LibraryIcon,
   Loader2Icon,
   Maximize2Icon,
+  Minimize2Icon,
+  PanelBottomIcon,
+  PanelRightIcon,
   PlusIcon,
   BookOpenIcon,
   MessageSquarePlusIcon,
@@ -116,7 +119,7 @@ import {
   addCitekeysToVault,
   addCitekeysToZoteroWithToast,
 } from "./citation-check";
-import { TopicMenu } from "./topic-menu";
+import { ConnectNoteItem, TopicMenu } from "./topic-menu";
 import { groupProjects } from "@/lib/project-grouping";
 import { LibraryFilterRow } from "./library-filter";
 import { FilterToggle } from "./vault-filter";
@@ -251,7 +254,14 @@ function normalizePath(path: string): string {
   return path.replace(/[\\/]+$/, "").toLowerCase();
 }
 
-export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
+export function QuickReferencePanel({
+  onClose,
+  closeOnEscape = true,
+}: {
+  onClose: () => void;
+  /** Off in the library, where Esc is for the reader and the dialogs. */
+  closeOnEscape?: boolean;
+}) {
   const recentProjects = useProjectStore((s) => s.recentProjects);
   const currentProjectRoot = useDocumentStore((s) => s.projectRoot);
   const zoteroAuthenticated = useZoteroStore((s) => s.isAuthenticated);
@@ -602,12 +612,33 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   }, [selectedFile, zoteroApiKey, zoteroUserID]);
 
   useEffect(() => {
+    if (!closeOnEscape) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [onClose, closeOnEscape]);
+
+  // Without a project there's no PDF pane: a paper is read here, below the
+  // list or beside it, or across the whole pane.
+  const [previewSide, setPreviewSide] = useStoredChoice<"below" | "beside">(
+    "quick-reference-preview-side",
+    "below",
+    ["below", "beside"],
+  );
+  const [previewFull, setPreviewFull] = useState(false);
+  const beside = previewSide === "beside";
+  const fullPreview = previewFull && !currentProjectRoot;
+  const direction = beside && !currentProjectRoot ? "horizontal" : "vertical";
+  const readerControls = currentProjectRoot
+    ? undefined
+    : {
+        beside,
+        full: previewFull,
+        toggleSide: () => setPreviewSide(beside ? "below" : "beside"),
+        toggleFull: () => setPreviewFull((f) => !f),
+      };
 
   const refProjectName = refProjectPath
     ? refProjectPath.split(/[/\\]/).pop() || refProjectPath
@@ -639,13 +670,20 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
   // Only once something is picked: an empty preview is wasted room.
   const previewPane = selectedFile && (
     <>
-      <PanelResizeHandle className="h-px bg-border transition-colors hover:bg-ring" />
+      {!fullPreview && (
+        <PanelResizeHandle
+          className={cn(
+            "bg-border transition-colors hover:bg-ring",
+            beside && !currentProjectRoot ? "w-px" : "h-px",
+          )}
+        />
+      )}
       <Panel
         id="preview"
         order={2}
         defaultSize={50}
         minSize={15}
-        className="min-h-0"
+        className="min-h-0 min-w-0"
       >
         <div className="flex h-full flex-col">
           <div className="flex shrink-0 items-center gap-1.5 border-border border-b px-2 py-1">
@@ -659,6 +697,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
               onClick={() => {
                 setSelectedFile(null);
                 setPreview(null);
+                setPreviewFull(false);
               }}
               title="Close the preview"
               aria-label="Close the preview"
@@ -667,7 +706,11 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
             </Button>
           </div>
           <div className="min-h-0 flex-1">
-            <FilePreview selectedFile={selectedFile} preview={preview} />
+            <FilePreview
+              selectedFile={selectedFile}
+              preview={preview}
+              reader={readerControls}
+            />
           </div>
         </div>
       </Panel>
@@ -692,7 +735,7 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
           <LibraryIcon className="size-3.5 text-muted-foreground" />
         )}
         <span className="min-w-0 flex-1 truncate font-medium text-sm">
-          {refProjectName ?? "Quick reference"}
+          {refProjectName ?? "Zotero library"}
         </span>
         <DockWideButton />
         <Button
@@ -701,291 +744,338 @@ export function QuickReferencePanel({ onClose }: { onClose: () => void }) {
           className="size-6"
           onClick={onClose}
           title="Close"
-          aria-label="Close quick reference"
+          aria-label="Close the Zotero library"
         >
           <XIcon className="size-3.5" />
         </Button>
       </DockHeaderBar>
 
       {!refProjectPath && (
-        <PanelGroup direction="vertical" className="min-h-0 flex-1">
-          <Panel
-            id="browse"
-            order={1}
-            defaultSize={55}
-            minSize={20}
-            className="min-h-0"
-          >
-            <div className="h-full overflow-y-auto p-2">
-              <FoldSection
-                id="projects"
-                title="Projects"
-                count={availableProjects.length}
-                action={
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    onClick={handleBrowse}
-                    title="Open folder…"
-                    aria-label="Open folder"
-                  >
-                    <FolderOpenIcon className="size-3.5" />
-                  </Button>
-                }
-              >
-                <ReferenceProjects
-                  projects={availableProjects}
-                  onOpen={openReferenceProject}
-                  onBrowse={handleBrowse}
-                />
-              </FoldSection>
+        <PanelGroup
+          key={direction}
+          direction={direction}
+          className="min-h-0 flex-1"
+        >
+          {!fullPreview && (
+            <Panel
+              id="browse"
+              order={1}
+              defaultSize={55}
+              minSize={20}
+              className="min-h-0"
+            >
+              <div className="h-full overflow-y-auto p-2">
+                <FoldSection
+                  id="projects"
+                  title="Projects"
+                  count={availableProjects.length}
+                  action={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6"
+                      onClick={handleBrowse}
+                      title="Open folder…"
+                      aria-label="Open folder"
+                    >
+                      <FolderOpenIcon className="size-3.5" />
+                    </Button>
+                  }
+                >
+                  <ReferenceProjects
+                    projects={availableProjects}
+                    onOpen={openReferenceProject}
+                    onBrowse={handleBrowse}
+                  />
+                </FoldSection>
 
-              <FoldSection
-                id="zotero"
-                title="Zotero"
-                action={zoteroAuthenticated ? <ZoteroRefresh /> : undefined}
-              >
-                {!zoteroAuthenticated ? (
-                  <button
-                    type="button"
-                    onClick={() => useSettingsWindow.getState().show("zotero")}
-                    className="px-2 py-1 text-left text-muted-foreground text-xs hover:text-foreground"
-                  >
-                    Connect Zotero in Settings to browse your library here.
-                  </button>
-                ) : (
-                  <div className="flex flex-col gap-0.5">
-                    <div className="mb-1 flex items-center gap-1.5 px-2">
-                      <div className="relative min-w-0 flex-1">
-                        <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          value={zoteroQuery}
-                          onChange={(e) => setZoteroQuery(e.target.value)}
-                          placeholder="Search title or author…"
-                          aria-label="Search references by title or author"
-                          title="Also: author:nelson, year:1990-2005, year:>2010, type:book"
-                          className="h-7 pr-7 pl-7 text-xs"
-                        />
-                        {zoteroQuery && (
-                          <button
-                            type="button"
-                            onClick={() => setZoteroQuery("")}
-                            aria-label="Clear search"
-                            className="absolute top-1/2 right-1.5 flex size-4 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                <FoldSection
+                  id="zotero"
+                  title="Zotero"
+                  action={zoteroAuthenticated ? <ZoteroRefresh /> : undefined}
+                >
+                  {!zoteroAuthenticated ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        useSettingsWindow.getState().show("zotero")
+                      }
+                      className="px-2 py-1 text-left text-muted-foreground text-xs hover:text-foreground"
+                    >
+                      Connect Zotero in Settings to browse your library here.
+                    </button>
+                  ) : (
+                    <div className="flex flex-col gap-0.5">
+                      <div className="mb-1 flex items-center gap-1.5 px-2">
+                        <div className="relative min-w-0 flex-1">
+                          <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            value={zoteroQuery}
+                            onChange={(e) => setZoteroQuery(e.target.value)}
+                            placeholder="Search title or author…"
+                            aria-label="Search references by title or author"
+                            title="Also: author:nelson, year:1990-2005, year:>2010, type:book"
+                            className="h-7 pr-7 pl-7 text-xs"
+                          />
+                          {zoteroQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setZoteroQuery("")}
+                              aria-label="Clear search"
+                              className="absolute top-1/2 right-1.5 flex size-4 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            >
+                              <XIcon className="size-3" />
+                            </button>
+                          )}
+                        </div>
+                        <Select
+                          value={zoteroSort}
+                          onValueChange={(value) =>
+                            setZoteroSort(value as ReferenceSort)
+                          }
+                        >
+                          <SelectTrigger
+                            size="sm"
+                            className="h-7! w-auto shrink-0 text-xs"
+                            aria-label="Order references"
+                            title="Order references"
                           >
-                            <XIcon className="size-3" />
-                          </button>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {REFERENCE_SORTS.map((option) => (
+                              <SelectItem
+                                key={option.value}
+                                value={option.value}
+                              >
+                                {option.value === "relevance" &&
+                                !zoteroQuery.trim()
+                                  ? "Default"
+                                  : option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FilterToggle
+                          open={showZoteroFilters}
+                          active={referenceFilterActive(zoteroFilter)}
+                          onToggle={() => setShowZoteroFilters((v) => !v)}
+                        />
+                        {currentProjectRoot && (
+                          <CitedToggle on={citedOnly} onChange={setCitedOnly} />
                         )}
                       </div>
-                      <Select
-                        value={zoteroSort}
-                        onValueChange={(value) =>
-                          setZoteroSort(value as ReferenceSort)
-                        }
-                      >
-                        <SelectTrigger
-                          size="sm"
-                          className="h-7! w-auto shrink-0 text-xs"
-                          aria-label="Order references"
-                          title="Order references"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {REFERENCE_SORTS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.value === "relevance" &&
-                              !zoteroQuery.trim()
-                                ? "Default"
-                                : option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FilterToggle
-                        open={showZoteroFilters}
-                        active={referenceFilterActive(zoteroFilter)}
-                        onToggle={() => setShowZoteroFilters((v) => !v)}
-                      />
-                      {currentProjectRoot && (
-                        <CitedToggle on={citedOnly} onChange={setCitedOnly} />
-                      )}
-                    </div>
-                    {showZoteroFilters && (
-                      <LibraryFilterRow
-                        items={
-                          zoteroItemsByCollection.get(MY_LIBRARY_KEY) ?? []
-                        }
-                        filter={zoteroFilter}
-                        onChange={setZoteroFilter}
-                      />
-                    )}
-                    {citedOnly && currentProjectRoot ? (
-                      <>
-                        <CitedHeader order={citedOrder} onOrder={setCitedOrder}>
-                          {!libraryReady ? (
-                            "Loading your library…"
-                          ) : (
-                            <>
-                              {cited.items.length} cited in this project
-                              {cited.missing.length > 0 && (
-                                <>
-                                  {" · "}
-                                  <span title={cited.missing.join(", ")}>
-                                    {cited.missing.length} not in Zotero:
-                                  </span>{" "}
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      void addCitekeysToZoteroWithToast(
-                                        cited.missing,
-                                      )
-                                    }
-                                    className="text-primary hover:underline"
-                                  >
-                                    add
-                                  </button>
-                                  {vaultReady && (
-                                    <>
-                                      {" · "}
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          void addCitekeysToVault(cited.missing)
-                                        }
-                                        className="text-primary hover:underline"
-                                        title="Adds them to Zotero, then writes their notes"
-                                      >
-                                        add with notes
-                                      </button>
-                                    </>
-                                  )}
-                                </>
-                              )}
-                            </>
-                          )}
-                        </CitedHeader>
-                        {orderCited(
-                          matchingQuery(
-                            cited.items.filter(
-                              (c) =>
-                                filterByConditions([c.item], zoteroFilter)
-                                  .length > 0,
-                            ),
-                            zoteroQuery,
-                          ),
-                          (c) => c.places,
-                          (c) => cited.items.indexOf(c),
-                          citedOrder,
-                        ).map(({ item, places }) => (
-                          <ZoteroItemRow
-                            key={item.key}
-                            item={item}
-                            isSelected={selectedZoteroItemKey === item.key}
-                            onSelect={selectZoteroItem}
-                            places={places}
-                          />
-                        ))}
-                      </>
-                    ) : searching ? (
-                      <ZoteroSearchResults
-                        results={searchResults}
-                        loading={zoteroLoadingKeys.has(MY_LIBRARY_KEY)}
-                        error={zoteroErrorKeys.get(MY_LIBRARY_KEY)}
-                        selectedItemKey={selectedZoteroItemKey}
-                        onSelectItem={selectZoteroItem}
-                      />
-                    ) : (
-                      <>
-                        <ZoteroTreeRow
-                          icon={BookOpenIcon}
-                          label="My Library"
-                          collectionKey={null}
-                          expanded={expandedZoteroCollections.has(
-                            MY_LIBRARY_KEY,
-                          )}
-                          onToggle={() =>
-                            toggleZoteroNode(MY_LIBRARY_KEY, null)
+                      {showZoteroFilters && (
+                        <LibraryFilterRow
+                          items={
+                            zoteroItemsByCollection.get(MY_LIBRARY_KEY) ?? []
                           }
+                          filter={zoteroFilter}
+                          onChange={setZoteroFilter}
                         />
-                        {expandedZoteroCollections.has(MY_LIBRARY_KEY) && (
-                          <ZoteroNestedGroup>
-                            <ZoteroItemsSlot
-                              items={zoteroItemsByCollection.get(
-                                MY_LIBRARY_KEY,
-                              )}
-                              loading={zoteroLoadingKeys.has(MY_LIBRARY_KEY)}
-                              error={zoteroErrorKeys.get(MY_LIBRARY_KEY)}
+                      )}
+                      {citedOnly && currentProjectRoot ? (
+                        <>
+                          <CitedHeader
+                            order={citedOrder}
+                            onOrder={setCitedOrder}
+                          >
+                            {!libraryReady ? (
+                              "Loading your library…"
+                            ) : (
+                              <>
+                                {cited.items.length} cited in this project
+                                {cited.missing.length > 0 && (
+                                  <>
+                                    {" · "}
+                                    <span title={cited.missing.join(", ")}>
+                                      {cited.missing.length} not in Zotero:
+                                    </span>{" "}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        void addCitekeysToZoteroWithToast(
+                                          cited.missing,
+                                        )
+                                      }
+                                      className="text-primary hover:underline"
+                                    >
+                                      add
+                                    </button>
+                                    {vaultReady && (
+                                      <>
+                                        {" · "}
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            void addCitekeysToVault(
+                                              cited.missing,
+                                            )
+                                          }
+                                          className="text-primary hover:underline"
+                                          title="Adds them to Zotero, then writes their notes"
+                                        >
+                                          add with notes
+                                        </button>
+                                      </>
+                                    )}
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </CitedHeader>
+                          {orderCited(
+                            matchingQuery(
+                              cited.items.filter(
+                                (c) =>
+                                  filterByConditions([c.item], zoteroFilter)
+                                    .length > 0,
+                              ),
+                              zoteroQuery,
+                            ),
+                            (c) => c.places,
+                            (c) => cited.items.indexOf(c),
+                            citedOrder,
+                          ).map(({ item, places }) => (
+                            <ZoteroItemRow
+                              key={item.key}
+                              item={item}
+                              isSelected={selectedZoteroItemKey === item.key}
+                              onSelect={selectZoteroItem}
+                              places={places}
+                            />
+                          ))}
+                        </>
+                      ) : searching ? (
+                        <ZoteroSearchResults
+                          results={searchResults}
+                          loading={zoteroLoadingKeys.has(MY_LIBRARY_KEY)}
+                          error={zoteroErrorKeys.get(MY_LIBRARY_KEY)}
+                          selectedItemKey={selectedZoteroItemKey}
+                          onSelectItem={selectZoteroItem}
+                        />
+                      ) : (
+                        <>
+                          <ZoteroTreeRow
+                            icon={BookOpenIcon}
+                            label="My Library"
+                            collectionKey={null}
+                            expanded={expandedZoteroCollections.has(
+                              MY_LIBRARY_KEY,
+                            )}
+                            onToggle={() =>
+                              toggleZoteroNode(MY_LIBRARY_KEY, null)
+                            }
+                          />
+                          {expandedZoteroCollections.has(MY_LIBRARY_KEY) && (
+                            <ZoteroNestedGroup>
+                              <ZoteroItemsSlot
+                                items={zoteroItemsByCollection.get(
+                                  MY_LIBRARY_KEY,
+                                )}
+                                loading={zoteroLoadingKeys.has(MY_LIBRARY_KEY)}
+                                error={zoteroErrorKeys.get(MY_LIBRARY_KEY)}
+                                selectedItemKey={selectedZoteroItemKey}
+                                onSelectItem={selectZoteroItem}
+                                sort={zoteroSort}
+                              />
+                            </ZoteroNestedGroup>
+                          )}
+                          {zoteroCollectionTree.map((node) => (
+                            <ZoteroCollectionTree
+                              key={node.key}
+                              node={node}
+                              expandedKeys={expandedZoteroCollections}
+                              onToggleExpand={toggleZoteroNode}
+                              itemsByCollection={zoteroItemsByCollection}
+                              loadingKeys={zoteroLoadingKeys}
+                              errorKeys={zoteroErrorKeys}
                               selectedItemKey={selectedZoteroItemKey}
                               onSelectItem={selectZoteroItem}
                               sort={zoteroSort}
                             />
-                          </ZoteroNestedGroup>
-                        )}
-                        {zoteroCollectionTree.map((node) => (
-                          <ZoteroCollectionTree
-                            key={node.key}
-                            node={node}
-                            expandedKeys={expandedZoteroCollections}
-                            onToggleExpand={toggleZoteroNode}
-                            itemsByCollection={zoteroItemsByCollection}
-                            loadingKeys={zoteroLoadingKeys}
-                            errorKeys={zoteroErrorKeys}
-                            selectedItemKey={selectedZoteroItemKey}
-                            onSelectItem={selectZoteroItem}
-                            sort={zoteroSort}
-                          />
-                        ))}
-                      </>
-                    )}
-                  </div>
-                )}
-              </FoldSection>
-            </div>
-          </Panel>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </FoldSection>
+              </div>
+            </Panel>
+          )}
           {previewPane}
         </PanelGroup>
       )}
 
       {refProjectPath && (
-        <PanelGroup direction="vertical" className="min-h-0 flex-1">
-          <Panel
-            id="browse"
-            order={1}
-            defaultSize={45}
-            minSize={15}
-            className="min-h-0"
-          >
-            <div className="h-full overflow-y-auto p-1.5">
-              {treeLoading && (
-                <div className="flex items-center gap-2 p-2 text-muted-foreground text-xs">
-                  <Loader2Icon className="size-3.5 animate-spin" />
-                  Reading project…
-                </div>
-              )}
-              {treeError && (
-                <p className="p-2 text-destructive text-xs">{treeError}</p>
-              )}
-              {tree && !treeLoading && (
-                <TreeView
-                  node={tree}
-                  depth={0}
-                  expanded={expanded}
-                  onToggleFolder={toggleFolder}
-                  selectedPath={
-                    selectedFile?.source === "fs" ? selectedFile.label : null
-                  }
-                  onSelectFile={selectFile}
-                />
-              )}
-            </div>
-          </Panel>
+        <PanelGroup
+          key={direction}
+          direction={direction}
+          className="min-h-0 flex-1"
+        >
+          {!fullPreview && (
+            <Panel
+              id="browse"
+              order={1}
+              defaultSize={45}
+              minSize={15}
+              className="min-h-0"
+            >
+              <div className="h-full overflow-y-auto p-1.5">
+                {treeLoading && (
+                  <div className="flex items-center gap-2 p-2 text-muted-foreground text-xs">
+                    <Loader2Icon className="size-3.5 animate-spin" />
+                    Reading project…
+                  </div>
+                )}
+                {treeError && (
+                  <p className="p-2 text-destructive text-xs">{treeError}</p>
+                )}
+                {tree && !treeLoading && (
+                  <TreeView
+                    node={tree}
+                    depth={0}
+                    expanded={expanded}
+                    onToggleFolder={toggleFolder}
+                    selectedPath={
+                      selectedFile?.source === "fs" ? selectedFile.label : null
+                    }
+                    onSelectFile={selectFile}
+                  />
+                )}
+              </div>
+            </Panel>
+          )}
           {previewPane}
         </PanelGroup>
       )}
     </div>
   );
+}
+
+/** A choice remembered on this computer. */
+function useStoredChoice<T extends string>(
+  key: string,
+  fallback: T,
+  allowed: readonly T[],
+): [T, (value: T) => void] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = localStorage.getItem(key) as T | null;
+      return stored && allowed.includes(stored) ? stored : fallback;
+    } catch {
+      return fallback;
+    }
+  });
+  const set = (next: T) => {
+    setValue(next);
+    try {
+      localStorage.setItem(key, next);
+    } catch {
+      // Remembered for this session only.
+    }
+  };
+  return [value, set];
 }
 
 /** Whether a section is folded, remembered on this computer. */
@@ -1534,6 +1624,11 @@ function ZoteroItemRow({
             vaultNoteName ?? (await addPaperToVault(item.key)).name
           }
         />
+        <ConnectNoteItem
+          resolve={async () =>
+            vaultNoteName ?? (await addPaperToVault(item.key)).name
+          }
+        />
         {projectOpen && <ContextMenuSeparator />}
         {!projectOpen ? null : bibFiles.length === 0 ? (
           <ContextMenuItem
@@ -1818,12 +1913,22 @@ function TreeView({
   );
 }
 
+/** How a paper is laid out in the library, where there's no PDF pane. */
+interface ReaderControls {
+  beside: boolean;
+  full: boolean;
+  toggleSide: () => void;
+  toggleFull: () => void;
+}
+
 function FilePreview({
   selectedFile,
   preview,
+  reader,
 }: {
   selectedFile: SelectedFile | null;
   preview: Preview | null;
+  reader?: ReaderControls;
 }) {
   if (!selectedFile) {
     return (
@@ -1925,16 +2030,53 @@ function FilePreview({
         ) : undefined
       }
       actions={
-        <Button
-          variant="outline"
-          size="sm"
-          className="mr-1 h-6 shrink-0 gap-1 px-2 text-xs"
-          onClick={() => useReadingStore.getState().open(paper)}
-          title="Opens it in a tab of the big PDF pane, beside your editor"
-        >
-          <Maximize2Icon className="size-3" />
-          Open in PDF pane
-        </Button>
+        reader ? (
+          <>
+            {!reader.full && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6 shrink-0"
+                onClick={reader.toggleSide}
+                title={reader.beside ? "Below the list" : "Beside the list"}
+                aria-label={
+                  reader.beside ? "Below the list" : "Beside the list"
+                }
+              >
+                {reader.beside ? (
+                  <PanelBottomIcon className="size-3.5" />
+                ) : (
+                  <PanelRightIcon className="size-3.5" />
+                )}
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="mr-1 size-6 shrink-0"
+              onClick={reader.toggleFull}
+              title={reader.full ? "Show the list" : "Hide the list"}
+              aria-label={reader.full ? "Show the list" : "Hide the list"}
+            >
+              {reader.full ? (
+                <Minimize2Icon className="size-3.5" />
+              ) : (
+                <Maximize2Icon className="size-3.5" />
+              )}
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mr-1 h-6 shrink-0 gap-1 px-2 text-xs"
+            onClick={() => useReadingStore.getState().open(paper)}
+            title="Opens it in a tab of the big PDF pane, beside your editor"
+          >
+            <Maximize2Icon className="size-3" />
+            Open in PDF pane
+          </Button>
+        )
       }
     />
   );

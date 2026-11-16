@@ -21,6 +21,27 @@ tag.
 
 ## [Unreleased]
 
+### Added
+
+- Library & Vault: a bar on top shows or hides the Zotero library and
+  the vault, and swaps their sides. The layout is remembered.
+- Reading a paper in Library & Vault: put the PDF beside the list
+  instead of below it, or hide the list to read across the whole pane.
+- **Connect to note…** on any note, and on papers in the Zotero
+  library, links it with any other note, a topic with a related topic
+  for example. Both notes list each other under Related.
+- New notes can be a topic, an idea or a plain note, not only what the
+  vault's templates offer. A topic or idea gets its usual sections.
+
+### Fixed
+
+- Right-click → Connect to topic/idea → New… did nothing in Library &
+  Vault.
+- Open in PDF pane did nothing in Library & Vault, where there is no
+  PDF pane; the reader's own layout buttons take its place there.
+- Esc no longer closes the Zotero library in Library & Vault.
+- The Zotero panel is called Zotero library instead of Quick reference.
+
 ## [3.0.0] - 2026-11-05
 
 ### Added

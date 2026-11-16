@@ -67,6 +67,7 @@ import {
 } from "./cited-here";
 import { NoteContextMenu, NoteMenuItems } from "./topic-menu";
 import { kindFolder } from "@/lib/vault/kind-folders";
+import { newGroupNote } from "@/lib/vault/add-passage";
 import { chooseNoteKind, unlinkProject } from "@/lib/vault/note-changes";
 import { citeKeyAtCursor } from "@/lib/vault/cite-at-cursor";
 import { noteForCitekey } from "@/lib/vault/cite-link";
@@ -1218,12 +1219,40 @@ function NewNoteForm({
   const [template, setTemplate] = useState(
     lastTemplate && templates.includes(lastTemplate) ? lastTemplate : "",
   );
+  // Papers come from Zotero and projects from their folders: not made here.
+  const kinds = useKindChoices().filter(
+    (k) => k.kind !== "paper" && k.kind !== "project",
+  );
+  const [kind, setKind] = useState<NoteKind>(
+    () => kindFromTemplate(template) ?? "note",
+  );
   const [busy, setBusy] = useState(false);
+
+  const pickKind = (next: NoteKind) => {
+    setKind(next);
+    const where = kindFolder(next);
+    if (where !== null) setFolder(where);
+    // The vault's own template for that kind, if it has one.
+    const match = templates.find((t) => kindFromTemplate(t) === next);
+    setTemplate(match ?? (kindFromTemplate(template) ? "" : template));
+  };
 
   const create = async () => {
     setBusy(true);
     try {
-      onDone(await createNote(folder, title, template || null));
+      const today = new Date().toISOString().slice(0, 10);
+      const name = await createNote(
+        folder,
+        title,
+        template || null,
+        kind === "topic" || kind === "idea"
+          ? (n) => newGroupNote(kind as "topic" | "idea", n, today)
+          : undefined,
+      );
+      if (kind !== "note" && kindFromTemplate(template) !== kind) {
+        useVaultStore.getState().setNoteKind(name, kind);
+      }
+      onDone(name);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
       setBusy(false);
@@ -1252,6 +1281,19 @@ function NewNoteForm({
       />
       <div className="flex items-center gap-1.5">
         <select
+          value={kind}
+          onChange={(e) => pickKind(e.target.value as NoteKind)}
+          aria-label="Type"
+          title="Type"
+          className={selectClass}
+        >
+          {kinds.map((k) => (
+            <option key={k.kind} value={k.kind}>
+              {k.label}
+            </option>
+          ))}
+        </select>
+        <select
           value={folder}
           onChange={(e) => setFolder(e.target.value)}
           aria-label="Folder"
@@ -1272,11 +1314,14 @@ function NewNoteForm({
             value={template}
             onChange={(e) => {
               setTemplate(e.target.value);
-              // A template named for a kind (Idea, Topic…) files the note
-              // where that kind's notes live.
-              const kind = kindFromTemplate(e.target.value);
-              const where = kind ? kindFolder(kind) : null;
-              if (where !== null) setFolder(where);
+              // A template named for a kind (Idea, Topic…) makes that kind,
+              // filed where that kind's notes live.
+              const named = kindFromTemplate(e.target.value);
+              if (named) {
+                setKind(named);
+                const where = kindFolder(named);
+                if (where !== null) setFolder(where);
+              }
             }}
             aria-label="Template"
             title="Template"
