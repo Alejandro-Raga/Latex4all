@@ -148,15 +148,26 @@ Note types are saved in the vault, so every computer using it has the same ones.
 
 ## Planner
 
-The **Planner**, on the start screen, keeps your to-dos: a list for each project, and an **Inbox** for everything else.
+The **Planner**, on the start screen, keeps your to-dos and what you mean to read: a list for each project, and an **Inbox** for everything else.
 
-- **Today** and **Next 7 days** show what's due across all your projects. **All** shows every task.
-- **Type a task the way you'd say it,** like "Revise the intro friday !high". The date and priority are picked up for you: today, tomorrow, friday, next week, in 3 days, 20 nov, and in Spanish too (mañana, el viernes). Add **!high**, **!medium** or **!low** for priority, and words like **#writing** to group tasks.
-- **Click a task** to change its date or priority, move it, add steps to it, or delete it.
+- **Today**, **Tomorrow** and **Next 7 days** show what's due across all your projects. **All tasks** shows every open task, and **Completed** what you've finished.
+- **Type a task the way you'd say it,** like "Draft the intro friday !high". The date and priority are picked up for you: today, tomorrow, friday, next week, in 3 days, 20 nov, and in Spanish too (mañana, el viernes). Add **!high**, **!medium** or **!low** for priority, and words like **#writing** to group tasks.
+- **Click a task** to see it on the right: change its date or priority, write a description, add steps, or delete it.
+- **Drag tasks** to reorder them, between sections, onto another project or the Inbox in the sidebar to move them, or onto **Today** or **Tomorrow** to set their date.
 - **List or Board:** the board shows a project's tasks in columns (To do, In progress, Waiting). Drag tasks between them, or add columns of your own.
-- **While writing**, the **Plan** panel (⌘⌥4) shows the project's tasks next to your text.
+- **Projects** show an icon for their type, and the arrows beside **Projects** sort them.
 
-In a shared project, everyone sees the same tasks: they're kept with the project, in a file called Plan.md. The Inbox is kept by the app, or in your vault if you've connected one, so Obsidian users see it there too.
+### Reading lists
+
+Each project has a **Reading** list apart from its tasks, and there's one of your own in the Inbox. **Reading list** in the sidebar gathers them all.
+
+- **Right-click a paper** in your Zotero library or your vault and choose **Add to reading list**.
+- **Each paper moves along by itself:** **Reading** when you open it, **Read** when you highlight it, **In notes** when you add a passage to a note, **Cited** when your project cites it. Click its status to change it yourself.
+- **Drag papers** to set the order you'll read them in, or use the board to move them between statuses.
+
+**While writing**, the **Plan** panel (⌘⌥4) shows the project's tasks and reading list next to your text.
+
+In a shared project, everyone sees the same tasks and reading list: they're kept with the project, in a file called Plan.md. The Inbox is kept by the app, or in your vault if you've connected one, so Obsidian users see it there too.
 
 ## Chat assistant
 

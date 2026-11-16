@@ -119,6 +119,7 @@ import {
   addCitekeysToVault,
   addCitekeysToZoteroWithToast,
 } from "./citation-check";
+import { AddToReadingMenu } from "@/components/planner/reading-menu";
 import { ConnectionPills } from "./connection-pills";
 import { openInVault } from "./highlight-quote";
 import { ConnectNoteMenu } from "./topic-menu";
@@ -1625,6 +1626,7 @@ function ZoteroItemRow({
           <NotebookTextIcon className="size-3.5" />
           Add to vault
         </ContextMenuItem>
+        <AddToReadingMenu paper={{ title: item.title, itemKey: item.key }} />
         <ConnectNoteMenu
           noteName={vaultNoteName}
           resolve={async () =>

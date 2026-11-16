@@ -5,6 +5,7 @@
  * <name>` tags, between the `%% begin zotero %%` markers), so a vault with
  * that sync and one without end up with the same note.
  */
+import { advanceEverywhere } from "@/lib/plan/reading-sync";
 import { addZoteroTag } from "@/lib/zotero-api";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
@@ -167,6 +168,17 @@ export async function addPassage(
   name: string,
   passage: Passage,
 ): Promise<string> {
+  const note = await addPassageTo(group, name, passage);
+  // Quoted in a note: on the reading lists it's on, it's in notes.
+  void advanceEverywhere(passage.itemKey, "noted");
+  return note;
+}
+
+async function addPassageTo(
+  group: PassageGroup,
+  name: string,
+  passage: Passage,
+): Promise<string> {
   const { apiKey, userID } = useZoteroStore.getState();
   const vault = useVaultStore.getState();
   await vault.ensureVault();
@@ -257,6 +269,7 @@ export async function addPassageToNote(
   if (paper.path === target.path) {
     throw new Error("The paper's own note has its highlights already.");
   }
+  void advanceEverywhere(passage.itemKey, "noted");
   const current = await source.readNote(target.path);
   const next = withPassage(
     current.text,

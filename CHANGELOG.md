@@ -23,15 +23,20 @@ tag.
 
 ### Added
 
-- **Planner**, on the start screen: tasks for each project and an Inbox,
-  with Today, Next 7 days and All gathered from all of them, as a list
-  or a board. Add tasks as you'd say them ("Revise the intro friday
-  !high #writing"); click one for its date, priority, section and
-  subtasks. In a project, the Plan panel (⌘⌥4) shows its plan beside the
-  writing. No vault or Obsidian needed: a project's tasks are kept with
-  the project (and shared with collaborators), the Inbox by the app, or
-  in the vault if one is connected.
-
+- **Planner**, on the start screen, laid out like TickTick: lists on
+  the left, tasks in the middle, the picked task's details on the right.
+  Today, Tomorrow, Next 7 days, Inbox, All tasks and Completed gather
+  every project's tasks; projects show an icon for their type and sort by
+  recent, name, due date or size. Add tasks as you'd say them ("Draft
+  the intro friday !high"). Drag tasks to reorder them, between sections
+  or board columns, onto another project, or onto Today or Tomorrow. In
+  a project, the Plan panel (⌘⌥4) shows its plan beside the writing. No
+  vault or Obsidian needed.
+- **Reading lists**, apart from tasks: one per project and one of your
+  own. Right-click a paper in the Zotero library or the vault to add it.
+  Each moves along by itself, Reading when opened, Read when highlighted,
+  In notes when quoted in a note, Cited when the project cites it, and
+  can be set by hand or reordered.
 - Library & Vault: a bar on top shows or hides the Zotero library and
   the vault, swaps them, and puts them side by side or one above the
   other. The layout is remembered.

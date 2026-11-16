@@ -359,3 +359,28 @@ export function renameSection(plan: Plan, index: number, title: string): Plan {
   next.sections[index].title = title;
   return next;
 }
+
+/** A task's description: its note lines, without their indent. */
+export const notesText = (task: Task) =>
+  task.notes
+    .map((n) => n.replace(/^\s{1,4}/, ""))
+    .join("\n")
+    .trim();
+
+/** Description text as note lines under the task. */
+export const notesLines = (text: string) =>
+  text.trim()
+    ? text
+        .trim()
+        .split("\n")
+        .map((l) => `    ${l}`)
+    : [];
+
+/** A copy of a task to put in another plan (its line rewritten there). */
+export const detached = (task: Task): Task => {
+  const { raw: _raw, ...rest } = task;
+  return {
+    ...rest,
+    subtasks: task.subtasks.map(({ raw: _r, ...s }) => s),
+  };
+};

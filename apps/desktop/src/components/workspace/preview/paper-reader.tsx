@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { advanceEverywhere } from "@/lib/plan/reading-sync";
 import { addPassageToNote } from "@/lib/vault/add-passage";
 import { useDockStore } from "@/stores/dock-store";
 import { filedToast, NotePicker } from "./group-picker";
@@ -119,6 +120,8 @@ async function saveHighlight(
       text: selection.text,
       comment,
     });
+    // Highlighted: read, on the reading lists it's on.
+    void advanceEverywhere(paper.zotero.itemKey, "read");
     if (!quiet) {
       toast.success(
         comment ? "Note saved to Zotero" : "Highlight saved to Zotero",
@@ -235,6 +238,12 @@ export function PaperReader({
   useEffect(() => {
     if (visible) fitIfNew();
   }, [visible, fitIfNew]);
+
+  // Opened: being read, on the reading lists it's on.
+  const itemKey = paper.zotero?.itemKey;
+  useEffect(() => {
+    if (visible && itemKey) void advanceEverywhere(itemKey, "reading");
+  }, [visible, itemKey]);
 
   // Highlights made here show at once; the open tab of this paper, if any,
   // gets them too.

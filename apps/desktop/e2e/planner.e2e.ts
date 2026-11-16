@@ -53,8 +53,16 @@ test("a project's plan as a list and a board; a new plan where there's none", as
   await expect(main.getByText("Reply to reviewers")).toBeVisible();
 
   // Details: a due date and a subtask.
+  // Its details open beside the list.
   await main.getByText("Reply to reviewers").click();
-  await main.getByRole("button", { name: "Tomorrow" }).click();
+  await expect(main.getByLabel("Task", { exact: true })).toHaveValue(
+    "Reply to reviewers",
+  );
+  await main.getByRole("button", { name: "Due date" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Tomorrow" })
+    .click();
   await expect
     .poll(() => disk(page, PLAN))
     .toMatch(/- \[ \] Reply to reviewers 📅 \d{4}-\d{2}-\d{2}/);
@@ -66,7 +74,9 @@ test("a project's plan as a list and a board; a new plan where there's none", as
 
   // The board: sections as columns.
   await main.getByRole("radio", { name: "Board" }).click();
-  await expect(main.getByText(/^In progress/)).toBeVisible();
+  await expect(
+    main.getByText("In progress", { exact: true }).first(),
+  ).toBeVisible();
   await expect(main.getByText("Comments from María")).toBeVisible();
   if (process.env.SHOTS) {
     await page.screenshot({ path: `${process.env.SHOTS}/planner-board.png` });
@@ -125,5 +135,63 @@ test("the Inbox works with no vault: the app keeps it", async ({
       /^# Inbox\n\n## To do\n\n- \[ \] Book the flight 📅 \d{4}-\d{2}-\d{2}\n/,
     );
   await expect(main.getByText("Book the flight")).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("a reading list apart from tasks, and tasks dragged to another project", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByRole("radio", { name: "List" }).click();
+  await main.getByRole("radio", { name: "Reading" }).click();
+  await expect(main.getByText("Nothing to read yet.")).toBeVisible();
+  await main.getByLabel("Add something to read").fill("Absorptive capacity");
+  await main.getByLabel("Add something to read").press("Enter");
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toContain(
+      "## Reading list\n\n- [ ] Absorptive capacity #reading/to-read\n",
+    );
+  // Status by hand, from its pill.
+  await main.getByRole("button", { name: "Status: To read" }).click();
+  await page.getByRole("menuitem", { name: "Reading" }).click();
+  await expect.poll(() => disk(page, PLAN)).toContain("#reading/reading");
+  // Not among the tasks.
+  await main.getByRole("radio", { name: "Tasks" }).click();
+  await expect(main.getByText("Absorptive capacity")).toHaveCount(0);
+  // The Reading list gathers it.
+  await page.getByRole("button", { name: /^Reading list/ }).click();
+  await expect(main.getByText("Absorptive capacity")).toBeVisible();
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/planner-reading.png` });
+  }
+
+  // A task dragged onto Thesis in the sidebar moves there.
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  await main.getByRole("radio", { name: "Tasks" }).click();
+  await main
+    .getByText("Reply to reviewers")
+    .dragTo(page.getByRole("button", { name: /^Thesis/ }));
+  await expect
+    .poll(() => disk(page, "/papers/Thesis/Plan.md"))
+    .toContain("- [ ] Reply to reviewers");
+  await expect.poll(() => disk(page, PLAN)).not.toContain("Reply to reviewers");
+
+  // Completed: what's been checked off.
+  await main.getByRole("checkbox", { name: "Mark as done" }).first().click();
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /^Completed/ })
+    .click();
+  await expect(main.getByText("Draft the discussion")).toBeVisible();
+  if (process.env.SHOTS) {
+    await page.screenshot({
+      path: `${process.env.SHOTS}/planner-completed.png`,
+    });
+  }
   expect(errors).toEqual([]);
 });

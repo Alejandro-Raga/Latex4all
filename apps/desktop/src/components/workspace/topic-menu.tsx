@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { create } from "zustand";
+import { AddToReadingMenu } from "@/components/planner/reading-menu";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -258,6 +259,11 @@ export function NoteMenuItems({ noteName }: { noteName: string }) {
     <>
       <NoteKindMenu noteName={note.name} />
       <ConnectNoteMenu noteName={note.name} resolve={async () => note.name} />
+      {note.kind === "paper" && (
+        <AddToReadingMenu
+          paper={{ title: note.title, itemKey: note.zoteroKey ?? undefined }}
+        />
+      )}
       <ContextMenuSeparator />
       <DeleteNoteItem noteName={note.name} />
     </>

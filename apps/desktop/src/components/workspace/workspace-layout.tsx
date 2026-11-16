@@ -19,6 +19,7 @@ import { SettingsWindow } from "@/components/settings/settings-view";
 import { ProjectNoteSync } from "./project-note-sync";
 import { CitationCheckDialog } from "./citation-check";
 import { WorkspaceMemory } from "./workspace-memory";
+import { ReadingCitedSync } from "@/components/planner/reading-cited-sync";
 import { CommandPalette, useWorkspaceShortcuts } from "./command-palette";
 import { ZoteroTargetDialog } from "./zotero-target-dialog";
 import { MemoryDialog } from "@/components/claude-chat/memory-dialog";
@@ -281,6 +282,7 @@ export function WorkspaceLayout() {
       <ProjectNoteSync />
       <CitationCheckDialog />
       <WorkspaceMemory />
+      <ReadingCitedSync />
       <CommandPalette />
       <ZoteroTargetDialog />
       <MemoryDialog />

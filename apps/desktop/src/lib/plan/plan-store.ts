@@ -163,6 +163,16 @@ export function usePlanText(key: PlanKey): string | null | undefined {
   return live !== undefined ? live : stored;
 }
 
+/** A plan's text right now, outside React (for moving tasks between plans). */
+export function planTextNow(key: PlanKey): string | null | undefined {
+  const root = rootOf(key);
+  const doc = useDocumentStore.getState();
+  if (root && doc.projectRoot === root) {
+    return doc.files.find((f) => f.relativePath === PLAN_FILE)?.content ?? null;
+  }
+  return usePlanStore.getState().entries[key]?.text;
+}
+
 /** Writes a plan, wherever it lives. */
 export const writePlan = (key: PlanKey, text: string) =>
   usePlanStore.getState().write(key, text);
@@ -172,19 +182,27 @@ export interface PlanList {
   name: string;
   /** The project's folder; none for the Inbox. */
   root?: string;
+  /** Its type ("Article", "Thesis"…), if it has one. */
+  type?: string;
+  lastOpened?: number;
 }
 
 /** The plans the Planner shows: the Inbox, then recent projects. */
 export function usePlanLists(): PlanList[] {
   const recent = useProjectStore((s) => s.recentProjects);
+  const types = useProjectStore((s) => s.projectTypes);
   return useMemo(
     () => [
       { key: INBOX, name: "Inbox" },
-      ...[...recent]
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((p) => ({ key: projectKey(p.path), name: p.name, root: p.path })),
+      ...recent.map((p) => ({
+        key: projectKey(p.path),
+        name: p.name,
+        root: p.path,
+        type: types?.[p.path],
+        lastOpened: p.lastOpened,
+      })),
     ],
-    [recent],
+    [recent, types],
   );
 }
 
