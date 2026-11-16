@@ -83,9 +83,9 @@ The vault is your Obsidian vault: a folder on your computer, or one on a WebDAV 
 
 - **Notes are grouped by type:** papers, ideas, topics, and types of your own. Papers are also sorted into their Zotero collections.
 - **Add a paper** by right-clicking it in the library. Its note holds the paper's details and your highlights.
-- **Highlights in a note** show the passage, its color and page, with your comment beneath. Right-click one to add it to an idea or topic, or open it in the PDF. The other notes that quote it are listed below it.
+- **Highlights in a note** show the passage, its color and page, with your comment beneath. Right-click one to add it to any note, or open it in the PDF. The other notes that quote it are listed below it.
 - **New notes** (the + above the list) can be a topic, an idea or a plain note. A topic or idea gets its usual sections, or your vault's own template for it.
-- **Right-click a note** to change its type, connect it to an idea or topic, or delete it. **Connect to note** links it with any other note, picked by type, a topic with a related topic for example. Each lists the other under **Related**.
+- **Right-click a note** to change its type, connect it to another note, or delete it. **Connect to note** lists the notes by type, with **New …** at the end of each to make one. A paper connected to an idea or topic goes into its Literature; other notes list each other under **Related**.
 - **The map** shows how your notes link to each other.
 
 [Open Settings → Vault](app:settings/vault)
@@ -102,10 +102,10 @@ With a project open, the Vault panel has two tabs.
 
 Ideas and topics are notes that collect passages, word for word, each with a link back to where it came from. A **topic** is a subject, such as "Renewable energy". An **idea** is a claim you could argue, such as "Remote work raises productivity". Gathering passages this way builds the material for an argument as you read.
 
-- **From a paper or your own text:** select a passage, or right-click a highlight, and choose **Add to idea…** or **Add to topic…**.
-- **A whole paper:** right-click it and choose **Connect to idea**, **Connect to topic** or **Connect to note**.
+- **From a paper or your own text:** select a passage, or right-click a highlight, and choose **Add to note**. The passage can go in an idea, a topic or any other note.
+- **A whole paper:** right-click it and choose **Connect to note**.
 
-Pick an existing note from the list or type a new name.
+Pick a note by its type, or **New …** at the end of the list to make one.
 
 In Zotero, an idea or topic is a tag, such as `topic: Renewable energy`. Latex4All adds the tag when you file something here. **Ideas and topics as Zotero tags** (Settings → Zotero) lets Zotero suggest these names while you tag there.
 

@@ -29,13 +29,21 @@ tag.
   instead of below it, or hide the list to read across the whole pane.
 - **Connect to note** in the right-click menu of any note, and of papers
   in the Zotero library, links it with any other note, picked by type
-  (papers, topics, ideas…). Both notes list each other under Related.
+  (papers, topics, ideas…). It replaces Connect to idea and Connect to
+  topic: a paper still goes into an idea's or topic's Literature, and two
+  other notes list each other under Related.
+- **Add to note** replaces Add to idea and Add to topic, for highlights
+  and selected text in PDFs, the LaTeX editor, highlight cards and the
+  Notes panel: the passage can go in any note, picked by type.
+- Each type in these menus ends with **New …**, to make a note of that
+  type on the spot.
+- Right-click menus are slightly see-through.
 - New notes can be a topic, an idea or a plain note, not only what the
   vault's templates offer. A topic or idea gets its usual sections.
 
 ### Fixed
 
-- Right-click → Connect to topic/idea → New… did nothing in Library &
+- Making a new topic or idea from a right-click did nothing in Library &
   Vault.
 - Open in PDF pane did nothing in Library & Vault, where there is no
   PDF pane; the reader's own layout buttons take its place there.

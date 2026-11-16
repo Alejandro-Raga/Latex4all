@@ -232,3 +232,41 @@ export async function addPassage(
   useVaultStore.getState().noteWritten(path, text);
   return noteName;
 }
+
+/**
+ * Quotes a highlight in any vault note, under its paper's heading, as an
+ * idea or topic gets it. Ideas and topics go the usual way (tagged in
+ * Zotero for the sync). Returns the note's name.
+ */
+export async function addPassageToNote(
+  noteName: string,
+  passage: Passage,
+): Promise<string> {
+  await useVaultStore.getState().ensureVault();
+  const { source, index } = useVaultStore.getState();
+  if (!source || !index) throw new Error("Connect your vault first.");
+  const target = findNote(index, noteName);
+  if (!target) throw new Error(`“${noteName}” isn't in the vault.`);
+  if (target.kind === "idea" || target.kind === "topic") {
+    return addPassage(target.kind as PassageGroup, target.name, passage);
+  }
+  const { name: paperName } = await addPaperToVault(passage.itemKey);
+  const after = useVaultStore.getState().index;
+  const paper = after ? findNote(after, paperName) : undefined;
+  if (!paper) throw new Error("The paper's note couldn't be found.");
+  if (paper.path === target.path) {
+    throw new Error("The paper's own note has its highlights already.");
+  }
+  const current = await source.readNote(target.path);
+  const next = withPassage(
+    current.text,
+    paper,
+    passage.annotationKey,
+    passageMarkdown(paper.name, passage),
+  );
+  if (next !== current.text) {
+    await source.writeNote(target.path, next, current.version);
+    useVaultStore.getState().noteWritten(target.path, next);
+  }
+  return target.name;
+}

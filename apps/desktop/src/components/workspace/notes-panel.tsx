@@ -2,10 +2,8 @@ import { useMemo, useState } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
 import {
   CheckIcon,
-  LightbulbIcon,
   Link2Icon,
   RotateCcwIcon,
-  TagIcon,
   Trash2Icon,
   XIcon,
 } from "lucide-react";
@@ -17,16 +15,16 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import type { PassageGroup } from "@/lib/vault/add-passage";
 import {
-  addOwnPassage,
+  addOwnPassageToNote,
   latexAsProse,
   type OwnPassage,
   ownPassageMarker,
 } from "@/lib/vault/own-passage";
 import { useVaultStore } from "@/stores/vault-store";
 import { AlsoIn, openInVault } from "./highlight-quote";
-import { filedToast, GroupPicker } from "./preview/group-picker";
+import { filedToast } from "./preview/group-picker";
+import { AddToNoteMenu } from "./topic-menu";
 import { Button } from "@/components/ui/button";
 import {
   Comment,
@@ -105,17 +103,9 @@ function NoteItem({
     const marker = ownPassageMarker(note.passage);
     return (index?.list ?? []).filter((n) => n.body.includes(marker));
   }, [index, note.passage]);
-  const [filing, setFiling] = useState<{
-    group: PassageGroup;
-    at: { left: number; top: number };
-  } | null>(null);
-  const [at, setAt] = useState({ left: 0, top: 0 });
 
   const body = (
-    <div
-      className="group relative"
-      onContextMenu={(e) => setAt({ left: e.clientX, top: e.clientY })}
-    >
+    <div className="group relative">
       <button
         type="button"
         onClick={onOpen}
@@ -298,14 +288,18 @@ function NoteItem({
       <ContextMenu>
         <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
         <ContextMenuContent className="w-52">
-          <ContextMenuItem onSelect={() => setFiling({ group: "idea", at })}>
-            <LightbulbIcon className="size-4" />
-            Add to idea…
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={() => setFiling({ group: "topic", at })}>
-            <TagIcon className="size-4" />
-            Add to topic…
-          </ContextMenuItem>
+          <AddToNoteMenu
+            marker={ownPassageMarker(passage)}
+            onPick={(name) =>
+              addOwnPassageToNote(name, passage)
+                .then(filedToast)
+                .catch((err) =>
+                  toast.error(
+                    `Couldn't add it to the note: ${err instanceof Error ? err.message : String(err)}`,
+                  ),
+                )
+            }
+          />
           {quoting.length > 0 && (
             <>
               <ContextMenuSeparator />
@@ -318,7 +312,7 @@ function NoteItem({
                   onSelect={() => openInVault(n.name)}
                 >
                   <Link2Icon className="size-4" />
-                  <span className="truncate">{n.name}</span>
+                  <span className="truncate">{n.title}</span>
                 </ContextMenuItem>
               ))}
             </>
@@ -326,24 +320,6 @@ function NoteItem({
         </ContextMenuContent>
       </ContextMenu>
       <AlsoIn notes={quoting} onOpen={openInVault} className="px-3 pb-1.5" />
-      {filing && (
-        <GroupPicker
-          group={filing.group}
-          anchor={filing.at}
-          onCancel={() => setFiling(null)}
-          onPick={async (name) => {
-            try {
-              const made = await addOwnPassage(filing.group, name, passage);
-              filedToast(filing.group, made);
-            } catch (err) {
-              toast.error(
-                `Couldn't add it to the ${filing.group}: ${err instanceof Error ? err.message : String(err)}`,
-              );
-            }
-            setFiling(null);
-          }}
-        />
-      )}
     </>
   );
 }

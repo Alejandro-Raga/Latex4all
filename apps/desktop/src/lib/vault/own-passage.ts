@@ -133,3 +133,11 @@ export async function addOwnPassage(
   }
   return noteName;
 }
+
+/** Quotes the passage in a vault note that exists already, of any type. */
+export function addOwnPassageToNote(
+  name: string,
+  passage: OwnPassage,
+): Promise<string> {
+  return addOwnPassage("idea", name, passage);
+}

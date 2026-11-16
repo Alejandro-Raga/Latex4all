@@ -537,7 +537,7 @@ if (scenario === "vault") {
   Promise.all([
     import("@/components/workspace/vault-panel"),
     import("@/components/workspace/topic-menu"),
-  ]).then(([{ VaultPanel }, { NewTopicDialog }]) =>
+  ]).then(([{ VaultPanel }, { NewNoteDialog }]) =>
     root.render(
       <ThemeProvider attribute="class" themes={THEME_IDS}>
         <ThemeBridge />
@@ -546,7 +546,7 @@ if (scenario === "vault") {
             <VaultPanel onClose={() => {}} />
           </div>
         </div>
-        <NewTopicDialog />
+        <NewNoteDialog />
       </ThemeProvider>,
     ),
   );

@@ -6,9 +6,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { addPassage, type PassageGroup } from "@/lib/vault/add-passage";
+import { addPassageToNote } from "@/lib/vault/add-passage";
 import { useDockStore } from "@/stores/dock-store";
-import { filedToast, GroupPicker } from "./group-picker";
+import { filedToast, NotePicker } from "./group-picker";
 import { notesByHighlight, openInVault } from "../highlight-quote";
 import { useVaultStore } from "@/stores/vault-store";
 import {
@@ -23,9 +23,8 @@ import {
   MessageSquarePlusIcon,
   MinusIcon,
   PlusIcon,
-  LightbulbIcon,
+  NotebookPenIcon,
   Link2Icon,
-  TagIcon,
   PanelRightIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -132,16 +131,15 @@ async function saveHighlight(
   }
 }
 
-/** Files a highlight already made under an idea or topic. */
+/** Quotes a highlight already made in a vault note. */
 async function fileExisting(
   paper: ReadingPaper,
   annotation: PdfAnnotationRect,
-  group: PassageGroup,
   name: string,
 ) {
   if (!paper.zotero || !annotation.key) return;
   try {
-    const note = await addPassage(group, name, {
+    const note = await addPassageToNote(name, {
       itemKey: paper.zotero.itemKey,
       attachmentKey: paper.zotero.attachmentKey,
       annotationKey: annotation.key,
@@ -150,19 +148,18 @@ async function fileExisting(
       pageLabel: annotation.pageLabel,
       pageIndex: annotation.pageIndex,
     });
-    filedToast(group, note);
+    filedToast(note);
   } catch (err) {
     toast.error(
-      `Couldn't add it to the ${group}: ${err instanceof Error ? err.message : String(err)}`,
+      `Couldn't add it to the note: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }
 
-/** Highlights the selection and files the passage under an idea or topic. */
+/** Highlights the selection and quotes the passage in a vault note. */
 async function fileHighlight(
   paper: ReadingPaper,
   selection: PdfTextSelection,
-  group: PassageGroup,
   name: string,
   onAdded: (annotation: PdfAnnotationRect) => void,
 ) {
@@ -176,17 +173,17 @@ async function fileHighlight(
   );
   if (!key || !paper.zotero) return;
   try {
-    const note = await addPassage(group, name, {
+    const note = await addPassageToNote(name, {
       itemKey: paper.zotero.itemKey,
       attachmentKey: paper.zotero.attachmentKey,
       annotationKey: key,
       text: selection.text,
       pageIndex: selection.pageNumber - 1,
     });
-    filedToast(group, note);
+    filedToast(note);
   } catch (err) {
     toast.error(
-      `Highlighted in Zotero, but not added to the ${group}: ${err instanceof Error ? err.message : String(err)}`,
+      `Highlighted in Zotero, but not added to the note: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }
@@ -300,15 +297,13 @@ export function PaperReader({
   const canHighlight = Boolean(paper.zotero && zoteroConnected);
   const [selection, setSelection] = useState<PdfTextSelection | null>(null);
   const [noteFor, setNoteFor] = useState<PdfTextSelection | null>(null);
-  const [filing, setFiling] = useState<{
-    group: PassageGroup;
-    selection: PdfTextSelection;
-  } | null>(null);
+  const [filing, setFiling] = useState<PdfTextSelection | null>(null);
   // A highlight right-clicked: its menu, then the idea or topic picker.
   const [highlightMenu, setHighlightMenu] = useState<{
     annotation: PdfAnnotationRect;
     at: { left: number; top: number };
-    group?: PassageGroup;
+    /** Picking the note it goes in. */
+    picking?: boolean;
     confirmDelete?: boolean;
   } | null>(null);
   // The vault notes quoting each highlight, for its menu.
@@ -336,14 +331,9 @@ export function PaperReader({
               icon: <MessageSquarePlusIcon className="size-4" />,
             },
             {
-              id: "idea",
-              label: "Add to idea…",
-              icon: <LightbulbIcon className="size-4" />,
-            },
-            {
-              id: "topic",
-              label: "Add to topic…",
-              icon: <TagIcon className="size-4" />,
+              id: "file",
+              label: "Add to note…",
+              icon: <NotebookPenIcon className="size-4" />,
             },
           ]
         : []),
@@ -407,7 +397,7 @@ export function PaperReader({
 
   // Esc closes the highlight's menu and the note box too.
   const anyOpen = Boolean(
-    noteFor || editingNote || (highlightMenu && !highlightMenu.group),
+    noteFor || editingNote || (highlightMenu && !highlightMenu.picking),
   );
   useEffect(() => {
     if (!anyOpen) return;
@@ -416,7 +406,7 @@ export function PaperReader({
       e.stopPropagation();
       setNoteFor(null);
       setEditingNote(null);
-      setHighlightMenu((m) => (m && !m.group ? null : m));
+      setHighlightMenu((m) => (m && !m.picking ? null : m));
     };
     window.addEventListener("keydown", key, true);
     return () => window.removeEventListener("keydown", key, true);
@@ -531,8 +521,8 @@ export function PaperReader({
             } else if (id === "note") {
               setNoteFor(selection);
               setSelection(null);
-            } else if (id === "idea" || id === "topic") {
-              setFiling({ group: id, selection });
+            } else if (id === "file") {
+              setFiling(selection);
               setSelection(null);
             }
           }}
@@ -553,7 +543,7 @@ export function PaperReader({
           }
         />
       )}
-      {highlightMenu && !highlightMenu.group && (
+      {highlightMenu && !highlightMenu.picking && (
         <>
           <button
             type="button"
@@ -566,7 +556,7 @@ export function PaperReader({
             }}
           />
           <div
-            className="fixed z-50 w-52 rounded-md border border-border bg-popover p-1 text-sm shadow-lg"
+            className="fixed z-50 w-52 rounded-md border border-border bg-popover/85 p-1 text-sm shadow-lg backdrop-blur-md"
             style={{
               left: Math.min(highlightMenu.at.left, window.innerWidth - 220),
               top: Math.min(highlightMenu.at.top, window.innerHeight - 200),
@@ -603,21 +593,16 @@ export function PaperReader({
               <MessageSquarePlusIcon className="size-3.5" />
               {highlightMenu.annotation.comment ? "Edit note" : "Add note"}
             </button>
-            {(["idea", "topic"] as const).map((group) => (
-              <button
-                key={group}
-                type="button"
-                onClick={() => setHighlightMenu({ ...highlightMenu, group })}
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
-              >
-                {group === "idea" ? (
-                  <LightbulbIcon className="size-3.5" />
-                ) : (
-                  <TagIcon className="size-3.5" />
-                )}
-                Add to {group}…
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={() =>
+                setHighlightMenu({ ...highlightMenu, picking: true })
+              }
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
+            >
+              <NotebookPenIcon className="size-3.5" />
+              Add to note…
+            </button>
             {(() => {
               const quoting = highlightMenu.annotation.key
                 ? (quotedIn.get(highlightMenu.annotation.key) ?? []).filter(
@@ -641,7 +626,7 @@ export function PaperReader({
                       className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
                     >
                       <Link2Icon className="size-3.5 shrink-0" />
-                      <span className="truncate">{n.name}</span>
+                      <span className="truncate">{n.title}</span>
                     </button>
                   ))}
                 </>
@@ -668,33 +653,25 @@ export function PaperReader({
           </div>
         </>
       )}
-      {highlightMenu?.group && (
-        <GroupPicker
-          group={highlightMenu.group}
+      {highlightMenu?.picking && (
+        <NotePicker
           anchor={highlightMenu.at}
+          marker={
+            highlightMenu.annotation.key
+              ? `annotation=${highlightMenu.annotation.key}`
+              : undefined
+          }
           onCancel={() => setHighlightMenu(null)}
-          onPick={async (name) => {
-            const { annotation, group } = highlightMenu;
-            if (group) await fileExisting(paper, annotation, group, name);
-            setHighlightMenu(null);
-          }}
+          onPick={(name) => fileExisting(paper, highlightMenu.annotation, name)}
         />
       )}
       {filing && (
-        <GroupPicker
-          group={filing.group}
-          anchor={filing.selection.position}
+        <NotePicker
+          anchor={filing.position}
           onCancel={() => setFiling(null)}
           onPick={async (name) => {
-            await fileHighlight(
-              paper,
-              filing.selection,
-              filing.group,
-              name,
-              onAdded,
-            );
-            setFiling(null);
             window.getSelection()?.removeAllRanges();
+            await fileHighlight(paper, filing, name, onAdded);
           }}
         />
       )}

@@ -3,7 +3,8 @@
  * link shows from both sides (and in Obsidian's backlinks and graph).
  */
 import { useVaultStore } from "@/stores/vault-store";
-import { findNote } from "./vault-index";
+import { connectToIdea, connectToTopic } from "./connect-topic";
+import { findNote, type VaultNote } from "./vault-index";
 
 const RELATED = "## Related";
 
@@ -56,4 +57,27 @@ export async function connectNotes(from: string, to: string): Promise<string> {
     }
   }
   return b.name;
+}
+
+const isGroup = (n: VaultNote) => n.kind === "topic" || n.kind === "idea";
+
+/**
+ * Connects two notes the way their types call for: anything with a topic or
+ * idea goes into its Literature (and the paper gets its Zotero tag, so the
+ * sync agrees), as before; any other two list each other under Related.
+ */
+export async function linkNotes(from: string, to: string): Promise<void> {
+  await useVaultStore.getState().ensureVault();
+  const { index } = useVaultStore.getState();
+  const a = index ? findNote(index, from) : undefined;
+  const b = index ? findNote(index, to) : undefined;
+  if (a && b && isGroup(a) !== isGroup(b)) {
+    const [member, group] = isGroup(b) ? [a, b] : [b, a];
+    await (group.kind === "topic" ? connectToTopic : connectToIdea)(
+      member.name,
+      group.name,
+    );
+    return;
+  }
+  await connectNotes(from, to);
 }

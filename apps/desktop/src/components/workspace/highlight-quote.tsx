@@ -1,11 +1,5 @@
-import { type ReactNode, useState } from "react";
-import {
-  FileTextIcon,
-  LightbulbIcon,
-  Link2Icon,
-  MessageSquareTextIcon,
-  TagIcon,
-} from "lucide-react";
+import type { ReactNode } from "react";
+import { FileTextIcon, Link2Icon, MessageSquareTextIcon } from "lucide-react";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -15,7 +9,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { openZoteroPdf, zoteroPdfTarget } from "@/components/zotero-pdf-dialog";
-import { addPassage, type PassageGroup } from "@/lib/vault/add-passage";
+import { addPassageToNote } from "@/lib/vault/add-passage";
 import { COLOR_HREF, FADED_HREF, noteFromHref } from "@/lib/vault/render";
 import {
   findNote,
@@ -24,7 +18,8 @@ import {
 } from "@/lib/vault/vault-index";
 import { useDockStore } from "@/stores/dock-store";
 import { useVaultStore } from "@/stores/vault-store";
-import { filedToast, GroupPicker } from "./preview/group-picker";
+import { filedToast } from "./preview/group-picker";
+import { AddToNoteMenu } from "./topic-menu";
 
 const PDF_LINK =
   /open-pdf\/library\/items\/([A-Z0-9]{8})\?(?:page=(\d+)&)?annotation=([A-Z0-9]{8})/;
@@ -248,11 +243,6 @@ export function HighlightQuote({
   title: string;
   onOpen: (name: string) => void;
 }) {
-  const [picking, setPicking] = useState<{
-    group: PassageGroup;
-    at: { left: number; top: number };
-  } | null>(null);
-  const [at, setAt] = useState({ left: 0, top: 0 });
   const h = highlightOf(node);
   if (!h) return <blockquote>{children}</blockquote>;
 
@@ -263,13 +253,13 @@ export function HighlightQuote({
     (n) => n.path !== current?.path,
   );
 
-  const file = async (group: PassageGroup, name: string) => {
+  const file = async (name: string) => {
     if (!paper?.zoteroKey) {
       toast.error("This highlight's paper isn't in the vault.");
       return;
     }
     try {
-      const note = await addPassage(group, name, {
+      const note = await addPassageToNote(name, {
         itemKey: paper.zoteroKey,
         attachmentKey: h.attachmentKey,
         annotationKey: h.annotationKey,
@@ -277,10 +267,10 @@ export function HighlightQuote({
         pageLabel: h.pageLabel,
         pageIndex: h.pageIndex,
       });
-      filedToast(group, note);
+      filedToast(note);
     } catch (err) {
       toast.error(
-        `Couldn't add it to the ${group}: ${err instanceof Error ? err.message : String(err)}`,
+        `Couldn't add it to the note: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   };
@@ -289,10 +279,7 @@ export function HighlightQuote({
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <figure
-            onContextMenu={(e) => setAt({ left: e.clientX, top: e.clientY })}
-            className="my-3 overflow-hidden rounded-md border border-border/70 bg-background"
-          >
+          <figure className="my-3 overflow-hidden rounded-md border border-border/70 bg-background">
             <div
               className="border-l-[3px] px-3 py-2 text-[13.5px] text-foreground leading-relaxed [&>p]:my-0"
               style={{ borderLeftColor: h.color ?? HIGHLIGHT_COLORS.yellow }}
@@ -309,14 +296,11 @@ export function HighlightQuote({
           </figure>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-56">
-          <ContextMenuItem onSelect={() => setPicking({ group: "idea", at })}>
-            <LightbulbIcon className="size-4" />
-            Add to idea…
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={() => setPicking({ group: "topic", at })}>
-            <TagIcon className="size-4" />
-            Add to topic…
-          </ContextMenuItem>
+          <AddToNoteMenu
+            marker={`annotation=${h.annotationKey}`}
+            exclude={current?.path}
+            onPick={(name) => void file(name)}
+          />
           <ContextMenuItem
             onSelect={() => {
               const pdf = zoteroPdfTarget(h.href, paper?.title ?? title);
@@ -335,24 +319,13 @@ export function HighlightQuote({
               {others.map((n) => (
                 <ContextMenuItem key={n.path} onSelect={() => onOpen(n.name)}>
                   <Link2Icon className="size-4" />
-                  <span className="truncate">{n.name}</span>
+                  <span className="truncate">{n.title}</span>
                 </ContextMenuItem>
               ))}
             </>
           )}
         </ContextMenuContent>
       </ContextMenu>
-      {picking && (
-        <GroupPicker
-          group={picking.group}
-          anchor={picking.at}
-          onCancel={() => setPicking(null)}
-          onPick={async (name) => {
-            await file(picking.group, name);
-            setPicking(null);
-          }}
-        />
-      )}
     </>
   );
 }

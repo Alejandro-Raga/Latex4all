@@ -67,6 +67,7 @@ import {
 } from "./cited-here";
 import { NoteContextMenu, NoteMenuItems } from "./topic-menu";
 import { kindFolder } from "@/lib/vault/kind-folders";
+import { kindFromTemplate } from "@/lib/vault/new-note";
 import { newGroupNote } from "@/lib/vault/add-passage";
 import { chooseNoteKind, unlinkProject } from "@/lib/vault/note-changes";
 import { citeKeyAtCursor } from "@/lib/vault/cite-at-cursor";
@@ -1175,14 +1176,6 @@ function TopicChips({ index, note }: { index: VaultIndex; note: VaultNote }) {
 }
 
 /** The kind a template makes, going by its name ("Idea", "Topic note"…). */
-function kindFromTemplate(path: string): NoteKind | null {
-  const name = (path.split("/").pop() ?? "").toLowerCase();
-  for (const kind of ["idea", "topic", "project", "paper"] as const) {
-    if (name.includes(kind)) return kind;
-  }
-  return null;
-}
-
 /** A note just created from the list, to open straight into editing. */
 let editOnOpen: string | null = null;
 

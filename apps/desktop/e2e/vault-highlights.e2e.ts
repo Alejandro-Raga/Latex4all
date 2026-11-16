@@ -23,11 +23,27 @@ test("a highlight in a note is a card: its comment apart, the notes quoting it, 
 
   await card.click({ button: "right" });
   await expect(
-    page.getByRole("menuitem", { name: "Add to idea…" }),
+    page.getByRole("menuitem", { name: "Add to note" }),
   ).toBeVisible();
   await expect(
     page.getByRole("menuitem", { name: "Open in the PDF" }),
   ).toBeVisible();
+  // Any note, by type: the idea quoting it already is ticked.
+  await page.getByRole("menuitem", { name: "Add to note" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await page.getByRole("menuitem", { name: /^Ideas/ }).focus();
+  await page.keyboard.press("ArrowRight");
+  const ideas = page.getByRole("menu", { name: "Ideas" });
+  await expect(
+    ideas.getByRole("menuitem", { name: /Firms retreat from research/ }),
+  ).toBeDisabled();
+  await expect(
+    ideas.getByRole("menuitem", { name: "New idea…" }),
+  ).toBeVisible();
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: "test-results/add-to-note.png" });
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
 
   await card

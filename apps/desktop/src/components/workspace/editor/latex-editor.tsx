@@ -146,18 +146,17 @@ import {
   Loader2Icon,
   MessageSquarePlusIcon,
   PencilLineIcon,
-  LightbulbIcon,
+  NotebookPenIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { PassageGroup } from "@/lib/vault/add-passage";
 import {
-  addOwnPassage,
+  addOwnPassageToNote,
   latexAsProse,
   type OwnPassage,
 } from "@/lib/vault/own-passage";
 import {
   filedToast,
-  GroupPicker,
+  NotePicker,
 } from "@/components/workspace/preview/group-picker";
 import { ClaudeChatDrawer } from "@/components/claude-chat/claude-chat-drawer";
 import { ProposedChangesPanel } from "@/components/claude-chat/proposed-changes-panel";
@@ -1578,23 +1577,17 @@ export function LatexEditor() {
         hint: "⌘⌥E",
       },
       {
-        id: "idea",
-        label: "Add to idea…",
-        icon: <LightbulbIcon className="size-4" />,
-      },
-      {
-        id: "topic",
-        label: "Add to topic…",
-        icon: <TagIcon className="size-4" />,
+        id: "file",
+        label: "Add to note…",
+        icon: <NotebookPenIcon className="size-4" />,
       },
     ],
     [],
   );
 
-  // A passage of this file filed under an idea or topic, its name being
+  // A passage of this file being quoted in a vault note, the note being
   // picked.
   const [ownFiling, setOwnFiling] = useState<{
-    group: PassageGroup;
     passage: OwnPassage;
     at: { left: number; top: number };
   } | null>(null);
@@ -1616,7 +1609,7 @@ export function LatexEditor() {
         }
         toolbarStickyRef.current = false;
         setSelectionCoords(null);
-      } else if (actionId === "idea" || actionId === "topic") {
+      } else if (actionId === "file") {
         const view = viewRef.current;
         const range = useDocumentStore.getState().selectionRange;
         const file = useDocumentStore
@@ -1629,7 +1622,6 @@ export function LatexEditor() {
           );
           const coords = view.coordsAtPos(range.start);
           setOwnFiling({
-            group: actionId,
             passage: {
               projectRoot: root,
               file: file.relativePath,
@@ -1993,18 +1985,16 @@ export function LatexEditor() {
               <HistoryDiffView diffs={historyDiffResult} />
             )}
             {ownFiling && (
-              <GroupPicker
-                group={ownFiling.group}
+              <NotePicker
                 anchor={ownFiling.at}
                 onCancel={() => setOwnFiling(null)}
                 onPick={async (name) => {
                   try {
-                    const note = await addOwnPassage(
-                      ownFiling.group,
+                    const note = await addOwnPassageToNote(
                       name,
                       ownFiling.passage,
                     );
-                    filedToast(ownFiling.group, note);
+                    filedToast(note);
                   } catch (err) {
                     toast.error(
                       err instanceof Error ? err.message : String(err),

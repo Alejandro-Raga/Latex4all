@@ -1,5 +1,14 @@
 import { expect, open, test } from "./fixtures";
 
+/** Opens a submenu by keyboard: hovering across menus is timing-bound. */
+async function openSubmenu(
+  page: import("@playwright/test").Page,
+  name: string | RegExp,
+) {
+  await page.getByRole("menuitem", { name }).focus();
+  await page.keyboard.press("ArrowRight");
+}
+
 const file = (page: import("@playwright/test").Page, path: string) =>
   page.evaluate((p) => (window as any).vaultFiles.get(p) as string, path);
 
@@ -28,15 +37,18 @@ test("typing [[ in a note suggests notes, found by title as well as name", async
   await expect(editor).toContainText("See [[A human capability approach]]");
 });
 
-test("right-click a paper to connect it to a new topic", async ({ page }) => {
+test("right-click a paper to connect it to a new topic, from Connect to note", async ({
+  page,
+}) => {
   await open(page, "scenario=vault");
   await page
     .getByRole("button", { name: /Absorptive capacity: a new perspective/ })
     .click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Connect to topic" }).hover();
+  await openSubmenu(page, "Connect to note");
+  await openSubmenu(page, /^Topics/);
   await page.getByRole("menuitem", { name: "New topic…" }).click();
-  await page.getByLabel("Topic name").fill("Absorptive capacity");
-  await page.getByRole("button", { name: "Connect" }).click();
+  await page.getByLabel("Title of the new note").fill("Absorptive capacity");
+  await page.getByRole("button", { name: "Create" }).click();
 
   // The topic note lists the paper; the paper links to the topic.
   await expect
@@ -53,7 +65,8 @@ test("right-click a paper to connect it to a new topic", async ({ page }) => {
   await page
     .getByRole("button", { name: /Absorptive capacity: a new perspective/ })
     .click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Connect to topic" }).hover();
+  await openSubmenu(page, "Connect to note");
+  await openSubmenu(page, /^Topics/);
   await expect(
     page.getByRole("menuitem", { name: "Absorptive capacity" }),
   ).toBeDisabled();
