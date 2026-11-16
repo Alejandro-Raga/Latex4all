@@ -539,7 +539,11 @@ if (scenario === "vault") {
     import("@/components/workspace/topic-menu"),
   ]).then(([{ VaultPanel }, { NewNoteDialog }]) =>
     root.render(
-      <ThemeProvider attribute="class" themes={THEME_IDS}>
+      <ThemeProvider
+        attribute="class"
+        themes={THEME_IDS}
+        forcedTheme={params.get("theme") ?? undefined}
+      >
         <ThemeBridge />
         <div className="flex h-full" style={chrome}>
           <div style={{ width: 420 }} className="flex h-full flex-col">
