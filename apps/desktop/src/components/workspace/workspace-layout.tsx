@@ -209,7 +209,7 @@ export function WorkspaceLayout() {
   }
 
   return (
-    <div ref={workspaceRef} className="flex h-full">
+    <div ref={workspaceRef} className="app-shell flex h-full">
       <PanelGroup direction="horizontal" className="h-full min-w-0 flex-1">
         <Panel
           ref={sidebarPanelRef}
@@ -251,7 +251,7 @@ export function WorkspaceLayout() {
           <Panel
             defaultSize={previewVisible ? 42.5 : 85}
             minSize={25}
-            className="min-w-0"
+            className="inset-panel min-w-0"
           >
             <LatexEditor />
           </Panel>
@@ -263,7 +263,7 @@ export function WorkspaceLayout() {
           <Panel
             defaultSize={codeVisible ? 42.5 : 85}
             minSize={25}
-            className="min-w-0"
+            className="inset-panel min-w-0"
           >
             <PdfPane />
           </Panel>
@@ -272,7 +272,12 @@ export function WorkspaceLayout() {
         {dockedPanels.length > 0 && <PaneDivider />}
 
         {dockedPanels.length > 0 && (
-          <Panel defaultSize={26} minSize={16} maxSize={45} className="min-w-0">
+          <Panel
+            defaultSize={26}
+            minSize={16}
+            maxSize={45}
+            className="inset-panel min-w-0"
+          >
             <RightDock />
           </Panel>
         )}

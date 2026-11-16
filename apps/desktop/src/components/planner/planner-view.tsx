@@ -5,6 +5,7 @@ import {
   CalendarRangeIcon,
   CheckCircle2Icon,
   CheckIcon,
+  ChevronRightIcon,
   InboxIcon,
   KanbanIcon,
   LayersIcon,
@@ -50,14 +51,115 @@ import { TaskDetails } from "./task-parts";
 
 type Selection = { smart: SmartFilter } | { plan: PlanKey };
 type Tab = "tasks" | "reading";
-type ProjectSort = "recent" | "name" | "due" | "count";
+type ProjectSort = "recent" | "type" | "due" | "count" | "name";
 
 const SORT_LABEL: Record<ProjectSort, string> = {
   recent: "Recently opened",
-  name: "Name",
+  type: "Type",
   due: "Due soonest",
   count: "Most tasks",
+  name: "Name",
 };
+
+interface ProjectGroup {
+  key: string;
+  /** null: no heading (sorted by name, one plain list). */
+  title: string | null;
+  items: PlanList[];
+}
+
+const DAY = 86_400_000;
+
+/** The project list split into groups that follow the chosen order. */
+function groupProjects(
+  projects: PlanList[],
+  sort: ProjectSort,
+  stats: Record<PlanKey, { open: number; due: number; next?: string }>,
+  now = Date.now(),
+): ProjectGroup[] {
+  const by = (pick: (p: PlanList) => [string, string]) => {
+    const groups = new Map<string, ProjectGroup>();
+    for (const p of projects) {
+      const [key, title] = pick(p);
+      const g = groups.get(key) ?? { key, title, items: [] };
+      g.items.push(p);
+      groups.set(key, g);
+    }
+    return [...groups.values()];
+  };
+  if (sort === "name") return [{ key: "all", title: null, items: projects }];
+  if (sort === "recent") {
+    const start = new Date(now).setHours(0, 0, 0, 0);
+    return by((p) => {
+      const at = p.lastOpened ?? 0;
+      if (at >= start) return ["today", "Opened today"];
+      if (at >= start - 6 * DAY) return ["week", "This week"];
+      if (at >= start - 30 * DAY) return ["month", "This month"];
+      return ["earlier", "Earlier"];
+    });
+  }
+  if (sort === "type") {
+    const groups = by((p) =>
+      p.type ? [`type:${p.type.toLowerCase()}`, p.type] : ["none", "No type"],
+    );
+    return groups.sort(
+      (a, b) =>
+        Number(a.key === "none") - Number(b.key === "none") ||
+        (a.title ?? "").localeCompare(b.title ?? ""),
+    );
+  }
+  if (sort === "due") {
+    const order = ["overdue", "today", "week", "later", "none"];
+    return by((p) => {
+      const next = stats[p.key]?.next;
+      if (!next) return ["none", "No dates"];
+      const days = daysUntil(next);
+      if (days < 0) return ["overdue", "Overdue"];
+      if (days === 0) return ["today", "Due today"];
+      if (days <= 6) return ["week", "Due this week"];
+      return ["later", "Later"];
+    }).sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+  }
+  const order = ["busy", "some", "empty"];
+  return by((p) => {
+    const open = stats[p.key]?.open ?? 0;
+    if (open >= 10) return ["busy", "Busy"];
+    if (open > 0) return ["some", "A few tasks"];
+    return ["empty", "Empty"];
+  }).sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+}
+
+/** A group of projects in the sidebar, folding away. */
+function ProjectGroupBlock({
+  group,
+  folded,
+  onFold,
+  children,
+}: {
+  group: ProjectGroup;
+  folded: boolean;
+  onFold: () => void;
+  children: ReactNode;
+}) {
+  if (group.title === null) return <>{children}</>;
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onFold}
+        aria-expanded={!folded}
+        className="flex w-full items-center gap-1 px-2 pt-2 pb-1 text-left text-[11px] text-muted-foreground hover:text-foreground"
+      >
+        <ChevronRightIcon
+          className={cn("size-3 transition-transform", !folded && "rotate-90")}
+        />
+        <span className="flex-1 truncate">{group.title}</span>
+        <span className="tabular-nums opacity-70">{group.items.length}</span>
+      </button>
+      {!folded && <div className="flex flex-col gap-0.5">{children}</div>}
+    </div>
+  );
+}
 
 /** Each smart list's color, and its icon. */
 /** Each list its own color, from the theme. */
@@ -140,9 +242,18 @@ export function PlannerView() {
   const [selected, select] = useStored<Selection>("selected", {
     smart: "today",
   });
-  const [mode, setMode] = useStored<PlanViewMode>("mode", "list");
+  // List or board, chosen apart for tasks and for reading.
+  const [taskMode, setTaskMode] = useStored<PlanViewMode>("mode-tasks", "list");
+  const [readMode, setReadMode] = useStored<PlanViewMode>(
+    "mode-reading",
+    "list",
+  );
   const [tab, setTab] = useStored<Tab>("tab", "tasks");
+  const mode = tab === "reading" ? readMode : taskMode;
+  const setMode = tab === "reading" ? setReadMode : setTaskMode;
   const [sort, setSort] = useStored<ProjectSort>("sort", "recent");
+  // Groups of projects folded away, per order ("recent:earlier").
+  const [folded, setFolded] = useStored<string[]>("folded", []);
   const [picked, setPicked] = useState<Selected | null>(null);
 
   // Per plan: open tasks, due today or before, the soonest date.
@@ -183,7 +294,7 @@ export function PlannerView() {
   const projects = useMemo(() => {
     const p = lists.filter((l) => l.key !== INBOX);
     return p.sort((a, b) => {
-      if (sort === "name")
+      if (sort === "name" || sort === "type")
         return a.name.localeCompare(b.name, undefined, { numeric: true });
       if (sort === "count") {
         return (
@@ -333,18 +444,34 @@ export function PlannerView() {
                 Your projects show here once you've opened them.
               </p>
             )}
-            {projects.map((p) => (
-              <SideItem
-                key={p.key}
-                icon={<ProjectIcon list={p} className="size-4" />}
-                label={p.name}
-                count={stats.plans[p.key]?.open}
-                alert={(stats.plans[p.key]?.due ?? 0) > 0}
-                active={"plan" in selected && selected.plan === p.key}
-                onClick={() => choose({ plan: p.key })}
-                dropId={`side:${p.key}`}
-                onDrop={(d) => moveToPlan(d, p)}
-              />
+            {groupProjects(projects, sort, stats.plans).map((g) => (
+              <ProjectGroupBlock
+                key={`${sort}:${g.key}`}
+                group={g}
+                folded={folded.includes(`${sort}:${g.key}`)}
+                onFold={() => {
+                  const id = `${sort}:${g.key}`;
+                  setFolded(
+                    folded.includes(id)
+                      ? folded.filter((f) => f !== id)
+                      : [...folded, id],
+                  );
+                }}
+              >
+                {g.items.map((p) => (
+                  <SideItem
+                    key={p.key}
+                    icon={<ProjectIcon list={p} className="size-4" />}
+                    label={p.name}
+                    count={stats.plans[p.key]?.open}
+                    alert={(stats.plans[p.key]?.due ?? 0) > 0}
+                    active={"plan" in selected && selected.plan === p.key}
+                    onClick={() => choose({ plan: p.key })}
+                    dropId={`side:${p.key}`}
+                    onDrop={(d) => moveToPlan(d, p)}
+                  />
+                ))}
+              </ProjectGroupBlock>
             ))}
           </nav>
         </aside>

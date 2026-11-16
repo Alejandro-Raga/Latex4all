@@ -105,6 +105,24 @@ export const usePlanStore = create<PlanState>((set, get) => ({
 
   write: async (key, text) => {
     const root = rootOf(key);
+    // Shown at once; saved after (a dropped task lands where it was dropped).
+    const known = get().entries[key];
+    if (known !== undefined || !root || openPlanFile(root) === undefined) {
+      set((s) => ({ entries: { ...s.entries, [key]: { ...known, text } } }));
+    }
+    try {
+      await saveTo(key, root, text);
+    } catch (err) {
+      await get().load(key);
+      throw err;
+    }
+  },
+}));
+
+async function saveTo(key: PlanKey, root: string | null, text: string) {
+  const get = usePlanStore.getState;
+  const set = usePlanStore.setState;
+  {
     if (root) {
       const open = openPlanFile(root);
       if (open) {
@@ -145,8 +163,8 @@ export const usePlanStore = create<PlanState>((set, get) => ({
     useVaultStore.getState().noteWritten(INBOX_PATH, text);
     // The new version, for the next write.
     await get().load(key);
-  },
-}));
+  }
+}
 
 /** A plan's text as it is now, kept current; null when there's none yet. */
 export function usePlanText(key: PlanKey): string | null | undefined {

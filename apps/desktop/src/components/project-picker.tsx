@@ -597,7 +597,7 @@ export function ProjectPicker() {
   }
 
   return (
-    <div className="flex h-full bg-background text-foreground">
+    <div className="app-shell flex h-full bg-background text-foreground">
       <aside
         className={cn(
           "flex shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out",
@@ -722,7 +722,7 @@ export function ProjectPicker() {
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="inset-card flex min-w-0 flex-1 flex-col bg-background">
         {activeSection === "library" ? (
           <LibraryView />
         ) : activeSection === "planner" ? (

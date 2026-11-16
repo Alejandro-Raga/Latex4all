@@ -14,7 +14,7 @@ Hover a card for Open PDF, Show in Finder and Duplicate. Right-click a project f
 
 Inside a project, your files are on the left, the editor in the middle and the PDF on the right. The icons on the far right open three side panels: **Zotero library**, **Vault** (your notes) and **Notes** (comments on your text).
 
-Menus, popovers and notifications are see-through glass; **Settings → Appearance → Menus** makes them **Clear**, **Frosted** or **Solid**. **Background** there gives the window a soft **Gradient** in your theme's colors, or keeps it **Flat**.
+Menus, popovers and notifications are see-through glass; **Settings → Appearance → Menus** makes them **Clear**, **Frosted** or **Solid**. **Background** there runs a **Gradient** of your theme's colors around the edges of the window, with your work on cards inside it, or keeps it **Flat**.
 
 Without a project open, **Library & Vault** shows your Zotero library and your vault together. The bar on top hides either one, swaps them, and puts them side by side or one above the other.
 
@@ -157,7 +157,7 @@ The **Planner**, on the start screen, keeps your to-dos and what you mean to rea
 - **Drag tasks** to reorder them or move them between headings. Drop one on the middle of another task to make it a subtask. Drop it on a project or the Inbox in the sidebar to move it there, or on **Today** or **Tomorrow** to set its date.
 - **Headings** split a project into parts, such as "Literature review" or "Writing". **Add heading** is at the end of the list; the **…** beside a heading renames or deletes it (its tasks stay).
 - **List or Board:** the board shows each heading as a column. Drag tasks between columns.
-- **Projects** show an icon for their type, and the arrows beside **Projects** sort them.
+- **Projects** show an icon for their type. The arrows beside **Projects** sort them (recently opened, type, due date, number of tasks, name) and group them to match; click a group to fold it.
 
 ### Reading lists
 

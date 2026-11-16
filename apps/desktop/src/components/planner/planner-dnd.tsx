@@ -9,12 +9,14 @@
  */
 import { type ReactNode, useState } from "react";
 import {
+  type CollisionDetection,
   DndContext,
   type DragEndEvent,
   type DragMoveEvent,
   DragOverlay,
   type DragStartEvent,
   PointerSensor,
+  pointerWithin,
   useDraggable,
   useDroppable,
   useSensor,
@@ -67,6 +69,9 @@ const fits = (drag: DragTask, target?: DropTarget) =>
   target.accepts === "any" ||
   (target.accepts === "reading") === !!drag.reading;
 
+/** What's under the pointer, and only that: the drop follows the pointer. */
+const underPointer: CollisionDetection = (args) => pointerWithin(args);
+
 /** Around everything that drags or takes drops. */
 export function PlannerDnd({ children }: { children: ReactNode }) {
   const sensors = useSensors(
@@ -89,6 +94,7 @@ export function PlannerDnd({ children }: { children: ReactNode }) {
   return (
     <DndContext
       sensors={sensors}
+      collisionDetection={underPointer}
       onDragStart={(e: DragStartEvent) => {
         const drag = e.active.data.current as DragTask;
         setActive(drag);

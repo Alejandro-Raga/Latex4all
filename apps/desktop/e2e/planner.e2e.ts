@@ -285,3 +285,44 @@ test("drag a task into another to nest it; right-click to move; headings", async
   await expect(main.getByText("Comments from María")).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("projects grouped by the chosen order; list or board apart for tasks and reading", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner&types=1");
+  const projects = page.getByRole("navigation", { name: "Projects" });
+  await page.getByRole("button", { name: "Sort projects" }).click();
+  await page.getByRole("menuitem", { name: "Type" }).click();
+  const articles = projects.getByRole("button", { name: /^Article/ });
+  await expect(articles).toBeVisible();
+  await expect(
+    projects.getByRole("button", { name: /^Paper 3/ }),
+  ).toBeVisible();
+  // A group folds away, and back.
+  await articles.click();
+  await expect(projects.getByRole("button", { name: /^Paper 3/ })).toHaveCount(
+    0,
+  );
+  await articles.click();
+  await expect(
+    projects.getByRole("button", { name: /^Paper 3/ }),
+  ).toBeVisible();
+
+  await projects.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByRole("radio", { name: "Tasks" }).click();
+  await main.getByRole("radio", { name: "Board" }).click();
+  await main.getByRole("radio", { name: "Reading" }).click();
+  await expect(main.getByRole("radio", { name: "List" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await main.getByRole("radio", { name: "Tasks" }).click();
+  await expect(main.getByRole("radio", { name: "Board" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  expect(errors).toEqual([]);
+});

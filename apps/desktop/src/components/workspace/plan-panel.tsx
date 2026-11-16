@@ -53,7 +53,14 @@ export function PlanPanel({ onClose }: { onClose: () => void }) {
   const root = useDocumentStore((s) => s.projectRoot);
   const lists = usePlanLists();
   const [tab, setTab] = useState<"tasks" | "reading">("tasks");
-  const [mode, setMode] = useState<PlanViewMode>("list");
+  const [modes, setModes] = useState<Record<"tasks" | "reading", PlanViewMode>>(
+    {
+      tasks: "list",
+      reading: "list",
+    },
+  );
+  const mode = modes[tab];
+  const setMode = (m: PlanViewMode) => setModes({ ...modes, [tab]: m });
   if (!root) return null;
   const key = projectKey(root);
   const list = lists.find((l) => l.key === key) ?? {

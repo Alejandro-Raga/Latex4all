@@ -496,50 +496,74 @@
 }
 
 /*
- * Settings → Appearance → Background → Gradient: a soft wash of the theme's
- * own colors over the window's backgrounds. Fixed to the window, so a
- * panel, a card and the page behind them show one continuous wash.
+ * Settings → Appearance → Background → Gradient, as Arc and others do it:
+ * the theme's colors flow through the window's frame (its background, the
+ * sidebars, the dividers), and the content sits on plain cards inset into
+ * it, so the color frames the work instead of running behind it.
  */
 :root {
-  --surface-wash:
+  --frame-wash:
     radial-gradient(
-      90vw 70vh at 0% 0%,
-      color-mix(in oklab, var(--primary) 9%, transparent),
-      transparent 70%
+      120vw 90vh at 0% 0%,
+      color-mix(in oklab, var(--primary) 16%, transparent),
+      transparent 65%
     ),
     radial-gradient(
-      80vw 70vh at 100% 100%,
-      color-mix(in oklab, var(--chart-2) 9%, transparent),
-      transparent 70%
+      110vw 90vh at 100% 100%,
+      color-mix(in oklab, var(--chart-2) 18%, transparent),
+      transparent 65%
     ),
-    radial-gradient(
-      60vw 50vh at 100% 0%,
-      color-mix(in oklab, var(--chart-4) 6%, transparent),
-      transparent 70%
+    linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--chart-4) 8%, transparent),
+      color-mix(in oklab, var(--chart-3) 8%, transparent)
     );
 }
 :is(.dark, .theme-dark) {
-  --surface-wash:
+  --frame-wash:
     radial-gradient(
-      90vw 70vh at 0% 0%,
-      color-mix(in oklab, var(--primary) 14%, transparent),
-      transparent 70%
+      120vw 90vh at 0% 0%,
+      color-mix(in oklab, var(--primary) 22%, transparent),
+      transparent 65%
     ),
     radial-gradient(
-      80vw 70vh at 100% 100%,
-      color-mix(in oklab, var(--chart-2) 12%, transparent),
-      transparent 70%
+      110vw 90vh at 100% 100%,
+      color-mix(in oklab, var(--chart-2) 22%, transparent),
+      transparent 65%
     ),
-    radial-gradient(
-      60vw 50vh at 100% 0%,
-      color-mix(in oklab, var(--chart-4) 8%, transparent),
-      transparent 70%
+    linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--chart-4) 10%, transparent),
+      color-mix(in oklab, var(--chart-3) 10%, transparent)
     );
 }
+/* The frame: one wash across the window, whatever part of it shows. */
 [data-background="gradient"] body,
-[data-background="gradient"] .bg-background,
-[data-background="gradient"] .bg-sidebar,
-[data-background="gradient"] .bg-frame {
-  background-image: var(--surface-wash);
+[data-background="gradient"] .app-shell,
+[data-background="gradient"]
+  :is(.bg-sidebar, .bg-frame, .pane-header):not(
+    :is(.inset-card, .inset-panel) *
+  ) {
+  background-image: var(--frame-wash);
   background-attachment: fixed;
+}
+/* Content on a card of its own, inset into the frame. */
+[data-background="gradient"] .inset-card {
+  margin: 6px 6px 6px 0;
+  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+}
+/* A resizable pane: room around it, the card inside. */
+[data-background="gradient"] .inset-panel {
+  padding: 6px 3px;
+}
+[data-background="gradient"] .inset-panel > * {
+  /* Solid, whatever the pane is made of: the wash stays outside. */
+  background-color: var(--background);
+  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
 }
