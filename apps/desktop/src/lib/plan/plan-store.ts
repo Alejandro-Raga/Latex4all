@@ -4,11 +4,14 @@
  * - A project's plan is Plan.md at its root. While the project is open it
  *   goes through the open files, so a shared project's collaborators get
  *   each change as it's made; otherwise it's read from and written to disk.
- * - The Inbox, for what belongs to no project, is Tasks/Inbox.md in the
- *   vault, so it's on the phone too through the vault's own sync.
+ * - The Inbox, for what belongs to no project, is kept in the app's own
+ *   folder; with a vault connected, it's Tasks/Inbox.md there instead (on
+ *   the phone too, through the vault's sync), taking along what was kept
+ *   in the app the first time it's saved.
  */
 import { useEffect, useMemo } from "react";
-import { readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { appDataDir, join as joinPath } from "@tauri-apps/api/path";
+import { mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { create } from "zustand";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
@@ -17,6 +20,21 @@ import { PLAN_FILE } from "./plan-file";
 
 export const INBOX = "inbox";
 export const INBOX_PATH = "Tasks/Inbox.md";
+
+/** The Inbox when there's no vault: in the app's own folder. */
+async function localInbox(): Promise<string> {
+  const dir = await joinPath(await appDataDir(), "planner");
+  await mkdir(dir, { recursive: true }).catch(() => {});
+  return joinPath(dir, "Inbox.md");
+}
+
+async function readLocalInbox(): Promise<string | null> {
+  try {
+    return await readTextFile(await localInbox());
+  } catch {
+    return null;
+  }
+}
 
 /** A plan's key: "inbox", or "project:" and the project's folder. */
 export type PlanKey = string;
@@ -33,6 +51,8 @@ interface Entry {
   text: string | null;
   /** The vault's version of the Inbox, to write over it safely. */
   version?: string | null;
+  /** The Inbox is in the vault (not yet: in the app's folder). */
+  inVault?: boolean;
 }
 
 interface PlanState {
@@ -63,16 +83,20 @@ export const usePlanStore = create<PlanState>((set, get) => ({
         entry = { text: null };
       }
     } else {
-      await useVaultStore.getState().ensureVault();
+      await useVaultStore
+        .getState()
+        .ensureVault()
+        .catch(() => {});
       const source = useVaultStore.getState().source;
       if (!source) {
-        entry = { text: null };
+        entry = { text: await readLocalInbox() };
       } else {
         try {
           const { text, version } = await source.readNote(INBOX_PATH);
-          entry = { text, version };
+          entry = { text, version, inVault: true };
         } catch {
-          entry = { text: null };
+          // Not in the vault yet: what the app kept, moved there on saving.
+          entry = { text: await readLocalInbox(), inVault: false };
         }
       }
     }
@@ -98,12 +122,18 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       set((s) => ({ entries: { ...s.entries, [key]: { text } } }));
       return;
     }
-    const vault = useVaultStore.getState();
-    await vault.ensureVault();
+    await useVaultStore
+      .getState()
+      .ensureVault()
+      .catch(() => {});
     const source = useVaultStore.getState().source;
-    if (!source) throw new Error("Connect your vault for an Inbox.");
+    if (!source) {
+      await writeTextFile(await localInbox(), text);
+      set((s) => ({ entries: { ...s.entries, [key]: { text } } }));
+      return;
+    }
     const known = get().entries[key];
-    if (known?.text == null) {
+    if (!known?.inVault) {
       try {
         await source.createNote(INBOX_PATH, text);
       } catch {

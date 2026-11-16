@@ -78,7 +78,9 @@ test("a project's plan as a list and a board; a new plan where there's none", as
   // Thesis has no plan: the first task starts one.
   await page.getByRole("button", { name: /^Thesis/ }).click();
   await main.getByRole("radio", { name: "List" }).click();
-  await expect(main.getByText(/No plan yet/)).toBeVisible();
+  await expect(
+    main.getByText("No tasks yet. Add the first one above."),
+  ).toBeVisible();
   await main.getByLabel("Add a task").fill("Outline chapter 1 friday");
   await main.getByLabel("Add a task").press("Enter");
   await expect
@@ -100,5 +102,28 @@ test("the writing view has the project's plan in its own panel", async ({
     .click();
   await expect(page.getByText("Plan", { exact: true }).first()).toBeVisible();
   await expect(page.getByLabel("Add a task")).toBeVisible();
-  await expect(page.getByText(/No plan yet/)).toBeVisible();
+  await expect(
+    page.getByText("No tasks yet. Add the first one above."),
+  ).toBeVisible();
+});
+
+test("the Inbox works with no vault: the app keeps it", async ({
+  page,
+  errors,
+}) => {
+  await open(page, "scenario=planner&novault=1");
+  await page.getByRole("button", { name: /^Inbox/ }).click();
+  const main = page.getByRole("main");
+  await expect(
+    main.getByText("For tasks that don't belong to a project."),
+  ).toBeVisible();
+  await main.getByLabel("Add a task").fill("Book the flight tomorrow");
+  await main.getByLabel("Add a task").press("Enter");
+  await expect
+    .poll(() => disk(page, "/appdata/planner/Inbox.md"))
+    .toMatch(
+      /^# Inbox\n\n## To do\n\n- \[ \] Book the flight 📅 \d{4}-\d{2}-\d{2}\n/,
+    );
+  await expect(main.getByText("Book the flight")).toBeVisible();
+  expect(errors).toEqual([]);
 });

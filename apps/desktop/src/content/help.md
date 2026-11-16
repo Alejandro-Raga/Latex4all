@@ -148,15 +148,15 @@ Note types are saved in the vault, so every computer using it has the same ones.
 
 ## Planner
 
-The **Planner**, on the start screen, keeps your tasks: one list per project, and an **Inbox** for the rest.
+The **Planner**, on the start screen, keeps your to-dos: a list for each project, and an **Inbox** for everything else.
 
-- **Today** and **Next 7 days** gather what's due from every project and the Inbox. **All** shows every open task.
-- **Add a task as you'd say it:** "Revise the intro friday !high #writing". Dates (today, tomorrow, friday, next week, in 3 days, 20 nov), priority (!high, !medium, !low) and tags are picked out. Spanish works too: mañana, el viernes.
-- **Click a task** to change its date, priority or section, add subtasks, or delete it.
-- **List or Board:** a project's sections (To do, In progress, Waiting…) show as columns on the board. Drag tasks between them, and add sections of your own.
-- **In a project**, the **Plan** panel (⌘⌥4) shows its plan beside your writing.
+- **Today** and **Next 7 days** show what's due across all your projects. **All** shows every task.
+- **Type a task the way you'd say it,** like "Revise the intro friday !high". The date and priority are picked up for you: today, tomorrow, friday, next week, in 3 days, 20 nov, and in Spanish too (mañana, el viernes). Add **!high**, **!medium** or **!low** for priority, and words like **#writing** to group tasks.
+- **Click a task** to change its date or priority, move it, add steps to it, or delete it.
+- **List or Board:** the board shows a project's tasks in columns (To do, In progress, Waiting). Drag tasks between them, or add columns of your own.
+- **While writing**, the **Plan** panel (⌘⌥4) shows the project's tasks next to your text.
 
-A project's plan is **Plan.md** in the project folder, so in a shared project everyone sees the same plan. The Inbox is **Tasks/Inbox.md** in your vault. Both are plain Markdown, in the format of Obsidian's Tasks plugin, so they also open and check off in Obsidian.
+In a shared project, everyone sees the same tasks: they're kept with the project, in a file called Plan.md. The Inbox is kept by the app, or in your vault if you've connected one, so Obsidian users see it there too.
 
 ## Chat assistant
 

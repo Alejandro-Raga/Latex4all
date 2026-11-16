@@ -26,6 +26,8 @@
               disk.set(path, new TextDecoder().decode(args));
               return null;
             }
+            if (cmd === "plugin:path|resolve_directory") return "/appdata";
+            if (cmd === "plugin:path|join") return args.paths.join("/");
             if (cmd.startsWith("plugin:event")) return 0;
             return null;
           }

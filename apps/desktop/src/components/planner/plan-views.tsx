@@ -134,8 +134,8 @@ function ListView({
       {text === null && (
         <p className="px-2 text-muted-foreground text-xs">
           {list.key === INBOX
-            ? "Tasks that belong to no project. They're kept in your vault, in Tasks/Inbox.md."
-            : "No plan yet: the first task starts Plan.md in the project folder."}
+            ? "For tasks that don't belong to a project."
+            : "No tasks yet. Add the first one above."}
         </p>
       )}
       {groups.map((g) => (

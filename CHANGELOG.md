@@ -28,9 +28,9 @@ tag.
   or a board. Add tasks as you'd say them ("Revise the intro friday
   !high #writing"); click one for its date, priority, section and
   subtasks. In a project, the Plan panel (⌘⌥4) shows its plan beside the
-  writing. A project's plan is Plan.md in its folder, shared with
-  collaborators; the Inbox is Tasks/Inbox.md in the vault; both open in
-  Obsidian.
+  writing. No vault or Obsidian needed: a project's tasks are kept with
+  the project (and shared with collaborators), the Inbox by the app, or
+  in the vault if one is connected.
 
 - Library & Vault: a bar on top shows or hides the Zotero library and
   the vault, swaps them, and puts them side by side or one above the

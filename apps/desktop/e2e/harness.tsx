@@ -768,33 +768,41 @@ if (scenario === "planner") {
   (window as any).__disk = disk;
   const files = new Map<string, string>();
   (window as any).vaultFiles = files;
-  useVaultStore.setState({
-    source: {
-      kind: "local",
-      label: "Vault",
-      load: async () => ({
-        notes: [...files].map(([p, t]) => parseNote(p, t)),
-        attachments: new Map(),
-        versions: new Map(),
-        templates: [],
-        newNoteFolder: null,
-      }),
-      readAttachment: async () => new Uint8Array(),
-      readNote: async (p: string) => {
-        if (!files.has(p)) throw new Error("not found");
-        return { text: files.get(p) ?? "", version: null };
+  // ?novault=1: no vault connected, and none to find.
+  if (params.get("novault")) {
+    useVaultStore.setState({
+      source: null,
+      index: null,
+      ensureVault: async () => {},
+    } as never);
+  } else
+    useVaultStore.setState({
+      source: {
+        kind: "local",
+        label: "Vault",
+        load: async () => ({
+          notes: [...files].map(([p, t]) => parseNote(p, t)),
+          attachments: new Map(),
+          versions: new Map(),
+          templates: [],
+          newNoteFolder: null,
+        }),
+        readAttachment: async () => new Uint8Array(),
+        readNote: async (p: string) => {
+          if (!files.has(p)) throw new Error("not found");
+          return { text: files.get(p) ?? "", version: null };
+        },
+        writeNote: async (p: string, t: string) => {
+          files.set(p, t);
+          return null;
+        },
+        createNote: async (p: string, t: string) => {
+          if (files.has(p)) throw new Error(`exists: ${p}`);
+          files.set(p, t);
+        },
       },
-      writeNote: async (p: string, t: string) => {
-        files.set(p, t);
-        return null;
-      },
-      createNote: async (p: string, t: string) => {
-        if (files.has(p)) throw new Error(`exists: ${p}`);
-        files.set(p, t);
-      },
-    },
-    index: null,
-  } as never);
+      index: null,
+    } as never);
   useProjectStore.setState({
     recentProjects: [
       { path: "/papers/Paper 2", name: "Paper 2", lastOpened: 1 },
