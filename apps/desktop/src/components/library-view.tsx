@@ -1,4 +1,4 @@
-import { type CSSProperties, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
   ArrowLeftRightIcon,
@@ -13,7 +13,7 @@ import { QuickReferencePanel } from "@/components/workspace/quick-reference-pane
 import { VaultPanel } from "@/components/workspace/vault-panel";
 import { VaultStandalone } from "@/components/workspace/vault-standalone";
 import { cn } from "@/lib/utils";
-import { confirmLeaveVaultEdit } from "@/stores/vault-store";
+import { confirmLeaveVaultEdit, useVaultStore } from "@/stores/vault-store";
 
 type Side = "reference" | "vault";
 
@@ -61,6 +61,25 @@ export function LibraryView() {
       // Kept for this session.
     }
   };
+  // A note opened from elsewhere (a pill in the Zotero library): the vault
+  // shows, if it was hidden, so it can be read.
+  useEffect(
+    () =>
+      useVaultStore.subscribe((s, prev) => {
+        if (!s.current || s.current === prev.current) return;
+        setLayoutState((l) => {
+          if (l.vault) return l;
+          const next = { ...l, vault: true };
+          try {
+            localStorage.setItem(LAYOUT_KEY, JSON.stringify(next));
+          } catch {
+            // Kept for this session.
+          }
+          return next;
+        });
+      }),
+    [],
+  );
   const toggle = (side: Side) => {
     const other = side === "reference" ? "vault" : "reference";
     if (layout[side] && !layout[other]) return;

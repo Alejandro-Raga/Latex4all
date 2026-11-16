@@ -10,6 +10,7 @@ import {
   type VaultIndex,
   type VaultNote,
 } from "@/lib/vault/vault-index";
+import { groupColor } from "@/lib/vault/group-colors";
 import { useKindChoices } from "@/stores/vault-store";
 
 /** Past this many, the list gets a search box. */
@@ -44,13 +45,10 @@ export function connectionsByType(
 export function ConnectionPills({
   index,
   note,
-  colorOf,
   onOpen,
 }: {
   index: VaultIndex;
   note: VaultNote;
-  /** A type's color, as the lists and the map draw it. */
-  colorOf: (group: string, kind: string) => string;
   onOpen: (name: string) => void;
 }) {
   const choices = useKindChoices();
@@ -73,7 +71,7 @@ export function ConnectionPills({
         <Pill
           key={g.kind}
           label={g.plural}
-          color={colorOf(g.plural, g.kind)}
+          color={groupColor(g.plural, g.kind)}
           notes={g.notes}
           onOpen={onOpen}
         />

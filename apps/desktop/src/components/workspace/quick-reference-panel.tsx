@@ -119,6 +119,8 @@ import {
   addCitekeysToVault,
   addCitekeysToZoteroWithToast,
 } from "./citation-check";
+import { ConnectionPills } from "./connection-pills";
+import { openInVault } from "./highlight-quote";
 import { ConnectNoteMenu } from "./topic-menu";
 import { groupProjects } from "@/lib/project-grouping";
 import { LibraryFilterRow } from "./library-filter";
@@ -1532,9 +1534,12 @@ function ZoteroItemRow({
   const bibFiles = useBibFiles();
 
   // Its note in the vault, if it has one; a topic needs one to list.
-  const vaultNoteName = useVaultStore(
-    (s) => s.index?.list.find((n) => n.zoteroKey === item.key)?.name,
+  const vaultIndex = useVaultStore((s) => s.index);
+  const vaultNote = useMemo(
+    () => vaultIndex?.list.find((n) => n.zoteroKey === item.key),
+    [vaultIndex, item.key],
   );
+  const vaultNoteName = vaultNote?.name;
 
   const addToVault = () =>
     toast.promise(addPaperToVault(item.key), {
@@ -1599,6 +1604,15 @@ function ZoteroItemRow({
           {places && (
             <div className="pb-1 pl-7">
               <CitedAt places={places} />
+            </div>
+          )}
+          {vaultIndex && vaultNote && (
+            <div className="-mt-1 pb-1 pl-7">
+              <ConnectionPills
+                index={vaultIndex}
+                note={vaultNote}
+                onOpen={openInVault}
+              />
             </div>
           )}
         </div>

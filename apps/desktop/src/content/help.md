@@ -88,7 +88,7 @@ The vault is your Obsidian vault: a folder on your computer, or one on a WebDAV 
 - **Highlights in a note** show the passage, its color and page, with your comment beneath. Right-click one to add it to any note, or open it in the PDF. The other notes that quote it are listed below it.
 - **New notes** (the + above the list) can be a topic, an idea or a plain note. A topic or idea gets its usual sections, or your vault's own template for it.
 - **Right-click a note** to change its type, connect it to another note, or delete it. **Connect to note** lists the notes by type, with **New …** at the end of each to make one. A paper connected to an idea or topic goes into its Literature; other notes list each other under **Related**.
-- **Pills under each note** show what it is connected to, by type: Papers 12, Topics 3. Click one to list those notes; a long list has a search box.
+- **Pills under each note**, and under papers in the Zotero library, show what it is connected to, by type: Papers 12, Topics 3. Click one to list those notes; a long list has a search box.
 - **The map** shows how your notes link to each other.
 
 [Open Settings → Vault](app:settings/vault)

@@ -66,6 +66,9 @@ import {
   useItemKeyByCitekey,
 } from "./cited-here";
 import { ConnectionPills } from "./connection-pills";
+import { groupColor } from "@/lib/vault/group-colors";
+
+export { groupColor };
 import { NoteContextMenu, NoteMenuItems } from "./topic-menu";
 import { kindFolder } from "@/lib/vault/kind-folders";
 import { kindFromTemplate } from "@/lib/vault/new-note";
@@ -101,11 +104,7 @@ import {
 } from "@/lib/vault/vault-index";
 import { cn } from "@/lib/utils";
 import { useDocumentStore } from "@/stores/document-store";
-import {
-  useKindChoices,
-  useVaultStore,
-  vaultStyle,
-} from "@/stores/vault-store";
+import { useKindChoices, useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { MarkdownNoteEditor } from "./markdown-note-editor";
 import { ProjectHome } from "./vault-project-home";
@@ -150,40 +149,7 @@ import {
 
 const REFRESH_MS = 30_000;
 
-const PAPER_COLOR = "#3b82f6";
-const ROOT_COLOR = "#94a3b8";
-const FOLDER_COLORS = [
-  "#f59e0b",
-  "#10b981",
-  "#8b5cf6",
-  "#ec4899",
-  "#14b8a6",
-  "#f97316",
-  "#84cc16",
-  "#06b6d4",
-];
-
 const groupLabel = (group: string) => group || "Notes";
-
-/** A note's colour in lists and the map: papers blue, others by their folder. */
-/** A group's own color, before any picked for it. */
-function defaultGroupColor(group: string, kind?: string): string {
-  if (kind === "paper" || group === PAPERS_GROUP) return PAPER_COLOR;
-  if (!group) return ROOT_COLOR;
-  let hash = 0;
-  for (const ch of group) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return FOLDER_COLORS[hash % FOLDER_COLORS.length];
-}
-
-/** The color a group is drawn in: picked, its type's, or its own. */
-export function groupColor(group: string, kind?: string): string {
-  const { colors, types } = vaultStyle();
-  return (
-    colors[group] ??
-    types.find((t) => t.label === group)?.color ??
-    defaultGroupColor(group, kind)
-  );
-}
 
 function noteColor(note: VaultNote): string {
   return groupColor(note.group, note.kind);
@@ -1025,12 +991,7 @@ export function NoteRow({
             </span>
           )}
           {places && <CitedAt places={places} />}
-          <ConnectionPills
-            index={index}
-            note={n}
-            colorOf={groupColor}
-            onOpen={onOpen}
-          />
+          <ConnectionPills index={index} note={n} onOpen={onOpen} />
           {places && <NoTopicHint index={index} note={n} />}
         </span>
         {aside && (
