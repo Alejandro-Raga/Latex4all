@@ -35,22 +35,22 @@ export function typeIcon(type?: string): LucideIcon {
   return FolderIcon;
 }
 
-const COLORS = [
-  "#3b82f6",
-  "#8b5cf6",
-  "#ec4899",
-  "#f97316",
-  "#14b8a6",
-  "#22c55e",
-  "#eab308",
-  "#06b6d4",
-];
-
-/** A project's own color, the same every time. */
-export function projectColor(name: string): string {
-  let hash = 0;
-  for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return COLORS[hash % COLORS.length];
+/** A project type's color, from the theme: every thesis looks alike. */
+export function typeColor(type?: string): string {
+  const t = (type ?? "").toLowerCase();
+  if (!t) return "var(--muted-foreground)";
+  if (t.includes("thesis") || t.includes("tesis")) return "var(--chart-1)";
+  if (
+    t.includes("presentation") ||
+    t.includes("talk") ||
+    t.includes("slides")
+  ) {
+    return "var(--chart-2)";
+  }
+  if (t.includes("poster")) return "var(--chart-3)";
+  if (t.includes("book")) return "var(--chart-4)";
+  if (t.includes("article") || t.includes("paper")) return "var(--primary)";
+  return "var(--chart-5)";
 }
 
 export function ProjectIcon({
@@ -64,7 +64,7 @@ export function ProjectIcon({
   return (
     <Icon
       className={cn("shrink-0", className)}
-      style={{ color: projectColor(list.name) }}
+      style={{ color: typeColor(list.type) }}
     />
   );
 }

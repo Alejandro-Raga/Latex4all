@@ -3,7 +3,7 @@ import {
   CalendarIcon,
   CheckIcon,
   FlagIcon,
-  GripVerticalIcon,
+  ChevronRightIcon,
   PlusIcon,
   Trash2Icon,
   XIcon,
@@ -23,14 +23,15 @@ import {
 } from "@/lib/plan/plan-file";
 import { parseQuickAdd, type QuickTask } from "@/lib/plan/quick-add";
 import { cn } from "@/lib/utils";
+import { DropMarker } from "./planner-dnd";
 
 /** A priority's color: the checkbox's ring, the flag, a card's edge. */
 export const PRIORITY_COLOR: Record<Priority, string> = {
   0: "var(--muted-foreground)",
-  1: "#3b82f6",
-  2: "#eab308",
-  3: "#f97316",
-  4: "#ef4444",
+  1: "var(--chart-2)",
+  2: "var(--chart-4)",
+  3: "var(--chart-1)",
+  4: "var(--destructive)",
 };
 export const PRIORITY_LABEL: Record<Priority, string> = {
   0: "None",
@@ -41,9 +42,9 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
 };
 
 const TONE_CLASS = {
-  overdue: "text-red-500",
-  today: "text-blue-500",
-  soon: "text-amber-600 dark:text-amber-400",
+  overdue: "text-destructive",
+  today: "text-primary",
+  soon: "text-chart-1",
   later: "text-muted-foreground",
 };
 
@@ -188,10 +189,18 @@ export interface TaskContext {
   icon: ReactNode;
 }
 
+/** What a row needs to drag and take drops (see planner-dnd). */
+export interface RowDnd {
+  ref: (el: HTMLElement | null) => void;
+  handlers: Record<string, unknown>;
+  over: "before" | "inside" | "after" | null;
+  dragging: boolean;
+}
+
 /**
- * One task in a list: grip (on hover), checkbox, title, tags, where it's
- * from, and its date. A click selects it (its details open beside), or in
- * a narrow panel opens them below.
+ * One task in a list: checkbox, title, tags, where it's from, its date, and
+ * its subtasks folded under it. A click selects it (its details open
+ * beside), or in a narrow panel opens them below.
  */
 export function TaskRow({
   task,
@@ -199,75 +208,102 @@ export function TaskRow({
   context,
   selected,
   onSelect,
-  drag,
-  dropMarker,
+  dnd,
   inline,
+  subtasks,
+  menu,
 }: {
   task: Task;
   actions: TaskActions;
   context?: TaskContext;
   selected?: boolean;
   onSelect?: () => void;
-  /** Drag props, when it can be dragged. */
-  drag?: React.HTMLAttributes<HTMLDivElement>;
-  /** A line above it: something will be dropped here. */
-  dropMarker?: boolean;
+  dnd?: RowDnd;
   /** Details open under the row (narrow panels). */
   inline?: boolean;
+  /** Its subtasks, drawn as a tree under it. */
+  subtasks?: ReactNode;
+  /** Wraps the row in its right-click menu. */
+  menu?: (row: ReactNode) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [folded, setFolded] = useState(false);
   const click = () => (inline ? setOpen(!open) : onSelect?.());
-  return (
-    <div className="relative">
-      {dropMarker && (
-        <span className="pointer-events-none absolute inset-x-2 -top-px h-0.5 rounded-full bg-primary" />
+  const hasSubs = task.subtasks.length > 0;
+  const row = (
+    <div
+      ref={dnd?.ref}
+      {...(dnd?.handlers as React.HTMLAttributes<HTMLDivElement>)}
+      role="button"
+      tabIndex={0}
+      onClick={click}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") click();
+      }}
+      className={cn(
+        "group relative flex cursor-default items-center gap-2.5 rounded-lg px-2 py-[7px] outline-none transition-colors",
+        selected || open ? "bg-accent" : "hover:bg-muted/70",
+        dnd?.over === "inside" && "bg-primary/10 ring-1 ring-primary/50",
+        dnd?.dragging && "opacity-30",
       )}
-      <div
-        {...drag}
-        role="button"
-        tabIndex={0}
-        onClick={click}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            click();
-          }
-        }}
-        className={cn(
-          "group flex cursor-default items-center gap-2.5 rounded-lg px-2 py-2 transition-colors",
-          selected || open ? "bg-primary/10" : "hover:bg-muted/70",
-        )}
-      >
-        {drag && (
-          <GripVerticalIcon className="-ml-1.5 size-3.5 shrink-0 cursor-grab text-muted-foreground/0 group-hover:text-muted-foreground/60" />
-        )}
-        <Check
-          done={task.done}
-          priority={task.priority}
-          onToggle={actions.toggle}
-        />
-        <span className="min-w-0 flex-1">
-          <span
-            className={cn(
-              "block truncate text-sm",
-              task.done && "text-muted-foreground line-through",
-            )}
+    >
+      <DropMarker zone={dnd?.over ?? null} />
+      <span className="flex w-3 shrink-0 justify-center">
+        {hasSubs && subtasks && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setFolded(!folded);
+            }}
+            aria-label={folded ? "Show subtasks" : "Hide subtasks"}
+            className="text-muted-foreground hover:text-foreground"
           >
-            <TitleText title={task.title} />
-          </span>
-        </span>
-        <span className="flex shrink-0 items-center gap-2">
-          <Tags title={task.title} />
-          <Progress subtasks={task.subtasks} />
-          {context && (
-            <span className="flex max-w-32 items-center gap-1 text-[11px] text-muted-foreground">
-              {context.icon}
-              <span className="truncate">{context.name}</span>
-            </span>
+            <ChevronRightIcon
+              className={cn(
+                "size-3.5 transition-transform",
+                !folded && "rotate-90",
+              )}
+            />
+          </button>
+        )}
+      </span>
+      <Check
+        done={task.done}
+        priority={task.priority}
+        onToggle={actions.toggle}
+      />
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "block truncate text-sm",
+            task.done && "text-muted-foreground line-through",
           )}
-          {task.due && !task.done && <DueBadge due={task.due} />}
+        >
+          <TitleText title={task.title} />
         </span>
-      </div>
+      </span>
+      <span className="flex shrink-0 items-center gap-2">
+        <Tags title={task.title} />
+        {(!subtasks || folded) && <Progress subtasks={task.subtasks} />}
+        {context && (
+          <span className="flex max-w-32 items-center gap-1 text-[11px] text-muted-foreground">
+            {context.icon}
+            <span className="truncate">{context.name}</span>
+          </span>
+        )}
+        {task.due && !task.done && <DueBadge due={task.due} />}
+      </span>
+    </div>
+  );
+  return (
+    <div>
+      {menu ? menu(row) : row}
+      {hasSubs && subtasks && !folded && (
+        <div className="ml-[22px] border-border/70 border-l pl-1.5">
+          {subtasks}
+        </div>
+      )}
       {inline && open && (
         <div className="px-2 pb-2">
           <TaskDetails task={task} actions={actions} />

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   addSection,
+  deleteSection,
+  nestTask,
+  promoteSubtask,
   addTask,
   allTasks,
   deleteTask,
@@ -169,4 +172,36 @@ it("finds tags, as Obsidian does", () => {
     "writing",
     "paper-2/intro",
   ]);
+});
+
+describe("headings and subtasks", () => {
+  it("deletes a heading, its tasks kept under the one before", () => {
+    const plan = parsePlan(SAMPLE);
+    const next = deleteSection(plan, 2);
+    expect(next.sections.map((s) => s.title)).toEqual([null, "To do"]);
+    expect(allTasks(next).map((t) => [t.task.title, t.section])).toEqual([
+      ["Draft the discussion #writing", "To do"],
+      ["Send the outline", "To do"],
+      ["Comments from María 🔁 every week", "To do"],
+    ]);
+  });
+
+  it("nests a task under another, and back out", () => {
+    const plan = parsePlan(SAMPLE);
+    const [a, b] = allTasks(plan);
+    const nested = nestTask(plan, b.ref, a.ref);
+    expect(allTasks(nested).map((t) => t.task.title)).toEqual([
+      "Draft the discussion #writing",
+      "Comments from María 🔁 every week",
+    ]);
+    expect(serializePlan(nested)).toContain(
+      "    - [x] Outline it\n    - [x] Send the outline 📅 2026-11-10 ✅ 2026-11-14\n    Notes under it.",
+    );
+    const out = promoteSubtask(nested, a.ref, 2);
+    expect(allTasks(out).map((t) => t.task.title)).toEqual([
+      "Draft the discussion #writing",
+      "Send the outline",
+      "Comments from María 🔁 every week",
+    ]);
+  });
 });

@@ -34,9 +34,15 @@ tag.
   vault or Obsidian needed.
 - **Reading lists**, apart from tasks: one per project and one of your
   own. Right-click a paper in the Zotero library or the vault to add it.
-  Each moves along by itself, Reading when opened, Read when highlighted,
-  In notes when quoted in a note, Cited when the project cites it, and
+  Each moves along by itself, Reading when opened, Highlighted when
+  highlighted, Quoted when quoted in a note, Cited when the project cites it, and
   can be set by hand or reordered.
+- Planner: right-click a task to date it, prioritize it, move it to
+  another project or the Inbox, or make it a subtask. Drag a task onto
+  another to nest it. Subtasks show as a tree. Headings divide a project,
+  and can be added, renamed and deleted (on the board too).
+- Reading lists: right-click a paper to open it and read it. Statuses
+  say what they mean (Highlighted, Quoted), and cited papers stay listed.
 - Library & Vault: a bar on top shows or hides the Zotero library and
   the vault, swaps them, and puts them side by side or one above the
   other. The layout is remembered.

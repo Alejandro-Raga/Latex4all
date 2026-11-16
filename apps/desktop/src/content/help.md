@@ -152,9 +152,11 @@ The **Planner**, on the start screen, keeps your to-dos and what you mean to rea
 
 - **Today**, **Tomorrow** and **Next 7 days** show what's due across all your projects. **All tasks** shows every open task, and **Completed** what you've finished.
 - **Type a task the way you'd say it,** like "Draft the intro friday !high". The date and priority are picked up for you: today, tomorrow, friday, next week, in 3 days, 20 nov, and in Spanish too (mañana, el viernes). Add **!high**, **!medium** or **!low** for priority, and words like **#writing** to group tasks.
-- **Click a task** to see it on the right: change its date or priority, write a description, add steps, or delete it.
-- **Drag tasks** to reorder them, between sections, onto another project or the Inbox in the sidebar to move them, or onto **Today** or **Tomorrow** to set their date.
-- **List or Board:** the board shows a project's tasks in columns (To do, In progress, Waiting). Drag tasks between them, or add columns of your own.
+- **Click a task** to see it on the right: change its date or priority, write a description, add subtasks, or delete it. Subtasks show under their task, and fold away with the arrow.
+- **Right-click a task** to set its date or priority, move it to another project or the Inbox, put it under another heading, make it a subtask of another task, or delete it.
+- **Drag tasks** to reorder them or move them between headings. Drop one on the middle of another task to make it a subtask. Drop it on a project or the Inbox in the sidebar to move it there, or on **Today** or **Tomorrow** to set its date.
+- **Headings** split a project into parts, such as "Literature review" or "Writing". **Add heading** is at the end of the list; the **…** beside a heading renames or deletes it (its tasks stay).
+- **List or Board:** the board shows each heading as a column. Drag tasks between columns.
 - **Projects** show an icon for their type, and the arrows beside **Projects** sort them.
 
 ### Reading lists
@@ -162,7 +164,8 @@ The **Planner**, on the start screen, keeps your to-dos and what you mean to rea
 Each project has a **Reading** list apart from its tasks, and there's one of your own in the Inbox. **Reading list** in the sidebar gathers them all.
 
 - **Right-click a paper** in your Zotero library or your vault and choose **Add to reading list**.
-- **Each paper moves along by itself:** **Reading** when you open it, **Read** when you highlight it, **In notes** when you add a passage to a note, **Cited** when your project cites it. Click its status to change it yourself.
+- **Right-click a paper** in the list to open it and read it, change its status, move it to another list, or remove it.
+- **Each paper moves along by itself:** **Reading** when you open it, **Highlighted** when you highlight it, **Quoted** when you quote it in a note, **Cited** when your project cites it. Click its status to change it yourself. Cited papers stay on the list.
 - **Drag papers** to set the order you'll read them in, or use the board to move them between statuses.
 
 **While writing**, the **Plan** panel (⌘⌥4) shows the project's tasks and reading list next to your text.

@@ -384,3 +384,65 @@ export const detached = (task: Task): Task => {
     subtasks: task.subtasks.map(({ raw: _r, ...s }) => s),
   };
 };
+
+/**
+ * Deletes a heading; its tasks go to the heading before it (or the first
+ * one left), or stay above the headings if there's none.
+ */
+export function deleteSection(plan: Plan, index: number): Plan {
+  const section = plan.sections[index];
+  if (!section || section.title === null) return plan;
+  const next = clone(plan);
+  const [gone] = next.sections.splice(index, 1);
+  const tasks = gone.items.filter((i) => i.kind === "task");
+  if (tasks.length === 0) return next;
+  // The heading before, else the first left that isn't the opening part.
+  let target = index - 1;
+  if (target < 1 || next.sections[target]?.title == null) {
+    target = next.sections.findIndex((s, i) => i > 0 && s.title !== null);
+  }
+  if (target < 0) target = 0;
+  const into = next.sections[target];
+  for (const item of tasks) {
+    if (item.kind === "task") insertTask(into, endOfTasks(into), item.task);
+  }
+  return next;
+}
+
+/** Makes a task a subtask of another (its own subtasks come along, flat). */
+export function nestTask(plan: Plan, ref: TaskRef, parent: TaskRef): Plan {
+  const task = taskAt(plan, ref);
+  const host = taskAt(plan, parent);
+  if (
+    !task ||
+    !host ||
+    (ref.section === parent.section && ref.item === parent.item)
+  ) {
+    return plan;
+  }
+  const { subtasks, notes: _notes, raw: _raw, ...rest } = task;
+  const added = [
+    { ...rest, subtasks: [], notes: [] },
+    ...subtasks.map((s) => ({ ...s, raw: undefined })),
+  ];
+  const withSubs = updateTask(plan, parent, {
+    subtasks: [...host.subtasks, ...added],
+  });
+  return deleteTask(withSubs, ref);
+}
+
+/** Makes a subtask a task again, right after its parent. */
+export function promoteSubtask(plan: Plan, ref: TaskRef, sub: number): Plan {
+  const host = taskAt(plan, ref);
+  const child = host?.subtasks[sub];
+  if (!host || !child) return plan;
+  const next = updateTask(plan, ref, {
+    subtasks: host.subtasks.filter((_, i) => i !== sub),
+  });
+  const section = next.sections[ref.section];
+  section.items.splice(ref.item + 1, 0, {
+    kind: "task",
+    task: { ...child, raw: undefined, subtasks: [], notes: [] },
+  });
+  return next;
+}

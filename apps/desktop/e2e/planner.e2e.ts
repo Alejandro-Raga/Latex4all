@@ -7,6 +7,28 @@ const vault = (page: import("@playwright/test").Page, path: string) =>
 
 const PLAN = "/papers/Paper 2/Plan.md";
 
+/** Drags with the mouse, as a person does: a few steps, then the drop. */
+async function drag(
+  page: import("@playwright/test").Page,
+  from: import("@playwright/test").Locator,
+  to: import("@playwright/test").Locator,
+  /** Where on the target, from its top (0) to its bottom (1). */
+  at = 0.5,
+) {
+  const a = await from.boundingBox();
+  const b = await to.boundingBox();
+  if (!a || !b) throw new Error("nothing to drag");
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(a.x + a.width / 2 + 8, a.y + a.height / 2 + 8, {
+    steps: 4,
+  });
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height * at, { steps: 12 });
+  await page.mouse.up();
+  // Clicks right after a drop are held back a moment, as by hand.
+  await page.waitForTimeout(100);
+}
+
 test("Today gathers what's due from every plan; quick add goes to the Inbox", async ({
   page,
   errors,
@@ -157,8 +179,10 @@ test("a reading list apart from tasks, and tasks dragged to another project", as
       "## Reading list\n\n- [ ] Absorptive capacity #reading/to-read\n",
     );
   // Status by hand, from its pill.
-  await main.getByRole("button", { name: "Status: To read" }).click();
-  await page.getByRole("menuitem", { name: "Reading" }).click();
+  await main
+    .getByRole("button", { name: "Status: To read", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: /^Reading/ }).click();
   await expect.poll(() => disk(page, PLAN)).toContain("#reading/reading");
   // Not among the tasks.
   await main.getByRole("radio", { name: "Tasks" }).click();
@@ -173,16 +197,19 @@ test("a reading list apart from tasks, and tasks dragged to another project", as
   // A task dragged onto Thesis in the sidebar moves there.
   await page.getByRole("button", { name: /^Paper 2/ }).click();
   await main.getByRole("radio", { name: "Tasks" }).click();
-  await main
-    .getByText("Reply to reviewers")
-    .dragTo(page.getByRole("button", { name: /^Thesis/ }));
+  await drag(
+    page,
+    main.getByText("Reply to reviewers"),
+    page.getByRole("button", { name: /^Thesis/ }),
+  );
   await expect
     .poll(() => disk(page, "/papers/Thesis/Plan.md"))
     .toContain("- [ ] Reply to reviewers");
   await expect.poll(() => disk(page, PLAN)).not.toContain("Reply to reviewers");
 
   // Completed: what's been checked off.
-  await main.getByRole("checkbox", { name: "Mark as done" }).first().click();
+  const cb = main.getByRole("checkbox", { name: "Mark as done" }).first();
+  await cb.click();
   await page
     .getByRole("navigation", { name: "Lists" })
     .getByRole("button", { name: /^Completed/ })
@@ -193,5 +220,68 @@ test("a reading list apart from tasks, and tasks dragged to another project", as
       path: `${process.env.SHOTS}/planner-completed.png`,
     });
   }
+  expect(errors).toEqual([]);
+});
+
+test("drag a task into another to nest it; right-click to move; headings", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByRole("radio", { name: "Tasks" }).click();
+  await main.getByRole("radio", { name: "List" }).click();
+
+  // Onto the middle of another: its subtask, shown under it.
+  await drag(
+    page,
+    main.getByText("Reply to reviewers"),
+    main.getByText("Draft the discussion"),
+  );
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toContain("    - [ ] Compare with Cohen\n    - [ ] Reply to reviewers\n");
+  await expect(main.getByText("Reply to reviewers")).toBeVisible();
+
+  // Right-click: back to a task, then to the Inbox.
+  await main.getByText("Reply to reviewers").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Make it a task" }).click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/\n- \[ \] Reply to reviewers\n/);
+  await main.getByText("Reply to reviewers").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Move to", exact: true }).focus();
+  await page.keyboard.press("ArrowRight");
+  await page.getByRole("menuitem", { name: "Inbox" }).click();
+  await expect
+    .poll(() => vault(page, "Tasks/Inbox.md"))
+    .toContain("- [ ] Reply to reviewers");
+
+  // A heading of one's own, then deleted: its tasks stay.
+  await main.getByRole("button", { name: "Add heading" }).click();
+  await main.getByLabel("New heading").fill("Revisions");
+  await main.getByLabel("New heading").press("Enter");
+  await expect.poll(() => disk(page, PLAN)).toContain("## Revisions");
+  await drag(
+    page,
+    main.getByText("Comments from María"),
+    main.getByText("Revisions", { exact: true }),
+  );
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/## Revisions\n\n- \[ \] Comments from María/);
+  if (process.env.SHOTS) {
+    await page.screenshot({
+      path: `${process.env.SHOTS}/planner-headings.png`,
+    });
+  }
+  const heading = main.locator(".group\\/heading", { hasText: "Revisions" });
+  await heading.hover();
+  await heading.getByRole("button", { name: "Heading options" }).click();
+  await page.getByRole("menuitem", { name: "Delete heading" }).click();
+  await expect.poll(() => disk(page, PLAN)).not.toContain("## Revisions");
+  await expect(main.getByText("Comments from María")).toBeVisible();
   expect(errors).toEqual([]);
 });

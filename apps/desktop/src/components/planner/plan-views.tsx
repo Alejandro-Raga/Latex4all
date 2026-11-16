@@ -1,12 +1,32 @@
 import { type ReactNode, useState } from "react";
 import {
+  ArrowUpFromLineIcon,
   BookOpenIcon,
+  CalendarIcon,
   CheckCircle2Icon,
+  CheckIcon,
   ChevronRightIcon,
   CoffeeIcon,
+  CornerDownRightIcon,
+  FlagIcon,
+  FolderInputIcon,
   InboxIcon,
+  ListIcon,
+  MoreHorizontalIcon,
+  PencilIcon,
   PlusIcon,
+  Trash2Icon,
 } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,11 +37,16 @@ import { daysUntil, dayFromToday } from "@/lib/plan/dates";
 import {
   addSection,
   addTask,
+  deleteSection,
   deleteTask,
   moveTask,
+  nestTask,
   newPlanText,
   type Plan,
+  type Priority,
   parsePlan,
+  promoteSubtask,
+  renameSection,
   type Task,
   type TaskRef,
   today,
@@ -32,6 +57,7 @@ import {
 import {
   INBOX,
   type PlanList,
+  usePlanLists,
   usePlanText,
   usePlanTexts,
 } from "@/lib/plan/plan-store";
@@ -43,24 +69,32 @@ import {
   type ReadingStatus,
   readingItems,
   STATUS_COLOR,
+  STATUS_HINT,
   STATUS_LABEL,
   STATUSES,
   setReadingStatus,
   workTasks,
 } from "@/lib/plan/reading";
 import { cn } from "@/lib/utils";
+import { openToRead } from "./open-paper";
 import {
-  type DragTask,
+  dropOnSection,
+  dropOnTask,
   editPlan,
   moveToPlan,
-  useTaskDrag,
 } from "./plan-actions";
+import {
+  type DragTask,
+  DropMarker,
+  useDropArea,
+  useTaskDnd,
+} from "./planner-dnd";
 import { ProjectIcon } from "./project-icon";
 import {
   Check,
   DueBadge,
   PRIORITY_COLOR,
-  Progress,
+  PRIORITY_LABEL,
   QuickAdd,
   Tags,
   type TaskActions,
@@ -105,7 +139,7 @@ export function actionsFor(
   };
 }
 
-/** A new task: in the first section that isn't the reading list. */
+/** A new task: in the given section, else the first that isn't reading. */
 const addQuick = (list: PlanList, task: QuickTask, section?: number) =>
   editPlan(list, (p) => {
     const first = section ?? workSections(p)[0]?.index;
@@ -119,75 +153,18 @@ const addQuick = (list: PlanList, task: QuickTask, section?: number) =>
     return addTask(withTodo, task, reading);
   });
 
-/** Drag props for a row or card, and dropping before it. */
-function useDragRow(
-  list: PlanList,
-  ref: TaskRef,
-  id: string,
-  onDrop: (drag: DragTask) => void,
-  reading?: boolean,
-) {
-  const drag = useTaskDrag((s) => s.drag);
-  const over = useTaskDrag((s) => s.over === id);
-  const dragging = drag?.list.key === list.key && sameRef(drag.ref, ref);
-  return {
-    dragging,
-    over: over && !!drag && !dragging,
-    props: {
-      draggable: true,
-      onDragStart: (e: React.DragEvent) => {
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", id);
-        useTaskDrag.getState().start({ list, ref, reading });
-      },
-      onDragEnd: () => useTaskDrag.getState().end(),
-      onDragOver: (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        useTaskDrag.getState().setOver(id);
-      },
-      onDrop: (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const d = useTaskDrag.getState().drag;
-        useTaskDrag.getState().end();
-        if (d) onDrop(d);
-      },
-    },
-  };
-}
-
-/** Dropped before a task: moved there (or into this plan, from another). */
-function dropBefore(list: PlanList, section: number, before?: number) {
-  return (d: DragTask) => {
-    if (d.list.key !== list.key) {
-      void moveToPlan(d, list);
-      return;
-    }
-    void editPlan(list, (p) => moveTask(p, d.ref, section, before));
-  };
-}
-
 export function Empty({
   icon,
-  color,
   title,
   text,
 }: {
   icon: ReactNode;
-  color: string;
   title: string;
   text?: string;
 }) {
   return (
     <div className="flex flex-col items-center px-6 py-14 text-center">
-      <span
-        className="mb-3 flex size-14 items-center justify-center rounded-2xl"
-        style={{
-          color,
-          backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)`,
-        }}
-      >
+      <span className="mb-3 flex size-14 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
         {icon}
       </span>
       <p className="font-medium text-sm">{title}</p>
@@ -198,65 +175,517 @@ export function Empty({
   );
 }
 
-/** Dropping onto a whole area (a section, a column). */
-function dropArea(id: string, onDrop: (d: DragTask) => void) {
-  return {
-    onDragOver: (e: React.DragEvent) => {
-      e.preventDefault();
-      useTaskDrag.getState().setOver(id);
-    },
-    onDrop: (e: React.DragEvent) => {
-      e.preventDefault();
-      const d = useTaskDrag.getState().drag;
-      useTaskDrag.getState().end();
-      if (d) onDrop(d);
-    },
-  };
+/* ─────────────────────────── Menus ─────────────────────────── */
+
+/** The places a task can move to: the Inbox and the other projects. */
+function MoveToMenu({
+  list,
+  onPick,
+  label = "Move to",
+}: {
+  list: PlanList;
+  onPick: (target: PlanList) => void;
+  label?: string;
+}) {
+  const lists = usePlanLists().filter((l) => l.key !== list.key);
+  const inbox = lists.find((l) => l.key === INBOX);
+  const projects = lists
+    .filter((l) => l.key !== INBOX)
+    .sort((a, b) => (b.lastOpened ?? 0) - (a.lastOpened ?? 0));
+  return (
+    <ContextMenuSub>
+      <ContextMenuSubTrigger>
+        <FolderInputIcon className="size-3.5" />
+        {label}
+      </ContextMenuSubTrigger>
+      <ContextMenuSubContent className="max-h-80 w-52 overflow-y-auto">
+        {inbox && (
+          <ContextMenuItem onClick={() => onPick(inbox)}>
+            <InboxIcon className="size-3.5" />
+            Inbox
+          </ContextMenuItem>
+        )}
+        {projects.length > 0 && <ContextMenuSeparator />}
+        {projects.map((p) => (
+          <ContextMenuItem key={p.key} onClick={() => onPick(p)}>
+            <ProjectIcon list={p} className="size-3.5" />
+            <span className="truncate">{p.name}</span>
+          </ContextMenuItem>
+        ))}
+      </ContextMenuSubContent>
+    </ContextMenuSub>
+  );
 }
 
-function Group({
-  title,
-  count,
-  color,
+/** A task's right-click menu: date, priority, where it goes, nesting. */
+function TaskMenu({
+  list,
+  plan,
+  taskRef,
+  task,
   children,
-  dropId,
-  onDrop,
-  defaultOpen = true,
+}: {
+  list: PlanList;
+  plan: Plan;
+  taskRef: TaskRef;
+  task: Task;
+  children: ReactNode;
+}) {
+  const edit = (change: (p: Plan) => Plan) => void editPlan(list, change);
+  const sections = workSections(plan).filter(
+    (s) => s.index !== taskRef.section,
+  );
+  const others = workTasks(plan).filter(
+    (t) => !t.task.done && !sameRef(t.ref, taskRef),
+  );
+  const drag: DragTask = { list, ref: taskRef, label: task.title };
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-52">
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <CalendarIcon className="size-3.5" />
+            Date
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-40">
+            {(
+              [
+                ["Today", 0],
+                ["Tomorrow", 1],
+                ["Next week", 7],
+              ] as const
+            ).map(([label, days]) => (
+              <ContextMenuItem
+                key={label}
+                onClick={() =>
+                  edit((p) =>
+                    updateTask(p, taskRef, { due: dayFromToday(days) }),
+                  )
+                }
+              >
+                {label}
+              </ContextMenuItem>
+            ))}
+            {task.due && (
+              <ContextMenuItem
+                onClick={() =>
+                  edit((p) => updateTask(p, taskRef, { due: undefined }))
+                }
+              >
+                No date
+              </ContextMenuItem>
+            )}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <FlagIcon className="size-3.5" />
+            Priority
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-36">
+            {([4, 3, 2, 1, 0] as Priority[]).map((p) => (
+              <ContextMenuItem
+                key={p}
+                onClick={() =>
+                  edit((pl) => updateTask(pl, taskRef, { priority: p }))
+                }
+              >
+                <FlagIcon
+                  className="size-3.5"
+                  style={{ color: PRIORITY_COLOR[p] }}
+                  fill={p ? PRIORITY_COLOR[p] : "none"}
+                />
+                {PRIORITY_LABEL[p]}
+                {task.priority === p && (
+                  <CheckIcon className="ml-auto size-3.5" />
+                )}
+              </ContextMenuItem>
+            ))}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        <ContextMenuSeparator />
+        <MoveToMenu
+          list={list}
+          onPick={(target) => void moveToPlan(drag, target)}
+        />
+        {sections.length > 0 && (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <ListIcon className="size-3.5" />
+              Move to heading
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="max-h-72 w-48 overflow-y-auto">
+              {sections.map((s) => (
+                <ContextMenuItem
+                  key={s.index}
+                  onClick={() => edit((p) => moveTask(p, taskRef, s.index))}
+                >
+                  <span className="truncate">{s.title}</span>
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        )}
+        {others.length > 0 && (
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <CornerDownRightIcon className="size-3.5" />
+              Make subtask of
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="max-h-72 w-60 overflow-y-auto">
+              {others.slice(0, 30).map((t) => (
+                <ContextMenuItem
+                  key={`${t.ref.section}-${t.ref.item}`}
+                  onClick={() => edit((p) => nestTask(p, taskRef, t.ref))}
+                >
+                  <span className="truncate">
+                    <TitleText title={t.task.title} />
+                  </span>
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        )}
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          variant="destructive"
+          onClick={() => edit((p) => deleteTask(p, taskRef))}
+        >
+          <Trash2Icon className="size-3.5" />
+          Delete
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/* ─────────────────────────── Tasks and subtasks ─────────────────────────── */
+
+function SubtaskRow({
+  list,
+  parent,
+  index,
+  sub,
+}: {
+  list: PlanList;
+  parent: TaskRef;
+  index: number;
+  sub: Task;
+}) {
+  const id = `sub:${list.key}:${parent.section}:${parent.item}:${index}`;
+  const dnd = useTaskDnd(
+    id,
+    { list, ref: parent, sub: index, label: sub.title },
+    {
+      accepts: "tasks",
+      // Dropped on a subtask: before it, among its parent's subtasks.
+      onDrop: (d, zone) =>
+        dropOnTask(list, parent, d, zone === "after" ? "after" : "inside"),
+    },
+  );
+  const edit = (change: (p: Plan) => Plan) => void editPlan(list, change);
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          ref={dnd.ref}
+          {...(dnd.handlers as React.HTMLAttributes<HTMLDivElement>)}
+          className={cn(
+            "relative flex cursor-default items-center gap-2 rounded-md px-2 py-1 hover:bg-muted/70",
+            dnd.dragging && "opacity-30",
+          )}
+        >
+          <DropMarker zone={dnd.over === "inside" ? null : dnd.over} />
+          <Check
+            small
+            done={sub.done}
+            priority={sub.priority}
+            onToggle={() => edit((p) => toggleSubtask(p, parent, index))}
+          />
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-[13px]",
+              sub.done && "text-muted-foreground line-through",
+            )}
+          >
+            <TitleText title={sub.title} />
+          </span>
+          {sub.due && !sub.done && <DueBadge due={sub.due} />}
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-48">
+        <ContextMenuItem
+          onClick={() => edit((p) => promoteSubtask(p, parent, index))}
+        >
+          <ArrowUpFromLineIcon className="size-3.5" />
+          Make it a task
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          variant="destructive"
+          onClick={() =>
+            edit((p) => {
+              const host = p.sections[parent.section]?.items[parent.item];
+              if (host?.kind !== "task") return p;
+              return updateTask(p, parent, {
+                subtasks: host.task.subtasks.filter((_, i) => i !== index),
+              });
+            })
+          }
+        >
+          <Trash2Icon className="size-3.5" />
+          Delete
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/** A task in a list: drags, takes drops, opens on click, nests its subtasks. */
+function TaskItem({
+  list,
+  plan,
+  task,
+  taskRef,
+  inline,
+  selected,
+  onSelect,
+  context,
+}: {
+  list: PlanList;
+  plan: Plan;
+  task: Task;
+  taskRef: TaskRef;
+  inline?: boolean;
+  selected?: boolean;
+  onSelect?: (s: Selected) => void;
+  context?: TaskContext;
+}) {
+  const id = `task:${list.key}:${taskRef.section}:${taskRef.item}`;
+  const dnd = useTaskDnd(
+    id,
+    { list, ref: taskRef, label: task.title },
+    {
+      accepts: "tasks",
+      nestable: true,
+      onDrop: (d, zone) => dropOnTask(list, taskRef, d, zone),
+    },
+  );
+  return (
+    <TaskRow
+      task={task}
+      actions={actionsFor(list, taskRef, plan)}
+      inline={inline}
+      selected={selected}
+      onSelect={() => onSelect?.({ list, ref: taskRef })}
+      dnd={dnd}
+      context={context}
+      menu={(row) => (
+        <TaskMenu list={list} plan={plan} taskRef={taskRef} task={task}>
+          {row}
+        </TaskMenu>
+      )}
+      subtasks={task.subtasks.map((s, i) => (
+        <SubtaskRow
+          key={`${i}-${s.title}`}
+          list={list}
+          parent={taskRef}
+          index={i}
+          sub={s}
+        />
+      ))}
+    />
+  );
+}
+
+/* ─────────────────────────── Headings ─────────────────────────── */
+
+/** A heading's menu: rename it, or delete it (its tasks stay). */
+function HeadingMenu({
+  onRename,
+  onDelete,
+}: {
+  onRename: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Heading options"
+          className="flex size-6 items-center justify-center rounded-md text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover/heading:opacity-100 data-[state=open]:opacity-100"
+        >
+          <MoreHorizontalIcon className="size-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuItem onSelect={onRename}>
+          <PencilIcon className="size-3.5" />
+          Rename
+        </DropdownMenuItem>
+        <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+          <Trash2Icon className="size-3.5" />
+          Delete heading
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function HeadingTitle({
+  title,
+  editing,
+  onDone,
+  className,
 }: {
   title: string;
-  count: number;
-  color?: string;
-  children: ReactNode;
-  dropId?: string;
-  onDrop?: (d: DragTask) => void;
-  defaultOpen?: boolean;
+  editing: boolean;
+  onDone: (title: string | null) => void;
+  className?: string;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const over = useTaskDrag((s) => !!dropId && s.over === dropId && !!s.drag);
+  const [value, setValue] = useState(title);
+  if (!editing) return <span className={className}>{title}</span>;
   return (
-    <section
-      {...(dropId && onDrop ? dropArea(dropId, onDrop) : {})}
-      className={cn("rounded-lg transition-colors", over && "bg-primary/5")}
-    >
+    <input
+      // biome-ignore lint/a11y/noAutofocus: renaming starts here.
+      autoFocus
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => onDone(value.trim() || null)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") onDone(null);
+      }}
+      aria-label="Heading"
+      className={cn(
+        "min-w-0 flex-1 rounded bg-background px-1 outline-none ring-1 ring-ring",
+        className,
+      )}
+    />
+  );
+}
+
+/** A heading in a project's list, as in Things: a title over its tasks. */
+function Heading({
+  list,
+  index,
+  title,
+  count,
+  children,
+}: {
+  list: PlanList;
+  index: number;
+  title: string;
+  count: number;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const drop = useDropArea(`head:${list.key}:${index}`, {
+    accepts: "tasks",
+    onDrop: (d) => dropOnSection(list, index, d),
+  });
+  return (
+    <section className="pt-3">
+      <div
+        ref={drop.ref}
+        className={cn(
+          "group/heading flex items-center gap-1.5 border-border border-b px-1 pb-1.5",
+          drop.over && "border-primary",
+        )}
+      >
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          aria-label={open ? "Fold" : "Unfold"}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <ChevronRightIcon
+            className={cn("size-4 transition-transform", open && "rotate-90")}
+          />
+        </button>
+        <HeadingTitle
+          title={title}
+          editing={editing}
+          className="font-semibold text-[15px] text-foreground"
+          onDone={(name) => {
+            setEditing(false);
+            if (name && name !== title) {
+              void editPlan(list, (p) => renameSection(p, index, name));
+            }
+          }}
+        />
+        <span className="text-muted-foreground text-xs tabular-nums">
+          {count}
+        </span>
+        <span className="flex-1" />
+        <HeadingMenu
+          onRename={() => setEditing(true)}
+          onDelete={() => void editPlan(list, (p) => deleteSection(p, index))}
+        />
+      </div>
+      {open && <div className="pt-1">{children}</div>}
+      {open && count === 0 && (
+        <p className="px-3 py-2 text-muted-foreground/70 text-xs">
+          Drop tasks here
+        </p>
+      )}
+    </section>
+  );
+}
+
+function AddHeading({ list }: { list: PlanList }) {
+  const [adding, setAdding] = useState(false);
+  const [title, setTitle] = useState("");
+  if (!adding) {
+    return (
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left font-semibold text-muted-foreground text-xs hover:text-foreground"
+        onClick={() => setAdding(true)}
+        className="mt-3 flex items-center gap-1.5 rounded-md px-2 py-1 text-muted-foreground text-xs hover:bg-muted hover:text-foreground"
       >
-        <ChevronRightIcon
-          className={cn("size-3.5 transition-transform", open && "rotate-90")}
-        />
-        {color && (
-          <span
-            className="size-2 rounded-full"
-            style={{ backgroundColor: color }}
-          />
-        )}
-        {title}
-        <span className="font-normal tabular-nums opacity-70">{count}</span>
+        <PlusIcon className="size-3.5" />
+        Add heading
       </button>
-      {open && <div className="pb-1">{children}</div>}
-    </section>
+    );
+  }
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const name = title.trim();
+        if (name) {
+          void editPlan(list, (p) => {
+            // Before the reading list, which stays last.
+            const next = addSection(p, name);
+            const reading = next.sections.findIndex((s) =>
+              isReadingSection(s.title),
+            );
+            if (reading >= 0 && reading < next.sections.length - 1) {
+              const added = next.sections.pop();
+              if (added) next.sections.splice(reading, 0, added);
+            }
+            return next;
+          });
+        }
+        setTitle("");
+        setAdding(false);
+      }}
+      className="mt-3 border-border border-b px-1 pb-1.5"
+    >
+      <input
+        // biome-ignore lint/a11y/noAutofocus: just asked to add one.
+        autoFocus
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onBlur={() => !title.trim() && setAdding(false)}
+        placeholder="Heading"
+        aria-label="New heading"
+        className="w-full bg-transparent font-semibold text-[15px] outline-none placeholder:text-muted-foreground/60"
+      />
+    </form>
   );
 }
 
@@ -301,6 +730,31 @@ export function PlanView({
   return mode === "board" ? <Board {...props} /> : <ListView {...props} />;
 }
 
+function Completed({
+  count,
+  children,
+}: {
+  count: number;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="pt-4">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 px-1 text-muted-foreground text-xs hover:text-foreground"
+      >
+        <ChevronRightIcon
+          className={cn("size-3.5 transition-transform", open && "rotate-90")}
+        />
+        {open ? "Hide" : "Show"} {count} completed
+      </button>
+      {open && <div className="pt-1">{children}</div>}
+    </section>
+  );
+}
+
 function ListView({
   list,
   plan,
@@ -314,8 +768,8 @@ function ListView({
   const done = tasks.filter((t) => t.task.done);
   const sections = workSections(plan);
   const loose = open.filter((t) => plan.sections[t.ref.section].title === null);
-  const row = (t: (typeof tasks)[number]) => (
-    <DraggableRow
+  const item = (t: (typeof tasks)[number]) => (
+    <TaskItem
       key={`${t.ref.section}-${t.ref.item}-${t.task.title}`}
       list={list}
       plan={plan}
@@ -327,7 +781,7 @@ function ListView({
     />
   );
   return (
-    <div className={cn("space-y-2", inline ? "p-2" : "px-6 py-4")}>
+    <div className={cn(inline ? "p-2" : "px-8 py-5")}>
       <QuickAdd onAdd={(task) => addQuick(list, task)} />
       {open.length === 0 && (
         <Empty
@@ -338,7 +792,6 @@ function ListView({
               <CoffeeIcon className="size-6" />
             )
           }
-          color={list.key === INBOX ? "#0ea5e9" : "#22c55e"}
           title={
             isNew
               ? list.key === INBOX
@@ -348,86 +801,29 @@ function ListView({
           }
         />
       )}
-      {loose.map(row)}
+      <div className="pt-2">{loose.map(item)}</div>
       {open.length > 0 &&
         sections.map((s) => {
           const items = open.filter((t) => t.ref.section === s.index);
           return (
-            <Group
-              key={s.index}
+            <Heading
+              key={`${s.index}-${s.title}`}
+              list={list}
+              index={s.index}
               title={s.title}
               count={items.length}
-              dropId={`section:${list.key}:${s.index}`}
-              onDrop={dropBefore(list, s.index)}
             >
-              {items.map(row)}
-            </Group>
+              {items.map(item)}
+            </Heading>
           );
         })}
+      {!isNew && <AddHeading list={list} />}
       {done.length > 0 && (
-        <Group
-          title="Completed"
-          count={done.length}
-          color="#22c55e"
-          defaultOpen={false}
-        >
-          {done.map(row)}
-        </Group>
+        <Completed count={done.length}>{done.map(item)}</Completed>
       )}
     </div>
   );
 }
-
-function DraggableRow({
-  list,
-  plan,
-  task,
-  taskRef,
-  inline,
-  selected,
-  onSelect,
-  context,
-}: {
-  list: PlanList;
-  plan: Plan;
-  task: Task;
-  taskRef: TaskRef;
-  inline?: boolean;
-  selected?: boolean;
-  onSelect?: (s: Selected) => void;
-  context?: TaskContext;
-}) {
-  const id = `row:${list.key}:${taskRef.section}:${taskRef.item}`;
-  const { props, over, dragging } = useDragRow(
-    list,
-    taskRef,
-    id,
-    dropBefore(list, taskRef.section, taskRef.item),
-  );
-  return (
-    <div className={cn(dragging && "opacity-40")}>
-      <TaskRow
-        task={task}
-        actions={actionsFor(list, taskRef, plan)}
-        inline={inline}
-        selected={selected}
-        onSelect={() => onSelect?.({ list, ref: taskRef })}
-        drag={props}
-        dropMarker={over}
-        context={context}
-      />
-    </div>
-  );
-}
-
-const COLUMN_COLORS = [
-  "#64748b",
-  "#3b82f6",
-  "#f59e0b",
-  "#8b5cf6",
-  "#ec4899",
-  "#14b8a6",
-];
 
 /** Columns of cards: side by side when there's room, stacked when not. */
 function BoardFrame({
@@ -448,46 +844,49 @@ function BoardFrame({
 }
 
 function Column({
+  id,
   title,
   color,
   count,
-  dropId,
   onDrop,
+  accepts,
+  menu,
   children,
   footer,
 }: {
-  title: string;
+  id: string;
+  title: ReactNode;
   color: string;
   count: number;
-  dropId: string;
   onDrop: (d: DragTask) => void;
+  accepts: "tasks" | "reading";
+  menu?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
 }) {
-  const over = useTaskDrag((s) => s.over === dropId && !!s.drag);
+  const drop = useDropArea(id, { accepts, onDrop: (d) => onDrop(d) });
   return (
     <div
-      {...dropArea(dropId, onDrop)}
+      ref={drop.ref}
       className={cn(
-        "flex @3xl:max-h-full @3xl:w-72 w-full shrink-0 flex-col rounded-xl bg-muted/50 transition-colors",
-        over && "bg-primary/10 ring-1 ring-primary/40",
+        "group/heading flex @3xl:max-h-full @3xl:w-72 w-full shrink-0 flex-col rounded-xl bg-muted/50 transition-colors",
+        drop.over && "bg-accent",
       )}
     >
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">
         <span
-          className="size-2.5 rounded-full"
+          className="size-2 shrink-0 rounded-full"
           style={{ backgroundColor: color }}
         />
-        <span className="font-semibold text-sm">{title}</span>
-        <span className="rounded-full bg-background px-1.5 text-[11px] text-muted-foreground tabular-nums">
+        {title}
+        <span className="text-[11px] text-muted-foreground tabular-nums">
           {count}
         </span>
+        <span className="flex-1" />
+        {menu}
       </div>
       <div className="min-h-10 space-y-2 overflow-y-auto px-2 pb-2">
         {children}
-        {over && (
-          <div className="h-10 rounded-lg border-2 border-primary/40 border-dashed" />
-        )}
       </div>
       {footer && <div className="px-2 pb-2">{footer}</div>}
     </div>
@@ -495,56 +894,209 @@ function Column({
 }
 
 function Card({
-  id,
-  list,
-  taskRef,
-  onDrop,
-  reading,
+  dnd,
   children,
   edge,
   onClick,
   selected,
 }: {
-  id: string;
-  list: PlanList;
-  taskRef: TaskRef;
-  onDrop: (d: DragTask) => void;
-  reading?: boolean;
+  dnd: ReturnType<typeof useTaskDnd>;
   children: ReactNode;
   edge?: string;
   onClick?: () => void;
   selected?: boolean;
 }) {
-  const { props, over, dragging } = useDragRow(
-    list,
-    taskRef,
-    id,
-    onDrop,
-    reading,
-  );
   return (
-    <>
-      {over && (
-        <div className="h-10 rounded-lg border-2 border-primary/40 border-dashed" />
+    <div
+      ref={dnd.ref}
+      {...(dnd.handlers as React.HTMLAttributes<HTMLDivElement>)}
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onClick?.();
+      }}
+      className={cn(
+        "relative rounded-lg border bg-background p-2.5 shadow-xs outline-none transition-shadow hover:shadow-md",
+        selected ? "border-ring" : "border-border",
+        dnd.over === "inside" && "ring-1 ring-primary/50",
+        dnd.dragging && "opacity-30",
       )}
-      <div
-        {...props}
-        role="button"
-        tabIndex={0}
-        onClick={onClick}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") onClick?.();
-        }}
-        className={cn(
-          "cursor-grab rounded-lg border bg-background p-2.5 shadow-xs transition-shadow hover:shadow-md",
-          selected ? "border-primary" : "border-border",
-          dragging && "opacity-40",
-        )}
-        style={edge ? { borderLeft: `3px solid ${edge}` } : undefined}
-      >
-        {children}
+      style={edge ? { borderLeft: `3px solid ${edge}` } : undefined}
+    >
+      <DropMarker zone={dnd.over} />
+      {children}
+    </div>
+  );
+}
+
+function TaskCard({
+  list,
+  plan,
+  task,
+  taskRef,
+  selected,
+  onSelect,
+}: {
+  list: PlanList;
+  plan: Plan;
+  task: Task;
+  taskRef: TaskRef;
+  selected?: boolean;
+  onSelect?: (s: Selected) => void;
+}) {
+  const dnd = useTaskDnd(
+    `card:${list.key}:${taskRef.section}:${taskRef.item}`,
+    { list, ref: taskRef, label: task.title },
+    {
+      accepts: "tasks",
+      nestable: true,
+      onDrop: (d, zone) => dropOnTask(list, taskRef, d, zone),
+    },
+  );
+  const actions = actionsFor(list, taskRef, plan);
+  const meta =
+    task.due || task.subtasks.length > 0 || /(^|\s)#[^\s]/.test(task.title);
+  return (
+    <TaskMenu list={list} plan={plan} taskRef={taskRef} task={task}>
+      <div>
+        <Card
+          dnd={dnd}
+          edge={task.priority ? PRIORITY_COLOR[task.priority] : undefined}
+          selected={selected}
+          onClick={() => onSelect?.({ list, ref: taskRef })}
+        >
+          <div className="flex items-start gap-2">
+            <span className="pt-px">
+              <Check
+                done={task.done}
+                priority={task.priority}
+                onToggle={actions.toggle}
+              />
+            </span>
+            <span className="min-w-0 flex-1 text-sm leading-snug">
+              <TitleText title={task.title} />
+            </span>
+          </div>
+          {task.subtasks.length > 0 && (
+            <div className="mt-1.5 space-y-0.5 pl-[26px]">
+              {task.subtasks.slice(0, 4).map((s, i) => (
+                <div
+                  key={`${i}-${s.title}`}
+                  className="flex items-center gap-1.5 text-xs"
+                >
+                  <Check
+                    small
+                    done={s.done}
+                    priority={s.priority}
+                    onToggle={() => actions.toggleSub(i)}
+                  />
+                  <span
+                    className={cn(
+                      "truncate",
+                      s.done && "text-muted-foreground line-through",
+                    )}
+                  >
+                    {s.title}
+                  </span>
+                </div>
+              ))}
+              {task.subtasks.length > 4 && (
+                <p className="text-[11px] text-muted-foreground">
+                  +{task.subtasks.length - 4} more
+                </p>
+              )}
+            </div>
+          )}
+          {meta && (task.due || /(^|\s)#[^\s]/.test(task.title)) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 pl-[26px]">
+              {task.due && <DueBadge due={task.due} icon />}
+              <Tags title={task.title} />
+            </div>
+          )}
+        </Card>
       </div>
-    </>
+    </TaskMenu>
+  );
+}
+
+const COLUMN_COLORS = [
+  "var(--muted-foreground)",
+  "var(--primary)",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+];
+
+function BoardColumn({
+  list,
+  plan,
+  index,
+  title,
+  color,
+  tasks,
+  selected,
+  onSelect,
+}: {
+  list: PlanList;
+  plan: Plan;
+  index: number;
+  title: string;
+  color: string;
+  tasks: ReturnType<typeof workTasks>;
+  selected?: Selected | null;
+  onSelect?: (s: Selected) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <Column
+      id={`col:${list.key}:${index}`}
+      accepts="tasks"
+      title={
+        <HeadingTitle
+          title={title}
+          editing={editing}
+          className="font-semibold text-sm"
+          onDone={(name) => {
+            setEditing(false);
+            if (name && name !== title) {
+              void editPlan(list, (p) => renameSection(p, index, name));
+            }
+          }}
+        />
+      }
+      color={color}
+      count={tasks.length}
+      onDrop={(d) => dropOnSection(list, index, d)}
+      menu={
+        <HeadingMenu
+          onRename={() => setEditing(true)}
+          onDelete={() => void editPlan(list, (p) => deleteSection(p, index))}
+        />
+      }
+      footer={
+        <QuickAdd
+          className="bg-transparent"
+          placeholder="Add a task"
+          onAdd={(task) => addQuick(list, task, index)}
+        />
+      }
+    >
+      {tasks.map((t) => (
+        <TaskCard
+          key={`${t.ref.section}-${t.ref.item}-${t.task.title}`}
+          list={list}
+          plan={plan}
+          task={t.task}
+          taskRef={t.ref}
+          selected={
+            selected?.list.key === list.key && sameRef(selected.ref, t.ref)
+          }
+          onSelect={onSelect}
+        />
+      ))}
+    </Column>
   );
 }
 
@@ -578,77 +1130,44 @@ function Board({ list, plan, selected, onSelect }: ViewProps) {
         </form>
       }
     >
-      {columns.map((col, i) => {
-        const cards = tasks.filter((t) => t.ref.section === col.index);
-        return (
-          <Column
-            key={col.index}
-            title={col.title}
-            color={COLUMN_COLORS[i % COLUMN_COLORS.length]}
-            count={cards.length}
-            dropId={`col:${list.key}:${col.index}`}
-            onDrop={dropBefore(list, col.index)}
-            footer={
-              <QuickAdd
-                className="bg-transparent"
-                onAdd={(task) => addQuick(list, task, col.index)}
-              />
-            }
-          >
-            {cards.map((t) => {
-              const actions = actionsFor(list, t.ref, plan);
-              const meta =
-                t.task.due ||
-                t.task.subtasks.length > 0 ||
-                /(^|\s)#[^\s]/.test(t.task.title);
-              return (
-                <Card
-                  key={`${t.ref.section}-${t.ref.item}-${t.task.title}`}
-                  id={`card:${list.key}:${t.ref.section}:${t.ref.item}`}
-                  list={list}
-                  taskRef={t.ref}
-                  onDrop={dropBefore(list, col.index, t.ref.item)}
-                  edge={
-                    t.task.priority
-                      ? PRIORITY_COLOR[t.task.priority]
-                      : undefined
-                  }
-                  selected={
-                    selected?.list.key === list.key &&
-                    sameRef(selected.ref, t.ref)
-                  }
-                  onClick={() => onSelect?.({ list, ref: t.ref })}
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="pt-px">
-                      <Check
-                        done={t.task.done}
-                        priority={t.task.priority}
-                        onToggle={actions.toggle}
-                      />
-                    </span>
-                    <span className="min-w-0 flex-1 text-sm leading-snug">
-                      <TitleText title={t.task.title} />
-                    </span>
-                  </div>
-                  {meta && (
-                    <div className="mt-2 flex flex-wrap items-center gap-2 pl-[26px]">
-                      {t.task.due && <DueBadge due={t.task.due} icon />}
-                      <Progress subtasks={t.task.subtasks} />
-                      <Tags title={t.task.title} />
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
-          </Column>
-        );
-      })}
+      {columns.map((col, i) => (
+        <BoardColumn
+          key={`${col.index}-${col.title}`}
+          list={list}
+          plan={plan}
+          index={col.index}
+          title={col.title}
+          color={COLUMN_COLORS[i % COLUMN_COLORS.length]}
+          tasks={tasks.filter((t) => t.ref.section === col.index)}
+          selected={selected}
+          onSelect={onSelect}
+        />
+      ))}
     </BoardFrame>
   );
 }
 
 /* ─────────────────────────── Reading lists ─────────────────────────── */
+
+const setStatus = (list: PlanList, ref: TaskRef, status: ReadingStatus) =>
+  editPlan(list, (p) => setReadingStatus(p, ref, status, today()));
+
+function StatusChoice({ status }: { status: ReadingStatus }) {
+  return (
+    <span className="flex min-w-0 flex-col">
+      <span className="flex items-center gap-2">
+        <span
+          className="size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: STATUS_COLOR[status] }}
+        />
+        {STATUS_LABEL[status]}
+      </span>
+      <span className="pl-4 text-[11px] text-muted-foreground">
+        {STATUS_HINT[status]}
+      </span>
+    </span>
+  );
+}
 
 function StatusPill({
   status,
@@ -664,24 +1183,23 @@ function StatusPill({
         <button
           type="button"
           onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
           aria-label={`Status: ${STATUS_LABEL[status]}`}
+          title={STATUS_HINT[status]}
           className="shrink-0 rounded-full px-2 py-0.5 font-medium text-[11px]"
           style={{
             color,
-            backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)`,
+            backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`,
           }}
         >
           {STATUS_LABEL[status]}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-36">
+      <DropdownMenuContent align="end" className="w-56">
         {STATUSES.map((s) => (
           <DropdownMenuItem key={s} onSelect={() => onChange(s)}>
-            <span
-              className="size-2 rounded-full"
-              style={{ backgroundColor: STATUS_COLOR[s] }}
-            />
-            {STATUS_LABEL[s]}
+            <StatusChoice status={s} />
+            {s === status && <CheckIcon className="ml-auto size-3.5" />}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -689,42 +1207,112 @@ function StatusPill({
   );
 }
 
-const setStatus = (list: PlanList, ref: TaskRef, status: ReadingStatus) =>
-  editPlan(list, (p) => setReadingStatus(p, ref, status, today()));
+/** A reading entry's right-click menu: read it, its status, where it goes. */
+function ReadingMenu({
+  list,
+  item,
+  children,
+}: {
+  list: PlanList;
+  item: ReadingItem;
+  children: ReactNode;
+}) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-56">
+        <ContextMenuItem
+          disabled={!item.itemKey}
+          onClick={() => openToRead(item.itemKey, item.title)}
+        >
+          <BookOpenIcon className="size-3.5" />
+          Open to read
+        </ContextMenuItem>
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <CheckCircle2Icon className="size-3.5" />
+            Status
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent className="w-60">
+            {STATUSES.map((s) => (
+              <ContextMenuItem
+                key={s}
+                onClick={() => void setStatus(list, item.ref, s)}
+              >
+                <StatusChoice status={s} />
+                {s === item.status && (
+                  <CheckIcon className="ml-auto size-3.5" />
+                )}
+              </ContextMenuItem>
+            ))}
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+        <MoveToMenu
+          list={list}
+          label="Move to the reading list of"
+          onPick={(target) =>
+            void moveToPlan(
+              { list, ref: item.ref, reading: true, label: item.title },
+              target,
+            )
+          }
+        />
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          variant="destructive"
+          onClick={() => void editPlan(list, (p) => deleteTask(p, item.ref))}
+        >
+          <Trash2Icon className="size-3.5" />
+          Remove from list
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+function readingDrop(list: PlanList, item: ReadingItem) {
+  return (d: DragTask, zone: "before" | "inside" | "after") => {
+    if (d.list.key !== list.key) {
+      void moveToPlan(d, list);
+      return;
+    }
+    void editPlan(list, (p) =>
+      moveTask(
+        p,
+        d.ref,
+        item.ref.section,
+        zone === "after" ? item.ref.item + 1 : item.ref.item,
+      ),
+    );
+  };
+}
 
 function ReadingRow({
   list,
   item,
   context,
-  index,
 }: {
   list: PlanList;
   item: ReadingItem;
   context?: TaskContext;
-  index?: number;
 }) {
-  const id = `read:${list.key}:${item.ref.section}:${item.ref.item}`;
-  const { props, over, dragging } = useDragRow(
-    list,
-    item.ref,
-    id,
-    dropBefore(list, item.ref.section, item.ref.item),
-    true,
+  const dnd = useTaskDnd(
+    `read:${list.key}:${item.ref.section}:${item.ref.item}`,
+    { list, ref: item.ref, reading: true, label: item.title },
+    { accepts: "reading", onDrop: readingDrop(list, item) },
   );
   return (
-    <div className={cn("relative", dragging && "opacity-40")}>
-      {over && (
-        <span className="pointer-events-none absolute inset-x-2 -top-px h-0.5 rounded-full bg-primary" />
-      )}
+    <ReadingMenu list={list} item={item}>
       <div
-        {...props}
-        className="group flex cursor-grab items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted/70"
-      >
-        {index !== undefined && (
-          <span className="w-5 shrink-0 text-right text-muted-foreground text-xs tabular-nums">
-            {index}
-          </span>
+        ref={dnd.ref}
+        {...(dnd.handlers as React.HTMLAttributes<HTMLDivElement>)}
+        onDoubleClick={() => openToRead(item.itemKey, item.title)}
+        className={cn(
+          "relative flex cursor-default items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted/70",
+          dnd.dragging && "opacity-30",
         )}
+      >
+        <DropMarker zone={dnd.over} />
         <BookOpenIcon
           className="size-4 shrink-0"
           style={{ color: STATUS_COLOR[item.status] }}
@@ -749,9 +1337,69 @@ function ReadingRow({
           onChange={(s) => void setStatus(list, item.ref, s)}
         />
       </div>
-    </div>
+    </ReadingMenu>
   );
 }
+
+function ReadingCard({ list, item }: { list: PlanList; item: ReadingItem }) {
+  const dnd = useTaskDnd(
+    `rcard:${list.key}:${item.ref.section}:${item.ref.item}`,
+    { list, ref: item.ref, reading: true, label: item.title },
+    { accepts: "reading", onDrop: readingDrop(list, item) },
+  );
+  return (
+    <ReadingMenu list={list} item={item}>
+      <div>
+        <Card dnd={dnd}>
+          <p
+            className="flex items-start gap-2 text-sm leading-snug"
+            onDoubleClick={() => openToRead(item.itemKey, item.title)}
+          >
+            <BookOpenIcon
+              className="mt-0.5 size-3.5 shrink-0"
+              style={{ color: STATUS_COLOR[item.status] }}
+            />
+            {item.title}
+          </p>
+        </Card>
+      </div>
+    </ReadingMenu>
+  );
+}
+
+function StatusColumn({
+  list,
+  status,
+  items,
+}: {
+  list: PlanList;
+  status: ReadingStatus;
+  items: ReadingItem[];
+}) {
+  return (
+    <Column
+      id={`status:${list.key}:${status}`}
+      accepts="reading"
+      title={
+        <span className="font-semibold text-sm" title={STATUS_HINT[status]}>
+          {STATUS_LABEL[status]}
+        </span>
+      }
+      color={STATUS_COLOR[status]}
+      count={items.length}
+      onDrop={(d) => {
+        if (d.list.key === list.key) void setStatus(list, d.ref, status);
+      }}
+    >
+      {items.map((r) => (
+        <ReadingCard key={`${r.ref.item}-${r.title}`} list={list} item={r} />
+      ))}
+    </Column>
+  );
+}
+
+const READING_HELP =
+  "Right-click a paper in your Zotero library and choose Add to reading list. Its status moves along as you open, highlight, quote and cite it.";
 
 /** A plan's reading list: in reading order, or by status on a board. */
 export function ReadingView({
@@ -774,49 +1422,20 @@ export function ReadingView({
   if (mode === "board") {
     return (
       <BoardFrame>
-        {STATUSES.map((s) => {
-          const cards = items.filter((r) => r.status === s);
-          const toStatus = (d: DragTask) => {
-            if (d.list.key === list.key) void setStatus(list, d.ref, s);
-          };
-          return (
-            <Column
-              key={s}
-              title={STATUS_LABEL[s]}
-              color={STATUS_COLOR[s]}
-              count={cards.length}
-              dropId={`status:${list.key}:${s}`}
-              onDrop={toStatus}
-            >
-              {cards.map((r) => (
-                <Card
-                  key={`${r.ref.item}-${r.title}`}
-                  id={`rcard:${list.key}:${r.ref.item}`}
-                  list={list}
-                  taskRef={r.ref}
-                  reading
-                  onDrop={toStatus}
-                >
-                  <p className="flex items-start gap-2 text-sm leading-snug">
-                    <BookOpenIcon
-                      className="mt-0.5 size-3.5 shrink-0"
-                      style={{ color: STATUS_COLOR[s] }}
-                    />
-                    {r.title}
-                  </p>
-                </Card>
-              ))}
-            </Column>
-          );
-        })}
+        {STATUSES.map((s) => (
+          <StatusColumn
+            key={s}
+            list={list}
+            status={s}
+            items={items.filter((r) => r.status === s)}
+          />
+        ))}
       </BoardFrame>
     );
   }
 
-  const active = items.filter((r) => r.status !== "cited");
-  const cited = items.filter((r) => r.status === "cited");
   return (
-    <div className={cn("space-y-2", inline ? "p-2" : "px-6 py-4")}>
+    <div className={cn(inline ? "p-2" : "px-8 py-5")}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -848,39 +1467,19 @@ export function ReadingView({
       {items.length === 0 ? (
         <Empty
           icon={<BookOpenIcon className="size-6" />}
-          color="#8b5cf6"
           title="Nothing to read yet."
-          text="Right-click a paper in your Zotero library and choose Add to reading list. It moves along by itself as you open, highlight, take notes on and cite it."
+          text={READING_HELP}
         />
       ) : (
-        <>
-          <div>
-            {active.map((r, i) => (
-              <ReadingRow
-                key={`${r.ref.item}-${r.title}`}
-                list={list}
-                item={r}
-                index={i + 1}
-              />
-            ))}
-          </div>
-          {cited.length > 0 && (
-            <Group
-              title="Cited"
-              count={cited.length}
-              color={STATUS_COLOR.cited}
-              defaultOpen={false}
-            >
-              {cited.map((r) => (
-                <ReadingRow
-                  key={`${r.ref.item}-${r.title}`}
-                  list={list}
-                  item={r}
-                />
-              ))}
-            </Group>
-          )}
-        </>
+        <div className="pt-2">
+          {items.map((r) => (
+            <ReadingRow key={`${r.ref.item}-${r.title}`} list={list} item={r} />
+          ))}
+          <p className="px-2 pt-3 text-muted-foreground text-xs">
+            Right-click a paper to open it. Drag to set the order you'll read
+            them in.
+          </p>
+        </div>
       )}
     </div>
   );
@@ -909,7 +1508,7 @@ export const contextOf = (list: PlanList): TaskContext => ({
   name: list.key === INBOX ? "Inbox" : list.name,
   icon:
     list.key === INBOX ? (
-      <InboxIcon className="size-3 text-sky-500" />
+      <InboxIcon className="size-3" />
     ) : (
       <ProjectIcon list={list} className="size-3" />
     ),
@@ -926,6 +1525,47 @@ const dayTitle = (iso: string) => {
     month: "short",
   });
 };
+
+function Group({
+  title,
+  count,
+  color,
+  children,
+}: {
+  title: string;
+  count: number;
+  color?: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <section className="pt-3">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-1.5 border-border border-b px-1 pb-1.5 text-left font-semibold text-[15px]"
+      >
+        <ChevronRightIcon
+          className={cn(
+            "size-4 text-muted-foreground transition-transform",
+            open && "rotate-90",
+          )}
+        />
+        {color && (
+          <span
+            className="size-2 rounded-full"
+            style={{ backgroundColor: color }}
+          />
+        )}
+        {title}
+        <span className="font-normal text-muted-foreground text-xs tabular-nums">
+          {count}
+        </span>
+      </button>
+      {open && <div className="pt-1">{children}</div>}
+    </section>
+  );
+}
 
 /** Tasks gathered from every plan: by date, by plan, or finished. */
 export function SmartView({
@@ -950,16 +1590,20 @@ export function SmartView({
     const rows = plans.flatMap(({ list, plan }) =>
       readingItems(plan).map((item) => ({ list, item })),
     );
-    const order: ReadingStatus[] = ["reading", "to-read", "read", "noted"];
-    const active = rows.filter((r) => r.item.status !== "cited");
+    const order: ReadingStatus[] = [
+      "reading",
+      "to-read",
+      "read",
+      "noted",
+      "cited",
+    ];
     return (
-      <div className="space-y-2 px-6 py-4">
-        {active.length === 0 && (
+      <div className="px-8 py-5">
+        {rows.length === 0 && (
           <Empty
             icon={<BookOpenIcon className="size-6" />}
-            color="#8b5cf6"
             title="Nothing to read yet."
-            text="Right-click a paper in your Zotero library and choose Add to reading list."
+            text={READING_HELP}
           />
         )}
         {order.map((status) => {
@@ -1021,12 +1665,12 @@ export function SmartView({
     groups.set(g, [...(groups.get(g) ?? []), t]);
   }
 
-  const empty: Record<Exclude<SmartFilter, "reading">, [string, string]> = {
-    today: ["Nothing due today.", "#3b82f6"],
-    tomorrow: ["Nothing due tomorrow.", "#f59e0b"],
-    week: ["Nothing due this week.", "#8b5cf6"],
-    all: ["No tasks yet.", "#64748b"],
-    completed: ["Nothing finished yet.", "#22c55e"],
+  const empty: Record<Exclude<SmartFilter, "reading">, string> = {
+    today: "Nothing due today.",
+    tomorrow: "Nothing due tomorrow.",
+    week: "Nothing due this week.",
+    all: "No tasks yet.",
+    completed: "Nothing finished yet.",
   };
   const addDefaults =
     filter === "today"
@@ -1035,7 +1679,7 @@ export function SmartView({
         ? { due: dayFromToday(1) }
         : undefined;
   return (
-    <div className="space-y-2 px-6 py-4">
+    <div className="px-8 py-5">
       {inbox && filter !== "completed" && (
         <QuickAdd
           autoFocus
@@ -1059,8 +1703,7 @@ export function SmartView({
               <CoffeeIcon className="size-6" />
             )
           }
-          color={empty[filter][1]}
-          title={empty[filter][0]}
+          title={empty[filter]}
         />
       )}
       {[...groups].map(([title, group]) => (
@@ -1068,10 +1711,10 @@ export function SmartView({
           key={title}
           title={title}
           count={group.length}
-          color={title === "Overdue" ? "#ef4444" : undefined}
+          color={title === "Overdue" ? "var(--destructive)" : undefined}
         >
           {group.map((t) => (
-            <DraggableRow
+            <TaskItem
               key={`${t.list.key}-${t.ref.section}-${t.ref.item}-${t.task.title}`}
               list={t.list}
               plan={t.plan}

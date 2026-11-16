@@ -11,6 +11,7 @@ import {
   type PlanViewMode,
   ReadingView,
 } from "@/components/planner/plan-views";
+import { PlannerDnd } from "@/components/planner/planner-dnd";
 import { Button } from "@/components/ui/button";
 import { projectKey, usePlanLists } from "@/lib/plan/plan-store";
 import { cn } from "@/lib/utils";
@@ -109,11 +110,13 @@ export function PlanPanel({ onClose }: { onClose: () => void }) {
         </Button>
       </DockHeaderBar>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {tab === "reading" ? (
-          <ReadingView list={list} mode={mode} inline />
-        ) : (
-          <PlanView list={list} mode={mode} inline />
-        )}
+        <PlannerDnd>
+          {tab === "reading" ? (
+            <ReadingView list={list} mode={mode} inline />
+          ) : (
+            <PlanView list={list} mode={mode} inline />
+          )}
+        </PlannerDnd>
       </div>
     </div>
   );

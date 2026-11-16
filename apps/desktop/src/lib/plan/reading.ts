@@ -34,17 +34,27 @@ export type ReadingStatus = (typeof STATUSES)[number];
 export const STATUS_LABEL: Record<ReadingStatus, string> = {
   "to-read": "To read",
   reading: "Reading",
-  read: "Read",
-  noted: "In notes",
+  read: "Highlighted",
+  noted: "Quoted",
   cited: "Cited",
 };
 
+/** What each status means, and what sets it by itself. */
+export const STATUS_HINT: Record<ReadingStatus, string> = {
+  "to-read": "Not opened yet",
+  reading: "Set when you open it",
+  read: "Set when you highlight it",
+  noted: "Set when you quote it in a note",
+  cited: "Set when your project cites it",
+};
+
+/** The theme's own colors, so every theme keeps its look. */
 export const STATUS_COLOR: Record<ReadingStatus, string> = {
-  "to-read": "#64748b",
-  reading: "#3b82f6",
-  read: "#8b5cf6",
-  noted: "#f59e0b",
-  cited: "#22c55e",
+  "to-read": "var(--muted-foreground)",
+  reading: "var(--primary)",
+  read: "var(--chart-2)",
+  noted: "var(--chart-4)",
+  cited: "var(--chart-1)",
 };
 
 const STATUS_TAG = /\s*#reading\/([a-z-]+)/;

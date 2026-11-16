@@ -13,6 +13,7 @@ import { QuickReferencePanel } from "@/components/workspace/quick-reference-pane
 import { VaultPanel } from "@/components/workspace/vault-panel";
 import { VaultStandalone } from "@/components/workspace/vault-standalone";
 import { cn } from "@/lib/utils";
+import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import { confirmLeaveVaultEdit, useVaultStore } from "@/stores/vault-store";
 
 type Side = "reference" | "vault";
@@ -80,6 +81,15 @@ export function LibraryView() {
       }),
     [],
   );
+  // A paper asked to open: the Zotero library side shows to open it.
+  useEffect(() => {
+    const show = (asked: boolean) => {
+      if (!asked) return;
+      setLayoutState((l) => (l.reference ? l : { ...l, reference: true }));
+    };
+    show(!!useLibraryPreview.getState().request);
+    return useLibraryPreview.subscribe((st) => show(!!st.request));
+  }, []);
   const toggle = (side: Side) => {
     const other = side === "reference" ? "vault" : "reference";
     if (layout[side] && !layout[other]) return;

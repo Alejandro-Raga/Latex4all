@@ -112,6 +112,7 @@ import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
 import { ThemeMenuButton } from "@/components/theme-picker";
 import { LibraryView } from "@/components/library-view";
+import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import { PlannerView } from "@/components/planner/planner-view";
 import { HelpView } from "@/components/help-view";
 import { useBugReport } from "@/components/bug-report-dialog";
@@ -177,6 +178,14 @@ export function ProjectPicker() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [activeSection, setActiveSection] =
     useState<ProjectPickerSection>("projects");
+  // A paper asked to open (from a reading list): to Library & Vault.
+  useEffect(
+    () =>
+      useLibraryPreview.subscribe((st) => {
+        if (st.request && st.listening === 0) setActiveSection("library");
+      }),
+    [],
+  );
   const [settingsDetailSection, setSettingsDetailSection] =
     useState<SettingsSection>("provider");
   const [searchQuery, setSearchQuery] = useState("");

@@ -32,13 +32,8 @@ import {
 } from "@/lib/plan/plan-store";
 import { readingItems, workTasks } from "@/lib/plan/reading";
 import { cn } from "@/lib/utils";
-import {
-  completeDrag,
-  type DragTask,
-  dueOn,
-  moveToPlan,
-  useTaskDrag,
-} from "./plan-actions";
+import { completeDrag, dueOn, moveToPlan } from "./plan-actions";
+import { type DragTask, PlannerDnd, useDropArea } from "./planner-dnd";
 import {
   actionsFor,
   contextOf,
@@ -50,7 +45,7 @@ import {
   type SmartFilter,
   SmartView,
 } from "./plan-views";
-import { ProjectIcon, projectColor } from "./project-icon";
+import { ProjectIcon, typeColor } from "./project-icon";
 import { TaskDetails } from "./task-parts";
 
 type Selection = { smart: SmartFilter } | { plan: PlanKey };
@@ -65,18 +60,17 @@ const SORT_LABEL: Record<ProjectSort, string> = {
 };
 
 /** Each smart list's color, and its icon. */
+/** Calm, in the theme's colors: only Today stands out. */
+const MUTED = "var(--muted-foreground)";
 const SMART: Record<SmartFilter, { color: string; icon: ReactNode }> = {
-  today: { color: "#3b82f6", icon: <TodayIcon /> },
-  tomorrow: { color: "#f59e0b", icon: <SunIcon className="size-4" /> },
-  week: { color: "#8b5cf6", icon: <CalendarRangeIcon className="size-4" /> },
-  reading: { color: "#ec4899", icon: <BookOpenIcon className="size-4" /> },
-  all: { color: "#64748b", icon: <LayersIcon className="size-4" /> },
-  completed: {
-    color: "#22c55e",
-    icon: <CheckCircle2Icon className="size-4" />,
-  },
+  today: { color: "var(--primary)", icon: <TodayIcon /> },
+  tomorrow: { color: MUTED, icon: <SunIcon className="size-4" /> },
+  week: { color: MUTED, icon: <CalendarRangeIcon className="size-4" /> },
+  reading: { color: MUTED, icon: <BookOpenIcon className="size-4" /> },
+  all: { color: MUTED, icon: <LayersIcon className="size-4" /> },
+  completed: { color: MUTED, icon: <CheckCircle2Icon className="size-4" /> },
 };
-const INBOX_COLOR = "#0ea5e9";
+const INBOX_COLOR = MUTED;
 
 /** Today's icon: a calendar page showing today's date. */
 function TodayIcon() {
@@ -225,7 +219,7 @@ export function PlannerView() {
     const s = stats.plans[current.key];
     return {
       title: current.key === INBOX ? "Inbox" : current.name,
-      color: current.key === INBOX ? INBOX_COLOR : projectColor(current.name),
+      color: current.key === INBOX ? INBOX_COLOR : typeColor(current.type),
       icon:
         current.key === INBOX ? (
           <InboxIcon className="size-4" />
@@ -243,213 +237,215 @@ export function PlannerView() {
   })();
 
   return (
-    <div className="flex h-full min-h-0 bg-background">
-      <aside className="flex w-60 shrink-0 flex-col border-border border-r bg-sidebar pt-[var(--titlebar-height)]">
-        <nav className="flex flex-col gap-0.5 p-2 pt-3" aria-label="Lists">
-          {(["today", "tomorrow", "week"] as SmartFilter[]).map((f) => (
-            <SmartItem
-              key={f}
-              filter={f}
-              count={stats.smart[f]}
-              active={"smart" in selected && selected.smart === f}
-              onClick={() => choose({ smart: f })}
-              onDrop={
-                f === "today"
-                  ? (d) => dueOn(d, 0)
-                  : f === "tomorrow"
-                    ? (d) => dueOn(d, 1)
-                    : undefined
-              }
-            />
-          ))}
-          {inbox && (
-            <SideItem
-              icon={<InboxIcon className="size-4" />}
-              color={INBOX_COLOR}
-              label="Inbox"
-              count={stats.plans[INBOX]?.open}
-              active={"plan" in selected && selected.plan === INBOX}
-              onClick={() => choose({ plan: INBOX })}
-              dropId="side:inbox"
-              onDrop={(d) => moveToPlan(d, inbox)}
-            />
-          )}
-          <span className="my-1.5 h-px bg-border" />
-          {(["reading", "all", "completed"] as SmartFilter[]).map((f) => (
-            <SmartItem
-              key={f}
-              filter={f}
-              count={f === "completed" ? undefined : stats.smart[f]}
-              active={"smart" in selected && selected.smart === f}
-              onClick={() => choose({ smart: f })}
-              onDrop={f === "completed" ? completeDrag : undefined}
-            />
-          ))}
-        </nav>
-        <div className="flex items-center px-4 pt-3 pb-1">
-          <span className="flex-1 font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">
-            Projects
-          </span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                title={`Sort: ${SORT_LABEL[sort]}`}
-                aria-label="Sort projects"
-                className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-              >
-                <ArrowUpDownIcon className="size-3.5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuLabel className="text-muted-foreground text-xs">
-                Sort projects by
-              </DropdownMenuLabel>
-              {(Object.keys(SORT_LABEL) as ProjectSort[]).map((s) => (
-                <DropdownMenuItem key={s} onSelect={() => setSort(s)}>
-                  {sort === s ? (
-                    <CheckIcon className="size-3.5" />
-                  ) : (
-                    <span className="size-3.5" />
-                  )}
-                  {SORT_LABEL[s]}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <nav
-          className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3"
-          aria-label="Projects"
-        >
-          {projects.length === 0 && (
-            <p className="px-2 text-muted-foreground text-xs">
-              Your projects show here once you've opened them.
-            </p>
-          )}
-          {projects.map((p) => (
-            <SideItem
-              key={p.key}
-              icon={<ProjectIcon list={p} className="size-4" />}
-              label={p.name}
-              count={stats.plans[p.key]?.open}
-              alert={(stats.plans[p.key]?.due ?? 0) > 0}
-              active={"plan" in selected && selected.plan === p.key}
-              onClick={() => choose({ plan: p.key })}
-              dropId={`side:${p.key}`}
-              onDrop={(d) => moveToPlan(d, p)}
-            />
-          ))}
-        </nav>
-      </aside>
-
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center gap-3 border-border/70 border-b px-6 pt-[calc(var(--titlebar-height)+12px)] pb-3">
-          {header.icon && (
-            <span
-              className="flex size-9 items-center justify-center rounded-xl"
-              style={{
-                color: header.color,
-                backgroundColor: `color-mix(in srgb, ${header.color} 14%, transparent)`,
-              }}
-            >
-              {header.icon}
+    <PlannerDnd>
+      <div className="flex h-full min-h-0 bg-background">
+        <aside className="flex w-60 shrink-0 flex-col border-border border-r bg-sidebar pt-[var(--titlebar-height)]">
+          <nav className="flex flex-col gap-0.5 p-2 pt-3" aria-label="Lists">
+            {(["today", "tomorrow", "week"] as SmartFilter[]).map((f) => (
+              <SmartItem
+                key={f}
+                filter={f}
+                count={stats.smart[f]}
+                active={"smart" in selected && selected.smart === f}
+                onClick={() => choose({ smart: f })}
+                onDrop={
+                  f === "today"
+                    ? (d) => dueOn(d, 0)
+                    : f === "tomorrow"
+                      ? (d) => dueOn(d, 1)
+                      : undefined
+                }
+              />
+            ))}
+            {inbox && (
+              <SideItem
+                icon={<InboxIcon className="size-4" />}
+                color={INBOX_COLOR}
+                label="Inbox"
+                count={stats.plans[INBOX]?.open}
+                active={"plan" in selected && selected.plan === INBOX}
+                onClick={() => choose({ plan: INBOX })}
+                dropId="side:inbox"
+                onDrop={(d) => moveToPlan(d, inbox)}
+              />
+            )}
+            <span className="my-1.5 h-px bg-border" />
+            {(["reading", "all", "completed"] as SmartFilter[]).map((f) => (
+              <SmartItem
+                key={f}
+                filter={f}
+                count={f === "completed" ? undefined : stats.smart[f]}
+                active={"smart" in selected && selected.smart === f}
+                onClick={() => choose({ smart: f })}
+                onDrop={f === "completed" ? completeDrag : undefined}
+              />
+            ))}
+          </nav>
+          <div className="flex items-center px-4 pt-3 pb-1">
+            <span className="flex-1 font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">
+              Projects
             </span>
-          )}
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate font-semibold text-lg leading-tight">
-              {header.title}
-            </h1>
-            {header.sub && (
-              <p className="truncate text-muted-foreground text-xs">
-                {header.sub}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  title={`Sort: ${SORT_LABEL[sort]}`}
+                  aria-label="Sort projects"
+                  className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
+                >
+                  <ArrowUpDownIcon className="size-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuLabel className="text-muted-foreground text-xs">
+                  Sort projects by
+                </DropdownMenuLabel>
+                {(Object.keys(SORT_LABEL) as ProjectSort[]).map((s) => (
+                  <DropdownMenuItem key={s} onSelect={() => setSort(s)}>
+                    {sort === s ? (
+                      <CheckIcon className="size-3.5" />
+                    ) : (
+                      <span className="size-3.5" />
+                    )}
+                    {SORT_LABEL[s]}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <nav
+            className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3"
+            aria-label="Projects"
+          >
+            {projects.length === 0 && (
+              <p className="px-2 text-muted-foreground text-xs">
+                Your projects show here once you've opened them.
               </p>
             )}
-          </div>
-          {current && (
-            <>
-              <Segmented
-                label="Show"
-                value={tab}
-                onChange={(t) => {
-                  setTab(t);
-                  setPicked(null);
+            {projects.map((p) => (
+              <SideItem
+                key={p.key}
+                icon={<ProjectIcon list={p} className="size-4" />}
+                label={p.name}
+                count={stats.plans[p.key]?.open}
+                alert={(stats.plans[p.key]?.due ?? 0) > 0}
+                active={"plan" in selected && selected.plan === p.key}
+                onClick={() => choose({ plan: p.key })}
+                dropId={`side:${p.key}`}
+                onDrop={(d) => moveToPlan(d, p)}
+              />
+            ))}
+          </nav>
+        </aside>
+
+        <main className="flex min-w-0 flex-1 flex-col">
+          <header className="flex shrink-0 items-center gap-3 border-border/70 border-b px-6 pt-[calc(var(--titlebar-height)+12px)] pb-3">
+            {header.icon && (
+              <span
+                className="flex size-9 items-center justify-center rounded-xl"
+                style={{
+                  color: header.color,
+                  backgroundColor: `color-mix(in srgb, ${header.color} 14%, transparent)`,
                 }}
-                options={[
-                  [
-                    "tasks",
-                    <ListTodoIcon key="t" className="size-3.5" />,
-                    "Tasks",
-                  ],
-                  [
-                    "reading",
-                    <BookOpenIcon key="r" className="size-3.5" />,
-                    "Reading",
-                  ],
-                ]}
-              />
-              <Segmented
-                label="View"
-                value={mode}
-                onChange={setMode}
-                options={[
-                  ["list", <ListIcon key="l" className="size-3.5" />, "List"],
-                  [
-                    "board",
-                    <KanbanIcon key="b" className="size-3.5" />,
-                    "Board",
-                  ],
-                ]}
-              />
-            </>
-          )}
-        </header>
-        <div className="flex min-h-0 flex-1">
-          <div
-            className={cn(
-              "min-h-0 min-w-0 flex-1",
-              current && mode === "board"
-                ? "overflow-hidden"
-                : "overflow-y-auto",
+              >
+                {header.icon}
+              </span>
             )}
-          >
-            <div
-              className={cn(
-                !(current && mode === "board") && "mx-auto max-w-3xl",
-              )}
-            >
-              {"smart" in selected ? (
-                <SmartView
-                  filter={selected.smart}
-                  lists={lists}
-                  selected={picked}
-                  onSelect={setPicked}
-                />
-              ) : !current ? (
-                <p className="p-6 text-muted-foreground text-sm">
-                  That list isn't here any more.
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate font-semibold text-lg leading-tight">
+                {header.title}
+              </h1>
+              {header.sub && (
+                <p className="truncate text-muted-foreground text-xs">
+                  {header.sub}
                 </p>
-              ) : tab === "reading" ? (
-                <ReadingView key={current.key} list={current} mode={mode} />
-              ) : (
-                <PlanView
-                  key={current.key}
-                  list={current}
-                  mode={mode}
-                  selected={picked}
-                  onSelect={setPicked}
-                />
               )}
             </div>
+            {current && (
+              <>
+                <Segmented
+                  label="Show"
+                  value={tab}
+                  onChange={(t) => {
+                    setTab(t);
+                    setPicked(null);
+                  }}
+                  options={[
+                    [
+                      "tasks",
+                      <ListTodoIcon key="t" className="size-3.5" />,
+                      "Tasks",
+                    ],
+                    [
+                      "reading",
+                      <BookOpenIcon key="r" className="size-3.5" />,
+                      "Reading",
+                    ],
+                  ]}
+                />
+                <Segmented
+                  label="View"
+                  value={mode}
+                  onChange={setMode}
+                  options={[
+                    ["list", <ListIcon key="l" className="size-3.5" />, "List"],
+                    [
+                      "board",
+                      <KanbanIcon key="b" className="size-3.5" />,
+                      "Board",
+                    ],
+                  ]}
+                />
+              </>
+            )}
+          </header>
+          <div className="flex min-h-0 flex-1">
+            <div
+              className={cn(
+                "min-h-0 min-w-0 flex-1",
+                current && mode === "board"
+                  ? "overflow-hidden"
+                  : "overflow-y-auto",
+              )}
+            >
+              <div
+                className={cn(
+                  !(current && mode === "board") && "mx-auto max-w-3xl",
+                )}
+              >
+                {"smart" in selected ? (
+                  <SmartView
+                    filter={selected.smart}
+                    lists={lists}
+                    selected={picked}
+                    onSelect={setPicked}
+                  />
+                ) : !current ? (
+                  <p className="p-6 text-muted-foreground text-sm">
+                    That list isn't here any more.
+                  </p>
+                ) : tab === "reading" ? (
+                  <ReadingView key={current.key} list={current} mode={mode} />
+                ) : (
+                  <PlanView
+                    key={current.key}
+                    list={current}
+                    mode={mode}
+                    selected={picked}
+                    onSelect={setPicked}
+                  />
+                )}
+              </div>
+            </div>
+            {picked && (
+              <aside className="w-[360px] shrink-0 border-border border-l">
+                <DetailPane selected={picked} onClose={() => setPicked(null)} />
+              </aside>
+            )}
           </div>
-          {picked && (
-            <aside className="w-[360px] shrink-0 border-border border-l">
-              <DetailPane selected={picked} onClose={() => setPicked(null)} />
-            </aside>
-          )}
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </PlannerDnd>
   );
 }
 
@@ -572,7 +568,7 @@ function SideItem({
   onDrop,
 }: {
   icon: ReactNode;
-  /** The icon's color (projects color their own). */
+  /** The icon's color (projects color theirs by type). */
   color?: string;
   label: string;
   count?: number;
@@ -583,38 +579,23 @@ function SideItem({
   dropId?: string;
   onDrop?: (d: DragTask) => void;
 }) {
-  const dragging = useTaskDrag((s) => !!s.drag);
-  const over = useTaskDrag((s) => !!dropId && s.over === dropId);
+  const drop = useDropArea(dropId ?? `side:none:${label}`, {
+    accepts: "any",
+    onDrop: (d) => onDrop?.(d),
+  });
+  const over = !!onDrop && drop.over;
   return (
     <button
+      ref={onDrop ? drop.ref : undefined}
       type="button"
       onClick={onClick}
       aria-current={active ? "page" : undefined}
-      onDragOver={
-        onDrop
-          ? (e) => {
-              e.preventDefault();
-              useTaskDrag.getState().setOver(dropId ?? null);
-            }
-          : undefined
-      }
-      onDrop={
-        onDrop
-          ? (e) => {
-              e.preventDefault();
-              const d = useTaskDrag.getState().drag;
-              useTaskDrag.getState().end();
-              if (d) void onDrop(d);
-            }
-          : undefined
-      }
       className={cn(
-        "flex h-8 items-center gap-2.5 rounded-lg px-2 text-left text-sm transition-colors",
-        active
-          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-          : "text-foreground/80 hover:bg-sidebar-accent/60",
-        dragging && onDrop && "ring-1 ring-border ring-dashed",
-        over && "bg-primary/15 ring-primary",
+        "flex h-8 items-center gap-2.5 rounded-md px-2 text-left text-sm transition-colors",
+        active || over
+          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+          : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50",
+        active && "font-medium",
       )}
     >
       <span
@@ -624,7 +605,9 @@ function SideItem({
         {icon}
       </span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {alert && <span className="size-1.5 shrink-0 rounded-full bg-red-500" />}
+      {alert && (
+        <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
+      )}
       {!!count && (
         <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
           {count}
