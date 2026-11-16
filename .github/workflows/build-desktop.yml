@@ -176,7 +176,7 @@ jobs:
   # macOS (Apple Silicon)
   # ──────────────────────────────────────────────
   build-macos:
-    runs-on: macos-14
+    runs-on: macos-15
     if: >-
       github.event_name != 'workflow_dispatch'
       || inputs.platforms == 'all'
