@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type CSSProperties, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import {
   ArrowLeftRightIcon,
@@ -99,7 +99,8 @@ export function LibraryView() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar">
-      <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1">
+      {/* Below the window's drag strip, which takes clicks at the very top. */}
+      <div className="flex h-[calc(32px+var(--titlebar-height))] shrink-0 items-center gap-1 border-b px-2 pt-[var(--titlebar-height)]">
         <PaneToggle
           on={layout.reference}
           onClick={() => toggle("reference")}
@@ -130,6 +131,8 @@ export function LibraryView() {
           both ? `library-view${layout.swapped ? "-swapped" : ""}` : undefined
         }
         className="min-h-0 flex-1"
+        // The bar sits under the drag strip, so the panes' headers needn't.
+        style={{ "--titlebar-height": "0px" } as CSSProperties}
       >
         {layout.swapped
           ? [vault, handle, reference]
