@@ -118,19 +118,22 @@ export function TopicMenu({
           Connect to {group === "idea" ? "idea" : "topic"}
         </span>
       </ContextMenuSubTrigger>
-      <ContextMenuSubContent className="max-h-80 w-56 overflow-y-auto">
+      <ContextMenuSubContent className="max-h-80 w-64 overflow-y-auto">
         {topics.map((t) => (
           <ContextMenuItem
             key={t.path}
             disabled={joined.has(t.name)}
             onClick={() => connect(resolve, t.name, group)}
+            className="items-start"
           >
             {joined.has(t.name) ? (
-              <CheckIcon className="size-3.5" />
+              <CheckIcon className="mt-0.5 size-3.5" />
             ) : (
-              <Icon className="size-3.5 opacity-40" />
+              <Icon className="mt-0.5 size-3.5 opacity-40" />
             )}
-            <span className="truncate">{t.title}</span>
+            <span className="line-clamp-2 min-w-0 flex-1" title={t.title}>
+              {t.title}
+            </span>
           </ContextMenuItem>
         ))}
         {topics.length > 0 && <ContextMenuSeparator />}
@@ -437,14 +440,15 @@ export function ConnectNoteMenu({
                     key={n.path}
                     disabled={done}
                     onClick={() => connectTo(resolve, n)}
+                    className="items-start"
                   >
                     {done ? (
-                      <CheckIcon className="size-3.5" />
+                      <CheckIcon className="mt-0.5 size-3.5" />
                     ) : (
-                      <LinkIcon className="size-3.5 opacity-40" />
+                      <LinkIcon className="mt-0.5 size-3.5 opacity-40" />
                     )}
                     <span className="min-w-0 flex-1" title={n.title}>
-                      <span className="block truncate">{n.title}</span>
+                      <span className="line-clamp-2">{n.title}</span>
                       {byline(n) && (
                         <span className="block truncate text-muted-foreground text-xs">
                           {byline(n)}
