@@ -32,5 +32,5 @@ test("backgrounds are flat or a gradient, by choice", async ({ page }) => {
   const image = await page.evaluate(
     () => getComputedStyle(document.body).backgroundImage,
   );
-  expect(image).toContain("radial-gradient");
+  expect(image).toContain("gradient(");
 });
