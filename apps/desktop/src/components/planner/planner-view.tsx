@@ -16,6 +16,8 @@ import {
   SearchIcon,
   SunIcon,
   SquarePenIcon,
+  PlusIcon,
+  Trash2Icon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -33,6 +35,8 @@ import {
 } from "@/lib/plan/plan-file";
 import {
   INBOX,
+  isProjectKey,
+  useOwnLists,
   type PlanKey,
   type PlanList,
   usePlanLists,
@@ -66,7 +70,7 @@ import {
 } from "./plan-views";
 import { CalendarView } from "./calendar-view";
 import { TimelineView } from "./timeline-view";
-import { ProjectIcon, typeColor } from "./project-icon";
+import { ProjectIcon, typeColor, listColor } from "./project-icon";
 import { DueBadge, DueButton, TaskDetails } from "./task-parts";
 import { editPlan } from "./plan-actions";
 
@@ -325,8 +329,9 @@ export function PlannerView() {
   }, [keys, texts]);
 
   const inbox = lists.find((l) => l.key === INBOX);
+  const ownLists = lists.filter((l) => l.personal);
   const projects = useMemo(() => {
-    const p = lists.filter((l) => l.key !== INBOX);
+    const p = lists.filter((l) => isProjectKey(l.key));
     return p.sort((a, b) => {
       if (sort === "name" || sort === "type")
         return a.name.localeCompare(b.name, undefined, { numeric: true });
@@ -381,7 +386,12 @@ export function PlannerView() {
     const s = stats.plans[current.key];
     return {
       title: current.key === INBOX ? "Inbox" : current.name,
-      color: current.key === INBOX ? INBOX_COLOR : typeColor(current.type),
+      color:
+        current.key === INBOX
+          ? INBOX_COLOR
+          : current.personal
+            ? listColor(current)
+            : typeColor(current.type),
       icon:
         current.key === INBOX ? (
           <InboxIcon className="size-4" />
@@ -433,6 +443,21 @@ export function PlannerView() {
                 onDrop={(d) => moveToPlan(d, inbox)}
               />
             )}
+            {ownLists.map((l) => (
+              <SideItem
+                key={l.key}
+                icon={<ProjectIcon list={l} className="size-4" />}
+                label={l.name}
+                count={stats.plans[l.key]?.open}
+                alert={(stats.plans[l.key]?.due ?? 0) > 0}
+                active={"plan" in selected && selected.plan === l.key}
+                onClick={() => choose({ plan: l.key })}
+                dropId={`side:${l.key}`}
+                onDrop={(d) => moveToPlan(d, l)}
+                menu={<OwnListMenu list={l} />}
+              />
+            ))}
+            <NewList onMade={(key) => choose({ plan: key })} />
             <span className="my-1.5 h-px bg-border" />
             {(["reading", "all", "completed"] as SmartFilter[]).map((f) => (
               <SmartItem
@@ -602,7 +627,7 @@ export function PlannerView() {
                 </p>
               )}
             </div>
-            {current && current.key !== INBOX && (
+            {current && isProjectKey(current.key) && (
               <DueButton
                 label="Deadline"
                 due={stats.plans[current.key]?.deadline}
@@ -631,7 +656,7 @@ export function PlannerView() {
                       <BookOpenIcon key="r" className="size-3.5" />,
                       "Reading",
                     ],
-                    ...(current.key === INBOX
+                    ...(!isProjectKey(current.key)
                       ? []
                       : ([
                           [
@@ -686,7 +711,7 @@ export function PlannerView() {
                   <p className="p-6 text-muted-foreground text-sm">
                     That list isn't here any more.
                   </p>
-                ) : tab === "timeline" && current.key !== INBOX ? (
+                ) : tab === "timeline" && isProjectKey(current.key) ? (
                   <TimelineView key={current.key} list={current} />
                 ) : tab === "reading" ? (
                   <ReadingView key={current.key} list={current} mode={mode} />
@@ -899,4 +924,95 @@ function SideItem({
 async function openInEditor(root: string) {
   await useDocumentStore.getState().openProject(root);
   useProjectStore.getState().addRecentProject(root);
+}
+
+const LIST_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "var(--muted-foreground)",
+];
+
+/** A list of one's own, right-clicked: its color, or out of the Planner. */
+function OwnListMenu({ list }: { list: PlanList }) {
+  const file = list.key.slice("list:".length);
+  return (
+    <>
+      <div className="flex items-center gap-1.5 px-2 py-1.5">
+        {LIST_COLORS.map((c) => (
+          <button
+            key={c}
+            type="button"
+            aria-label="Color"
+            onClick={() => useOwnLists.getState().setColor(file, c)}
+            className={cn(
+              "size-4 rounded-full ring-offset-1 ring-offset-popover hover:ring-2 hover:ring-ring",
+              listColor(list) === c && "ring-2 ring-ring",
+            )}
+            style={{ backgroundColor: c }}
+          />
+        ))}
+      </div>
+      <ContextMenuItem
+        variant="destructive"
+        onClick={() => useOwnLists.getState().remove(file)}
+      >
+        <Trash2Icon className="size-3.5" />
+        Remove from Planner
+      </ContextMenuItem>
+    </>
+  );
+}
+
+/** "New list": a name, then the list, empty and picked. */
+function NewList({ onMade }: { onMade: (key: string) => void }) {
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState("");
+  if (!naming) {
+    return (
+      <button
+        type="button"
+        onClick={() => setNaming(true)}
+        className="flex h-8 items-center gap-2.5 rounded-md px-2 text-left text-muted-foreground text-sm hover:bg-sidebar-accent/50 hover:text-foreground"
+      >
+        <PlusIcon className="size-4" />
+        New list
+      </button>
+    );
+  }
+  const done = () => {
+    const key = name.trim() ? useOwnLists.getState().add(name) : null;
+    setNaming(false);
+    setName("");
+    if (key) onMade(key);
+  };
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        done();
+      }}
+      className="flex h-8 items-center gap-2.5 rounded-md bg-sidebar-accent/60 px-2"
+    >
+      <ListTodoIcon className="size-4 shrink-0 text-muted-foreground" />
+      <input
+        // biome-ignore lint/a11y/noAutofocus: just asked for
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onBlur={done}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            setName("");
+            setNaming(false);
+          }
+        }}
+        placeholder="Teaching, Admin…"
+        aria-label="List name"
+        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+      />
+    </form>
+  );
 }

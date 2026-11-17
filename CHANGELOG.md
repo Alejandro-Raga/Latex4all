@@ -23,6 +23,8 @@ tag.
 
 ### Added
 
+- Planner: lists of your own (Teaching, Admin…) under the Inbox, each
+  with its tasks and its own reading list. Right-click one to color it.
 - Library: "Read in full window" in the reader hides the paper list,
   the vault and the sidebar; Esc brings them back.
 - Reading: a bookmark button in the reader. The bookmark sets the

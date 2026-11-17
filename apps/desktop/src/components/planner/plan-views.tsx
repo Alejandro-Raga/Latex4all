@@ -55,6 +55,7 @@ import {
 } from "@/lib/plan/plan-file";
 import {
   INBOX,
+  isProjectKey,
   type PlanList,
   usePlanLists,
   usePlanText,
@@ -176,8 +177,9 @@ export function MoveToMenu({
 }) {
   const lists = usePlanLists().filter((l) => l.key !== list.key);
   const inbox = lists.find((l) => l.key === INBOX);
+  const own = lists.filter((l) => l.personal);
   const projects = lists
-    .filter((l) => l.key !== INBOX)
+    .filter((l) => isProjectKey(l.key))
     .sort((a, b) => (b.lastOpened ?? 0) - (a.lastOpened ?? 0));
   return (
     <ContextMenuSub>
@@ -192,6 +194,12 @@ export function MoveToMenu({
             Inbox
           </ContextMenuItem>
         )}
+        {own.map((p) => (
+          <ContextMenuItem key={p.key} onClick={() => onPick(p)}>
+            <ProjectIcon list={p} className="size-3.5" />
+            <span className="truncate">{p.name}</span>
+          </ContextMenuItem>
+        ))}
         {projects.length > 0 && <ContextMenuSeparator />}
         {projects.map((p) => (
           <ContextMenuItem key={p.key} onClick={() => onPick(p)}>
@@ -1159,12 +1167,7 @@ export const SMART_LABEL: Record<SmartFilter, string> = {
 
 export const contextOf = (list: PlanList): TaskContext => ({
   name: list.key === INBOX ? "Inbox" : list.name,
-  icon:
-    list.key === INBOX ? (
-      <InboxIcon className="size-3" />
-    ) : (
-      <ProjectIcon list={list} className="size-3" />
-    ),
+  icon: <ProjectIcon list={list} className="size-3" />,
 });
 
 const dayTitle = (iso: string) => {
@@ -1276,7 +1279,7 @@ export function SmartView({
     filter === "today" || filter === "tomorrow" || filter === "week"
       ? plans
           .flatMap(({ list, plan }) => {
-            const due = list.key === INBOX ? undefined : projectDue(plan);
+            const due = isProjectKey(list.key) ? projectDue(plan) : undefined;
             if (!due) return [];
             const days = daysUntil(due);
             const inRange =

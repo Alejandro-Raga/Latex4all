@@ -7,6 +7,8 @@ import { useProjectStore } from "@/stores/project-store";
 import { parsePlan, serializePlan } from "./plan-file";
 import {
   INBOX,
+  listKey,
+  useOwnLists,
   type PlanKey,
   planTextNow,
   projectKey,
@@ -26,6 +28,7 @@ import type { Plan } from "./plan-file";
 function allKeys(): PlanKey[] {
   return [
     INBOX,
+    ...useOwnLists.getState().lists.map((l) => listKey(l.file)),
     ...useProjectStore.getState().recentProjects.map((p) => projectKey(p.path)),
   ];
 }

@@ -8,11 +8,14 @@
  *   folder; with a vault connected, it's Tasks/Inbox.md there instead (on
  *   the phone too, through the vault's sync), taking along what was kept
  *   in the app the first time it's saved.
+ * - Lists of one's own (Teaching, Admin…) are kept the same way, each in
+ *   its own file beside the Inbox: Tasks/Teaching.md.
  */
 import { useEffect, useMemo } from "react";
 import { appDataDir, join as joinPath } from "@tauri-apps/api/path";
 import { mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useVaultStore } from "@/stores/vault-store";
@@ -21,25 +24,37 @@ import { PLAN_FILE } from "./plan-file";
 export const INBOX = "inbox";
 export const INBOX_PATH = "Tasks/Inbox.md";
 
-/** The Inbox when there's no vault: in the app's own folder. */
-async function localInbox(): Promise<string> {
+/** A plan's key: "inbox", "list:" and a list's file name, or "project:"
+ *  and the project's folder. */
+export type PlanKey = string;
+
+export const projectKey = (root: string): PlanKey => `project:${root}`;
+export const listKey = (file: string): PlanKey => `list:${file}`;
+export const isProjectKey = (key: PlanKey) => key.startsWith("project:");
+/** The Inbox or a list of one's own: no project. */
+export const isPersonalKey = (key: PlanKey) => !isProjectKey(key);
+
+/** A personal plan's file name, without ".md": "Inbox", "Teaching". */
+const fileOf = (key: PlanKey) =>
+  key === INBOX ? "Inbox" : key.slice("list:".length);
+/** Where it is in the vault. */
+export const vaultPathOf = (key: PlanKey) =>
+  key === INBOX ? INBOX_PATH : `Tasks/${fileOf(key)}.md`;
+
+/** A personal plan when there's no vault: in the app's own folder. */
+async function localFile(key: PlanKey): Promise<string> {
   const dir = await joinPath(await appDataDir(), "planner");
   await mkdir(dir, { recursive: true }).catch(() => {});
-  return joinPath(dir, "Inbox.md");
+  return joinPath(dir, `${fileOf(key)}.md`);
 }
 
-async function readLocalInbox(): Promise<string | null> {
+async function readLocal(key: PlanKey): Promise<string | null> {
   try {
-    return await readTextFile(await localInbox());
+    return await readTextFile(await localFile(key));
   } catch {
     return null;
   }
 }
-
-/** A plan's key: "inbox", or "project:" and the project's folder. */
-export type PlanKey = string;
-
-export const projectKey = (root: string): PlanKey => `project:${root}`;
 const rootOf = (key: PlanKey) =>
   key.startsWith("project:") ? key.slice("project:".length) : null;
 
@@ -89,14 +104,14 @@ export const usePlanStore = create<PlanState>((set, get) => ({
         .catch(() => {});
       const source = useVaultStore.getState().source;
       if (!source) {
-        entry = { text: await readLocalInbox() };
+        entry = { text: await readLocal(key) };
       } else {
         try {
-          const { text, version } = await source.readNote(INBOX_PATH);
+          const { text, version } = await source.readNote(vaultPathOf(key));
           entry = { text, version, inVault: true };
         } catch {
           // Not in the vault yet: what the app kept, moved there on saving.
-          entry = { text: await readLocalInbox(), inVault: false };
+          entry = { text: await readLocal(key), inVault: false };
         }
       }
     }
@@ -146,21 +161,22 @@ async function saveTo(key: PlanKey, root: string | null, text: string) {
       .catch(() => {});
     const source = useVaultStore.getState().source;
     if (!source) {
-      await writeTextFile(await localInbox(), text);
+      await writeTextFile(await localFile(key), text);
       set((s) => ({ entries: { ...s.entries, [key]: { text } } }));
       return;
     }
     const known = get().entries[key];
+    const path = vaultPathOf(key);
     if (!known?.inVault) {
       try {
-        await source.createNote(INBOX_PATH, text);
+        await source.createNote(path, text);
       } catch {
-        await source.writeNote(INBOX_PATH, text);
+        await source.writeNote(path, text);
       }
     } else {
-      await source.writeNote(INBOX_PATH, text, known.version);
+      await source.writeNote(path, text, known.version);
     }
-    useVaultStore.getState().noteWritten(INBOX_PATH, text);
+    useVaultStore.getState().noteWritten(path, text);
     // The new version, for the next write.
     await get().load(key);
   }
@@ -203,15 +219,82 @@ export interface PlanList {
   /** Its type ("Article", "Thesis"…), if it has one. */
   type?: string;
   lastOpened?: number;
+  /** A list of one's own (not the Inbox, not a project). */
+  personal?: boolean;
+  /** Its color, for a list of one's own. */
+  color?: string;
+}
+
+export interface OwnList {
+  /** Its file's name, which is also its name. */
+  file: string;
+  color?: string;
+}
+
+/** Lists of one's own (Teaching, Admin…), in the order they were made. */
+export const useOwnLists = create<{
+  lists: OwnList[];
+  add: (name: string, color?: string) => PlanKey | null;
+  remove: (file: string) => void;
+  setColor: (file: string, color?: string) => void;
+}>()(
+  persist(
+    (set, get) => ({
+      lists: [],
+      add: (name, color) => {
+        const file = name
+          .replace(/[\\/:*?"<>|#^[\]]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 60);
+        if (!file || /^inbox$/i.test(file)) return null;
+        if (
+          !get().lists.some((l) => l.file.toLowerCase() === file.toLowerCase())
+        ) {
+          set((s) => ({ lists: [...s.lists, { file, color }] }));
+        }
+        return listKey(file);
+      },
+      remove: (file) =>
+        set((s) => ({ lists: s.lists.filter((l) => l.file !== file) })),
+      setColor: (file, color) =>
+        set((s) => ({
+          lists: s.lists.map((l) => (l.file === file ? { ...l, color } : l)),
+        })),
+    }),
+    { name: "planner-own-lists" },
+  ),
+);
+
+/** Lists found in the vault's Tasks folder that this computer hasn't seen. */
+function vaultLists(paths: string[], known: OwnList[]): OwnList[] {
+  const out: OwnList[] = [];
+  for (const path of paths) {
+    const m = /^Tasks\/([^/]+)\.md$/.exec(path);
+    if (!m || /^inbox$/i.test(m[1])) continue;
+    if (known.some((l) => l.file === m[1])) continue;
+    out.push({ file: m[1] });
+  }
+  return out;
 }
 
 /** The plans the Planner shows: the Inbox, then recent projects. */
 export function usePlanLists(): PlanList[] {
   const recent = useProjectStore((s) => s.recentProjects);
   const types = useProjectStore((s) => s.projectTypes);
+  const own = useOwnLists((s) => s.lists);
+  const vaultPaths = useVaultStore((s) => s.index?.list);
   return useMemo(
     () => [
       { key: INBOX, name: "Inbox" },
+      ...[...own, ...vaultLists(vaultPaths?.map((n) => n.path) ?? [], own)].map(
+        (l) => ({
+          key: listKey(l.file),
+          name: l.file,
+          personal: true,
+          color: l.color,
+        }),
+      ),
       ...recent.map((p) => ({
         key: projectKey(p.path),
         name: p.name,
@@ -220,7 +303,7 @@ export function usePlanLists(): PlanList[] {
         lastOpened: p.lastOpened,
       })),
     ],
-    [recent, types],
+    [recent, types, own, vaultPaths],
   );
 }
 

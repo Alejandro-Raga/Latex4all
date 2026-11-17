@@ -1,4 +1,6 @@
 import {
+  InboxIcon,
+  ListTodoIcon,
   BookOpenIcon,
   ClipboardListIcon,
   FileTextIcon,
@@ -10,7 +12,7 @@ import {
   PresentationIcon,
   ScrollTextIcon,
 } from "lucide-react";
-import type { PlanList } from "@/lib/plan/plan-store";
+import { INBOX, type PlanList } from "@/lib/plan/plan-store";
 import { cn } from "@/lib/utils";
 
 /** A project type's icon: an article a page, a thesis a cap… */
@@ -73,13 +75,34 @@ export function typeColor(type?: string): string {
   return OWN_COLORS[hash % OWN_COLORS.length];
 }
 
+/** A list of one's own: its color, or a default. */
+export const listColor = (list: Pick<PlanList, "color">) =>
+  list.color ?? "var(--chart-5)";
+
 export function ProjectIcon({
   list,
   className,
 }: {
-  list: Pick<PlanList, "name" | "type">;
+  list: Pick<PlanList, "name" | "type"> &
+    Partial<Pick<PlanList, "key" | "personal" | "color">>;
   className?: string;
 }) {
+  if (list.key === INBOX) {
+    return (
+      <InboxIcon
+        className={cn("shrink-0", className)}
+        style={{ color: "var(--muted-foreground)" }}
+      />
+    );
+  }
+  if (list.personal) {
+    return (
+      <ListTodoIcon
+        className={cn("shrink-0", className)}
+        style={{ color: listColor(list) }}
+      />
+    );
+  }
   const Icon = typeIcon(list.type);
   return (
     <Icon

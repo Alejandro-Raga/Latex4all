@@ -5,6 +5,8 @@ import { daysUntil } from "@/lib/plan/dates";
 import { parsePlan, today } from "@/lib/plan/plan-file";
 import {
   INBOX,
+  listKey,
+  useOwnLists,
   planTextNow,
   projectKey,
   usePlanStore,
@@ -21,6 +23,11 @@ const SEEN = "planner-summary-day";
 export async function daySummary(): Promise<string | null> {
   const lists = [
     { key: INBOX, name: "Inbox", project: false },
+    ...useOwnLists.getState().lists.map((l) => ({
+      key: listKey(l.file),
+      name: l.file,
+      project: false,
+    })),
     ...useProjectStore.getState().recentProjects.map((p) => ({
       key: projectKey(p.path),
       name: p.name,

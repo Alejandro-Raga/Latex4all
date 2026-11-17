@@ -10,6 +10,7 @@ import {
 import { newPlanText, parsePlan, serializePlan } from "@/lib/plan/plan-file";
 import {
   INBOX,
+  isProjectKey,
   type PlanList,
   planTextNow,
   usePlanLists,
@@ -39,7 +40,11 @@ async function addTo(list: PlanList, paper: Paper) {
     const plan = parsePlan(text ?? newPlanText(list.name));
     const next = addReading(plan, paper);
     const name =
-      list.key === INBOX ? MY_READING : `${list.name}'s reading list`;
+      list.key === INBOX
+        ? MY_READING
+        : list.personal
+          ? `the ${list.name} reading list`
+          : `${list.name}'s reading list`;
     if (next === plan) {
       toast.info(`Already in ${name}`);
       return;
@@ -57,8 +62,9 @@ async function addTo(list: PlanList, paper: Paper) {
 export function AddToReadingMenu({ paper }: { paper: Paper }) {
   const lists = usePlanLists();
   const openRoot = useDocumentStore((s) => s.projectRoot);
+  const own = lists.filter((l) => l.personal);
   const projects = lists
-    .filter((l) => l.key !== INBOX)
+    .filter((l) => isProjectKey(l.key))
     .sort(
       (a, b) =>
         Number(b.root === openRoot) - Number(a.root === openRoot) ||
@@ -66,7 +72,11 @@ export function AddToReadingMenu({ paper }: { paper: Paper }) {
     )
     .slice(0, 12);
   const general = lists.find((l) => l.key === INBOX);
-  const texts = usePlanTexts([INBOX, ...projects.map((p) => p.key)]);
+  const texts = usePlanTexts([
+    INBOX,
+    ...own.map((l) => l.key),
+    ...projects.map((p) => p.key),
+  ]);
   const listed = (key: string) => {
     const text = texts[key];
     return (
@@ -101,6 +111,9 @@ export function AddToReadingMenu({ paper }: { paper: Paper }) {
             MY_READING,
             <InboxIcon className="size-3.5 opacity-60" />,
           )}
+        {own.map((l) =>
+          item(l, l.name, <ProjectIcon list={l} className="size-3.5" />),
+        )}
         {projects.length > 0 && <ContextMenuSeparator />}
         {projects.map((p) =>
           item(

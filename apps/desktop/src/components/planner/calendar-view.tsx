@@ -33,11 +33,16 @@ import {
   toggleTask,
   updateTask,
 } from "@/lib/plan/plan-file";
-import { INBOX, type PlanList, usePlanTexts } from "@/lib/plan/plan-store";
+import {
+  INBOX,
+  isProjectKey,
+  type PlanList,
+  usePlanTexts,
+} from "@/lib/plan/plan-store";
 import { cn } from "@/lib/utils";
 import { editPlan } from "./plan-actions";
 import { type DragTask, useDropArea } from "./planner-dnd";
-import { typeColor } from "./project-icon";
+import { typeColor, listColor } from "./project-icon";
 import { Check, QuickAdd, TitleText } from "./task-parts";
 
 type Span = "month" | "week";
@@ -74,7 +79,11 @@ function Chip({
     disabled: !drag,
   });
   const color =
-    entry.listKey === INBOX ? "var(--muted-foreground)" : typeColor(list?.type);
+    entry.listKey === INBOX
+      ? "var(--muted-foreground)"
+      : list?.personal
+        ? listColor(list)
+        : typeColor(list?.type);
   const toggle = () => {
     if (!list || !entry.ref) return;
     const ref = entry.ref;
@@ -224,7 +233,7 @@ export function CalendarView({ lists }: { lists: PlanList[] }) {
                   key: l.key,
                   name: l.key === INBOX ? "Inbox" : l.name,
                   plan: parsePlan(text),
-                  project: l.key !== INBOX,
+                  project: isProjectKey(l.key),
                 },
               ]
             : [];

@@ -519,3 +519,33 @@ test("a date picked from the month", async ({ page, errors }) => {
     .toMatch(/- \[ \] Reply to reviewers 📅 \d{4}-\d{2}-15/);
   expect(errors).toEqual([]);
 });
+
+test("a list of one's own, with its tasks and its reading", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: "New list" }).click();
+  await page.getByLabel("List name").fill("Teaching");
+  await page.getByLabel("List name").press("Enter");
+  const main = page.getByRole("main");
+  await expect(main.getByRole("heading", { name: "Teaching" })).toBeVisible();
+  await main.getByLabel("Add a task").fill("Grade the essays");
+  await main.getByLabel("Add a task").press("Enter");
+  await expect
+    .poll(() => vault(page, "Tasks/Teaching.md"))
+    .toContain("- [ ] Grade the essays");
+  await main.getByRole("radio", { name: "Reading" }).click();
+  await main.getByLabel("Add a paper").fill("The economics of science");
+  await main.getByLabel("Add a paper").press("Enter");
+  await expect
+    .poll(() => vault(page, "Tasks/Teaching.md"))
+    .toContain("The economics of science #reading/to-read");
+  // No deadline or timeline: those are a project's.
+  await expect(main.getByRole("radio", { name: "Timeline" })).toHaveCount(0);
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/own-list.png` });
+  }
+  expect(errors).toEqual([]);
+});
