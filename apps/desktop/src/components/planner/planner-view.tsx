@@ -1,5 +1,6 @@
 import { type ReactNode, useMemo, useState } from "react";
 import {
+  Grid2x2Icon,
   ArrowUpDownIcon,
   BookOpenIcon,
   CalendarDaysIcon,
@@ -70,6 +71,7 @@ import {
   SmartView,
 } from "./plan-views";
 import { CalendarView } from "./calendar-view";
+import { MatrixView, quadrantOf } from "./matrix-view";
 import { TimelineView } from "./timeline-view";
 import { ProjectIcon, typeColor, listColor } from "./project-icon";
 import { DueBadge, DueButton, TaskDetails } from "./task-parts";
@@ -200,6 +202,10 @@ const SMART: Record<SmartFilter, { color: string; icon: ReactNode }> = {
     color: "var(--chart-1)",
     icon: <CalendarDaysIcon className="size-4" />,
   },
+  matrix: {
+    color: "var(--destructive)",
+    icon: <Grid2x2Icon className="size-4" />,
+  },
   reading: {
     color: "color-mix(in oklab, var(--chart-4) 50%, var(--chart-5))",
     icon: <BookOpenIcon className="size-4" />,
@@ -300,6 +306,7 @@ export function PlannerView() {
       tomorrow: 0,
       week: 0,
       calendar: 0,
+      matrix: 0,
       reading: 0,
       all: 0,
       completed: 0,
@@ -321,6 +328,7 @@ export function PlannerView() {
       const next = [...dated, ...(deadline ? [deadline] : [])].sort()[0];
       plans[key] = { open: open.length, due, next, deadline };
       smart.today += due;
+      smart.matrix += open.filter((t) => quadrantOf(t.task) === "do").length;
       smart.tomorrow += dated.filter((d) => daysUntil(d) === 1).length;
       smart.week += dated.filter((d) => daysUntil(d) <= 6).length;
       smart.all += open.length;
@@ -358,7 +366,8 @@ export function PlannerView() {
     "plan" in selected ? lists.find((l) => l.key === selected.plan) : undefined;
   // The calendar and boards take the whole width.
   const fullBleed =
-    ("smart" in selected && selected.smart === "calendar") ||
+    ("smart" in selected &&
+      (selected.smart === "calendar" || selected.smart === "matrix")) ||
     (!!current && mode === "board" && tab !== "timeline");
   const choose = (s: Selection) => {
     select(s);
@@ -382,9 +391,11 @@ export function PlannerView() {
               })
             : selected.smart === "calendar"
               ? "Every project's dates in one place"
-              : selected.smart === "completed"
-                ? "What you've finished, most recent first"
-                : `${count} ${selected.smart === "reading" ? "to read" : count === 1 ? "task" : "tasks"}`,
+              : selected.smart === "matrix"
+                ? "By importance and urgency. Drag a task to change it."
+                : selected.smart === "completed"
+                  ? "What you've finished, most recent first"
+                  : `${count} ${selected.smart === "reading" ? "to read" : count === 1 ? "task" : "tasks"}`,
       };
     }
     if (!current) return { title: "", color: "#64748b", icon: null, sub: "" };
@@ -418,24 +429,30 @@ export function PlannerView() {
       <div className="flex h-full min-h-0 bg-background">
         <aside className="flex w-60 shrink-0 flex-col border-border border-r bg-sidebar pt-[var(--titlebar-height)]">
           <nav className="flex flex-col gap-0.5 p-2 pt-3" aria-label="Lists">
-            {(["today", "tomorrow", "week", "calendar"] as SmartFilter[]).map(
-              (f) => (
-                <SmartItem
-                  key={f}
-                  filter={f}
-                  count={stats.smart[f]}
-                  active={"smart" in selected && selected.smart === f}
-                  onClick={() => choose({ smart: f })}
-                  onDrop={
-                    f === "today"
-                      ? (d) => dueOn(d, 0)
-                      : f === "tomorrow"
-                        ? (d) => dueOn(d, 1)
-                        : undefined
-                  }
-                />
-              ),
-            )}
+            {(
+              [
+                "today",
+                "tomorrow",
+                "week",
+                "calendar",
+                "matrix",
+              ] as SmartFilter[]
+            ).map((f) => (
+              <SmartItem
+                key={f}
+                filter={f}
+                count={stats.smart[f]}
+                active={"smart" in selected && selected.smart === f}
+                onClick={() => choose({ smart: f })}
+                onDrop={
+                  f === "today"
+                    ? (d) => dueOn(d, 0)
+                    : f === "tomorrow"
+                      ? (d) => dueOn(d, 1)
+                      : undefined
+                }
+              />
+            ))}
             {inbox && (
               <SideItem
                 icon={<InboxIcon className="size-4" />}
@@ -704,6 +721,12 @@ export function PlannerView() {
               <div className={cn(fullBleed ? "h-full" : "mx-auto max-w-3xl")}>
                 {"smart" in selected && selected.smart === "calendar" ? (
                   <CalendarView lists={lists} />
+                ) : "smart" in selected && selected.smart === "matrix" ? (
+                  <MatrixView
+                    lists={lists}
+                    selected={picked}
+                    onSelect={setPicked}
+                  />
                 ) : "smart" in selected ? (
                   <SmartView
                     filter={selected.smart}

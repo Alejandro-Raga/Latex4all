@@ -23,6 +23,9 @@ tag.
 
 ### Added
 
+- Planner: a Matrix of your tasks by importance (priority) and urgency
+  (due within two days): Do first, Schedule, Squeeze in, Later. Drag a
+  task to another box to change its priority or date.
 - Planner: subtasks are tasks in their own right, nested as deep as you
   like. Click one to open it, with its own date, priority, description
   and subtasks; dated ones show in Today, the week and the Calendar.

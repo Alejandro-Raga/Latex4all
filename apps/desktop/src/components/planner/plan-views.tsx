@@ -889,6 +889,7 @@ export function Column({
   menu,
   children,
   footer,
+  fill,
 }: {
   id: string;
   title: ReactNode;
@@ -899,13 +900,16 @@ export function Column({
   menu?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
+  /** Fills the room it's given (a box of the matrix), not a column's width. */
+  fill?: boolean;
 }) {
   const drop = useDropArea(id, { accepts, onDrop: (d) => onDrop(d) });
   return (
     <div
       ref={drop.ref}
       className={cn(
-        "group/heading flex @3xl:max-h-full @3xl:w-72 w-full shrink-0 flex-col rounded-xl bg-muted/50 transition-colors",
+        "group/heading flex w-full shrink-0 flex-col rounded-xl bg-muted/50 transition-colors",
+        fill ? "h-full min-h-0" : "@3xl:max-h-full @3xl:w-72",
         drop.over && "bg-accent",
       )}
     >
@@ -966,7 +970,7 @@ export function Card({
   );
 }
 
-function TaskCard({
+export function TaskCard({
   list,
   plan,
   task,
@@ -1218,6 +1222,7 @@ export type SmartFilter =
   | "tomorrow"
   | "week"
   | "calendar"
+  | "matrix"
   | "reading"
   | "all"
   | "completed";
@@ -1227,6 +1232,7 @@ export const SMART_LABEL: Record<SmartFilter, string> = {
   tomorrow: "Tomorrow",
   week: "Next 7 days",
   calendar: "Calendar",
+  matrix: "Matrix",
   reading: "Reading list",
   all: "All tasks",
   completed: "Completed",
@@ -1385,7 +1391,10 @@ export function SmartView({
     groups.set(g, [...(groups.get(g) ?? []), t]);
   }
 
-  const empty: Record<Exclude<SmartFilter, "reading" | "calendar">, string> = {
+  const empty: Record<
+    Exclude<SmartFilter, "reading" | "calendar" | "matrix">,
+    string
+  > = {
     today: "Nothing due today.",
     tomorrow: "Nothing due tomorrow.",
     week: "Nothing due this week.",

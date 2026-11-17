@@ -576,7 +576,9 @@ test("subtasks are tasks too: opened, dated, with their own subtasks", async ({
   const main = page.getByRole("main");
   await main.getByText("Compare with Cohen").click();
   const detail = page.getByRole("complementary").last();
-  await expect(detail.getByLabel("Task", { exact: true })).toHaveValue("Compare with Cohen");
+  await expect(detail.getByLabel("Task", { exact: true })).toHaveValue(
+    "Compare with Cohen",
+  );
   await detail.getByLabel("Add subtask").fill("Read section 3");
   await detail.getByLabel("Add subtask").press("Enter");
   await detail.getByRole("button", { name: "Due date" }).click();
@@ -592,6 +594,38 @@ test("subtasks are tasks too: opened, dated, with their own subtasks", async ({
   // Shown nested in the list, and back up to its parent.
   await expect(main.getByText("Read section 3")).toHaveCount(2);
   await detail.getByRole("button", { name: "Draft the discussion" }).click();
-  await expect(detail.getByLabel("Task", { exact: true })).toHaveValue("Draft the discussion #writing");
+  await expect(detail.getByLabel("Task", { exact: true })).toHaveValue(
+    "Draft the discussion #writing",
+  );
+  expect(errors).toEqual([]);
+});
+
+test("the matrix: by importance and urgency, changed by dragging", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await open(page, "scenario=planner");
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /^Matrix/ })
+    .click();
+  const main = page.getByRole("main");
+  const box = (name: string) =>
+    main.locator("div.group\\/heading").filter({ hasText: name });
+  // High priority and overdue: do it first.
+  await expect(box("Do first").getByText("Draft the discussion")).toBeVisible();
+  await expect(box("Later").getByText("Reply to reviewers")).toBeVisible();
+  await drag(
+    page,
+    box("Later").getByText("Reply to reviewers"),
+    box("Schedule"),
+  );
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toContain("- [ ] Reply to reviewers ⏫");
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/matrix.png` });
+  }
   expect(errors).toEqual([]);
 });
