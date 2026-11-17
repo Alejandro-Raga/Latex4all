@@ -830,6 +830,46 @@ if (scenario === "planner") {
         }
       : {},
   } as never);
+  // A Zotero library held in memory, for adding papers from it.
+  useZoteroStore.setState({ apiKey: "key", userID: "1" } as never);
+  Promise.all([import("@/lib/zotero-library")]).then(([{ useZoteroLibrary }]) =>
+    useZoteroLibrary.setState({
+      ensure: async () => {},
+      loading: false,
+      mirror: {
+        format: 2,
+        userID: "1",
+        version: 1,
+        items: Object.fromEntries(
+          [
+            [
+              "COHEN001",
+              "Absorptive capacity: a new perspective on learning and innovation",
+              "Cohen, Levinthal",
+              "1990",
+            ],
+            [
+              "ARORA001",
+              "The decline of science in corporate R&D",
+              "Arora, Belenzon, Patacconi",
+              "2018",
+            ],
+            [
+              "NELSON01",
+              "The simple economics of basic scientific research",
+              "Nelson",
+              "1959",
+            ],
+          ].map(([key, title, creators, year]) => [
+            key,
+            { key, title, creators, year, date: year, collections: [] },
+          ]),
+        ),
+        attachments: {},
+        collections: [],
+      },
+    } as never),
+  );
   import("@/components/planner/planner-view").then(({ PlannerView }) =>
     root.render(
       <ThemeProvider

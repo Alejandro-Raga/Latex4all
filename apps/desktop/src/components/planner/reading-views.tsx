@@ -3,7 +3,7 @@
  * read. A paper's marker is its status (to read, reading with how far,
  * read), the reader's to set; its pills say what's been done with it.
  */
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import {
   BookOpenIcon,
   CheckIcon,
@@ -26,7 +26,14 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { lookupDoi } from "@/lib/plan/doi";
+import { itemsIn, useZoteroLibrary } from "@/lib/zotero-library";
+import { searchReferences } from "@/lib/zotero-search";
 import {
   deleteTask,
   moveTask,
@@ -506,6 +513,132 @@ function dropOnGroup(list: PlanList, status: ReadingStatus) {
 
 /* ─────────────────────────── Adding papers ─────────────────────────── */
 
+/**
+ * Papers from the Zotero library, found by typing or by collection, added
+ * with a click; the list stays open to add several.
+ */
+function ZoteroPicker({
+  list,
+  listed,
+}: {
+  list: PlanList;
+  listed: Set<string>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [collection, setCollection] = useState("");
+  const apiKey = useZoteroStore((s) => s.apiKey);
+  const userID = useZoteroStore((s) => s.userID);
+  const mirror = useZoteroLibrary((s) => s.mirror);
+  const loading = useZoteroLibrary((s) => s.loading);
+  const results = useMemo(() => {
+    if (!mirror) return [];
+    const items = itemsIn(mirror, collection || null);
+    return searchReferences(
+      items,
+      query,
+      query.trim() ? "relevance" : "newest",
+    ).slice(0, 60);
+  }, [mirror, collection, query]);
+  const collections = useMemo(
+    () =>
+      [...(mirror?.collections ?? [])].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      ),
+    [mirror],
+  );
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next && apiKey && userID) {
+          void useZoteroLibrary.getState().ensure(apiKey, userID);
+        }
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-muted/60 px-3 text-sm hover:bg-muted"
+        >
+          <LibraryBigIcon className="size-4 text-primary" />
+          Add from Zotero
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-96 p-0">
+        {!apiKey || !userID ? (
+          <p className="p-4 text-muted-foreground text-sm">
+            Connect Zotero in Settings to add papers from your library.
+          </p>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 border-border border-b p-2">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search your library"
+                aria-label="Search your Zotero library"
+                className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm outline-none focus:border-ring"
+              />
+              {collections.length > 0 && (
+                <select
+                  value={collection}
+                  onChange={(e) => setCollection(e.target.value)}
+                  aria-label="Collection"
+                  className="h-8 max-w-32 rounded-md border border-input bg-background px-1.5 text-xs"
+                >
+                  <option value="">All</option>
+                  {collections.map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <div className="max-h-80 overflow-y-auto p-1">
+              {results.map((item) => {
+                const added = listed.has(item.key);
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    disabled={added}
+                    onClick={() =>
+                      void editPlan(list, (p) =>
+                        addReading(p, { title: item.title, itemKey: item.key }),
+                      )
+                    }
+                    className="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-muted disabled:opacity-60 disabled:hover:bg-transparent"
+                  >
+                    {added ? (
+                      <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-chart-2" />
+                    ) : (
+                      <PlusIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="line-clamp-2 text-sm">{item.title}</span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {[item.creators, item.year].filter(Boolean).join(" · ")}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+              {results.length === 0 && (
+                <p className="p-3 text-muted-foreground text-sm">
+                  {loading ? "Loading your library…" : "Nothing matches."}
+                </p>
+              )}
+            </div>
+          </>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /** Adds by title, DOI or link; a DOI alone is named from Crossref. */
 function AddPaper({ list, className }: { list: PlanList; className?: string }) {
   const [text, setText] = useState("");
@@ -646,7 +779,13 @@ export function ReadingView({
 
   return (
     <div className={cn(inline ? "p-2" : "px-8 py-5")}>
-      <AddPaper list={list} />
+      <div className="flex gap-2">
+        <AddPaper list={list} className="flex-1" />
+        <ZoteroPicker
+          list={list}
+          listed={new Set(items.flatMap((r) => (r.itemKey ? [r.itemKey] : [])))}
+        />
+      </div>
       {items.length === 0 ? (
         <Empty
           icon={<BookOpenIcon className="size-6" />}
@@ -720,7 +859,21 @@ export function AllReading({
 }) {
   return (
     <div className="px-8 py-5">
-      {general && <AddPaper list={general} />}
+      {general && (
+        <div className="flex gap-2">
+          <AddPaper list={general} className="flex-1" />
+          <ZoteroPicker
+            list={general}
+            listed={
+              new Set(
+                rows
+                  .filter((r) => r.list.key === general.key)
+                  .flatMap((r) => (r.item.itemKey ? [r.item.itemKey] : [])),
+              )
+            }
+          />
+        </div>
+      )}
       {rows.length === 0 ? (
         <Empty
           icon={<BookOpenIcon className="size-6" />}

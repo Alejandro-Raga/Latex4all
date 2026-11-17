@@ -382,3 +382,45 @@ test("a project's deadline: set in its header, shown in the sidebar and in Today
   }
   expect(errors).toEqual([]);
 });
+
+test("papers added from the Zotero library; projects found by name", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner&types=1");
+  const sidebar = page.getByRole("navigation", { name: "Projects" });
+  await page.getByLabel("Find a project").fill("talk");
+  await expect(
+    sidebar.getByRole("button", { name: /Conference talk/ }),
+  ).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: /^Paper 2/ })).toHaveCount(
+    0,
+  );
+  await page.getByLabel("Find a project").fill("article");
+  await expect(sidebar.getByRole("button", { name: /^Paper 3/ })).toBeVisible();
+  await page.getByLabel("Find a project").fill("");
+
+  await sidebar.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByRole("radio", { name: "Reading" }).click();
+  await main.getByRole("radio", { name: "List" }).click();
+  await main.getByRole("button", { name: "Add from Zotero" }).click();
+  await page.getByLabel("Search your Zotero library").fill("decline");
+  await page.getByRole("button", { name: /The decline of science/ }).click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toContain(
+      "- [ ] [The decline of science in corporate R&D](zotero://select/library/items/ARORA001) #reading/to-read",
+    );
+  // Once added, ticked in the picker.
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("button", { name: /The decline of science/ }),
+  ).toBeDisabled();
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/zotero-picker.png` });
+  }
+  expect(errors).toEqual([]);
+});

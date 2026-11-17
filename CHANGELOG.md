@@ -44,6 +44,9 @@ tag.
 - Settings → Appearance → Background: Gradient runs the theme's colors
   through the window's frame and sets the editor, the PDF and the panels
   on cards inset into it; Flat keeps single colors.
+- Reading lists: Add from Zotero searches the library (or a collection)
+  and adds papers with a click. The Planner's project list has a search
+  box.
 - Planner: projects can have a deadline of their own (Deadline, at the
   top of a project). It shows in the sidebar, counts when sorting by due
   date, and appears under Deadlines in Today, Tomorrow and Next 7 days.

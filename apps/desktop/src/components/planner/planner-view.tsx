@@ -11,6 +11,7 @@ import {
   LayersIcon,
   ListIcon,
   ListTodoIcon,
+  SearchIcon,
   SunIcon,
 } from "lucide-react";
 import {
@@ -260,6 +261,7 @@ export function PlannerView() {
   const [sort, setSort] = useStored<ProjectSort>("sort", "recent");
   // Groups of projects folded away, per order ("recent:earlier").
   const [folded, setFolded] = useStored<string[]>("folded", []);
+  const [projectQuery, setProjectQuery] = useState("");
   const [picked, setPicked] = useState<Selected | null>(null);
 
   // Per plan: open tasks, due today or before, the soonest date.
@@ -446,16 +448,57 @@ export function PlannerView() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          {projects.length > 5 && (
+            <div className="px-2 pb-1.5">
+              <div className="flex h-7 items-center gap-1.5 rounded-md bg-sidebar-accent/60 px-2 focus-within:ring-1 focus-within:ring-ring">
+                <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                <input
+                  value={projectQuery}
+                  onChange={(e) => setProjectQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Escape" && setProjectQuery("")}
+                  placeholder="Find a project"
+                  aria-label="Find a project"
+                  className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                />
+              </div>
+            </div>
+          )}
           <nav
             className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3"
             aria-label="Projects"
           >
+            {projectQuery.trim() &&
+              !projects.some((p) =>
+                `${p.name} ${p.type ?? ""}`
+                  .toLowerCase()
+                  .includes(projectQuery.trim().toLowerCase().split(/\s+/)[0]),
+              ) && (
+                <p className="px-2 text-muted-foreground text-xs">
+                  No project matches.
+                </p>
+              )}
             {projects.length === 0 && (
               <p className="px-2 text-muted-foreground text-xs">
                 Your projects show here once you've opened them.
               </p>
             )}
-            {groupProjects(projects, sort, stats.plans).map((g) => (
+            {(projectQuery.trim()
+              ? [
+                  {
+                    key: "found",
+                    title: null,
+                    items: projects.filter((p) => {
+                      const words = projectQuery
+                        .toLowerCase()
+                        .split(/\s+/)
+                        .filter(Boolean);
+                      const text = `${p.name} ${p.type ?? ""}`.toLowerCase();
+                      return words.every((w) => text.includes(w));
+                    }),
+                  } as ProjectGroup,
+                ]
+              : groupProjects(projects, sort, stats.plans)
+            ).map((g) => (
               <ProjectGroupBlock
                 key={`${sort}:${g.key}`}
                 group={g}

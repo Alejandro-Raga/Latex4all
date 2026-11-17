@@ -158,13 +158,13 @@ The **Planner**, on the start screen, keeps your to-dos and what you mean to rea
 - **Headings** split a project into parts, such as "Literature review" or "Writing". **Add heading** is at the end of the list; the **…** beside a heading renames or deletes it (its tasks stay).
 - **List or Board:** the board shows each heading as a column. Drag tasks between columns.
 - **A project can have a deadline**, such as a submission date: **Deadline** at the top of the project sets it. It shows beside the project in the sidebar, counts when sorting by due date, and appears under **Deadlines** in Today, Tomorrow and Next 7 days when it comes up.
-- **Projects** show an icon for their type. The arrows beside **Projects** sort them (recently opened, type, due date, number of tasks, name) and group them to match; click a group to fold it.
+- **Projects** show an icon for their type. **Find a project** filters them by name or type. The arrows beside **Projects** sort them (recently opened, type, due date, number of tasks, name) and group them to match; click a group to fold it.
 
 ### Reading lists
 
 Each project has a **Reading** list apart from its tasks: the papers to read for it, in the order you'll read them. There's one of your own in the Inbox, and **Reading list** in the sidebar gathers them all.
 
-- **Add a paper** with the box at the top: its title, its DOI or a link. A DOI on its own fills in the title. You can also right-click a paper in your Zotero library or your vault and choose **Add to reading list**.
+- **Add a paper** with the box at the top: its title, its DOI or a link. A DOI on its own fills in the title. **Add from Zotero**, beside it, searches your library (or one collection) and adds papers with a click. You can also right-click a paper in your Zotero library or your vault and choose **Add to reading list**.
 - **The circle is the paper's status:** empty to read, a ring that fills with the pages read while you're reading it, a check once it's read. Click it to move it on. Opening a paper marks it as reading and keeps the last page you were on.
 - **Pills** show what you've done with it, by themselves: **Highlighted**, **Quoted** (in a note), **Cited** (in your project). **Not in Zotero** marks papers you added by hand.
 - **Papers are grouped** into **Reading now**, **Up next** (numbered, in reading order) and **Read**. Drag them to change the order, or into another group to change their status.
