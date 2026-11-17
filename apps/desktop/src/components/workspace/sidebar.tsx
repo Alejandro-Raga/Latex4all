@@ -6,6 +6,7 @@ import {
   useEffect,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { ResizeHandle } from "@/components/ui/resize-handle";
 import { getVersion } from "@tauri-apps/api/app";
 import {
   FileTextIcon,
@@ -51,7 +52,7 @@ import {
   type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { Panel, PanelGroup } from "react-resizable-panels";
 import { useDocumentStore, type ProjectFile } from "@/stores/document-store";
 import { revealInFileManager, revealLabel } from "@/lib/reveal";
 import { useHistoryStore } from "@/stores/history-store";
@@ -1557,7 +1558,10 @@ export function Sidebar({
               </div>
             </Panel>
 
-            <PanelResizeHandle className="h-px bg-sidebar-border transition-colors hover:bg-ring data-resize-handle-active:bg-ring" />
+            <ResizeHandle
+              direction="horizontal"
+              className="bg-sidebar-border"
+            />
 
             {/* Outline */}
             <Panel defaultSize={30} minSize={10}>

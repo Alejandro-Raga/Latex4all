@@ -7,9 +7,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { ResizeHandle } from "@/components/ui/resize-handle";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { Panel, PanelGroup } from "react-resizable-panels";
 import {
   ArrowLeftIcon,
   ChevronRightIcon,
@@ -674,11 +675,8 @@ export function QuickReferencePanel({
   const previewPane = selectedFile && (
     <>
       {!fullPreview && (
-        <PanelResizeHandle
-          className={cn(
-            "bg-border transition-colors hover:bg-ring",
-            beside && !currentProjectRoot ? "w-px" : "h-px",
-          )}
+        <ResizeHandle
+          direction={beside && !currentProjectRoot ? "vertical" : "horizontal"}
         />
       )}
       <Panel

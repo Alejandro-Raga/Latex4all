@@ -44,6 +44,8 @@ tag.
 - Settings → Appearance → Background: Gradient runs the theme's colors
   through the window's frame and sets the editor, the PDF and the panels
   on cards inset into it; Flat keeps single colors.
+- Pane dividers are a hairline with a grip that shows when you point at
+  one, easier to catch than they look; the same everywhere.
 - Planner: the project list is grouped by the chosen order (opened today,
   this week…; by type; by due date; by size), each group folding away.
   Tasks and reading lists each keep their own List or Board choice.

@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useState } from "react";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { ResizeHandle } from "@/components/ui/resize-handle";
+import { Panel, PanelGroup } from "react-resizable-panels";
 import {
   ArrowLeftRightIcon,
   ArrowUpDownIcon,
@@ -130,12 +131,9 @@ export function LibraryView() {
     </Panel>
   );
   const handle = both && (
-    <PanelResizeHandle
+    <ResizeHandle
       key="handle"
-      className={cn(
-        "bg-border transition-colors hover:bg-ring",
-        layout.stacked ? "h-px" : "w-px",
-      )}
+      direction={layout.stacked ? "horizontal" : "vertical"}
     />
   );
   const Swap = layout.stacked ? ArrowUpDownIcon : ArrowLeftRightIcon;

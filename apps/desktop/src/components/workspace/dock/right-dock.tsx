@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ResizeHandle } from "@/components/ui/resize-handle";
 import {
   type ImperativePanelHandle,
   Panel,
   PanelGroup,
-  PanelResizeHandle,
 } from "react-resizable-panels";
 import {
   LibraryIcon,
@@ -120,9 +120,7 @@ export function RightDock() {
           const header = i === 0 ? FIRST_HEADER_PX : HEADER_PX;
           return (
             <Fragment key={panel}>
-              {i > 0 && (
-                <PanelResizeHandle className="h-px bg-border transition-colors hover:bg-ring" />
-              )}
+              {i > 0 && <ResizeHandle direction="horizontal" />}
               <Panel
                 id={panel}
                 order={DOCK_PANELS.indexOf(panel)}

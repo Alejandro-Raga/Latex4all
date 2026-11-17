@@ -5,10 +5,10 @@ import {
   useRef,
   useState,
 } from "react";
+import { ResizeHandle } from "@/components/ui/resize-handle";
 import {
   Panel,
   PanelGroup,
-  PanelResizeHandle,
   type ImperativePanelHandle,
 } from "react-resizable-panels";
 import { Sidebar } from "./sidebar";
@@ -47,9 +47,7 @@ function easeInOutSmooth(progress: number) {
  * target to drag.
  */
 function PaneDivider() {
-  return (
-    <PanelResizeHandle className="w-1.5 shrink-0 border-divider border-x bg-frame transition-colors hover:bg-ring/40 data-[resize-handle-state=drag]:bg-ring/50" />
-  );
+  return <ResizeHandle gutter />;
 }
 
 export function WorkspaceLayout() {
