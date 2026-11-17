@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useState, useRef } from "react";
 import {
   PinIcon,
   CopyIcon,
@@ -565,6 +565,7 @@ function HeadingMenu({
   /** Pins a note to the section. */
   onPin?: () => void;
 }) {
+  const after = useRef<(() => void) | null>(null);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -580,20 +581,35 @@ function HeadingMenu({
         align="end"
         className="w-44"
         // A date picked next opens where focus would have gone back to.
-        onCloseAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+          // Once it's gone: what was picked opens (a date, a note list)
+          // with nothing of the menu left to close it again.
+          const next = after.current;
+          after.current = null;
+          next?.();
+        }}
       >
         <DropdownMenuItem onSelect={onRename}>
           <PencilIcon className="size-3.5" />
           Rename
         </DropdownMenuItem>
         {onDate && (
-          <DropdownMenuItem onSelect={() => setTimeout(onDate, 0)}>
+          <DropdownMenuItem
+            onSelect={() => {
+              after.current = onDate;
+            }}
+          >
             <CalendarIcon className="size-3.5" />
             Set a date
           </DropdownMenuItem>
         )}
         {onPin && (
-          <DropdownMenuItem onSelect={() => setTimeout(onPin, 0)}>
+          <DropdownMenuItem
+            onSelect={() => {
+              after.current = onPin;
+            }}
+          >
             <PinIcon className="size-3.5" />
             Pin a note
           </DropdownMenuItem>
