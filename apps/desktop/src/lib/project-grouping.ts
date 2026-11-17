@@ -11,7 +11,7 @@
 
 import { UNTYPED_LABEL } from "@/lib/project-meta";
 
-export type ProjectSort = "recent" | "added" | "created" | "type";
+export type ProjectSort = "recent" | "added" | "created" | "type" | "priority";
 
 export interface SortableProject {
   path: string;
@@ -41,6 +41,8 @@ export interface GroupingInput<T extends SortableProject> {
   /** Path to the folder's creation time. Absent until it has been read from
    *  disk, where date-added stands in so the order is still stable. */
   createdAt?: ReadonlyMap<string, number>;
+  /** Path to its priority, 1 (low) to 4 (highest). Absent: none. */
+  priorities?: ReadonlyMap<string, number>;
 }
 
 export const FAVORITES_LABEL = "Favourites";
@@ -80,6 +82,7 @@ export function groupProjects<T extends SortableProject>({
   types,
   addedAt,
   createdAt,
+  priorities,
 }: GroupingInput<T>): ProjectGroup<T>[] {
   const compare =
     sort === "added"
@@ -94,6 +97,20 @@ export function groupProjects<T extends SortableProject>({
   const groups: ProjectGroup<T>[] = [];
   if (pinned.length > 0) {
     groups.push({ key: "favorites", label: FAVORITES_LABEL, projects: pinned });
+  }
+
+  if (sort === "priority") {
+    const labels = ["", "Low", "Medium", "High", "Highest"];
+    for (const level of [4, 3, 2, 1, 0]) {
+      const here = rest.filter((p) => (priorities?.get(p.path) ?? 0) === level);
+      if (here.length === 0) continue;
+      groups.push({
+        key: `priority:${level}`,
+        label: level ? `${labels[level]} priority` : "No priority",
+        projects: here,
+      });
+    }
+    return groups;
   }
 
   if (sort !== "type") {

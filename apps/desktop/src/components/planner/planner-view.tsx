@@ -1,5 +1,6 @@
 import { type ReactNode, useMemo, useState } from "react";
 import {
+  FlagIcon,
   Grid2x2Icon,
   ArrowUpDownIcon,
   BookOpenIcon,
@@ -34,6 +35,9 @@ import {
   setProjectDue,
   childRef,
   taskAt,
+  projectPriority,
+  setProjectPriority,
+  type Priority,
 } from "@/lib/plan/plan-file";
 import {
   INBOX,
@@ -74,16 +78,24 @@ import { CalendarView } from "./calendar-view";
 import { MatrixView, quadrantOf } from "./matrix-view";
 import { TimelineView } from "./timeline-view";
 import { ProjectIcon, typeColor, listColor } from "./project-icon";
-import { DueBadge, DueButton, TaskDetails } from "./task-parts";
+import {
+  DueBadge,
+  DueButton,
+  TaskDetails,
+  PriorityMenu,
+  PRIORITY_LABEL,
+  PRIORITY_COLOR,
+} from "./task-parts";
 import { editPlan } from "./plan-actions";
 
 type Selection = { smart: SmartFilter } | { plan: PlanKey };
 type Tab = "tasks" | "reading" | "timeline";
-type ProjectSort = "recent" | "type" | "due" | "count" | "name";
+type ProjectSort = "recent" | "type" | "priority" | "due" | "count" | "name";
 
 const SORT_LABEL: Record<ProjectSort, string> = {
   recent: "Recently opened",
   type: "Type",
+  priority: "Priority",
   due: "Due soonest",
   count: "Most tasks",
   name: "Name",
@@ -102,7 +114,10 @@ const DAY = 86_400_000;
 function groupProjects(
   projects: PlanList[],
   sort: ProjectSort,
-  stats: Record<PlanKey, { open: number; due: number; next?: string }>,
+  stats: Record<
+    PlanKey,
+    { open: number; due: number; next?: string; priority?: Priority }
+  >,
   now = Date.now(),
 ): ProjectGroup[] {
   const by = (pick: (p: PlanList) => [string, string]) => {
@@ -135,6 +150,12 @@ function groupProjects(
         Number(a.key === "none") - Number(b.key === "none") ||
         (a.title ?? "").localeCompare(b.title ?? ""),
     );
+  }
+  if (sort === "priority") {
+    return by((p) => {
+      const pr = stats[p.key]?.priority ?? 0;
+      return [`p${pr}`, pr ? `${PRIORITY_LABEL[pr]} priority` : "No priority"];
+    }).sort((a, b) => b.key.localeCompare(a.key));
   }
   if (sort === "due") {
     const order = ["overdue", "today", "week", "later", "none"];
@@ -299,7 +320,13 @@ export function PlannerView() {
   const stats = useMemo(() => {
     const plans: Record<
       PlanKey,
-      { open: number; due: number; next?: string; deadline?: string }
+      {
+        open: number;
+        due: number;
+        next?: string;
+        deadline?: string;
+        priority: Priority;
+      }
     > = {};
     const smart: Record<SmartFilter, number> = {
       today: 0,
@@ -326,7 +353,13 @@ export function PlannerView() {
       // The project's own deadline counts among its dates.
       const deadline = plan ? projectDue(plan) : undefined;
       const next = [...dated, ...(deadline ? [deadline] : [])].sort()[0];
-      plans[key] = { open: open.length, due, next, deadline };
+      plans[key] = {
+        open: open.length,
+        due,
+        next,
+        deadline,
+        priority: plan ? projectPriority(plan) : 0,
+      };
       smart.today += due;
       smart.matrix += open.filter((t) => quadrantOf(t.task) === "do").length;
       smart.tomorrow += dated.filter((d) => daysUntil(d) === 1).length;
@@ -346,6 +379,13 @@ export function PlannerView() {
   const projects = useMemo(() => {
     const p = lists.filter((l) => isProjectKey(l.key));
     return p.sort((a, b) => {
+      if (sort === "priority") {
+        const d =
+          (stats.plans[b.key]?.priority ?? 0) -
+          (stats.plans[a.key]?.priority ?? 0);
+        if (d) return d;
+        return (b.lastOpened ?? 0) - (a.lastOpened ?? 0);
+      }
       if (sort === "name" || sort === "type")
         return a.name.localeCompare(b.name, undefined, { numeric: true });
       if (sort === "count") {
@@ -595,6 +635,7 @@ export function PlannerView() {
                     label={p.name}
                     count={stats.plans[p.key]?.open}
                     deadline={stats.plans[p.key]?.deadline}
+                    priority={stats.plans[p.key]?.priority}
                     alert={(stats.plans[p.key]?.due ?? 0) > 0}
                     active={"plan" in selected && selected.plan === p.key}
                     onClick={() => choose({ plan: p.key })}
@@ -649,6 +690,14 @@ export function PlannerView() {
                 </p>
               )}
             </div>
+            {current && isProjectKey(current.key) && (
+              <PriorityMenu
+                priority={stats.plans[current.key]?.priority ?? 0}
+                onChange={(p) =>
+                  void editPlan(current, (plan) => setProjectPriority(plan, p))
+                }
+              />
+            )}
             {current && isProjectKey(current.key) && (
               <DueButton
                 label="Deadline"
@@ -910,7 +959,10 @@ function SideItem({
   dropId,
   onDrop,
   menu,
+  priority,
 }: {
+  /** A project's priority: a small flag, when it has one. */
+  priority?: Priority;
   /** Its right-click menu. */
   menu?: ReactNode;
   icon: ReactNode;
@@ -953,6 +1005,14 @@ function SideItem({
         {icon}
       </span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
+      {!!priority && (
+        <FlagIcon
+          className="size-3 shrink-0"
+          style={{ color: PRIORITY_COLOR[priority] }}
+          fill={PRIORITY_COLOR[priority]}
+          aria-label={`${PRIORITY_LABEL[priority]} priority`}
+        />
+      )}
       {deadline && <DueBadge due={deadline} />}
       {alert && (
         <span className="size-1.5 shrink-0 rounded-full bg-destructive" />

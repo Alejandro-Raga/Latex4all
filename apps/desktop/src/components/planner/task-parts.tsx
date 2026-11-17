@@ -680,3 +680,43 @@ export function QuickAdd({
     </form>
   );
 }
+
+/** A project's priority: a flag that opens the choices. */
+export function PriorityMenu({
+  priority,
+  onChange,
+}: {
+  priority: Priority;
+  onChange: (p: Priority) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Priority"
+          className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-muted"
+        >
+          <FlagIcon
+            className="size-3.5"
+            style={{ color: PRIORITY_COLOR[priority] }}
+            fill={priority ? PRIORITY_COLOR[priority] : "none"}
+          />
+          <span className={cn(!priority && "text-muted-foreground")}>
+            {priority ? PRIORITY_LABEL[priority] : "Priority"}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-auto p-1">
+        <PriorityButtons
+          priority={priority}
+          onChange={(p) => {
+            onChange(p);
+            setOpen(false);
+          }}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}

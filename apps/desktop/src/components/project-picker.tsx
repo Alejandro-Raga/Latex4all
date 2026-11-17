@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { leaveSharedProject } from "@/stores/collab-store";
 import {
+  FlagIcon,
   BugIcon,
   CheckIcon,
   StarIcon,
@@ -114,7 +115,20 @@ import { ThemeMenuButton } from "@/components/theme-picker";
 import { LibraryView } from "@/components/library-view";
 import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import { PlannerView } from "@/components/planner/planner-view";
-import { usePlannerRequest } from "@/lib/plan/plan-store";
+import {
+  parsePlan,
+  type Priority,
+  projectPriority,
+} from "@/lib/plan/plan-file";
+import {
+  projectKey,
+  usePlannerRequest,
+  usePlanTexts,
+} from "@/lib/plan/plan-store";
+import {
+  PRIORITY_COLOR,
+  PRIORITY_LABEL,
+} from "@/components/planner/task-parts";
 import { useReaderFull } from "@/stores/reader-full-store";
 import { HelpView } from "@/components/help-view";
 import { useBugReport } from "@/components/bug-report-dialog";
@@ -133,6 +147,7 @@ const SORTS: Array<{ value: ProjectSort; label: string }> = [
   { value: "added", label: "Date added" },
   { value: "created", label: "Date created" },
   { value: "type", label: "Grouped by type" },
+  { value: "priority", label: "Priority" },
 ];
 
 type ProjectPickerSection =
@@ -585,6 +600,20 @@ export function ProjectPicker() {
     [projectTypes],
   );
 
+  // Each project's priority, from its plan.
+  const planTexts = usePlanTexts(
+    visibleProjects.map((p) => projectKey(p.path)),
+  );
+  const priorities = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const p of visibleProjects) {
+      const text = planTexts[projectKey(p.path)];
+      const level = text ? projectPriority(parsePlan(text)) : 0;
+      if (level) out.set(p.path, level);
+    }
+    return out;
+  }, [visibleProjects, planTexts]);
+
   const projectGroups = useMemo(
     () =>
       groupProjects({
@@ -594,8 +623,17 @@ export function ProjectPicker() {
         types: new Map(Object.entries(projectTypes)),
         addedAt: new Map(Object.entries(addedAt)),
         createdAt: new Map(Object.entries(createdAt)),
+        priorities,
       }),
-    [visibleProjects, projectSort, favorites, projectTypes, addedAt, createdAt],
+    [
+      visibleProjects,
+      projectSort,
+      favorites,
+      projectTypes,
+      addedAt,
+      createdAt,
+      priorities,
+    ],
   );
 
   if (wizardMode) {
@@ -987,6 +1025,7 @@ export function ProjectPicker() {
                                 <ProjectPreviewCard
                                   key={project.path}
                                   project={project}
+                                  priority={priorities.get(project.path) ?? 0}
                                   isFavorite={favorites.includes(project.path)}
                                   type={projectTypes[project.path] ?? null}
                                   typeOptions={typeOptions}
@@ -1807,7 +1846,9 @@ function ProjectPreviewCard({
   type,
   typeOptions,
   actions,
+  priority = 0,
 }: {
+  priority?: number;
   project: RecentProject;
   isFavorite: boolean;
   type: string | null;
@@ -1945,6 +1986,14 @@ function ProjectPreviewCard({
               >
                 {project.name}
               </button>
+              {priority > 0 && (
+                <FlagIcon
+                  className="size-3 shrink-0"
+                  style={{ color: PRIORITY_COLOR[priority as Priority] }}
+                  fill={PRIORITY_COLOR[priority as Priority]}
+                  aria-label={`${PRIORITY_LABEL[priority as Priority]} priority`}
+                />
+              )}
               {isShared && <SharedBadge conflicts={facts?.conflicts ?? 0} />}
             </div>
             <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">

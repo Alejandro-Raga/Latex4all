@@ -31,6 +31,11 @@ import {
 import { TemplateGallery } from "@/components/template-gallery";
 import { DEFAULT_CLAUDE_MD } from "@/lib/default-claude-md";
 import {
+  applyBasics,
+  ProjectBasics,
+  useBasics,
+} from "@/components/project-basics";
+import {
   buildReferenceFilesSection,
   importReferenceFiles,
 } from "@/lib/project-attachments";
@@ -82,6 +87,7 @@ function ScratchForm({ onBack }: { onBack: () => void }) {
   const [attachments, setAttachments] = useState<string[]>([]);
   const [projectFolder, setProjectFolder] = useState<string | null>(null);
   const [projectName, setProjectName] = useState("");
+  const [basics, setBasics] = useBasics();
   const [projectNameError, setProjectNameError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -203,6 +209,7 @@ function ScratchForm({ onBack }: { onBack: () => void }) {
         return;
       }
       await mkdir(projectPath, { recursive: true });
+      await applyBasics(projectPath, name, basics);
 
       // Create CLAUDE.md for Claude Code context
       const claudeMdPath = await join(projectPath, "CLAUDE.md");
@@ -313,6 +320,7 @@ function ScratchForm({ onBack }: { onBack: () => void }) {
             {projectNameError && (
               <p className="text-destructive text-xs">{projectNameError}</p>
             )}
+            <ProjectBasics value={basics} onChange={setBasics} />
           </div>
 
           {/* Purpose */}

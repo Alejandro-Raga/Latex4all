@@ -23,6 +23,10 @@ tag.
 
 ### Added
 
+- Projects have a priority, set in the Planner or when making the
+  project, shown as a flag in the Planner and on project cards, with a
+  Priority sort in both. A new project can also get its type and
+  deadline as it's made.
 - Planner: a Matrix of your tasks by importance (priority) and urgency
   (due within two days): Do first, Schedule, Squeeze in, Later. Drag a
   task to another box to change its priority or date.

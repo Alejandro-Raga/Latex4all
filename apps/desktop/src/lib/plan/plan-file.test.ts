@@ -299,3 +299,21 @@ describe("nested subtasks", () => {
     expect(serializePlan(gone)).toContain("    - [ ] Methods\n");
   });
 });
+
+describe("the project's priority", () => {
+  it("is the plan's priority property, beside its deadline", async () => {
+    const { projectPriority, setProjectPriority, setProjectDue } = await import(
+      "./plan-file"
+    );
+    const dated = setProjectDue(parsePlan("# P\n"), "2027-01-15");
+    const high = setProjectPriority(dated, 3);
+    expect(serializePlan(high)).toBe(
+      "---\ndue: 2027-01-15\npriority: high\n---\n# P\n",
+    );
+    expect(projectPriority(high)).toBe(3);
+    expect(projectDue(high)).toBe("2027-01-15");
+    const none = setProjectPriority(high, 0);
+    expect(serializePlan(none)).toBe("---\ndue: 2027-01-15\n---\n# P\n");
+    expect(projectPriority(none)).toBe(0);
+  });
+});

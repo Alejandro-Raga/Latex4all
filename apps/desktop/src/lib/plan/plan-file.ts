@@ -529,36 +529,39 @@ function frontmatter(plan: Plan): { start: number; end: number } | null {
   return null;
 }
 
-/** The project's own deadline, as its plan's `due` property. */
-export function projectDue(plan: Plan): string | undefined {
+/** A property of the plan (between its "---"s), as written. */
+function property(plan: Plan, name: string): string | undefined {
   const fm = frontmatter(plan);
   if (!fm) return undefined;
+  const re = new RegExp(`^${name}:\\s*['"]?([^'"]*?)['"]?\\s*$`);
   for (let i = fm.start + 1; i < fm.end; i++) {
     const item = plan.sections[0].items[i];
-    const m =
-      item.kind === "line" &&
-      /^due:\s*['"]?(\d{4}-\d{2}-\d{2})['"]?\s*$/.exec(item.line);
+    const m = item.kind === "line" && re.exec(item.line);
     if (m) return m[1];
   }
   return undefined;
 }
 
-/** Sets the project's deadline (or takes it away), its other properties kept. */
-export function setProjectDue(plan: Plan, due: string | undefined): Plan {
+/** Sets a property (or takes it away), the others kept. */
+function setProperty(
+  plan: Plan,
+  name: string,
+  value: string | undefined,
+): Plan {
   const next = clone(plan);
   const items = next.sections[0].items;
   const fm = frontmatter(next);
+  const line = `${name}: ${value}`;
   if (fm) {
     const at = items.findIndex(
       (item, i) =>
         i > fm.start &&
         i < fm.end &&
         item.kind === "line" &&
-        /^due:/.test(item.line),
+        item.line.startsWith(`${name}:`),
     );
-    if (due && at >= 0) items[at] = { kind: "line", line: `due: ${due}` };
-    else if (due)
-      items.splice(fm.end, 0, { kind: "line", line: `due: ${due}` });
+    if (value && at >= 0) items[at] = { kind: "line", line };
+    else if (value) items.splice(fm.end, 0, { kind: "line", line });
     else if (at >= 0) {
       items.splice(at, 1);
       // Nothing left between the "---"s: no properties at all.
@@ -566,11 +569,34 @@ export function setProjectDue(plan: Plan, due: string | undefined): Plan {
     }
     return next;
   }
-  if (!due) return plan;
+  if (!value) return plan;
   items.unshift(
     { kind: "line", line: "---" },
-    { kind: "line", line: `due: ${due}` },
+    { kind: "line", line },
     { kind: "line", line: "---" },
   );
   return next;
 }
+
+/** The project's own deadline, as its plan's `due` property. */
+export function projectDue(plan: Plan): string | undefined {
+  const due = property(plan, "due");
+  return due && /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : undefined;
+}
+
+/** Sets the project's deadline (or takes it away), its other properties kept. */
+export const setProjectDue = (plan: Plan, due: string | undefined) =>
+  setProperty(plan, "due", due);
+
+const PRIORITY_NAMES = ["", "low", "medium", "high", "highest"] as const;
+
+/** The project's priority, as its plan's `priority` property. */
+export function projectPriority(plan: Plan): Priority {
+  const p = PRIORITY_NAMES.indexOf(
+    (property(plan, "priority") ?? "").toLowerCase() as never,
+  );
+  return (p > 0 ? p : 0) as Priority;
+}
+
+export const setProjectPriority = (plan: Plan, priority: Priority) =>
+  setProperty(plan, "priority", PRIORITY_NAMES[priority] || undefined);

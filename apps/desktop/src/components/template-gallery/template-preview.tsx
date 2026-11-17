@@ -1,10 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { mkdir, writeTextFile } from "@tauri-apps/plugin-fs";
-import {
-  typeForTemplateSubcategory,
-  writeProjectType,
-} from "@/lib/project-meta";
+import { typeForTemplateSubcategory } from "@/lib/project-meta";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { homeDir } from "@tauri-apps/api/path";
 import { toast } from "sonner";
@@ -33,6 +30,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import {
+  applyBasics,
+  type Basics,
+  ProjectBasics,
+} from "@/components/project-basics";
 import { useTemplateStore } from "@/stores/template-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useDocumentStore } from "@/stores/document-store";
@@ -87,6 +89,10 @@ export function TemplatePreview() {
   const [attachments, setAttachments] = useState<string[]>([]);
   const [projectFolder, setProjectFolder] = useState<string | null>(null);
   const [projectName, setProjectName] = useState("");
+  // Its type is the template's until changed (undefined: not changed).
+  const [basics, setBasics] = useState<
+    Omit<Basics, "type"> & { type?: string | null }
+  >({ priority: 0 });
   const [projectNameError, setProjectNameError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -379,15 +385,14 @@ export function TemplatePreview() {
       }
       await mkdir(projectPath, { recursive: true });
 
-      // The template already says what kind of work this is, so the project
-      // arrives typed rather than asking for something it can infer.
-      const inferredType = typeForTemplateSubcategory(template.subcategory);
-      if (inferredType) {
-        await writeProjectType(projectPath, inferredType).catch(() => {
-          // A type is a convenience; failing to record it must not abort
-          // creating the project.
-        });
-      }
+      // Its type (the template's, unless changed), priority and deadline.
+      await applyBasics(projectPath, name, {
+        ...basics,
+        type:
+          basics.type === undefined
+            ? typeForTemplateSubcategory(template.subcategory)
+            : basics.type,
+      });
 
       const mainTexPath = await join(projectPath, template.mainFileName);
       const mainExists = await exists(mainTexPath);
@@ -598,6 +603,16 @@ export function TemplatePreview() {
                       {projectNameError}
                     </p>
                   )}
+                  <ProjectBasics
+                    value={{
+                      ...basics,
+                      type:
+                        basics.type === undefined
+                          ? typeForTemplateSubcategory(template.subcategory)
+                          : basics.type,
+                    }}
+                    onChange={setBasics}
+                  />
                 </div>
                 {/* Purpose — hero element */}
                 <div className="space-y-2">

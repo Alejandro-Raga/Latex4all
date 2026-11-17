@@ -629,3 +629,27 @@ test("the matrix: by importance and urgency, changed by dragging", async ({
   }
   expect(errors).toEqual([]);
 });
+
+test("a project's priority, in its plan and beside its name", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  await page
+    .getByRole("main")
+    .getByRole("button", { name: "Priority" })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "High priority" })
+    .click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/^---\npriority: high\n---\n/);
+  await expect(
+    page.getByRole("button", { name: /^Paper 2/ }).getByLabel("High priority"),
+  ).toBeVisible();
+  expect(errors).toEqual([]);
+});
