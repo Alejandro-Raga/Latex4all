@@ -550,6 +550,6 @@
 }
 
 /* Between the cards, the gap is the frame: no line, the color shows. */
-[data-background="gradient"] .resize-line {
-  display: none;
+[data-background="gradient"] .resize-gutter {
+  background-color: transparent;
 }
