@@ -23,6 +23,8 @@ tag.
 
 ### Added
 
+- Conflicted copies in a project: those identical to their original are
+  removed, the rest show above the files to compare and keep one.
 - Reading lists: a To re-read status.
 - Planner: right-click a project to open it in the editor.
 - **Planner**, on the start screen, laid out like TickTick: lists on

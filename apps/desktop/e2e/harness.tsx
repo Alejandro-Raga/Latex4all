@@ -368,6 +368,44 @@ if (scenario === "workspace") {
     collapsed: { reference: false, vault: false, notes: false },
   });
   useDockStore.getState().setOpen("notes", true);
+  if (params.get("copies")) {
+    // Copies a sync made: one the same as its original, one of Git's
+    // pointer file, one that differs.
+    const rootPath = "/p/Science Policy Paper";
+    const disk = new Map<string, string>([
+      [`${rootPath}/main.tex`, SAMPLE],
+      [`${rootPath}/refs.bib`, "@article{a, title={A}}"],
+      [`${rootPath}/refs (conflicted copy).bib`, "@article{a, title={A}}"],
+      [`${rootPath}/.git (conflicted copy)`, "gitdir: elsewhere"],
+      [
+        `${rootPath}/main (conflicted copy).tex`,
+        SAMPLE.replace("Introduction", "Overview"),
+      ],
+    ]);
+    (window as any).__copiesDisk = disk;
+    const { files } = useDocumentStore.getState();
+    const extra = [...disk.keys()]
+      .map((k) => k.slice(rootPath.length + 1))
+      .filter((r) => !files.some((f) => f.relativePath === r))
+      .map((r) => ({
+        ...tex(r, disk.get(`${rootPath}/${r}`) ?? ""),
+        type: "other",
+      }));
+    useDocumentStore.setState({
+      files: [...files, ...extra],
+      refreshFiles: async () => {
+        useDocumentStore.setState((st) => ({
+          files: st.files.filter(
+            (f) =>
+              !disk.size ||
+              disk.has(`${rootPath}/${f.relativePath}`) ||
+              !/conflicted copy/.test(f.relativePath),
+          ),
+        }));
+      },
+      saveAllFiles: async () => {},
+    } as never);
+  }
   if (params.get("dialog") === "cite") {
     // A project citing papers: some in the bibliography, some in the vault.
     const many = Number(params.get("many") ?? 0);

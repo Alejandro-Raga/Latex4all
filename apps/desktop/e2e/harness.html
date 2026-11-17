@@ -73,6 +73,29 @@
           }
           if (workspace) {
             if (cmd.startsWith("plugin:event")) return 0;
+            // ?copies=1: files on a disk held in memory, by full path.
+            const disk = window.__copiesDisk;
+            if (disk) {
+              const path = String(args?.path ?? "");
+              if (cmd === "plugin:path|join") return args.paths.join("/");
+              if (cmd === "plugin:fs|read_file") {
+                if (!disk.has(path)) throw new Error("not found");
+                return Array.from(new TextEncoder().encode(disk.get(path)));
+              }
+              if (cmd === "plugin:fs|write_file") {
+                const to = decodeURIComponent(options.headers.path);
+                disk.set(to, new TextDecoder().decode(args));
+                return null;
+              }
+              if (cmd === "plugin:fs|remove") {
+                disk.delete(path);
+                return null;
+              }
+              if (cmd === "plugin:fs|stat") {
+                if (!disk.has(path)) throw new Error("not found");
+                return { mtime: Date.now(), isFile: true, isDirectory: false, size: 1 };
+              }
+            }
             return /^(list|check|get_spelling|detect|history_list|slash)/.test(cmd)
               ? []
               : null;

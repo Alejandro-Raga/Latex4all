@@ -594,7 +594,8 @@ export const useAiUsage = create<AiUsageState>()(
         if (limits) set({ codexLimits: limits });
       },
       refreshClaudeUsage: async () => {
-        const text = await invoke<string>("claude_usage").catch(() => "");
+        const text =
+          (await invoke<string | null>("claude_usage").catch(() => "")) ?? "";
         const windows = parseClaudeUsage(text);
         if (!windows) return false;
         const prev = get().claudeLimits;

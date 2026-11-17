@@ -57,6 +57,7 @@ import { useDocumentStore, type ProjectFile } from "@/stores/document-store";
 import { revealInFileManager, revealLabel } from "@/lib/reveal";
 import { useHistoryStore } from "@/stores/history-store";
 import { cn } from "@/lib/utils";
+import { ConflictedCopies } from "./conflicted-copies";
 import { useSettingsWindow } from "@/stores/settings-window-store";
 import { useHelp } from "@/components/help-view";
 import { useReadingStore } from "@/stores/reading-store";
@@ -1474,6 +1475,7 @@ export function Sidebar({
                     </DropdownMenu>
                   </div>
                 </div>
+                <ConflictedCopies />
                 <DndContext
                   sensors={sensors}
                   onDragStart={handleDragStart}
