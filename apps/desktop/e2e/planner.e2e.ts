@@ -555,8 +555,13 @@ test("a section with a date, kept in its heading", async ({ page, errors }) => {
   await page.getByRole("button", { name: /^Paper 2/ }).click();
   const main = page.getByRole("main");
   const heading = main.locator("section").filter({ hasText: "In progress" });
+  // No date button until asked for, from the section's menu.
+  await expect(
+    heading.getByRole("button", { name: "Section date" }),
+  ).toHaveCount(0);
   await heading.hover();
-  await heading.getByRole("button", { name: "Section date" }).click();
+  await heading.getByRole("button", { name: "Heading options" }).click();
+  await page.getByRole("menuitem", { name: "Set a date" }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Next week" })

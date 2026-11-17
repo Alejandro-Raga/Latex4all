@@ -195,7 +195,7 @@ If you use a vault, your lists and the Inbox are saved in its `Tasks` folder, so
 
 ### Sections
 
-New projects start without sections. Click **Add heading** at the end of a list to add one, such as "Literature review" or "Writing". Hover a section to give it a date. The **…** next to a section renames or deletes it; its tasks stay.
+New projects start without sections. Click **Add heading** at the end of a list to add one, such as "Literature review" or "Writing". To give a section a date, open its **…** menu and choose **Set a date**. The **…** next to a section renames or deletes it; its tasks stay.
 
 Switch between **List** and **Board** at the top. On the board, each section is a column.
 

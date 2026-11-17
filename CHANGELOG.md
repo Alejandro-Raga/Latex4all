@@ -175,6 +175,16 @@ tag.
 
 ### Fixed
 
+- Priorities have their own colors (red, orange, amber, blue) in every
+  theme; medium and low looked alike in some.
+- Cards show their priority as a slim bar inside, clear of the corners.
+- Eisenhower matrix: a subtask with its own priority or date gets its own
+  card in its own box, instead of showing under its task in another.
+- Sections show a date only once they have one; set it from the
+  section's … menu. Section dates are smaller and say "Due", below the
+  tasks' own dates in weight.
+- The board's columns wrap onto a new row instead of running off the
+  side.
 - Timeline: labels of milestones close together, or close to the
   deadline, no longer overlap; the "Next" line stays on one line.
 - A task's Date and Repeat buttons line up and look alike.

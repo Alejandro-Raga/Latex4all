@@ -540,9 +540,12 @@ function TaskItem({
 function HeadingMenu({
   onRename,
   onDelete,
+  onDate,
 }: {
   onRename: () => void;
   onDelete: () => void;
+  /** Gives the section a date (shown once it has one). */
+  onDate?: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -555,11 +558,22 @@ function HeadingMenu({
           <MoreHorizontalIcon className="size-4" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44">
+      <DropdownMenuContent
+        align="end"
+        className="w-44"
+        // A date picked next opens where focus would have gone back to.
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         <DropdownMenuItem onSelect={onRename}>
           <PencilIcon className="size-3.5" />
           Rename
         </DropdownMenuItem>
+        {onDate && (
+          <DropdownMenuItem onSelect={() => setTimeout(onDate, 0)}>
+            <CalendarIcon className="size-3.5" />
+            Set a date
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem variant="destructive" onSelect={onDelete}>
           <Trash2Icon className="size-3.5" />
           Delete heading
@@ -618,6 +632,7 @@ function Heading({
 }) {
   const [open, setOpen] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [dating, setDating] = useState(false);
   const drop = useDropArea(`head:${list.key}:${index}`, {
     accepts: "tasks",
     onDrop: (d) => dropOnSection(list, index, d),
@@ -662,10 +677,19 @@ function Heading({
           {count}
         </span>
         <span className="flex-1" />
-        <SectionDate list={list} index={index} title={title} />
+        {(sectionDue(title) || dating) && (
+          <SectionDate
+            list={list}
+            index={index}
+            title={title}
+            open={dating}
+            onOpenChange={setDating}
+          />
+        )}
         <HeadingMenu
           onRename={() => setEditing(true)}
           onDelete={() => void editPlan(list, (p) => deleteSection(p, index))}
+          onDate={sectionDue(title) ? undefined : () => setDating(true)}
         />
       </div>
       {open && <div className="pt-1">{children}</div>}
@@ -877,7 +901,7 @@ export function BoardFrame({
 }) {
   return (
     <div className="@container h-full">
-      <div className="flex h-full @3xl:flex-row flex-col @3xl:items-start gap-3 @3xl:overflow-x-auto overflow-y-auto @3xl:overflow-y-hidden @3xl:p-5 p-3">
+      <div className="flex h-full @3xl:flex-row flex-col @3xl:flex-wrap @3xl:content-start @3xl:items-start gap-3 overflow-y-auto @3xl:p-5 p-3">
         {children}
         {add}
       </div>
@@ -968,8 +992,15 @@ export function Card({
         dnd.over === "inside" && "ring-1 ring-primary/50",
         dnd.dragging && "opacity-30",
       )}
-      style={edge ? { borderLeft: `3px solid ${edge}` } : undefined}
     >
+      {edge && (
+        // A slim bar inside the card, clear of its rounded corners.
+        <span
+          aria-hidden
+          className="absolute top-2.5 bottom-2.5 left-1 w-[3px] rounded-full"
+          style={{ backgroundColor: edge }}
+        />
+      )}
       <DropMarker zone={dnd.over} />
       {children}
     </div>
@@ -983,6 +1014,8 @@ export function TaskCard({
   taskRef,
   selected,
   onSelect,
+  showSub = () => true,
+  parentTitle,
 }: {
   list: PlanList;
   plan: Plan;
@@ -990,9 +1023,13 @@ export function TaskCard({
   taskRef: TaskRef;
   selected?: boolean;
   onSelect?: (s: Selected) => void;
+  /** Which subtasks it shows (the matrix shows some apart). */
+  showSub?: (sub: Task) => boolean;
+  /** A subtask shown as a card: the task it's under. */
+  parentTitle?: string;
 }) {
   const dnd = useTaskDnd(
-    `card:${list.key}:${taskRef.section}:${taskRef.item}`,
+    `card:${list.key}:${taskRef.section}:${taskRef.item}:${(taskRef.path ?? []).join(".")}`,
     { list, ref: taskRef, label: task.title },
     {
       accepts: "tasks",
@@ -1024,32 +1061,41 @@ export function TaskCard({
               <TitleText title={task.title} />
             </span>
           </div>
-          {task.subtasks.length > 0 && (
+          {parentTitle && (
+            <p className="mt-0.5 truncate pl-[26px] text-[11px] text-muted-foreground">
+              in {parentTitle}
+            </p>
+          )}
+          {task.subtasks.some(showSub) && (
             <div className="mt-1.5 space-y-0.5 pl-[26px]">
-              {task.subtasks.slice(0, 4).map((s, i) => (
-                <div
-                  key={`${i}-${s.title}`}
-                  className="flex items-center gap-1.5 text-xs"
-                >
-                  <Check
-                    small
-                    done={s.done}
-                    priority={s.priority}
-                    onToggle={() => actions.toggleSub(i)}
-                  />
-                  <span
-                    className={cn(
-                      "truncate",
-                      s.done && "text-muted-foreground line-through",
-                    )}
+              {task.subtasks
+                .map((s, i) => [s, i] as const)
+                .filter(([s]) => showSub(s))
+                .slice(0, 4)
+                .map(([s, i]) => (
+                  <div
+                    key={`${i}-${s.title}`}
+                    className="flex items-center gap-1.5 text-xs"
                   >
-                    {s.title}
-                  </span>
-                </div>
-              ))}
-              {task.subtasks.length > 4 && (
+                    <Check
+                      small
+                      done={s.done}
+                      priority={s.priority}
+                      onToggle={() => actions.toggleSub(i)}
+                    />
+                    <span
+                      className={cn(
+                        "truncate",
+                        s.done && "text-muted-foreground line-through",
+                      )}
+                    >
+                      {s.title}
+                    </span>
+                  </div>
+                ))}
+              {task.subtasks.filter(showSub).length > 4 && (
                 <p className="text-[11px] text-muted-foreground">
-                  +{task.subtasks.length - 4} more
+                  +{task.subtasks.filter(showSub).length - 4} more
                 </p>
               )}
             </div>
@@ -1098,6 +1144,7 @@ function BoardColumn({
   onSelect?: (s: Selected) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [dating, setDating] = useState(false);
   return (
     <Column
       id={`col:${list.key}:${index}`}
@@ -1121,7 +1168,15 @@ function BoardColumn({
               }
             }}
           />
-          {index > 0 && <SectionDate list={list} index={index} title={title} />}
+          {index > 0 && (sectionDue(title) || dating) && (
+            <SectionDate
+              list={list}
+              index={index}
+              title={title}
+              open={dating}
+              onOpenChange={setDating}
+            />
+          )}
         </span>
       }
       color={color}
@@ -1132,6 +1187,7 @@ function BoardColumn({
           <HeadingMenu
             onRename={() => setEditing(true)}
             onDelete={() => void editPlan(list, (p) => deleteSection(p, index))}
+            onDate={sectionDue(title) ? undefined : () => setDating(true)}
           />
         ) : undefined
       }
@@ -1519,33 +1575,35 @@ export function SmartView({
   );
 }
 
-/** A section's date: shown once set; on hover until then. */
+/**
+ * A section's date, small and quiet beside its name: shown once it has
+ * one, or while one is being picked (from the section's menu).
+ */
 function SectionDate({
   list,
   index,
   title,
+  open,
+  onOpenChange,
 }: {
   list: PlanList;
   index: number;
   title: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const due = sectionDue(title);
   return (
-    <span
-      className={cn(
-        !due &&
-          "opacity-0 focus-within:opacity-100 group-hover/heading:opacity-100",
-      )}
-    >
-      <DueButton
-        due={due}
-        ariaLabel="Section date"
-        onChange={(d) =>
-          void editPlan(list, (p) =>
-            renameSection(p, index, withSectionDue(title, d)),
-          )
-        }
-      />
-    </span>
+    <DueButton
+      due={sectionDue(title)}
+      ariaLabel="Section date"
+      open={open}
+      onOpenChange={onOpenChange}
+      quiet
+      onChange={(d) =>
+        void editPlan(list, (p) =>
+          renameSection(p, index, withSectionDue(title, d)),
+        )
+      }
+    />
   );
 }

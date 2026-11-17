@@ -74,9 +74,27 @@ export function MatrixView({
     if (!text) return [];
     const plan = parsePlan(text);
     plans.set(list.key, plan);
-    return workTasks(plan)
-      .filter((t) => !t.task.done)
-      .map((t) => ({ ...t, list, plan }));
+    // Subtasks with a priority or date of their own go in their own box.
+    const own = (sub: Task) => sub.priority > 0 || !!sub.due;
+    const subs: { task: Task; ref: TaskRef; parent: string }[] = [];
+    const walk = (task: Task, ref: TaskRef) =>
+      task.subtasks.forEach((sub, i) => {
+        const at = childRef(ref, i);
+        if (!sub.done && own(sub))
+          subs.push({ task: sub, ref: at, parent: task.title });
+        walk(sub, at);
+      });
+    const top = workTasks(plan).filter((t) => !t.task.done);
+    for (const t of top) walk(t.task, t.ref);
+    return [
+      ...top.map((t) => ({
+        ...t,
+        list,
+        plan,
+        parent: undefined as string | undefined,
+      })),
+      ...subs.map((s) => ({ ...s, list, plan })),
+    ];
   });
   return (
     <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-y-auto p-4 md:grid-cols-2 md:grid-rows-2">
@@ -99,16 +117,19 @@ export function MatrixView({
             >
               {inBox.map((t) => (
                 <TaskCard
-                  key={`${t.list.key}-${t.ref.section}-${t.ref.item}`}
+                  key={`${t.list.key}-${t.ref.section}-${t.ref.item}-${(t.ref.path ?? []).join(".")}`}
                   list={t.list}
                   plan={t.plan}
                   task={t.task}
                   taskRef={t.ref}
+                  parentTitle={t.parent}
+                  showSub={(sub) => !(sub.priority > 0 || sub.due)}
                   selected={
                     selected?.list.key === t.list.key &&
                     selected.ref.section === t.ref.section &&
                     selected.ref.item === t.ref.item &&
-                    !selected.ref.path?.length
+                    (selected.ref.path ?? []).join(".") ===
+                      (t.ref.path ?? []).join(".")
                   }
                   onSelect={onSelect}
                 />

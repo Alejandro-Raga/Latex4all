@@ -40,12 +40,16 @@ import { RepeatButton } from "./repeat-button";
 import { DropMarker } from "./planner-dnd";
 
 /** A priority's color: the checkbox's ring, the flag, a card's edge. */
+/**
+ * Fixed, not the theme's: a theme's chart colors can come out alike, and
+ * priorities must always look different (red, orange, amber, blue).
+ */
 export const PRIORITY_COLOR: Record<Priority, string> = {
   0: "var(--muted-foreground)",
-  1: "var(--chart-2)",
-  2: "var(--chart-4)",
-  3: "var(--chart-1)",
-  4: "var(--destructive)",
+  1: "oklch(0.64 0.14 245)",
+  2: "oklch(0.78 0.15 85)",
+  3: "oklch(0.7 0.18 50)",
+  4: "oklch(0.62 0.22 25)",
 };
 export const PRIORITY_LABEL: Record<Priority, string> = {
   0: "None",
@@ -339,6 +343,9 @@ export function DueButton({
   onChange,
   label = "Date",
   ariaLabel,
+  open: openAsked,
+  onOpenChange,
+  quiet,
 }: {
   due?: string;
   onChange: (due?: string) => void;
@@ -346,8 +353,18 @@ export function DueButton({
   label?: string;
   /** Its name for screen readers, if not its label's. */
   ariaLabel?: string;
+  /** Opened from elsewhere (a menu), and told when it closes. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Smaller and muted: a section's date, below its tasks' in weight. */
+  quiet?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [openHere, setOpenHere] = useState(false);
+  const open = openAsked ?? openHere;
+  const setOpen = (o: boolean) => {
+    setOpenHere(o);
+    onOpenChange?.(o);
+  };
   const pick = (d?: string) => {
     onChange(d);
     setOpen(false);
@@ -357,10 +374,17 @@ export function DueButton({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-muted"
+          className={cn(
+            "flex items-center gap-1.5 rounded-md hover:bg-muted",
+            quiet ? "h-6 px-1.5 text-[11px]" : "h-7 px-2 text-xs",
+          )}
           aria-label={ariaLabel ?? (label === "Date" ? "Due date" : label)}
         >
-          {due ? (
+          {due && quiet ? (
+            <span className="flex items-center gap-1 text-muted-foreground">
+              Due <DueBadge due={due} />
+            </span>
+          ) : due ? (
             <>
               {label !== "Date" && (
                 <span className="text-muted-foreground">{label}</span>
