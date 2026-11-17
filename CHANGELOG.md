@@ -23,6 +23,9 @@ tag.
 
 ### Added
 
+- Planner: sections can have a date, shown in their header and in the
+  Calendar. New projects start with no sections; tasks go under the
+  title until you add some, and the board shows them as "No section".
 - Planner: lists of your own (Teaching, Admin…) under the Inbox, each
   with its tasks and its own reading list. Right-click one to color it.
 - Library: "Read in full window" in the reader hides the paper list,

@@ -117,9 +117,7 @@ test("a project's plan as a list and a board; a new plan where there's none", as
   await main.getByLabel("Add a task").press("Enter");
   await expect
     .poll(() => disk(page, "/papers/Thesis/Plan.md"))
-    .toMatch(
-      /^# Thesis\n\n## To do\n\n- \[ \] Outline chapter 1 📅 \d{4}-\d{2}-\d{2}\n\n## In progress/,
-    );
+    .toMatch(/^# Thesis\n\n- \[ \] Outline chapter 1 📅 \d{4}-\d{2}-\d{2}\n$/);
   expect(errors).toEqual([]);
 });
 
@@ -153,9 +151,7 @@ test("the Inbox works with no vault: the app keeps it", async ({
   await main.getByLabel("Add a task").press("Enter");
   await expect
     .poll(() => disk(page, "/appdata/planner/Inbox.md"))
-    .toMatch(
-      /^# Inbox\n\n## To do\n\n- \[ \] Book the flight 📅 \d{4}-\d{2}-\d{2}\n/,
-    );
+    .toMatch(/^# Inbox\n\n- \[ \] Book the flight 📅 \d{4}-\d{2}-\d{2}\n/);
   await expect(main.getByText("Book the flight")).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -547,5 +543,25 @@ test("a list of one's own, with its tasks and its reading", async ({
   if (process.env.SHOTS) {
     await page.screenshot({ path: `${process.env.SHOTS}/own-list.png` });
   }
+  expect(errors).toEqual([]);
+});
+
+test("a section with a date, kept in its heading", async ({ page, errors }) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  const heading = main.locator("section").filter({ hasText: "In progress" });
+  await heading.hover();
+  await heading.getByRole("button", { name: "Section date" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Next week" })
+    .click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/## In progress 📅 \d{4}-\d{2}-\d{2}\n/);
+  // Shown by its name, the date apart.
+  await expect(main.getByText("In progress", { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });

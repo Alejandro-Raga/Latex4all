@@ -192,9 +192,24 @@ export function serializePlan(plan: Plan): string {
 }
 
 /** A plan to start from. */
+/** A new plan: its title alone; sections are added as the work needs. */
 export function newPlanText(name: string): string {
-  return `# ${name}\n\n## To do\n\n## In progress\n\n## Waiting\n`;
+  return `# ${name}\n`;
 }
+
+const SECTION_DUE = new RegExp(`\\s*📅\\s*${DATE}\\s*$`);
+
+/** A section's name, its date left out: "Draft" from "Draft 📅 2026-12-01". */
+export const sectionName = (title: string) =>
+  title.replace(SECTION_DUE, "").trim();
+
+/** When a section is to be done by, if it says. */
+export const sectionDue = (title: string | null) =>
+  title ? SECTION_DUE.exec(title)?.[1] : undefined;
+
+/** A section's title with this date (or none). */
+export const withSectionDue = (title: string, due?: string) =>
+  due ? `${sectionName(title)} 📅 ${due}` : sectionName(title);
 
 export const today = (now = new Date()): string => {
   const d = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
@@ -253,6 +268,12 @@ function insertTask(section: Section, at: number, task: Task) {
     }
     at = 1;
   }
+  // Under the plan's "# Title" (or any other text): a blank line first.
+  const before = section.items[at - 1];
+  if (before?.kind === "line" && before.line.trim() !== "") {
+    section.items.splice(at, 0, { kind: "line", line: "" });
+    at++;
+  }
   section.items.splice(at, 0, { kind: "task", task });
   // And one after the last task, before the next heading.
   const end = endOfTasks(section);
@@ -267,11 +288,8 @@ export function addTask(
   section?: number,
 ): Plan {
   const next = clone(plan);
-  let index = section ?? taskSections(next)[0]?.index;
-  if (index === undefined) {
-    next.sections.push({ title: "To do", items: [{ kind: "line", line: "" }] });
-    index = next.sections.length - 1;
-  }
+  // No sections: under the title, where tasks without one go.
+  const index = section ?? taskSections(next)[0]?.index ?? 0;
   const target = next.sections[index];
   insertTask(target, endOfTasks(target), {
     done: false,

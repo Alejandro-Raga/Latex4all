@@ -4,8 +4,15 @@
  * same written as an .ics file for Apple, Google or Outlook calendars.
  */
 import { milestones } from "./milestones";
-import { type Plan, projectDue, type TaskRef, today } from "./plan-file";
-import { readingItems, workTasks } from "./reading";
+import {
+  type Plan,
+  projectDue,
+  sectionDue,
+  sectionName,
+  type TaskRef,
+  today,
+} from "./plan-file";
+import { isSpecialSection, readingItems, workTasks } from "./reading";
 
 export type EntryKind = "task" | "milestone" | "deadline" | "reading";
 
@@ -52,6 +59,19 @@ export function calendarEntries(
         ref: r.ref,
       });
     }
+    // A section with a date: a step to reach by then.
+    plan.sections.forEach((section) => {
+      const due = sectionDue(section.title);
+      if (!due || !section.title || isSpecialSection(section.title)) return;
+      out.push({
+        kind: "milestone",
+        date: due,
+        title: sectionName(section.title),
+        done: false,
+        listKey: key,
+        listName: name,
+      });
+    });
     for (const m of milestones(plan)) {
       if (!m.task.due) continue;
       out.push({

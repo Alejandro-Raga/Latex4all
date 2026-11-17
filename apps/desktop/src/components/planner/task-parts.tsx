@@ -20,6 +20,7 @@ import {
   notesText,
   type Priority,
   type Task,
+  sectionName,
 } from "@/lib/plan/plan-file";
 import { parseQuickAdd, type QuickTask } from "@/lib/plan/quick-add";
 import { cn } from "@/lib/utils";
@@ -319,11 +320,14 @@ export function DueButton({
   due,
   onChange,
   label = "Date",
+  ariaLabel,
 }: {
   due?: string;
   onChange: (due?: string) => void;
   /** What it says when there's none ("Date", "Deadline"). */
   label?: string;
+  /** Its name for screen readers, if not its label's. */
+  ariaLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const pick = (d?: string) => {
@@ -336,7 +340,7 @@ export function DueButton({
         <button
           type="button"
           className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-muted"
-          aria-label={label === "Date" ? "Due date" : label}
+          aria-label={ariaLabel ?? (label === "Date" ? "Due date" : label)}
         >
           {due ? (
             <>
@@ -564,7 +568,7 @@ export function TaskDetails({
           >
             {actions.sections.map((s) => (
               <option key={s.index} value={s.index}>
-                {s.title}
+                {sectionName(s.title)}
               </option>
             ))}
           </select>

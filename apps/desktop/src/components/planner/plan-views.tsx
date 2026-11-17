@@ -52,6 +52,9 @@ import {
   toggleSubtask,
   toggleTask,
   updateTask,
+  sectionDue,
+  sectionName,
+  withSectionDue,
 } from "@/lib/plan/plan-file";
 import {
   INBOX,
@@ -89,6 +92,7 @@ import {
   type TaskContext,
   TaskRow,
   TitleText,
+  DueButton,
 } from "./task-parts";
 
 export type PlanViewMode = "list" | "board";
@@ -130,15 +134,9 @@ export function actionsFor(
 /** A new task: in the given section, else the first that isn't reading. */
 const addQuick = (list: PlanList, task: QuickTask, section?: number) =>
   editPlan(list, (p) => {
-    const first = section ?? workSections(p)[0]?.index;
-    if (first !== undefined) return addTask(p, task, first);
-    // None yet: a To do section, before any reading list.
-    const reading = p.sections.findIndex((s) => isSpecialSection(s.title));
-    if (reading < 0) return addTask(p, task);
-    const withTodo = addSection(p, "To do");
-    const moved = withTodo.sections.pop();
-    if (moved) withTodo.sections.splice(reading, 0, moved);
-    return addTask(withTodo, task, reading);
+    // The section asked for, or the first; none yet: under the title.
+    const first = section ?? workSections(p)[0]?.index ?? 0;
+    return addTask(p, task, first);
   });
 
 export function Empty({
@@ -316,7 +314,7 @@ function TaskMenu({
                   key={s.index}
                   onClick={() => edit((p) => moveTask(p, taskRef, s.index))}
                 >
-                  <span className="truncate">{s.title}</span>
+                  <span className="truncate">{sectionName(s.title)}</span>
                 </ContextMenuItem>
               ))}
             </ContextMenuSubContent>
@@ -602,13 +600,19 @@ function Heading({
           />
         </button>
         <HeadingTitle
-          title={title}
+          title={sectionName(title)}
           editing={editing}
           className="font-semibold text-[15px] text-foreground"
           onDone={(name) => {
             setEditing(false);
-            if (name && name !== title) {
-              void editPlan(list, (p) => renameSection(p, index, name));
+            if (name && name !== sectionName(title)) {
+              void editPlan(list, (p) =>
+                renameSection(
+                  p,
+                  index,
+                  withSectionDue(name, sectionDue(title)),
+                ),
+              );
             }
           }}
         />
@@ -616,6 +620,7 @@ function Heading({
           {count}
         </span>
         <span className="flex-1" />
+        <SectionDate list={list} index={index} title={title} />
         <HeadingMenu
           onRename={() => setEditing(true)}
           onDelete={() => void editPlan(list, (p) => deleteSection(p, index))}
@@ -1049,26 +1054,37 @@ function BoardColumn({
       id={`col:${list.key}:${index}`}
       accepts="tasks"
       title={
-        <HeadingTitle
-          title={title}
-          editing={editing}
-          className="font-semibold text-sm"
-          onDone={(name) => {
-            setEditing(false);
-            if (name && name !== title) {
-              void editPlan(list, (p) => renameSection(p, index, name));
-            }
-          }}
-        />
+        <span className="flex min-w-0 items-center gap-1">
+          <HeadingTitle
+            title={sectionName(title)}
+            editing={editing}
+            className="font-semibold text-sm"
+            onDone={(name) => {
+              setEditing(false);
+              if (name && name !== sectionName(title)) {
+                void editPlan(list, (p) =>
+                  renameSection(
+                    p,
+                    index,
+                    withSectionDue(name, sectionDue(title)),
+                  ),
+                );
+              }
+            }}
+          />
+          {index > 0 && <SectionDate list={list} index={index} title={title} />}
+        </span>
       }
       color={color}
       count={tasks.length}
       onDrop={(d) => dropOnSection(list, index, d)}
       menu={
-        <HeadingMenu
-          onRename={() => setEditing(true)}
-          onDelete={() => void editPlan(list, (p) => deleteSection(p, index))}
-        />
+        index > 0 ? (
+          <HeadingMenu
+            onRename={() => setEditing(true)}
+            onDelete={() => void editPlan(list, (p) => deleteSection(p, index))}
+          />
+        ) : undefined
       }
       footer={
         <QuickAdd
@@ -1099,6 +1115,9 @@ function Board({ list, plan, selected, onSelect }: ViewProps) {
   const [newSection, setNewSection] = useState("");
   const tasks = workTasks(plan).filter((t) => !t.task.done);
   const columns = workSections(plan);
+  const loose = tasks.filter(
+    (t) => plan.sections[t.ref.section].title === null,
+  );
   return (
     <BoardFrame
       add={
@@ -1125,6 +1144,18 @@ function Board({ list, plan, selected, onSelect }: ViewProps) {
         </form>
       }
     >
+      {(loose.length > 0 || columns.length === 0) && (
+        <BoardColumn
+          list={list}
+          plan={plan}
+          index={0}
+          title="No section"
+          color="var(--muted-foreground)"
+          tasks={loose}
+          selected={selected}
+          onSelect={onSelect}
+        />
+      )}
       {columns.map((col, i) => (
         <BoardColumn
           key={`${col.index}-${col.title}`}
@@ -1402,5 +1433,36 @@ export function SmartView({
         </Group>
       ))}
     </div>
+  );
+}
+
+/** A section's date: shown once set; on hover until then. */
+function SectionDate({
+  list,
+  index,
+  title,
+}: {
+  list: PlanList;
+  index: number;
+  title: string;
+}) {
+  const due = sectionDue(title);
+  return (
+    <span
+      className={cn(
+        !due &&
+          "opacity-0 focus-within:opacity-100 group-hover/heading:opacity-100",
+      )}
+    >
+      <DueButton
+        due={due}
+        ariaLabel="Section date"
+        onChange={(d) =>
+          void editPlan(list, (p) =>
+            renameSection(p, index, withSectionDue(title, d)),
+          )
+        }
+      />
+    </span>
   );
 }

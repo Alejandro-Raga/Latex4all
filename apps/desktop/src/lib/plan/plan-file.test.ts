@@ -11,6 +11,9 @@ import {
   deleteTask,
   moveTask,
   newPlanText,
+  sectionDue,
+  sectionName,
+  withSectionDue,
   parsePlan,
   serializePlan,
   tagsOf,
@@ -67,20 +70,29 @@ describe("parsePlan / serializePlan", () => {
     expect(serializePlan(parsePlan(SAMPLE))).toBe(SAMPLE);
   });
 
-  it("starts a plan with three sections", () => {
+  it("starts a plan with its title and no sections", () => {
     const plan = parsePlan(newPlanText("Paper 2"));
-    expect(plan.sections.map((s) => s.title)).toEqual([
-      null,
-      "To do",
-      "In progress",
-      "Waiting",
-    ]);
+    expect(plan.sections.map((s) => s.title)).toEqual([null]);
+    // A task then goes under the title.
+    expect(serializePlan(addTask(plan, { title: "First" }))).toBe(
+      "# Paper 2\n\n- [ ] First\n",
+    );
+  });
+
+  it("keeps a section's date in its heading", () => {
+    expect(sectionName("Draft 📅 2026-12-01")).toBe("Draft");
+    expect(sectionDue("Draft 📅 2026-12-01")).toBe("2026-12-01");
+    expect(sectionDue("Draft")).toBeUndefined();
+    expect(withSectionDue("Draft 📅 2026-12-01", "2027-01-02")).toBe(
+      "Draft 📅 2027-01-02",
+    );
+    expect(withSectionDue("Draft 📅 2026-12-01")).toBe("Draft");
   });
 });
 
 describe("changes", () => {
   it("adds a task at the end of the first section, spaced as by hand", () => {
-    const plan = addTask(parsePlan(newPlanText("P")), {
+    const plan = addTask(parsePlan(threeSections("P")), {
       title: "Read Cohen",
       due: "2026-11-18",
       priority: 2,
@@ -95,7 +107,7 @@ describe("changes", () => {
   });
 
   it("adds to a chosen section", () => {
-    const plan = parsePlan(newPlanText("P"));
+    const plan = parsePlan(threeSections("P"));
     const next = addTask(plan, { title: "Later" }, 3);
     expect(serializePlan(next)).toBe(
       "# P\n\n## To do\n\n## In progress\n\n## Waiting\n\n- [ ] Later\n",
@@ -162,7 +174,7 @@ describe("changes", () => {
   });
 
   it("adds a section at the end", () => {
-    const plan = addSection(parsePlan(newPlanText("P")), "Revisions");
+    const plan = addSection(parsePlan(threeSections("P")), "Revisions");
     expect(serializePlan(plan)).toBe(
       "# P\n\n## To do\n\n## In progress\n\n## Waiting\n\n## Revisions\n",
     );
@@ -210,7 +222,7 @@ describe("headings and subtasks", () => {
 
 describe("the project's deadline", () => {
   it("is the plan's due property, set, changed and taken away", () => {
-    const plan = parsePlan(newPlanText("P"));
+    const plan = parsePlan(threeSections("P"));
     expect(projectDue(plan)).toBeUndefined();
     const set = setProjectDue(plan, "2026-12-15");
     expect(serializePlan(set)).toBe(
@@ -233,3 +245,7 @@ describe("the project's deadline", () => {
     expect(serializePlan(setProjectDue(set, undefined))).toBe(SAMPLE);
   });
 });
+
+function threeSections(name: string) {
+  return `# ${name}\n\n## To do\n\n## In progress\n\n## Waiting\n`;
+}
