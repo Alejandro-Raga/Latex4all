@@ -10,13 +10,31 @@
  * "on", "by" or "due" before them or not. Spanish too: hoy, mañana, viernes.
  * Priority: !high !medium !low !urgent, or !!! !! !.
  */
-import { type Priority, today } from "./plan-file";
+import { type Priority, type Repeat, today } from "./plan-file";
 
 export interface QuickTask {
   title: string;
   due?: string;
   priority: Priority;
+  repeat?: Repeat;
 }
+
+/** "every week", "daily", "cada semana"…: how it repeats. */
+const REPEATS: [RegExp, Repeat][] = [
+  [/\s(?:every day|daily|cada d[ií]a|diario|diariamente)(?=\s)/i, "every day"],
+  [
+    /\s(?:every week|weekly|cada semana|semanal|semanalmente)(?=\s)/i,
+    "every week",
+  ],
+  [
+    /\s(?:every month|monthly|cada mes|mensual|mensualmente)(?=\s)/i,
+    "every month",
+  ],
+  [
+    /\s(?:every year|yearly|annually|cada a[ñn]o|anual|anualmente)(?=\s)/i,
+    "every year",
+  ],
+];
 
 const WEEKDAYS: Record<string, number> = {
   sunday: 0,
@@ -171,6 +189,15 @@ export function parseQuickAdd(text: string, now = new Date()): QuickTask {
     return " ";
   });
 
+  let repeat: Repeat | undefined;
+  for (const [re, r] of REPEATS) {
+    if (re.test(rest)) {
+      repeat = r;
+      rest = rest.replace(re, " ");
+      break;
+    }
+  }
+
   let due: string | undefined;
   const lower = rest.toLowerCase();
   search: for (const [pattern, toDate] of PHRASES) {
@@ -188,5 +215,12 @@ export function parseQuickAdd(text: string, now = new Date()): QuickTask {
       break search;
     }
   }
-  return { title: rest.replace(/\s+/g, " ").trim(), due, priority };
+  // Repeating with no date: from today.
+  if (repeat && !due) due = today(now);
+  return {
+    title: rest.replace(/\s+/g, " ").trim(),
+    due,
+    priority,
+    ...(repeat ? { repeat } : {}),
+  };
 }

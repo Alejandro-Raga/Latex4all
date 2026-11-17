@@ -23,6 +23,9 @@ tag.
 
 ### Added
 
+- Planner: repeating tasks, every day, week, month or year. Set it in
+  the task's details or type it ("every week", "cada mes"); checking one
+  off brings it back, due next time.
 - Planner: pin papers, ideas and topics to a task; they show in its
   details, one click from the note.
 - Add a task from anywhere with ⌘⇧A (Ctrl+Shift+A on Windows), into any

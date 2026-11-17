@@ -43,6 +43,8 @@ export interface Task {
   /** When it was checked off, YYYY-MM-DD. */
   doneOn?: string;
   priority: Priority;
+  /** How it repeats: "every day", "every week"… (Obsidian Tasks' 🔁). */
+  repeat?: Repeat;
   subtasks: Task[];
   /** Indented lines under it that aren't subtasks, as written. */
   notes: string[];
@@ -82,6 +84,9 @@ const TASK = /^- \[([ xX])\] (.*)$/;
 const SUBTASK = /^\s+- \[([ xX])\] (.*)$/;
 const DATE = "(\\d{4}-\\d{2}-\\d{2})";
 const DUE = new RegExp(`\\s*📅\\s*${DATE}`);
+const REPEAT = /\s*🔁\s*every (day|week|month|year)\b/;
+
+export type Repeat = "every day" | "every week" | "every month" | "every year";
 const DONE = new RegExp(`\\s*✅\\s*${DATE}`);
 const PRIORITY = /\s*([🔺⏫🔼🔽])️?/u;
 
@@ -97,12 +102,14 @@ function parseTaskText(done: boolean, text: string): Task {
   const due = take(DUE);
   const doneOn = take(DONE);
   const mark = take(PRIORITY);
+  const every = take(REPEAT);
   return {
     done,
     title: rest.trim(),
     due,
     doneOn,
     priority: mark ? MARK_PRIORITY[mark] : 0,
+    ...(every ? { repeat: `every ${every}` as Repeat } : {}),
     subtasks: [],
     notes: [],
   };
@@ -179,6 +186,7 @@ function taskLine(task: Task, indent = ""): string {
   }
   const parts = [`${indent}- [${task.done ? "x" : " "}] ${task.title}`];
   if (task.priority) parts.push(PRIORITY_MARK[task.priority]);
+  if (task.repeat) parts.push(`🔁 ${task.repeat}`);
   if (task.due) parts.push(`📅 ${task.due}`);
   if (task.done && task.doneOn) parts.push(`✅ ${task.doneOn}`);
   return parts.join(" ");
@@ -190,6 +198,7 @@ const canonical = (t: Task) =>
     t.done,
     t.title,
     t.priority,
+    t.repeat ?? "",
     t.due ?? "",
     t.done ? (t.doneOn ?? "") : "",
   ]);
@@ -357,13 +366,51 @@ export function updateTask(
 }
 
 /** Checks a task off (dated today), or back on. */
+/** The date a repeating task comes back on, after `from`. */
+export function nextDate(from: string, repeat: Repeat): string {
+  const [y, m, d] = from.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  if (repeat === "every day") date.setDate(d + 1);
+  if (repeat === "every week") date.setDate(d + 7);
+  if (repeat === "every month") {
+    // The same day next month, or its last if it hasn't one (31 → 28).
+    const last = new Date(y, m + 1, 0).getDate();
+    date.setDate(1);
+    date.setMonth(m);
+    date.setDate(Math.min(d, last));
+  }
+  if (repeat === "every year") date.setFullYear(y + 1);
+  return today(date);
+}
+
+/**
+ * Checks a task off (dated today), or back on. A repeating one comes back
+ * as a new task above it, due next time, as Obsidian's Tasks does it.
+ */
 export function toggleTask(plan: Plan, ref: TaskRef, now = new Date()): Plan {
   const task = taskAt(plan, ref);
   if (!task) return plan;
-  return updateTask(plan, ref, {
+  const checked = updateTask(plan, ref, {
     done: !task.done,
     doneOn: task.done ? undefined : today(now),
   });
+  if (task.done || !task.repeat || ref.path?.length) return checked;
+  const again: Task = {
+    ...detached(task),
+    done: false,
+    doneOn: undefined,
+    due: nextDate(task.due ?? today(now), task.repeat),
+    subtasks: task.subtasks.map((s) => ({
+      ...detached(s),
+      done: false,
+      doneOn: undefined,
+    })),
+  };
+  checked.sections[ref.section].items.splice(ref.item, 0, {
+    kind: "task",
+    task: again,
+  });
+  return checked;
 }
 
 export function toggleSubtask(

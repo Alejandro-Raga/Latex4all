@@ -59,3 +59,18 @@ describe("parseQuickAdd", () => {
     expect(q("Wow! great").title).toBe("Wow! great");
   });
 });
+
+describe("repeats", () => {
+  it("are read from the words, in English and Spanish", () => {
+    const now = new Date("2026-11-17T10:00:00");
+    expect(parseQuickAdd("Water the plants every week", now)).toEqual({
+      title: "Water the plants",
+      due: "2026-11-17",
+      priority: 0,
+      repeat: "every week",
+    });
+    expect(parseQuickAdd("Revisar correo cada día", now).repeat).toBe(
+      "every day",
+    );
+  });
+});

@@ -744,3 +744,28 @@ test("a task added from anywhere, into the list picked", async ({
     .toMatch(/- \[ \] Book the room 📅 \d{4}-\d{2}-\d{2}\n/);
   expect(errors).toEqual([]);
 });
+
+test("a repeating task comes back, due next time, once checked off", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByLabel("Add a task").fill("Back up the data every week");
+  await main.getByLabel("Add a task").press("Enter");
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/- \[ \] Back up the data 🔁 every week 📅 \d{4}-\d{2}-\d{2}\n/);
+  await main
+    .getByRole("button", { name: /Back up the data/ })
+    .getByRole("checkbox", { name: "Mark as done" })
+    .click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(
+      /- \[ \] Back up the data 🔁 every week 📅 (\S+)\n- \[x\] Back up the data 🔁 every week 📅 \S+ ✅/,
+    );
+  expect(errors).toEqual([]);
+});

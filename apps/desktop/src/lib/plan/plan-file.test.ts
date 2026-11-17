@@ -51,7 +51,7 @@ describe("parsePlan / serializePlan", () => {
     expect(tasks.map((t) => t.task.title)).toEqual([
       "Draft the discussion #writing",
       "Send the outline",
-      "Comments from María 🔁 every week",
+      "Comments from María",
     ]);
     const [first, second] = tasks.map((t) => t.task);
     expect(first).toMatchObject({
@@ -149,7 +149,7 @@ describe("changes", () => {
     const gone = deleteTask(plan, a.ref);
     expect(allTasks(gone).map((t) => t.task.title)).toEqual([
       "Send the outline",
-      "Comments from María 🔁 every week",
+      "Comments from María",
     ]);
     // To "Waiting", before its task: subtasks and notes go with it.
     const moved = moveTask(plan, a.ref, c.ref.section, c.ref.item);
@@ -157,7 +157,7 @@ describe("changes", () => {
     expect(after.map((t) => [t.task.title, t.section])).toEqual([
       ["Send the outline", "To do"],
       ["Draft the discussion #writing", "Waiting"],
-      ["Comments from María 🔁 every week", "Waiting"],
+      ["Comments from María", "Waiting"],
     ]);
     expect(serializePlan(moved)).toContain(
       "## Waiting\n\n- [ ] Draft the discussion ⏫ 📅 2026-11-20 #writing\n    - [ ] Compare",
@@ -198,7 +198,7 @@ describe("headings and subtasks", () => {
     expect(allTasks(next).map((t) => [t.task.title, t.section])).toEqual([
       ["Draft the discussion #writing", "To do"],
       ["Send the outline", "To do"],
-      ["Comments from María 🔁 every week", "To do"],
+      ["Comments from María", "To do"],
     ]);
   });
 
@@ -208,7 +208,7 @@ describe("headings and subtasks", () => {
     const nested = nestTask(plan, b.ref, a.ref);
     expect(allTasks(nested).map((t) => t.task.title)).toEqual([
       "Draft the discussion #writing",
-      "Comments from María 🔁 every week",
+      "Comments from María",
     ]);
     expect(serializePlan(nested)).toContain(
       "    - [x] Outline it\n    - [x] Send the outline 📅 2026-11-10 ✅ 2026-11-14\n    Notes under it.",
@@ -217,7 +217,7 @@ describe("headings and subtasks", () => {
     expect(allTasks(out).map((t) => t.task.title)).toEqual([
       "Draft the discussion #writing",
       "Send the outline",
-      "Comments from María 🔁 every week",
+      "Comments from María",
     ]);
   });
 });
@@ -340,5 +340,24 @@ describe("pins", () => {
       "    Read it twice.",
       "    📌 [[Cohen 1990]]",
     ]);
+  });
+});
+
+describe("repeating tasks", () => {
+  it("come back, due next time, when checked off", async () => {
+    const { nextDate } = await import("./plan-file");
+    expect(nextDate("2026-01-31", "every month")).toBe("2026-02-28");
+    expect(nextDate("2026-11-17", "every week")).toBe("2026-11-24");
+    const plan = parsePlan(
+      "# P\n\n- [ ] Weekly meeting notes 🔁 every week 📅 2026-11-17\n",
+    );
+    const done = toggleTask(
+      plan,
+      { section: 0, item: 2 },
+      new Date("2026-11-17T12:00:00"),
+    );
+    expect(serializePlan(done)).toBe(
+      "# P\n\n- [ ] Weekly meeting notes 🔁 every week 📅 2026-11-24\n- [x] Weekly meeting notes 🔁 every week 📅 2026-11-17 ✅ 2026-11-17\n",
+    );
   });
 });

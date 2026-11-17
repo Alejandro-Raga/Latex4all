@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from "react";
 import {
+  RepeatIcon,
   FolderPlusIcon,
   ArrowUpFromLineIcon,
   CalendarIcon,
@@ -1056,6 +1057,9 @@ export function TaskCard({
           )}
           {meta && (task.due || /(^|\s)#[^\s]/.test(task.title)) && (
             <div className="mt-2 flex flex-wrap items-center gap-2 pl-[26px]">
+              {task.repeat && (
+                <RepeatIcon className="size-3 text-muted-foreground" />
+              )}
               {task.due && <DueBadge due={task.due} icon />}
               <Tags title={task.title} />
             </div>

@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
+  RepeatIcon,
   PinIcon,
   ChevronLeftIcon,
   CalendarIcon,
@@ -19,7 +20,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { dueLabel } from "@/lib/plan/dates";
+import { dayFromToday, dueLabel } from "@/lib/plan/dates";
 import {
   notesLines,
   notesText,
@@ -28,6 +29,7 @@ import {
   sectionName,
   pinsOf,
   withPins,
+  type Repeat,
 } from "@/lib/plan/plan-file";
 import { parseQuickAdd, type QuickTask } from "@/lib/plan/quick-add";
 import { cn } from "@/lib/utils";
@@ -301,6 +303,12 @@ export function TaskRow({
             <span className="truncate">{context.name}</span>
           </span>
         )}
+        {task.repeat && (
+          <RepeatIcon
+            className="size-3 shrink-0 text-muted-foreground"
+            aria-label={`Repeats ${task.repeat}`}
+          />
+        )}
         {task.due && !task.done && <DueBadge due={task.due} />}
       </span>
     </div>
@@ -461,6 +469,29 @@ export function TaskDetails({
         />
         <span className="mx-1 h-4 w-px bg-border" />
         <DueButton due={task.due} onChange={(due) => actions.change({ due })} />
+        <select
+          value={task.repeat ?? ""}
+          onChange={(e) => {
+            const repeat = (e.target.value || undefined) as Repeat | undefined;
+            actions.change(
+              repeat && !task.due
+                ? { repeat, due: dayFromToday(0) }
+                : { repeat },
+            );
+          }}
+          aria-label="Repeat"
+          title="Repeat"
+          className={cn(
+            "h-7 rounded-md bg-transparent px-1 text-xs hover:bg-muted",
+            !task.repeat && "text-muted-foreground",
+          )}
+        >
+          <option value="">No repeat</option>
+          <option value="every day">Every day</option>
+          <option value="every week">Every week</option>
+          <option value="every month">Every month</option>
+          <option value="every year">Every year</option>
+        </select>
         <span className="flex-1" />
         <PriorityButtons
           priority={task.priority}

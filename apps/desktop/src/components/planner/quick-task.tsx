@@ -101,7 +101,6 @@ export function QuickTask() {
           className="space-y-3"
         >
           <input
-            // biome-ignore lint/a11y/noAutofocus: opened to type in
             autoFocus
             value={text}
             onChange={(e) => setText(e.target.value)}
