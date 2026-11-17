@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { advanceEverywhere } from "@/lib/plan/reading-sync";
+import { notePage, noteReading } from "@/lib/plan/reading-sync";
 import { addPassageToNote } from "@/lib/vault/add-passage";
 import { useDockStore } from "@/stores/dock-store";
 import { filedToast, NotePicker } from "./group-picker";
@@ -120,8 +120,8 @@ async function saveHighlight(
       text: selection.text,
       comment,
     });
-    // Highlighted: read, on the reading lists it's on.
-    void advanceEverywhere(paper.zotero.itemKey, "read");
+    // Highlighted, on the reading lists it's on.
+    void noteReading(paper.zotero.itemKey, "highlighted");
     if (!quiet) {
       toast.success(
         comment ? "Note saved to Zotero" : "Highlight saved to Zotero",
@@ -239,11 +239,22 @@ export function PaperReader({
     if (visible) fitIfNew();
   }, [visible, fitIfNew]);
 
-  // Opened: being read, on the reading lists it's on.
+  // Opened: being read, on the reading lists it's on, and the last page
+  // read kept there (once the page has stayed put a moment).
   const itemKey = paper.zotero?.itemKey;
   useEffect(() => {
-    if (visible && itemKey) void advanceEverywhere(itemKey, "reading");
+    if (visible && itemKey) void noteReading(itemKey, "opened");
   }, [visible, itemKey]);
+  const [pageCount, setPageCount] = useState<number | undefined>();
+  const [readingPage, setReadingPage] = useState<number | undefined>();
+  useEffect(() => {
+    if (!visible || !itemKey || !readingPage) return;
+    const timer = setTimeout(
+      () => void notePage(itemKey, readingPage, pageCount),
+      3000,
+    );
+    return () => clearTimeout(timer);
+  }, [visible, itemKey, readingPage, pageCount]);
 
   // Highlights made here show at once; the open tab of this paper, if any,
   // gets them too.
@@ -747,7 +758,11 @@ export function PaperReader({
         onScaleChange={changeScale}
         scrollToPageRef={scrollToPageRef}
         focusAnnotationRef={focusAnnotationRef}
-        onLoadSuccess={() => setLoaded(true)}
+        onLoadSuccess={(pages) => {
+          setLoaded(true);
+          setPageCount(pages);
+        }}
+        onCurrentPageChange={setReadingPage}
         onFirstPageSize={(width) => {
           pageWidthRef.current = width;
           fitIfNew();

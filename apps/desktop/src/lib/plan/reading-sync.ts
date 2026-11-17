@@ -4,7 +4,7 @@
  * on every reading list it's on (never back).
  */
 import { useProjectStore } from "@/stores/project-store";
-import { parsePlan, serializePlan, today } from "./plan-file";
+import { parsePlan, serializePlan } from "./plan-file";
 import {
   INBOX,
   type PlanKey,
@@ -13,7 +13,8 @@ import {
   usePlanStore,
   writePlan,
 } from "./plan-store";
-import { advanceReading, type ReadingStatus } from "./reading";
+import { addMark, markOpened, markPage, type ReadingMark } from "./reading";
+import type { Plan } from "./plan-file";
 
 /** Every plan a paper could be listed in: the general list and projects. */
 function allKeys(): PlanKey[] {
@@ -23,11 +24,9 @@ function allKeys(): PlanKey[] {
   ];
 }
 
-async function advanceIn(
-  key: PlanKey,
-  itemKeys: string[],
-  status: ReadingStatus,
-) {
+type Change = (plan: Plan, itemKey: string) => Plan;
+
+async function changeIn(key: PlanKey, itemKeys: string[], change: Change) {
   let text = planTextNow(key);
   if (text === undefined) {
     await usePlanStore.getState().load(key);
@@ -35,25 +34,43 @@ async function advanceIn(
   }
   if (!text || !itemKeys.some((k) => text.includes(k))) return;
   let plan = parsePlan(text);
-  for (const itemKey of itemKeys) {
-    plan = advanceReading(plan, itemKey, status, today());
-  }
+  for (const itemKey of itemKeys) plan = change(plan, itemKey);
   const next = serializePlan(plan);
   if (next !== text) await writePlan(key, next);
 }
 
-/** Moves papers forward on every reading list they're on. */
-export async function advanceEverywhere(
+async function changeAll(
   itemKeys: string | string[],
-  status: ReadingStatus,
-  /** Only this plan (citations count for their own project). */
+  change: Change,
   only?: PlanKey,
-): Promise<void> {
+) {
   const keys = (Array.isArray(itemKeys) ? itemKeys : [itemKeys]).filter(
     Boolean,
   );
   if (keys.length === 0) return;
   for (const key of only ? [only] : allKeys()) {
-    await advanceIn(key, keys, status).catch(() => {});
+    await changeIn(key, keys, change).catch(() => {});
   }
+}
+
+/**
+ * Something done with papers, for the reading lists they're on: opened
+ * (started), or highlighted, quoted in a note, cited (a mark each).
+ */
+export function noteReading(
+  itemKeys: string | string[],
+  what: "opened" | ReadingMark,
+  /** Only this plan (citations count for their own project). */
+  only?: PlanKey,
+): Promise<void> {
+  return changeAll(
+    itemKeys,
+    what === "opened" ? markOpened : (plan, key) => addMark(plan, key, what),
+    only,
+  );
+}
+
+/** The last page read of a paper, on its reading lists. */
+export function notePage(itemKey: string, page: number, pages?: number) {
+  return changeAll(itemKey, (plan, key) => markPage(plan, key, page, pages));
 }

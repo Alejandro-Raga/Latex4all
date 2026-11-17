@@ -161,12 +161,13 @@ The **Planner**, on the start screen, keeps your to-dos and what you mean to rea
 
 ### Reading lists
 
-Each project has a **Reading** list apart from its tasks, and there's one of your own in the Inbox. **Reading list** in the sidebar gathers them all.
+Each project has a **Reading** list apart from its tasks: the papers to read for it, in the order you'll read them. There's one of your own in the Inbox, and **Reading list** in the sidebar gathers them all.
 
-- **Right-click a paper** in your Zotero library or your vault and choose **Add to reading list**.
-- **Right-click a paper** in the list to open it and read it, change its status, move it to another list, or remove it.
-- **Each paper moves along by itself:** **Reading** when you open it, **Highlighted** when you highlight it, **Quoted** when you quote it in a note, **Cited** when your project cites it. Click its status to change it yourself. Cited papers stay on the list.
-- **Drag papers** to set the order you'll read them in, or use the board to move them between statuses.
+- **Add a paper** with the box at the top: its title, its DOI or a link. A DOI on its own fills in the title. You can also right-click a paper in your Zotero library or your vault and choose **Add to reading list**.
+- **The circle is the paper's status:** empty to read, a ring that fills with the pages read while you're reading it, a check once it's read. Click it to move it on. Opening a paper marks it as reading and keeps the last page you were on.
+- **Pills** show what you've done with it, by themselves: **Highlighted**, **Quoted** (in a note), **Cited** (in your project). **Not in Zotero** marks papers you added by hand.
+- **Papers are grouped** into **Reading now**, **Up next** (numbered, in reading order) and **Read**. Drag them to change the order, or into another group to change their status.
+- **Right-click a paper** to open it to read (or open its link), add it to Zotero, set its status, move it to another list, or remove it.
 
 **While writing**, the **Plan** panel (⌘⌥4) shows the project's tasks and reading list next to your text.
 

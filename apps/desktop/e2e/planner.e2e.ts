@@ -171,19 +171,45 @@ test("a reading list apart from tasks, and tasks dragged to another project", as
   await main.getByRole("radio", { name: "List" }).click();
   await main.getByRole("radio", { name: "Reading" }).click();
   await expect(main.getByText("Nothing to read yet.")).toBeVisible();
-  await main.getByLabel("Add something to read").fill("Absorptive capacity");
-  await main.getByLabel("Add something to read").press("Enter");
+  await main.getByLabel("Add a paper").fill("Absorptive capacity");
+  await main.getByLabel("Add a paper").press("Enter");
   await expect
     .poll(() => disk(page, PLAN))
     .toContain(
       "## Reading list\n\n- [ ] Absorptive capacity #reading/to-read\n",
     );
-  // Status by hand, from its pill.
+  // Typed in by hand: not in Zotero, up next.
+  await expect(main.getByText("Not in Zotero")).toBeVisible();
+  await expect(main.getByRole("button", { name: /^Up next/ })).toBeVisible();
+  // A link too, kept with it.
+  await main.getByLabel("Add a paper").fill("A talk https://example.org/talk");
+  await main.getByLabel("Add a paper").press("Enter");
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toContain("- [ ] [A talk](https://example.org/talk) #reading/to-read");
+  // The marker: a click starts it, another finishes it.
   await main
-    .getByRole("button", { name: "Status: To read", exact: true })
+    .getByRole("button", { name: "To read: mark as reading", exact: true })
+    .first()
     .click();
-  await page.getByRole("menuitem", { name: /^Reading/ }).click();
-  await expect.poll(() => disk(page, PLAN)).toContain("#reading/reading");
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toContain("- [ ] Absorptive capacity #reading/reading");
+  await expect(
+    main.getByRole("button", { name: /^Reading now/ }),
+  ).toBeVisible();
+  // Up next, the talk is now first: dragged into Reading now, it's started.
+  await drag(
+    page,
+    main.getByText("A talk"),
+    main.getByRole("button", { name: /^Reading now/ }),
+  );
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toContain("[A talk](https://example.org/talk) #reading/reading");
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/reading-groups.png` });
+  }
   // Not among the tasks.
   await main.getByRole("radio", { name: "Tasks" }).click();
   await expect(main.getByText("Absorptive capacity")).toHaveCount(0);

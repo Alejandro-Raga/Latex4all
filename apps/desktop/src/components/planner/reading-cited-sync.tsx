@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { useItemKeyByCitekey } from "@/components/workspace/cited-here";
 import { projectKey } from "@/lib/plan/plan-store";
-import { advanceEverywhere } from "@/lib/plan/reading-sync";
+import { noteReading } from "@/lib/plan/reading-sync";
 import { citedKeys } from "@/lib/vault/project-note";
 import { useDocumentStore } from "@/stores/document-store";
 import { useVaultStore } from "@/stores/vault-store";
@@ -35,7 +35,7 @@ export function ReadingCitedSync() {
       const items = cited
         .map((k) => fromZotero.get(k) ?? fromVault.get(k))
         .filter((k): k is string => Boolean(k));
-      void advanceEverywhere(items, "cited", projectKey(root));
+      void noteReading(items, "cited", projectKey(root));
     }, 2000);
     return () => clearTimeout(timer);
   }, [root, cited.join(","), fromZotero, index]);

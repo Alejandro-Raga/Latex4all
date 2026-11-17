@@ -3,7 +3,7 @@
  * the note links to the topic, and in Zotero the paper gets the topic's tag,
  * so a Zotero → Obsidian sync agrees.
  */
-import { advanceEverywhere } from "@/lib/plan/reading-sync";
+import { noteReading } from "@/lib/plan/reading-sync";
 import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { addZoteroTag } from "../zotero-api";
@@ -66,7 +66,7 @@ export async function connectToTopic(
   }
 
   // A paper in an idea or topic: in notes, on its reading lists.
-  if (note.zoteroKey) void advanceEverywhere(note.zoteroKey, "noted");
+  if (note.zoteroKey) void noteReading(note.zoteroKey, "quoted");
   const { apiKey, userID } = useZoteroStore.getState();
   if (note.zoteroKey && apiKey && userID) {
     await addZoteroTag(apiKey, userID, note.zoteroKey, `topic: ${name}`).catch(
@@ -115,7 +115,7 @@ export async function connectToIdea(
     noteWritten(path, text);
   }
   // A paper in an idea or topic: in notes, on its reading lists.
-  if (note.zoteroKey) void advanceEverywhere(note.zoteroKey, "noted");
+  if (note.zoteroKey) void noteReading(note.zoteroKey, "quoted");
   const { apiKey, userID } = useZoteroStore.getState();
   if (note.zoteroKey && apiKey && userID) {
     await addZoteroTag(apiKey, userID, note.zoteroKey, `idea: ${name}`).catch(

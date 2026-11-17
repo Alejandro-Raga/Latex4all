@@ -1,7 +1,6 @@
 import { type ReactNode, useState } from "react";
 import {
   ArrowUpFromLineIcon,
-  BookOpenIcon,
   CalendarIcon,
   CheckCircle2Icon,
   CheckIcon,
@@ -49,7 +48,6 @@ import {
   renameSection,
   type Task,
   type TaskRef,
-  today,
   toggleSubtask,
   toggleTask,
   updateTask,
@@ -62,21 +60,9 @@ import {
   usePlanTexts,
 } from "@/lib/plan/plan-store";
 import type { QuickTask } from "@/lib/plan/quick-add";
-import {
-  isReadingSection,
-  READING_SECTION,
-  type ReadingItem,
-  type ReadingStatus,
-  readingItems,
-  STATUS_COLOR,
-  STATUS_HINT,
-  STATUS_LABEL,
-  STATUSES,
-  setReadingStatus,
-  workTasks,
-} from "@/lib/plan/reading";
+import { isReadingSection, readingItems, workTasks } from "@/lib/plan/reading";
 import { cn } from "@/lib/utils";
-import { openToRead } from "./open-paper";
+import { AllReading } from "./reading-views";
 import {
   dropOnSection,
   dropOnTask,
@@ -178,7 +164,7 @@ export function Empty({
 /* ─────────────────────────── Menus ─────────────────────────── */
 
 /** The places a task can move to: the Inbox and the other projects. */
-function MoveToMenu({
+export function MoveToMenu({
   list,
   onPick,
   label = "Move to",
@@ -826,7 +812,7 @@ function ListView({
 }
 
 /** Columns of cards: side by side when there's room, stacked when not. */
-function BoardFrame({
+export function BoardFrame({
   children,
   add,
 }: {
@@ -843,7 +829,7 @@ function BoardFrame({
   );
 }
 
-function Column({
+export function Column({
   id,
   title,
   color,
@@ -893,7 +879,7 @@ function Column({
   );
 }
 
-function Card({
+export function Card({
   dnd,
   children,
   edge,
@@ -1147,343 +1133,7 @@ function Board({ list, plan, selected, onSelect }: ViewProps) {
   );
 }
 
-/* ─────────────────────────── Reading lists ─────────────────────────── */
-
-const setStatus = (list: PlanList, ref: TaskRef, status: ReadingStatus) =>
-  editPlan(list, (p) => setReadingStatus(p, ref, status, today()));
-
-function StatusChoice({ status }: { status: ReadingStatus }) {
-  return (
-    <span className="flex min-w-0 flex-col">
-      <span className="flex items-center gap-2">
-        <span
-          className="size-2 shrink-0 rounded-full"
-          style={{ backgroundColor: STATUS_COLOR[status] }}
-        />
-        {STATUS_LABEL[status]}
-      </span>
-      <span className="pl-4 text-[11px] text-muted-foreground">
-        {STATUS_HINT[status]}
-      </span>
-    </span>
-  );
-}
-
-function StatusPill({
-  status,
-  onChange,
-}: {
-  status: ReadingStatus;
-  onChange: (s: ReadingStatus) => void;
-}) {
-  const color = STATUS_COLOR[status];
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          onClick={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          aria-label={`Status: ${STATUS_LABEL[status]}`}
-          title={STATUS_HINT[status]}
-          className="shrink-0 rounded-full px-2 py-0.5 font-medium text-[11px]"
-          style={{
-            color,
-            backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`,
-          }}
-        >
-          {STATUS_LABEL[status]}
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        {STATUSES.map((s) => (
-          <DropdownMenuItem key={s} onSelect={() => onChange(s)}>
-            <StatusChoice status={s} />
-            {s === status && <CheckIcon className="ml-auto size-3.5" />}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-/** A reading entry's right-click menu: read it, its status, where it goes. */
-function ReadingMenu({
-  list,
-  item,
-  children,
-}: {
-  list: PlanList;
-  item: ReadingItem;
-  children: ReactNode;
-}) {
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent className="w-56">
-        <ContextMenuItem
-          disabled={!item.itemKey}
-          onClick={() => openToRead(item.itemKey, item.title)}
-        >
-          <BookOpenIcon className="size-3.5" />
-          Open to read
-        </ContextMenuItem>
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <CheckCircle2Icon className="size-3.5" />
-            Status
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-60">
-            {STATUSES.map((s) => (
-              <ContextMenuItem
-                key={s}
-                onClick={() => void setStatus(list, item.ref, s)}
-              >
-                <StatusChoice status={s} />
-                {s === item.status && (
-                  <CheckIcon className="ml-auto size-3.5" />
-                )}
-              </ContextMenuItem>
-            ))}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-        <MoveToMenu
-          list={list}
-          label="Move to the reading list of"
-          onPick={(target) =>
-            void moveToPlan(
-              { list, ref: item.ref, reading: true, label: item.title },
-              target,
-            )
-          }
-        />
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          variant="destructive"
-          onClick={() => void editPlan(list, (p) => deleteTask(p, item.ref))}
-        >
-          <Trash2Icon className="size-3.5" />
-          Remove from list
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
-  );
-}
-
-function readingDrop(list: PlanList, item: ReadingItem) {
-  return (d: DragTask, zone: "before" | "inside" | "after") => {
-    if (d.list.key !== list.key) {
-      void moveToPlan(d, list);
-      return;
-    }
-    void editPlan(list, (p) =>
-      moveTask(
-        p,
-        d.ref,
-        item.ref.section,
-        zone === "after" ? item.ref.item + 1 : item.ref.item,
-      ),
-    );
-  };
-}
-
-function ReadingRow({
-  list,
-  item,
-  context,
-}: {
-  list: PlanList;
-  item: ReadingItem;
-  context?: TaskContext;
-}) {
-  const dnd = useTaskDnd(
-    `read:${list.key}:${item.ref.section}:${item.ref.item}`,
-    { list, ref: item.ref, reading: true, label: item.title },
-    { accepts: "reading", onDrop: readingDrop(list, item) },
-  );
-  return (
-    <ReadingMenu list={list} item={item}>
-      <div
-        ref={dnd.ref}
-        {...(dnd.handlers as React.HTMLAttributes<HTMLDivElement>)}
-        onDoubleClick={() => openToRead(item.itemKey, item.title)}
-        className={cn(
-          "relative flex cursor-default items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted/70",
-          dnd.dragging && "opacity-30",
-        )}
-      >
-        <DropMarker zone={dnd.over} />
-        <BookOpenIcon
-          className="size-4 shrink-0"
-          style={{ color: STATUS_COLOR[item.status] }}
-        />
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate text-sm",
-            item.status === "cited" && "text-muted-foreground",
-          )}
-          title={item.title}
-        >
-          {item.title}
-        </span>
-        {context && (
-          <span className="flex max-w-32 items-center gap-1 text-[11px] text-muted-foreground">
-            {context.icon}
-            <span className="truncate">{context.name}</span>
-          </span>
-        )}
-        <StatusPill
-          status={item.status}
-          onChange={(s) => void setStatus(list, item.ref, s)}
-        />
-      </div>
-    </ReadingMenu>
-  );
-}
-
-function ReadingCard({ list, item }: { list: PlanList; item: ReadingItem }) {
-  const dnd = useTaskDnd(
-    `rcard:${list.key}:${item.ref.section}:${item.ref.item}`,
-    { list, ref: item.ref, reading: true, label: item.title },
-    { accepts: "reading", onDrop: readingDrop(list, item) },
-  );
-  return (
-    <ReadingMenu list={list} item={item}>
-      <div>
-        <Card dnd={dnd}>
-          <p
-            className="flex items-start gap-2 text-sm leading-snug"
-            onDoubleClick={() => openToRead(item.itemKey, item.title)}
-          >
-            <BookOpenIcon
-              className="mt-0.5 size-3.5 shrink-0"
-              style={{ color: STATUS_COLOR[item.status] }}
-            />
-            {item.title}
-          </p>
-        </Card>
-      </div>
-    </ReadingMenu>
-  );
-}
-
-function StatusColumn({
-  list,
-  status,
-  items,
-}: {
-  list: PlanList;
-  status: ReadingStatus;
-  items: ReadingItem[];
-}) {
-  return (
-    <Column
-      id={`status:${list.key}:${status}`}
-      accepts="reading"
-      title={
-        <span className="font-semibold text-sm" title={STATUS_HINT[status]}>
-          {STATUS_LABEL[status]}
-        </span>
-      }
-      color={STATUS_COLOR[status]}
-      count={items.length}
-      onDrop={(d) => {
-        if (d.list.key === list.key) void setStatus(list, d.ref, status);
-      }}
-    >
-      {items.map((r) => (
-        <ReadingCard key={`${r.ref.item}-${r.title}`} list={list} item={r} />
-      ))}
-    </Column>
-  );
-}
-
-const READING_HELP =
-  "Right-click a paper in your Zotero library and choose Add to reading list. Its status moves along as you open, highlight, quote and cite it.";
-
-/** A plan's reading list: in reading order, or by status on a board. */
-export function ReadingView({
-  list,
-  mode,
-  inline,
-}: {
-  list: PlanList;
-  mode: PlanViewMode;
-  inline?: boolean;
-}) {
-  const text = usePlanText(list.key);
-  const [title, setTitle] = useState("");
-  if (text === undefined) {
-    return <p className="p-4 text-muted-foreground text-sm">Loading…</p>;
-  }
-  const plan = parsePlan(text ?? newPlanText(list.name));
-  const items = readingItems(plan);
-
-  if (mode === "board") {
-    return (
-      <BoardFrame>
-        {STATUSES.map((s) => (
-          <StatusColumn
-            key={s}
-            list={list}
-            status={s}
-            items={items.filter((r) => r.status === s)}
-          />
-        ))}
-      </BoardFrame>
-    );
-  }
-
-  return (
-    <div className={cn(inline ? "p-2" : "px-8 py-5")}>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          const name = title.trim();
-          if (!name) return;
-          void editPlan(list, (p) => {
-            const at = p.sections.findIndex((s) => isReadingSection(s.title));
-            const withList = at >= 0 ? p : addSection(p, READING_SECTION);
-            const index = at >= 0 ? at : withList.sections.length - 1;
-            return addTask(
-              withList,
-              { title: `${name} #reading/to-read` },
-              index,
-            );
-          });
-          setTitle("");
-        }}
-        className="flex items-center gap-2 rounded-lg border border-transparent bg-muted/60 px-2.5 focus-within:border-ring focus-within:bg-background"
-      >
-        <PlusIcon className="size-4 text-primary" />
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Add something to read"
-          aria-label="Add something to read"
-          className="h-9 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-        />
-      </form>
-      {items.length === 0 ? (
-        <Empty
-          icon={<BookOpenIcon className="size-6" />}
-          title="Nothing to read yet."
-          text={READING_HELP}
-        />
-      ) : (
-        <div className="pt-2">
-          {items.map((r) => (
-            <ReadingRow key={`${r.ref.item}-${r.title}`} list={list} item={r} />
-          ))}
-          <p className="px-2 pt-3 text-muted-foreground text-xs">
-            Right-click a paper to open it. Drag to set the order you'll read
-            them in.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
+export { ReadingView } from "./reading-views";
 
 /* ─────────────────────────── Smart lists ─────────────────────────── */
 
@@ -1587,47 +1237,17 @@ export function SmartView({
   });
 
   if (filter === "reading") {
-    const rows = plans.flatMap(({ list, plan }) =>
-      readingItems(plan).map((item) => ({ list, item })),
-    );
-    const order: ReadingStatus[] = [
-      "reading",
-      "to-read",
-      "read",
-      "noted",
-      "cited",
-    ];
     return (
-      <div className="px-8 py-5">
-        {rows.length === 0 && (
-          <Empty
-            icon={<BookOpenIcon className="size-6" />}
-            title="Nothing to read yet."
-            text={READING_HELP}
-          />
+      <AllReading
+        general={inbox}
+        rows={plans.flatMap(({ list, plan }) =>
+          readingItems(plan).map((item) => ({
+            list,
+            item,
+            context: contextOf(list),
+          })),
         )}
-        {order.map((status) => {
-          const group = rows.filter((r) => r.item.status === status);
-          if (group.length === 0) return null;
-          return (
-            <Group
-              key={status}
-              title={STATUS_LABEL[status]}
-              count={group.length}
-              color={STATUS_COLOR[status]}
-            >
-              {group.map((r) => (
-                <ReadingRow
-                  key={`${r.list.key}-${r.item.ref.item}-${r.item.title}`}
-                  list={r.list}
-                  item={r.item}
-                  context={contextOf(r.list)}
-                />
-              ))}
-            </Group>
-          );
-        })}
-      </div>
+      />
     );
   }
 

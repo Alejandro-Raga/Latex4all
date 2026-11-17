@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { newPlanText, parsePlan, serializePlan } from "./plan-file";
 import {
+  addMark,
   addReading,
-  advanceReading,
+  linkReading,
+  markOpened,
+  markPage,
+  nextStatus,
+  parsePaperInput,
   readingItems,
   setReadingStatus,
   workTasks,
@@ -16,15 +21,14 @@ const start = () =>
 
 describe("reading list", () => {
   it("adds a paper under Reading list, linked to Zotero", () => {
-    const text = serializePlan(start());
-    expect(text).toContain(
+    expect(serializePlan(start())).toContain(
       "## Reading list\n\n- [ ] [Absorptive capacity](zotero://select/library/items/ABCD1234) #reading/to-read\n",
     );
-    const [item] = readingItems(start());
-    expect(item).toMatchObject({
+    expect(readingItems(start())[0]).toMatchObject({
       title: "Absorptive capacity",
       itemKey: "ABCD1234",
       status: "to-read",
+      marks: [],
     });
   });
 
@@ -34,29 +38,111 @@ describe("reading list", () => {
     expect(workTasks(twice).map((t) => t.task.title)).toEqual(["A task"]);
   });
 
-  it("moves forward on its own, never back", () => {
-    let plan = advanceReading(start(), "ABCD1234", "reading");
+  it("opening starts it and keeps the last page", () => {
+    let plan = markOpened(start(), "ABCD1234");
     expect(readingItems(plan)[0].status).toBe("reading");
-    plan = advanceReading(plan, "ABCD1234", "read", "2026-11-16");
-    expect(readingItems(plan)[0]).toMatchObject({ status: "read" });
-    expect(serializePlan(plan)).toContain(
-      "- [x] [Absorptive capacity](zotero://select/library/items/ABCD1234) #reading/read ✅ 2026-11-16",
+    plan = markPage(plan, "ABCD1234", 12, 30);
+    expect(readingItems(plan)[0]).toMatchObject({ page: 12, pages: 30 });
+    expect(serializePlan(plan)).toContain("#reading/reading [page:: 12/30]");
+    // Read papers stay read when opened again.
+    const read = setReadingStatus(
+      plan,
+      readingItems(plan)[0].ref,
+      "read",
+      "2026-11-17",
     );
-    // Opening it again doesn't put it back to Reading.
-    expect(advanceReading(plan, "ABCD1234", "reading")).toBe(plan);
-    // Another paper: nothing changes.
-    expect(advanceReading(plan, "ZZZZ0000", "cited")).toBe(plan);
+    expect(readingItems(markOpened(read, "ABCD1234"))[0].status).toBe("read");
+    expect(readingItems(markPage(read, "ABCD1234", 3))[0]).toMatchObject({
+      status: "read",
+      page: 3,
+    });
   });
 
-  it("can be set to any status by hand", () => {
+  it("keeps marks apart from the status", () => {
+    let plan = addMark(start(), "ABCD1234", "highlighted");
+    expect(readingItems(plan)[0]).toMatchObject({
+      status: "reading",
+      marks: ["highlighted"],
+    });
+    plan = addMark(plan, "ABCD1234", "cited");
+    plan = addMark(plan, "ABCD1234", "quoted");
+    expect(readingItems(plan)[0].marks).toEqual([
+      "highlighted",
+      "quoted",
+      "cited",
+    ]);
+    expect(readingItems(plan)[0].status).toBe("reading");
+    // The same mark again changes nothing.
+    expect(addMark(plan, "ABCD1234", "cited")).toBe(plan);
+  });
+
+  it("goes round its statuses by hand, read checked off", () => {
+    expect(nextStatus("to-read")).toBe("reading");
+    expect(nextStatus("reading")).toBe("read");
+    expect(nextStatus("read")).toBe("to-read");
     const plan = setReadingStatus(
       start(),
       readingItems(start())[0].ref,
-      "cited",
-      "2026-11-16",
+      "read",
+      "2026-11-17",
     );
-    const back = setReadingStatus(plan, readingItems(plan)[0].ref, "to-read");
-    expect(readingItems(back)[0]).toMatchObject({ status: "to-read" });
-    expect(readingItems(back)[0].task.done).toBe(false);
+    expect(readingItems(plan)[0].task).toMatchObject({
+      done: true,
+      doneOn: "2026-11-17",
+    });
+  });
+
+  it("reads lists from before: old statuses become marks", () => {
+    const old = parsePlan(
+      "## Reading list\n\n- [x] [A](zotero://select/library/items/AAAA0000) #reading/cited\n- [x] [B](zotero://select/library/items/BBBB0000) #reading/noted\n- [ ] [C](zotero://select/library/items/CCCC0000) #reading/read\n",
+    );
+    expect(readingItems(old).map((r) => [r.title, r.status, r.marks])).toEqual([
+      ["A", "read", ["cited"]],
+      ["B", "read", ["quoted"]],
+      ["C", "reading", ["highlighted"]],
+    ]);
+  });
+});
+
+describe("papers not in Zotero", () => {
+  it("takes a title, a DOI or a link as typed", () => {
+    expect(parsePaperInput("10.1016/j.respol.2018.01.005")).toEqual({
+      title: "10.1016/j.respol.2018.01.005",
+      url: "https://doi.org/10.1016/j.respol.2018.01.005",
+      doi: "10.1016/j.respol.2018.01.005",
+    });
+    expect(
+      parsePaperInput("Firms and science — doi:10.1016/j.respol.2018.01.005"),
+    ).toMatchObject({
+      title: "Firms and science",
+      doi: "10.1016/j.respol.2018.01.005",
+    });
+    expect(parsePaperInput("Some talk https://example.org/x")).toEqual({
+      title: "Some talk",
+      url: "https://example.org/x",
+      doi: undefined,
+    });
+    expect(parsePaperInput("Just a title")).toEqual({ title: "Just a title" });
+  });
+
+  it("keeps the link, then becomes a Zotero entry when added there", () => {
+    const plan = addReading(parsePlan(""), {
+      title: "Firms and science",
+      url: "https://doi.org/10.1016/j.respol.2018.01.005",
+    });
+    const [item] = readingItems(plan);
+    expect(item).toMatchObject({
+      title: "Firms and science",
+      doi: "10.1016/j.respol.2018.01.005",
+      itemKey: undefined,
+    });
+    const reading = setReadingStatus(plan, item.ref, "reading");
+    const linked = linkReading(reading, item.ref, "ZZZZ9999");
+    expect(readingItems(linked)[0]).toMatchObject({
+      itemKey: "ZZZZ9999",
+      url: undefined,
+      status: "reading",
+      title: "Firms and science",
+    });
   });
 });

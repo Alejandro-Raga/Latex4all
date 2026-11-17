@@ -1,72 +1,94 @@
 /**
- * A project's reading list: the papers to read for it, in reading order,
- * each with how far it's got. It's the "Reading list" section of the plan:
+ * A project's reading list: the papers to read for it, in the order they'll
+ * be read. It's the "Reading list" section of the plan:
  *
  *   ## Reading list
  *
- *   - [ ] [Absorptive capacity](zotero://select/library/items/ABCD1234) #reading/to-read
- *   - [x] [The decline of science](zotero://select/library/items/EFGH5678) #reading/cited
+ *   - [ ] [Absorptive capacity](zotero://select/library/items/ABCD1234) #reading/reading #reading/highlighted [page:: 12/30]
+ *   - [x] [The decline of science](zotero://select/library/items/EFGH5678) #reading/read #reading/cited
+ *   - [ ] [A paper someone mentioned](https://doi.org/10.1000/xyz) #reading/to-read
  *
- * The status moves forward on its own as the paper is opened, highlighted,
- * quoted in a note and cited; by hand it can go anywhere.
+ * Each paper has a status, the reader's own: to read, reading, read. It
+ * moves to Reading by itself when the paper is opened, which also keeps the
+ * last page. What's been done with it shows apart, as marks set by
+ * themselves: highlighted, quoted in a note, cited. Papers not in Zotero
+ * keep a title, and a DOI or a link if given.
  */
 import {
+  addSection,
+  addTask,
   allTasks,
   type Plan,
   type Task,
   type TaskRef,
-  addSection,
-  addTask,
   updateTask,
 } from "./plan-file";
 
 export const READING_SECTION = "Reading list";
 
-export const STATUSES = [
-  "to-read",
-  "reading",
-  "read",
-  "noted",
-  "cited",
-] as const;
+export const STATUSES = ["to-read", "reading", "read"] as const;
 export type ReadingStatus = (typeof STATUSES)[number];
 
 export const STATUS_LABEL: Record<ReadingStatus, string> = {
   "to-read": "To read",
   reading: "Reading",
-  read: "Highlighted",
-  noted: "Quoted",
-  cited: "Cited",
+  read: "Read",
 };
 
-/** What each status means, and what sets it by itself. */
+/** What each status means. */
 export const STATUS_HINT: Record<ReadingStatus, string> = {
-  "to-read": "Not opened yet",
-  reading: "Set when you open it",
-  read: "Set when you highlight it",
-  noted: "Set when you quote it in a note",
-  cited: "Set when your project cites it",
+  "to-read": "Not started",
+  reading: "Started: set when you open it",
+  read: "Finished",
 };
 
-/** The theme's own colors, so every theme keeps its look. */
 export const STATUS_COLOR: Record<ReadingStatus, string> = {
   "to-read": "var(--muted-foreground)",
   reading: "var(--primary)",
   read: "var(--chart-2)",
-  noted: "var(--chart-4)",
+};
+
+/** What's been done with a paper, each set by itself. */
+export const MARKS = ["highlighted", "quoted", "cited"] as const;
+export type ReadingMark = (typeof MARKS)[number];
+
+export const MARK_LABEL: Record<ReadingMark, string> = {
+  highlighted: "Highlighted",
+  quoted: "Quoted",
+  cited: "Cited",
+};
+
+export const MARK_HINT: Record<ReadingMark, string> = {
+  highlighted: "You've highlighted it",
+  quoted: "You've quoted it in a note",
+  cited: "Your project cites it",
+};
+
+export const MARK_COLOR: Record<ReadingMark, string> = {
+  highlighted: "var(--chart-4)",
+  quoted: "var(--chart-3)",
   cited: "var(--chart-1)",
 };
 
-const STATUS_TAG = /\s*#reading\/([a-z-]+)/;
-const ZOTERO_LINK =
-  /\[([^\]]*)\]\(zotero:\/\/select\/library\/items\/([A-Z0-9]+)\)/;
+const TAGS = /\s*#reading\/([a-z-]+)/g;
+const PAGE = /\s*\[page::\s*(\d+)(?:\s*\/\s*(\d+))?\]/;
+const LINK =
+  /\[([^\]]*)\]\((?:zotero:\/\/select\/library\/items\/([A-Z0-9]+)|(https?:\/\/[^)\s]+))\)/;
+const DOI = /\b(10\.\d{4,9}\/[^\s"<>]+[^\s"<>.,;)])/i;
 
 export interface ReadingItem {
   task: Task;
   ref: TaskRef;
   status: ReadingStatus;
-  /** The paper's Zotero item, if it came from Zotero. */
+  marks: ReadingMark[];
+  /** The last page opened, and how many there are. */
+  page?: number;
+  pages?: number;
+  /** The paper's Zotero item, when it's in Zotero. */
   itemKey?: string;
+  /** Where to find it otherwise: its DOI's address, or any link. */
+  url?: string;
+  doi?: string;
   /** Its title, as shown. */
   title: string;
 }
@@ -75,18 +97,51 @@ export const isReadingSection = (title: string | null) =>
   title?.toLowerCase() === READING_SECTION.toLowerCase();
 
 export function readingItem(task: Task, ref: TaskRef): ReadingItem {
-  const tag = STATUS_TAG.exec(task.title)?.[1];
-  const status = (STATUSES as readonly string[]).includes(tag ?? "")
-    ? (tag as ReadingStatus)
-    : task.done
-      ? "read"
-      : "to-read";
-  const link = ZOTERO_LINK.exec(task.title);
+  const tags = [...task.title.matchAll(TAGS)].map((m) => m[1]);
+  const marks = new Set<ReadingMark>(
+    tags.filter((t): t is ReadingMark =>
+      (MARKS as readonly string[]).includes(t),
+    ),
+  );
+  let status = tags.find((t): t is ReadingStatus =>
+    (STATUSES as readonly string[]).includes(t),
+  );
+  // Lists from before statuses and marks were apart.
+  if (tags.includes("noted")) marks.add("quoted");
+  if (!status && (tags.includes("noted") || marks.has("cited")))
+    status = "read";
+  if (!status && marks.has("highlighted")) status = "reading";
+  if (
+    status === "read" &&
+    tags.includes("read") &&
+    marks.size === 0 &&
+    !task.done
+  ) {
+    // "read" once meant highlighted.
+    status = "reading";
+    marks.add("highlighted");
+  }
+  status ??= task.done ? "read" : "to-read";
+  const page = PAGE.exec(task.title);
+  const link = LINK.exec(task.title);
+  const url = link?.[3];
   const title = task.title
-    .replace(STATUS_TAG, "")
-    .replace(ZOTERO_LINK, (_, text: string) => text)
+    .replace(TAGS, "")
+    .replace(PAGE, "")
+    .replace(LINK, (_, text: string) => text)
     .trim();
-  return { task, ref, status, itemKey: link?.[2], title };
+  return {
+    task,
+    ref,
+    status,
+    marks: MARKS.filter((m) => marks.has(m)),
+    page: page ? Number(page[1]) : undefined,
+    pages: page?.[2] ? Number(page[2]) : undefined,
+    itemKey: link?.[2],
+    url,
+    doi: url ? DOI.exec(decodeURIComponent(url))?.[1] : undefined,
+    title,
+  };
 }
 
 /** The reading list, in reading order. */
@@ -102,76 +157,196 @@ export function workTasks(plan: Plan) {
 }
 
 /** The reading list's section, made if there's none. */
-function readingSection(plan: Plan): { plan: Plan; index: number } {
+export function readingSection(plan: Plan): { plan: Plan; index: number } {
   const index = plan.sections.findIndex((s) => isReadingSection(s.title));
   if (index >= 0) return { plan, index };
   const next = addSection(plan, READING_SECTION);
   return { plan: next, index: next.sections.length - 1 };
 }
 
-const entryTitle = (
-  title: string,
-  itemKey: string | undefined,
-  status: ReadingStatus,
-) =>
-  `${itemKey ? `[${title.replace(/[[\]]/g, "")}](zotero://select/library/items/${itemKey})` : title} #reading/${status}`;
+interface Entry {
+  title: string;
+  itemKey?: string;
+  url?: string;
+  status: ReadingStatus;
+  marks: ReadingMark[];
+  page?: number;
+  pages?: number;
+}
+
+function entryTitle(item: Entry): string {
+  const text = item.title.replace(/[[\]]/g, "");
+  const name = item.itemKey
+    ? `[${text}](zotero://select/library/items/${item.itemKey})`
+    : item.url
+      ? `[${text}](${item.url})`
+      : item.title;
+  const parts = [
+    name,
+    `#reading/${item.status}`,
+    ...item.marks.map((m) => `#reading/${m}`),
+  ];
+  if (item.page) {
+    parts.push(`[page:: ${item.page}${item.pages ? `/${item.pages}` : ""}]`);
+  }
+  return parts.join(" ");
+}
+
+/**
+ * What was typed to add a paper: a title, a DOI, a link, or a title with
+ * either. A DOI becomes its doi.org address.
+ */
+export function parsePaperInput(text: string): {
+  title: string;
+  url?: string;
+  doi?: string;
+} {
+  const raw = text.trim();
+  const doi = DOI.exec(raw)?.[1];
+  const link = /https?:\/\/\S+/.exec(raw)?.[0];
+  const url = doi ? `https://doi.org/${doi}` : link;
+  const title = raw
+    .replace(/https?:\/\/\S+/, "")
+    .replace(
+      doi
+        ? new RegExp(
+            `(?:doi:\\s*)?${doi.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+            "i",
+          )
+        : /$^/,
+      "",
+    )
+    .replace(/\s+/g, " ")
+    .replace(/^[\s,–—-]+|[\s,–—-]+$/g, "")
+    .trim();
+  return { title: title || doi || link || raw, url, doi };
+}
 
 /** Adds a paper at the end of the list, unless it's there already. */
 export function addReading(
   plan: Plan,
-  paper: { title: string; itemKey?: string },
+  paper: { title: string; itemKey?: string; url?: string },
 ): Plan {
+  const items = readingItems(plan);
   if (
-    paper.itemKey &&
-    readingItems(plan).some((r) => r.itemKey === paper.itemKey)
+    (paper.itemKey && items.some((r) => r.itemKey === paper.itemKey)) ||
+    (paper.url && items.some((r) => r.url === paper.url))
   ) {
     return plan;
   }
   const { plan: withSection, index } = readingSection(plan);
   return addTask(
     withSection,
-    { title: entryTitle(paper.title, paper.itemKey, "to-read") },
+    { title: entryTitle({ ...paper, status: "to-read", marks: [] }) },
     index,
   );
 }
 
-/** Done once read: what's read, noted or cited is checked off. */
-const doneAt = (status: ReadingStatus) =>
-  STATUSES.indexOf(status) >= STATUSES.indexOf("read");
+function rewrite(
+  plan: Plan,
+  item: ReadingItem,
+  change: Partial<Entry>,
+  today?: string,
+): Plan {
+  const next = { ...item, ...change };
+  const title = entryTitle(next);
+  const done = next.status === "read";
+  if (title === item.task.title && done === item.task.done) return plan;
+  return updateTask(plan, item.ref, {
+    title,
+    done,
+    doneOn: done ? (item.task.doneOn ?? today) : undefined,
+  });
+}
 
+function itemAt(plan: Plan, ref: TaskRef) {
+  return readingItems(plan).find(
+    (r) => r.ref.section === ref.section && r.ref.item === ref.item,
+  );
+}
+
+/** Sets a paper's status by hand: anything goes. */
 export function setReadingStatus(
   plan: Plan,
   ref: TaskRef,
   status: ReadingStatus,
   today?: string,
 ): Plan {
-  const item = readingItems(plan).find(
-    (r) => r.ref.section === ref.section && r.ref.item === ref.item,
-  );
-  if (!item) return plan;
-  const done = doneAt(status);
-  return updateTask(plan, ref, {
-    title: entryTitle(item.title, item.itemKey, status),
-    done,
-    doneOn: done ? (item.task.doneOn ?? today) : undefined,
-  });
+  const item = itemAt(plan, ref);
+  return item ? rewrite(plan, item, { status }, today) : plan;
 }
 
-/**
- * Moves a paper's status forward to `status`, never back: opening a paper
- * read long ago leaves it read. Unchanged if the paper isn't on the list.
- */
-export function advanceReading(
+/** A paper now in Zotero: linked to its item, the rest kept. */
+export function linkReading(
+  plan: Plan,
+  ref: TaskRef,
+  itemKey: string,
+  title?: string,
+): Plan {
+  const item = itemAt(plan, ref);
+  return item
+    ? rewrite(plan, item, {
+        itemKey,
+        url: undefined,
+        title: title ?? item.title,
+      })
+    : plan;
+}
+
+/** The status after this one, as a click on the marker goes. */
+export const nextStatus = (status: ReadingStatus): ReadingStatus =>
+  STATUSES[(STATUSES.indexOf(status) + 1) % STATUSES.length];
+
+/** Applies a change to every entry of a paper. */
+function eachOf(
   plan: Plan,
   itemKey: string,
-  status: ReadingStatus,
-  today?: string,
+  change: (item: ReadingItem) => Partial<Entry> | null,
 ): Plan {
   let next = plan;
   for (const item of readingItems(plan)) {
     if (item.itemKey !== itemKey) continue;
-    if (STATUSES.indexOf(item.status) >= STATUSES.indexOf(status)) continue;
-    next = setReadingStatus(next, item.ref, status, today);
+    const patch = change(item);
+    if (patch) next = rewrite(next, item, patch);
   }
   return next;
 }
+
+/** Opened: being read, unless it's been read already. */
+export const markOpened = (plan: Plan, itemKey: string) =>
+  eachOf(plan, itemKey, (item) =>
+    item.status === "to-read" ? { status: "reading" } : null,
+  );
+
+/** The last page opened, of how many; opening it is starting it. */
+export const markPage = (
+  plan: Plan,
+  itemKey: string,
+  page: number,
+  pages?: number,
+) =>
+  eachOf(plan, itemKey, (item) =>
+    item.page === page &&
+    (pages === undefined || item.pages === pages) &&
+    item.status !== "to-read"
+      ? null
+      : {
+          page,
+          pages: pages ?? item.pages,
+          status: item.status === "to-read" ? "reading" : item.status,
+        },
+  );
+
+/** Highlighted, quoted or cited: the mark, kept. Highlighting starts it. */
+export const addMark = (plan: Plan, itemKey: string, mark: ReadingMark) =>
+  eachOf(plan, itemKey, (item) =>
+    item.marks.includes(mark)
+      ? null
+      : {
+          marks: MARKS.filter((m) => m === mark || item.marks.includes(m)),
+          status:
+            mark === "highlighted" && item.status === "to-read"
+              ? "reading"
+              : item.status,
+        },
+  );

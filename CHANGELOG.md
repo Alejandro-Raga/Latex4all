@@ -52,8 +52,13 @@ tag.
   Dragging is quicker: a dropped task lands at once.
 - Planner colors come from the theme, one per kind of project: every
   article the same color, every thesis another, in any theme.
-- Reading lists: right-click a paper to open it and read it. Statuses
-  say what they mean (Highlighted, Quoted), and cited papers stay listed.
+- Reading lists as a backlog: papers grouped into Reading now, Up next
+  (numbered, in the order you'll read them) and Read, dragged to reorder
+  or to change status. The circle is the status (to read, reading with
+  the pages read, read) and keeps the last page opened; pills show what's
+  been done with a paper (Highlighted, Quoted, Cited). Papers can be
+  added by title, DOI or link, even if they aren't in Zotero, and added
+  to Zotero later from their right-click menu.
 - Library & Vault: a bar on top shows or hides the Zotero library and
   the vault, swaps them, and puts them side by side or one above the
   other. The layout is remembered.
