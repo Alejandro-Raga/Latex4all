@@ -14,7 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { dayFromToday, dueLabel } from "@/lib/plan/dates";
+import { dueLabel } from "@/lib/plan/dates";
 import {
   notesLines,
   notesText,

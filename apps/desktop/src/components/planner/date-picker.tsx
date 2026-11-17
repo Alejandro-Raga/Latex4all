@@ -71,7 +71,6 @@ export function DatePicker({
         </div>
         <div className="grid grid-cols-7 text-center text-[10px] text-muted-foreground">
           {WEEKDAYS.map((d, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: two Ts and two Ss
             <span key={i} className="py-1">
               {d}
             </span>
