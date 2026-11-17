@@ -84,7 +84,7 @@ export const DEFAULT_LIMITS = {
   maxReportBytes: 16 * MiB,
   maxReportImages: 6,
   maxReportImageBytes: 4 * MiB,
-  reportsPerIpPerDay: 10,
+  reportsPerIpPerDay: 100,
   maxReportsBytes: 500 * MiB,
 };
 
