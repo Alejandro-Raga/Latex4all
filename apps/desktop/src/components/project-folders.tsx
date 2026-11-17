@@ -42,6 +42,12 @@ export const FOLDER_COLORS = [
   "var(--chart-5)",
 ];
 
+/**
+ * Opens a dialog once the menu it was chosen from has closed: closing hands
+ * focus back to where the menu was opened, which would close the dialog.
+ */
+export const afterMenu = (open: () => void) => setTimeout(open, 0);
+
 export const folderColor = (f?: ProjectFolder) =>
   f?.color ?? "var(--muted-foreground)";
 
@@ -166,7 +172,9 @@ export function FolderTiles({
                 Open
               </ContextMenuItem>
               <ContextMenuItem
-                onSelect={() => onPrompt({ kind: "rename", id: f.id })}
+                onSelect={() =>
+                  afterMenu(() => onPrompt({ kind: "rename", id: f.id }))
+                }
               >
                 Rename…
               </ContextMenuItem>
@@ -238,7 +246,9 @@ export function MoveToFolderMenu({
           </ContextMenuItem>
         ))}
         {folders.length > 0 && <ContextMenuSeparator />}
-        <ContextMenuItem onSelect={onNew}>New folder…</ContextMenuItem>
+        <ContextMenuItem onSelect={() => afterMenu(onNew)}>
+          New folder…
+        </ContextMenuItem>
         {current && (
           <ContextMenuItem
             onSelect={() => useProjectFolders.getState().put(path, null)}

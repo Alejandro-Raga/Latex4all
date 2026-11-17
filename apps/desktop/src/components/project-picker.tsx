@@ -133,6 +133,7 @@ import {
 import { useReaderFull } from "@/stores/reader-full-store";
 import { useProjectFolders } from "@/stores/project-folders-store";
 import {
+  afterMenu,
   FolderNameDialog,
   type FolderPrompt,
   FolderTag,
@@ -893,7 +894,9 @@ export function ProjectPicker() {
                         Import a folder…
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onSelect={() => setFolderPrompt({ kind: "new" })}
+                        onSelect={() =>
+                          afterMenu(() => setFolderPrompt({ kind: "new" }))
+                        }
                       >
                         <FolderPlusIcon className="size-4" />
                         New folder…
