@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  useContext,
 } from "react";
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { readFile } from "@tauri-apps/plugin-fs";
@@ -13,6 +14,8 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import { setReaderFull, useReaderFull } from "@/stores/reader-full-store";
 import { useBookmarkStore } from "@/stores/bookmark-store";
+import { inProject } from "@/stores/nav-store";
+import { LibraryPage } from "./vault-standalone";
 
 const FULL_KEY =
   typeof navigator !== "undefined" && navigator.userAgent.includes("Mac")
@@ -276,7 +279,11 @@ export function QuickReferencePanel({
   closeOnEscape?: boolean;
 }) {
   const recentProjects = useProjectStore((s) => s.recentProjects);
-  const currentProjectRoot = useDocumentStore((s) => s.projectRoot);
+  // On the Library page, the project open behind it (if any) isn't this
+  // library's: it reads and opens papers as with no project.
+  const onLibraryPage = useContext(LibraryPage);
+  const openProjectRoot = useDocumentStore((s) => s.projectRoot);
+  const currentProjectRoot = onLibraryPage ? null : openProjectRoot;
   const zoteroAuthenticated = useZoteroStore((s) => s.isAuthenticated);
   const zoteroApiKey = useZoteroStore((s) => s.apiKey);
   const zoteroUserID = useZoteroStore((s) => s.userID);
@@ -449,10 +456,12 @@ export function QuickReferencePanel({
   // A note's highlight link, with no project open: shown here.
   useEffect(() => {
     useLibraryPreview.setState((s) => ({ listening: s.listening + 1 }));
+    // Only where you are: the Library page, or the project's own panel.
+    const here = () => (onLibraryPage ? !inProject() : inProject());
     const show = (
       request: ReturnType<typeof useLibraryPreview.getState>["request"],
     ) => {
-      if (!request) return;
+      if (!request || !here()) return;
       useLibraryPreview.getState().done();
       setSelectedFile({
         source: "zotero",
@@ -466,7 +475,7 @@ export function QuickReferencePanel({
     const showFile = (
       file: ReturnType<typeof useLibraryPreview.getState>["file"],
     ) => {
-      if (!file) return;
+      if (!file || !here()) return;
       useLibraryPreview.getState().done();
       setSelectedFile({
         source: "fs",

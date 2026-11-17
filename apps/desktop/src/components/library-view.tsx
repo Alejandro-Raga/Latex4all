@@ -12,7 +12,10 @@ import {
 import { PanelBoundary } from "@/components/panel-boundary";
 import { QuickReferencePanel } from "@/components/workspace/quick-reference-panel";
 import { VaultPanel } from "@/components/workspace/vault-panel";
-import { VaultStandalone } from "@/components/workspace/vault-standalone";
+import {
+  LibraryPage,
+  VaultStandalone,
+} from "@/components/workspace/vault-standalone";
 import { cn } from "@/lib/utils";
 import { useReaderFull } from "@/stores/reader-full-store";
 import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
@@ -114,10 +117,12 @@ export function LibraryView() {
       className="min-h-0 min-w-0"
     >
       <PanelBoundary name="Library">
-        <QuickReferencePanel
-          onClose={() => toggle("reference")}
-          closeOnEscape={false}
-        />
+        <LibraryPage.Provider value>
+          <QuickReferencePanel
+            onClose={() => toggle("reference")}
+            closeOnEscape={false}
+          />
+        </LibraryPage.Provider>
       </PanelBoundary>
     </Panel>
   );

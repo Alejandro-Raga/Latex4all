@@ -7,3 +7,9 @@ import { createContext, useContext } from "react";
 export const VaultStandalone = createContext(false);
 
 export const useVaultStandalone = () => useContext(VaultStandalone);
+
+/**
+ * Set on the Library & Vault page: its Zotero library is the start page's,
+ * not the open project's (one may be open behind it).
+ */
+export const LibraryPage = createContext(false);

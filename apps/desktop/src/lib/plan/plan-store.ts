@@ -19,6 +19,7 @@ import { persist } from "zustand/middleware";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useVaultStore } from "@/stores/vault-store";
+import { useNav } from "@/stores/nav-store";
 import { PLAN_FILE } from "./plan-file";
 
 export const INBOX = "inbox";
@@ -343,9 +344,10 @@ export const usePlannerRequest = create<{
   done: () => set({ asked: 0 }),
 }));
 
-/** Back to the Planner: out of the open project, to the start page's Planner. */
+/** Back to the Planner, on the start page. */
 export function backToPlanner() {
-  const doc = useDocumentStore.getState();
-  if (doc.projectRoot) doc.closeProject();
-  usePlannerRequest.getState().ask();
+  // The project, if one is open, stays open behind it.
+  if (useDocumentStore.getState().projectRoot) {
+    useNav.getState().goHome("planner");
+  } else usePlannerRequest.getState().ask();
 }

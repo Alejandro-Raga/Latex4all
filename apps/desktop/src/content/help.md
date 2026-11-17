@@ -36,6 +36,17 @@ Hover a card for **Open PDF**, **Show in Finder** and **Duplicate**. Right-click
 
 Your files are on the left, the editor in the middle and the PDF on the right. The icons on the far right open the side panels: **Zotero library**, **Vault**, **Notes** and **Plan**.
 
+Under the project's name, a small strip shows when the project is due, its next task and the paper you're reading for it. Click it to open the Plan.
+
+### Move around the app
+
+You can go anywhere without closing your project:
+
+- The house at the top left takes you to the start page. **Planner** and **Library & Vault** are at the bottom of the project's sidebar.
+- On the start page, **Back to** and the project's name, at the top of the sidebar, return you to it as you left it.
+- After opening a project or a paper from the Planner, **Back to Planner** at the bottom of the window takes you back.
+- To close the project, right-click its name and choose **Close project**.
+
 ### Appearance
 
 **Settings → Appearance** sets the theme. **Menus** makes menus and popups **Clear**, **Frosted** or **Solid**. **Background** can be **Flat** or a **Gradient** of the theme's colors.

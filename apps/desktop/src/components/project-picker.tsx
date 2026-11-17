@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { leaveSharedProject } from "@/stores/collab-store";
 import {
+  ArrowLeftIcon,
   CheckCircle2Icon,
   FolderPlusIcon,
   FlagIcon,
@@ -133,6 +134,7 @@ import {
   PRIORITY_LABEL,
 } from "@/components/planner/task-parts";
 import { useReaderFull } from "@/stores/reader-full-store";
+import { inProject, useNav } from "@/stores/nav-store";
 import { useProjectFolders } from "@/stores/project-folders-store";
 import {
   afterMenu,
@@ -208,8 +210,15 @@ export function ProjectPicker() {
   const [wizardMode, setWizardMode] = useState<CreationMode | null>(null);
   const [appVersion, setAppVersion] = useState("");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [activeSection, setActiveSection] =
-    useState<ProjectPickerSection>("projects");
+  // The part asked for on getting here (from the project: the Planner…).
+  const [activeSection, setActiveSection] = useState<ProjectPickerSection>(
+    () => useNav.getState().section ?? "projects",
+  );
+  const openRoot = useDocumentStore((st) => st.projectRoot);
+  const askedSection = useNav((st) => st.section);
+  useEffect(() => {
+    if (askedSection) setActiveSection(askedSection);
+  }, [askedSection]);
   // The Planner asked for (from the day's summary).
   const readerFull = useReaderFull((st) => st.on);
   const plannerAsked = usePlannerRequest((st) => st.asked);
@@ -222,7 +231,7 @@ export function ProjectPicker() {
   useEffect(
     () =>
       useLibraryPreview.subscribe((st) => {
-        if ((st.request || st.file) && st.listening === 0) {
+        if ((st.request || st.file) && !inProject()) {
           setActiveSection("library");
         }
       }),
@@ -758,6 +767,16 @@ export function ProjectPicker() {
               isSidebarCollapsed ? "items-center px-0" : "px-2",
             )}
           >
+            {openRoot && (
+              <ProjectNavButton
+                active={false}
+                collapsed={isSidebarCollapsed}
+                icon={ArrowLeftIcon}
+                onClick={() => useNav.getState().backToProject()}
+              >
+                {`Back to ${openRoot.split(/[/\\]/).pop()}`}
+              </ProjectNavButton>
+            )}
             <ProjectNavButton
               active={activeSection === "projects"}
               collapsed={isSidebarCollapsed}

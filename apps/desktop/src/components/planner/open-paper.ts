@@ -6,6 +6,7 @@
 import { toast } from "sonner";
 import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import { useDockStore } from "@/stores/dock-store";
+import { inProject } from "@/stores/nav-store";
 import { useDocumentStore } from "@/stores/document-store";
 
 export function openToRead(itemKey: string | undefined, label: string) {
@@ -16,7 +17,7 @@ export function openToRead(itemKey: string | undefined, label: string) {
   useLibraryPreview.getState().ask({ itemKey, label });
   // The library shows it once it's there to: the dock's panel in a project;
   // without one, the start page turns to Library & Vault (it listens).
-  if (useDocumentStore.getState().projectRoot) {
+  if (inProject()) {
     useDockStore.getState().setOpen("reference", true);
   }
 }

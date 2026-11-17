@@ -75,6 +75,7 @@ import { openToRead } from "./open-paper";
 import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import { useDockStore } from "@/stores/dock-store";
 import { useBack } from "@/stores/back-store";
+import { inProject } from "@/stores/nav-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { editPlan, moveToPlan } from "./plan-actions";
 import { BoardFrame, Card, Column, Empty, MoveToMenu } from "./plan-views";
@@ -225,13 +226,13 @@ function Pills({ item }: { item: ReadingItem }) {
 export function open(item: ReadingItem) {
   // From the Planner on the start page, the paper opens in the Library:
   // a way back to the list.
-  if (item.itemKey && !useDocumentStore.getState().projectRoot) {
+  if (item.itemKey && !inProject()) {
     useBack.getState().set("Back to Planner", backToPlanner);
   }
   if (item.itemKey) openToRead(item.itemKey, item.title);
   else if (item.url?.startsWith("file://")) {
     // A project's PDF: read in the Library, like a Zotero paper.
-    if (!useDocumentStore.getState().projectRoot) {
+    if (!inProject()) {
       useBack.getState().set("Back to Planner", backToPlanner);
     } else {
       useDockStore.getState().setOpen("reference", true);

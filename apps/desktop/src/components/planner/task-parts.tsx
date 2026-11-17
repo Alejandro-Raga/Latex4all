@@ -20,6 +20,7 @@ import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
 import { openToRead } from "./open-paper";
 import { useBack } from "@/stores/back-store";
+import { goToProject, inProject } from "@/stores/nav-store";
 import { backToPlanner } from "@/lib/plan/plan-store";
 import {
   Popover,
@@ -865,11 +866,11 @@ export function Pins({
               aria-label={`Open the project ${titleOf(p)}`}
               onClick={async () => {
                 const root = projectOf(p) as string;
-                const fromPlanner = !useDocumentStore.getState().projectRoot;
-                await useDocumentStore.getState().openProject(root);
-                useProjectStore.getState().addRecentProject(root);
-                if (fromPlanner)
+                const fromPlanner = !inProject();
+                await goToProject(root);
+                if (fromPlanner) {
                   useBack.getState().set("Back to Planner", backToPlanner);
+                }
               }}
               className="rounded px-1 font-medium text-[11px] text-primary hover:bg-primary/10"
             >
@@ -884,7 +885,7 @@ export function Pins({
               onClick={() => {
                 const paper = paperOf(p);
                 if (!paper) return;
-                if (!useDocumentStore.getState().projectRoot) {
+                if (!inProject()) {
                   useBack.getState().set("Back to Planner", backToPlanner);
                 }
                 openToRead(paper.key, paper.title);

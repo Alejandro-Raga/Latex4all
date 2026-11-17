@@ -16,6 +16,8 @@ import { BugReportDialog } from "@/components/bug-report-dialog";
 import { DailySummary } from "@/components/planner/daily-summary";
 import { QuickTask } from "@/components/planner/quick-task";
 import { BackPill } from "@/components/back-pill";
+import { followProjectNav, useNav } from "@/stores/nav-store";
+import { cn } from "@/lib/utils";
 import { HelpDialog } from "@/components/help-view";
 import { ZoteroPdfDialog } from "@/components/zotero-pdf-dialog";
 import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
@@ -201,6 +203,7 @@ function WorkspaceWithClaude() {
 
 export function App({ onReady }: { onReady?: () => void }) {
   const projectRoot = useDocumentStore((s) => s.projectRoot);
+  const away = useNav((s) => s.away);
   const [showDebug, setShowDebug] = useState(false);
 
   // Register global keyboard shortcuts (Cmd+S, Cmd+N) at the app level
@@ -210,6 +213,7 @@ export function App({ onReady }: { onReady?: () => void }) {
   // Shared projects connect as they open.
   useEffect(() => followOpenProject(), []);
   useEffect(() => followAnnotations(), []);
+  useEffect(() => followProjectNav(), []);
 
   useEffect(() => {
     const preventNativeContextMenu = (event: MouseEvent) => {
@@ -256,7 +260,13 @@ export function App({ onReady }: { onReady?: () => void }) {
             data-tauri-drag-region
             className="fixed inset-x-0 top-0 z-[9999] h-[var(--titlebar-height)]"
           />
-          {projectRoot ? <WorkspaceWithClaude /> : <ProjectPicker />}
+          {/* The project stays as it was while you're elsewhere. */}
+          {projectRoot && (
+            <div className={cn("h-full", away && "hidden")}>
+              <WorkspaceWithClaude />
+            </div>
+          )}
+          {(!projectRoot || away) && <ProjectPicker />}
           <EnvironmentOnboarding />
           <BugReportDialog />
           <ZoteroPdfDialog />

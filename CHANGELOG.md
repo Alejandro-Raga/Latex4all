@@ -23,6 +23,13 @@ tag.
 
 ### Added
 
+- Move around without closing your project: the home button, Planner
+  and Library & Vault (at the bottom of the project's sidebar) take you
+  there with the project kept open, just as you left it; "Back to …" at
+  the top of the start page returns to it. Close project is in the
+  menu on the project's name.
+- A strip under the project's name: when it's due, the next task, and
+  the paper you're reading for it. Click it for the Plan.
 - Pin papers, ideas and topics to a section too, from its … menu.
 - PDFs in your projects, in the Library, can go on a reading list or get
   a task, like Zotero papers; from the list they open in the Library.

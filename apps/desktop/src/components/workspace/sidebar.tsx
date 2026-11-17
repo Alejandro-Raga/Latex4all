@@ -9,6 +9,7 @@ import {
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { getVersion } from "@tauri-apps/api/app";
 import {
+  ListTodoIcon,
   FileTextIcon,
   FolderIcon,
   HomeIcon,
@@ -57,6 +58,8 @@ import { useDocumentStore, type ProjectFile } from "@/stores/document-store";
 import { revealInFileManager, revealLabel } from "@/lib/reveal";
 import { useHistoryStore } from "@/stores/history-store";
 import { cn } from "@/lib/utils";
+import { useNav } from "@/stores/nav-store";
+import { ProjectStrip } from "./project-strip";
 import { ConflictedCopies } from "./conflicted-copies";
 import { useSettingsWindow } from "@/stores/settings-window-store";
 import { useHelp } from "@/components/help-view";
@@ -1310,9 +1313,9 @@ export function Sidebar({
           variant="ghost"
           size="icon"
           className="size-7 transition-transform duration-300 ease-in-out hover:scale-105"
-          onClick={closeProject}
-          title="Close project"
-          aria-label="Close project"
+          onClick={() => useNav.getState().goHome("projects")}
+          title="Start page (the project stays open)"
+          aria-label="Start page"
         >
           <HomeIcon className="size-3.5" />
         </Button>
@@ -1351,9 +1354,9 @@ export function Sidebar({
                 variant="ghost"
                 size="icon"
                 className="size-6 transition-all duration-150 ease-out hover:scale-105"
-                onClick={closeProject}
-                title="Close project"
-                aria-label="Close project"
+                onClick={() => useNav.getState().goHome("projects")}
+                title="Start page (the project stays open)"
+                aria-label="Start page"
               >
                 <HomeIcon className="size-3.5" />
               </Button>
@@ -1399,7 +1402,11 @@ export function Sidebar({
                   onSelect={() => void handleProjectMove()}
                   disabled={!projectRoot || isMovingProject}
                 >
-                  Move to…
+                  Move on disk…
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem onSelect={closeProject}>
+                  Close project
                 </ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
@@ -1413,6 +1420,8 @@ export function Sidebar({
               />
             </div>
           </div>
+
+          {projectRoot && <ProjectStrip root={projectRoot} />}
 
           {/* Resizable sections */}
           <PanelGroup direction="vertical" className="min-h-0 flex-1">
@@ -1606,6 +1615,27 @@ export function Sidebar({
           <div className="flex h-9 items-center justify-between border-sidebar-border border-t px-3 text-muted-foreground text-xs">
             <span className="truncate">Latex4All v{appVersion}</span>
             <div className="flex shrink-0 items-center gap-1">
+              {/* The rest of the app, the project kept open. */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                onClick={() => useNav.getState().goHome("planner")}
+                title="Planner"
+                aria-label="Planner"
+              >
+                <ListTodoIcon className="size-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-6"
+                onClick={() => useNav.getState().goHome("library")}
+                title="Library & Vault"
+                aria-label="Library & Vault"
+              >
+                <LibraryIcon className="size-3.5" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"

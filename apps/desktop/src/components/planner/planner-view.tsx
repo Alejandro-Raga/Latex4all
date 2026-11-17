@@ -66,6 +66,7 @@ import { cn } from "@/lib/utils";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useBack } from "@/stores/back-store";
+import { goToProject } from "@/stores/nav-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { completeDrag, dueOn, moveToPlan } from "./plan-actions";
 import { type DragTask, PlannerDnd, useDropArea } from "./planner-dnd";
@@ -1120,8 +1121,7 @@ function SideItem({
 
 /** Opens a project in the writing view. */
 async function openInEditor(root: string) {
-  await useDocumentStore.getState().openProject(root);
-  useProjectStore.getState().addRecentProject(root);
+  await goToProject(root);
   useBack.getState().set("Back to Planner", backToPlanner);
 }
 
