@@ -49,7 +49,10 @@ test("folders: made, filled from a project's menu, opened, and named on cards in
   await tile.click();
   await expect(page.getByText("Grant proposal").first()).toBeVisible();
   await expect(page.getByText("Reading notes")).toHaveCount(0);
-  await page.getByRole("heading").getByRole("button", { name: "All projects" }).click();
+  await page
+    .getByRole("heading")
+    .getByRole("button", { name: "All projects" })
+    .click();
   await expect(page.getByText("Reading notes").first()).toBeVisible();
   // Another order: every project, the card saying its folder.
   await page.getByRole("button", { name: /Recent/ }).click();

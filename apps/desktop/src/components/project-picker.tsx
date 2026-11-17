@@ -596,14 +596,12 @@ export function ProjectPicker() {
       if (id) counts[id] = (counts[id] ?? 0) + 1;
     }
     return counts;
-    // biome-ignore lint/correctness/useExhaustiveDependencies: filedIn reads these
   }, [visibleProjects, folderOf, folders]);
   const listedProjects = useMemo(
     () =>
       showFolders
         ? visibleProjects.filter((p) => filedIn(p.path) === openFolder)
         : visibleProjects,
-    // biome-ignore lint/correctness/useExhaustiveDependencies: filedIn reads these
     [showFolders, visibleProjects, openFolder, folderOf, folders],
   );
   // A folder deleted while open: back to the top.
