@@ -864,7 +864,9 @@ test("reading: general papers apart from the Inbox, now reading and up next", as
     .first()
     .click();
   await expect(main.getByText("Now reading")).toBeVisible();
-  await expect(main.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
+  await expect(
+    main.getByRole("button", { name: "Resume", exact: true }),
+  ).toBeVisible();
   // No goal unless asked for in Settings.
   await expect(main.getByText("This week")).toHaveCount(0);
   if (process.env.SHOTS) {
