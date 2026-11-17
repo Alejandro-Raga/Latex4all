@@ -146,3 +146,23 @@ describe("papers not in Zotero", () => {
     });
   });
 });
+
+describe("bookmarks", () => {
+  const plan = parsePlan(
+    "# P\n\n## Reading list\n\n- [ ] [Absorptive capacity](zotero://select/library/items/ABCD1234) #reading/to-read [page:: 3/40]\n",
+  );
+
+  it("keep the page, start the paper, and set its progress", async () => {
+    const { markBookmark, progress, readingItems } = await import("./reading");
+    const marked = markBookmark(plan, "ABCD1234", 20);
+    const [item] = readingItems(marked);
+    expect(item.bookmark).toBe(20);
+    expect(item.status).toBe("reading");
+    expect(item.title).toBe("Absorptive capacity");
+    expect(progress(item)).toBe(0.5);
+    expect(serializePlan(marked)).toContain("[page:: 3/40] [bookmark:: 20]");
+    const cleared = markBookmark(marked, "ABCD1234", undefined);
+    expect(readingItems(cleared)[0].bookmark).toBeUndefined();
+    expect(progress(readingItems(cleared)[0])).toBe(3 / 40);
+  });
+});

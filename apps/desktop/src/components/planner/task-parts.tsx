@@ -23,6 +23,7 @@ import {
 } from "@/lib/plan/plan-file";
 import { parseQuickAdd, type QuickTask } from "@/lib/plan/quick-add";
 import { cn } from "@/lib/utils";
+import { DatePicker } from "./date-picker";
 import { DropMarker } from "./planner-dnd";
 
 /** A priority's color: the checkbox's ring, the flag, a card's edge. */
@@ -352,42 +353,8 @@ export function DueButton({
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-56 p-2">
-        <div className="grid grid-cols-2 gap-1">
-          {(
-            [
-              ["Today", 0],
-              ["Tomorrow", 1],
-              ["Next week", 7],
-              ["In a month", 30],
-            ] as const
-          ).map(([label, days]) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => pick(dayFromToday(days))}
-              className="rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <input
-          type="date"
-          value={due ?? ""}
-          onChange={(e) => pick(e.target.value || undefined)}
-          aria-label="Pick a date"
-          className="mt-2 h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
-        />
-        {due && (
-          <button
-            type="button"
-            onClick={() => pick(undefined)}
-            className="mt-1 w-full rounded-md px-2 py-1.5 text-left text-muted-foreground text-xs hover:bg-muted"
-          >
-            No date
-          </button>
-        )}
+      <PopoverContent align="start" className="w-auto p-2">
+        <DatePicker value={due} onPick={pick} />
       </PopoverContent>
     </Popover>
   );

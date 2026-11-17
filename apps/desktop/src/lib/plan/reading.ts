@@ -76,6 +76,7 @@ export const MARK_COLOR: Record<ReadingMark, string> = {
 
 const TAGS = /\s*#reading\/([a-z-]+)/g;
 const PAGE = /\s*\[page::\s*(\d+)(?:\s*\/\s*(\d+))?\]/;
+const BOOKMARK = /\s*\[bookmark::\s*(\d+)\]/;
 const LINK =
   /\[([^\]]*)\]\((?:zotero:\/\/select\/library\/items\/([A-Z0-9]+)|(https?:\/\/[^)\s]+))\)/;
 const DOI = /\b(10\.\d{4,9}\/[^\s"<>]+[^\s"<>.,;)])/i;
@@ -88,6 +89,8 @@ export interface ReadingItem {
   /** The last page opened, and how many there are. */
   page?: number;
   pages?: number;
+  /** The page the reader bookmarked: where they stopped. */
+  bookmark?: number;
   /** The paper's Zotero item, when it's in Zotero. */
   itemKey?: string;
   /** Where to find it otherwise: its DOI's address, or any link. */
@@ -127,11 +130,13 @@ export function readingItem(task: Task, ref: TaskRef): ReadingItem {
   }
   status ??= task.done ? "read" : "to-read";
   const page = PAGE.exec(task.title);
+  const bookmark = BOOKMARK.exec(task.title);
   const link = LINK.exec(task.title);
   const url = link?.[3];
   const title = task.title
     .replace(TAGS, "")
     .replace(PAGE, "")
+    .replace(BOOKMARK, "")
     .replace(LINK, (_, text: string) => text)
     .trim();
   return {
@@ -141,6 +146,7 @@ export function readingItem(task: Task, ref: TaskRef): ReadingItem {
     marks: MARKS.filter((m) => marks.has(m)),
     page: page ? Number(page[1]) : undefined,
     pages: page?.[2] ? Number(page[2]) : undefined,
+    bookmark: bookmark ? Number(bookmark[1]) : undefined,
     itemKey: link?.[2],
     url,
     doi: url ? DOI.exec(decodeURIComponent(url))?.[1] : undefined,
@@ -181,6 +187,7 @@ interface Entry {
   marks: ReadingMark[];
   page?: number;
   pages?: number;
+  bookmark?: number;
 }
 
 function entryTitle(item: Entry): string {
@@ -198,6 +205,7 @@ function entryTitle(item: Entry): string {
   if (item.page) {
     parts.push(`[page:: ${item.page}${item.pages ? `/${item.pages}` : ""}]`);
   }
+  if (item.bookmark) parts.push(`[bookmark:: ${item.bookmark}]`);
   return parts.join(" ");
 }
 
@@ -365,3 +373,30 @@ export const addMark = (plan: Plan, itemKey: string, mark: ReadingMark) =>
               : item.status,
         },
   );
+
+/** Bookmarked at a page (or not, with none), on every entry of the paper. */
+export const markBookmark = (
+  plan: Plan,
+  itemKey: string,
+  bookmark: number | undefined,
+  pages?: number,
+) =>
+  eachOf(plan, itemKey, (item) =>
+    item.bookmark === bookmark
+      ? null
+      : {
+          bookmark,
+          pages: pages ?? item.pages,
+          status:
+            bookmark && (item.status === "to-read" || item.status === "reread")
+              ? "reading"
+              : item.status,
+        },
+  );
+
+/** How far into a paper: its bookmark if it has one, else the last page. */
+export function progress(item: ReadingItem): number | undefined {
+  const at = item.bookmark ?? item.page;
+  if (!at || !item.pages) return undefined;
+  return Math.min(1, at / item.pages);
+}

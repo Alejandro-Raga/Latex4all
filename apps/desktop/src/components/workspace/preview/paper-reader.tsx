@@ -6,7 +6,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { notePage, noteReading } from "@/lib/plan/reading-sync";
+import { noteBookmark, notePage, noteReading } from "@/lib/plan/reading-sync";
+import { useBookmarkStore } from "@/stores/bookmark-store";
 import { addPassageToNote } from "@/lib/vault/add-passage";
 import { useDockStore } from "@/stores/dock-store";
 import { filedToast, NotePicker } from "./group-picker";
@@ -19,6 +20,7 @@ import {
 import { addPaperToVault } from "@/lib/vault/add-paper";
 import { mergeLineRects } from "@/lib/pdf-line-rects";
 import {
+  BookmarkIcon,
   BookOpenIcon,
   CopyIcon,
   MessageSquarePlusIcon,
@@ -247,14 +249,23 @@ export function PaperReader({
   }, [visible, itemKey]);
   const [pageCount, setPageCount] = useState<number | undefined>();
   const [readingPage, setReadingPage] = useState<number | undefined>();
+  const placeKey = itemKey ?? paper.id;
+  const bookmark = useBookmarkStore((s) => s.places[placeKey]?.bookmark);
   useEffect(() => {
-    if (!visible || !itemKey || !readingPage) return;
-    const timer = setTimeout(
-      () => void notePage(itemKey, readingPage, pageCount),
-      3000,
-    );
+    if (!visible || !readingPage) return;
+    const timer = setTimeout(() => {
+      useBookmarkStore.getState().setLast(placeKey, readingPage);
+      if (itemKey) void notePage(itemKey, readingPage, pageCount);
+    }, 3000);
     return () => clearTimeout(timer);
-  }, [visible, itemKey, readingPage, pageCount]);
+  }, [visible, itemKey, placeKey, readingPage, pageCount]);
+  const toggleBookmark = () => {
+    const page = readingPage ?? 1;
+    const next = bookmark === page ? undefined : page;
+    useBookmarkStore.getState().setBookmark(placeKey, next);
+    if (itemKey) void noteBookmark(itemKey, next, pageCount);
+    toast(next ? `Bookmarked page ${next}` : "Bookmark removed");
+  };
 
   // Highlights made here show at once; the open tab of this paper, if any,
   // gets them too.
@@ -296,6 +307,17 @@ export function PaperReader({
   const focusAnnotationRef = useRef<((key: string) => boolean) | null>(null);
   const [loaded, setLoaded] = useState(false);
   const focus = paper.focus;
+  // Opened where it was left: at its bookmark, or the page last open.
+  const reopened = useRef(false);
+  useEffect(() => {
+    if (!loaded || focus || reopened.current) return;
+    reopened.current = true;
+    const place = useBookmarkStore.getState().places[placeKey];
+    const page = place?.bookmark ?? place?.last;
+    if (!page || page <= 1) return;
+    const timer = setTimeout(() => scrollToPageRef.current?.(page), 60);
+    return () => clearTimeout(timer);
+  }, [loaded, focus, placeKey]);
   useEffect(() => {
     if (!loaded || !focus) return;
     let tries = 0;
@@ -467,6 +489,39 @@ export function PaperReader({
             </span>
           ))}
         {inline && !status && count === 0 && <span className="flex-1" />}
+        {bookmark && readingPage !== bookmark && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => scrollToPageRef.current?.(bookmark)}
+            title="Go to the bookmark"
+          >
+            <BookmarkIcon className="size-3.5" />
+            p. {bookmark}
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          onClick={toggleBookmark}
+          title={
+            bookmark === (readingPage ?? 1)
+              ? "Remove the bookmark"
+              : "Bookmark this page"
+          }
+          aria-label={
+            bookmark === (readingPage ?? 1)
+              ? "Remove the bookmark"
+              : "Bookmark this page"
+          }
+        >
+          <BookmarkIcon
+            className="size-3.5"
+            fill={bookmark === (readingPage ?? 1) ? "currentColor" : "none"}
+          />
+        </Button>
         {headerActions}
         {!inline && paper.zotero && (
           <Button

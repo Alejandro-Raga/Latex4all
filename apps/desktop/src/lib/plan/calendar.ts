@@ -5,9 +5,9 @@
  */
 import { milestones } from "./milestones";
 import { type Plan, projectDue, type TaskRef, today } from "./plan-file";
-import { workTasks } from "./reading";
+import { readingItems, workTasks } from "./reading";
 
-export type EntryKind = "task" | "milestone" | "deadline";
+export type EntryKind = "task" | "milestone" | "deadline" | "reading";
 
 export interface CalendarEntry {
   kind: EntryKind;
@@ -38,6 +38,18 @@ export function calendarEntries(
         listKey: key,
         listName: name,
         ref: t.ref,
+      });
+    }
+    for (const r of readingItems(plan)) {
+      if (!r.task.due) continue;
+      out.push({
+        kind: "reading",
+        date: r.task.due,
+        title: r.title,
+        done: r.status === "read",
+        listKey: key,
+        listName: name,
+        ref: r.ref,
       });
     }
     for (const m of milestones(plan)) {
@@ -168,7 +180,9 @@ export function toIcs(entries: CalendarEntry[], now = new Date()): string {
         ? plainTitle(e.title)
         : e.kind === "milestone"
           ? `◆ ${plainTitle(e.title)} (${e.listName})`
-          : `${plainTitle(e.title)} (${e.listName})`;
+          : e.kind === "reading"
+            ? `Read: ${plainTitle(e.title)} (${e.listName})`
+            : `${plainTitle(e.title)} (${e.listName})`;
     lines.push(
       "BEGIN:VEVENT",
       `UID:${uid(e)}`,
@@ -176,7 +190,7 @@ export function toIcs(entries: CalendarEntry[], now = new Date()): string {
       `DTSTART;VALUE=DATE:${start}`,
       `DTEND;VALUE=DATE:${end}`,
       fold(`SUMMARY:${icsText(what)}`),
-      `CATEGORIES:${e.kind === "task" ? "Task" : e.kind === "milestone" ? "Milestone" : "Deadline"}`,
+      `CATEGORIES:${{ task: "Task", milestone: "Milestone", deadline: "Deadline", reading: "Reading" }[e.kind]}`,
       "TRANSP:TRANSPARENT",
       "END:VEVENT",
     );

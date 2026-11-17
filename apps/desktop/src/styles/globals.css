@@ -440,8 +440,8 @@
  * over busy content. Unlayered, so it wins over the bg-* they start from.
  */
 .glass {
-  --glass-tint: color-mix(in oklab, var(--popover) 50%, transparent);
-  --glass-blur: blur(4px) saturate(1.8) brightness(1.06);
+  --glass-tint: color-mix(in oklab, var(--popover) 84%, transparent);
+  --glass-blur: blur(18px) saturate(1.8) brightness(1.06);
   --glass-rim: color-mix(in oklab, white 70%, transparent);
   --glass-rim-low: color-mix(in oklab, white 22%, transparent);
   --glass-outline: color-mix(in oklab, white 18%, transparent);
@@ -458,8 +458,8 @@
   text-shadow: 0 0 6px var(--popover), 0 0 2px var(--popover);
 }
 :is(.dark, .theme-dark) .glass {
-  --glass-tint: color-mix(in oklab, var(--popover) 54%, transparent);
-  --glass-blur: blur(4px) saturate(1.6) brightness(1.12);
+  --glass-tint: color-mix(in oklab, var(--popover) 86%, transparent);
+  --glass-blur: blur(18px) saturate(1.6) brightness(1.12);
   --glass-rim: color-mix(in oklab, white 24%, transparent);
   --glass-rim-low: color-mix(in oklab, white 8%, transparent);
   --glass-outline: color-mix(in oklab, white 7%, transparent);
@@ -481,8 +481,8 @@
 }
 /* Settings → Appearance → Menus: frosted (more blur, more color)… */
 [data-glass="frosted"] .glass {
-  --glass-tint: color-mix(in oklab, var(--popover) 66%, transparent);
-  --glass-blur: blur(14px) saturate(1.6);
+  --glass-tint: color-mix(in oklab, var(--popover) 74%, transparent);
+  --glass-blur: blur(24px) saturate(1.6);
 }
 /* …or solid: the plain menu color, the rim kept. */
 [data-glass="solid"] .glass {

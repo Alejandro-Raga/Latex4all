@@ -23,6 +23,12 @@ tag.
 
 ### Added
 
+- Reading: a bookmark button in the reader. The bookmark sets the
+  paper's progress on the reading list, and papers reopen at the
+  bookmark or the page last open.
+- Reading lists: a "Read by" date for each paper, shown in the Calendar,
+  the calendar export and the daily summary.
+- A new date picker with a month view, in place of the system's.
 - Conflicted copies in a project: those identical to their original are
   removed, the rest show above the files to compare and keep one.
 - Reading lists: a To re-read status.
@@ -106,6 +112,8 @@ tag.
 
 ### Fixed
 
+- Menus and popups are more opaque, so text behind them doesn't show
+  through.
 - Shared projects in a Seafile, Dropbox or similar folder make far fewer
   conflicted copies: while people type, files are saved once everyone
   has paused, so every computer saves the same text.

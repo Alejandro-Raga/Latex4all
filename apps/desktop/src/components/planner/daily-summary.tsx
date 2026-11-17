@@ -42,10 +42,15 @@ export async function daySummary(): Promise<string | null> {
   const tasks = open.filter((e) => e.kind === "task");
   const overdue = tasks.filter((e) => daysUntil(e.date) < 0).length;
   const dueToday = tasks.filter((e) => daysUntil(e.date) === 0).length;
+  const papers = open.filter(
+    (e) => e.kind === "reading" && daysUntil(e.date) <= 0,
+  ).length;
   const dates = open
     .filter(
       (e) =>
-        e.kind !== "task" && daysUntil(e.date) >= 0 && daysUntil(e.date) <= 1,
+        (e.kind === "milestone" || e.kind === "deadline") &&
+        daysUntil(e.date) >= 0 &&
+        daysUntil(e.date) <= 1,
     )
     .map((e) =>
       e.kind === "deadline"
@@ -57,6 +62,9 @@ export async function daySummary(): Promise<string | null> {
       ? `${dueToday} ${dueToday === 1 ? "task" : "tasks"} due today`
       : "",
     overdue ? `${overdue} overdue` : "",
+    papers
+      ? `${papers} ${papers === 1 ? "paper" : "papers"} to finish reading`
+      : "",
     ...dates,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : null;

@@ -496,3 +496,26 @@ test("a project's timeline: milestones on the way to its deadline", async ({
   }
   expect(errors).toEqual([]);
 });
+
+test("a date picked from the month", async ({ page, errors }) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  await page.getByText("Reply to reviewers").click();
+  const detail = page.getByRole("complementary").last();
+  await detail.getByRole("button", { name: "Due date" }).click();
+  await page.getByRole("button", { name: "Next month" }).click();
+  if (process.env.SHOTS) {
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: `${process.env.SHOTS}/datepicker.png` });
+  }
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: /\b15\b/ })
+    .first()
+    .click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/- \[ \] Reply to reviewers 📅 \d{4}-\d{2}-15/);
+  expect(errors).toEqual([]);
+});

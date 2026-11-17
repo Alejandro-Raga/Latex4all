@@ -5,6 +5,7 @@
  */
 import { useMemo, useState } from "react";
 import {
+  BookOpenIcon,
   CalendarArrowUpIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -97,6 +98,11 @@ function Chip({
     >
       {entry.kind === "deadline" ? (
         <FlagIcon className="size-3 shrink-0 text-destructive" />
+      ) : entry.kind === "reading" ? (
+        <BookOpenIcon
+          className="size-3 shrink-0"
+          style={{ color: "var(--chart-3)" }}
+        />
       ) : entry.kind === "milestone" ? (
         <DiamondIcon
           className="size-3 shrink-0"
@@ -199,6 +205,7 @@ const DAY_ORDER: Record<CalendarEntry["kind"], number> = {
   deadline: 0,
   milestone: 1,
   task: 2,
+  reading: 3,
 };
 
 export function CalendarView({ lists }: { lists: PlanList[] }) {

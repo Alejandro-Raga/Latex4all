@@ -43,6 +43,7 @@ import {
   parsePlan,
   type TaskRef,
   today,
+  updateTask,
 } from "@/lib/plan/plan-file";
 import { type PlanList, usePlanText } from "@/lib/plan/plan-store";
 import {
@@ -52,6 +53,7 @@ import {
   MARK_HINT,
   MARK_LABEL,
   nextStatus,
+  progress,
   parsePaperInput,
   type ReadingItem,
   type ReadingStatus,
@@ -75,7 +77,7 @@ import {
   useDropArea,
   useTaskDnd,
 } from "./planner-dnd";
-import type { TaskContext } from "./task-parts";
+import { DueButton, type TaskContext } from "./task-parts";
 
 const setStatus = (list: PlanList, ref: TaskRef, status: ReadingStatus) =>
   editPlan(list, (p) => setReadingStatus(p, ref, status, today()));
@@ -97,8 +99,8 @@ function StatusMarker({
   const color = STATUS_COLOR[item.status];
   const share =
     item.status === "reading"
-      ? item.page && item.pages
-        ? Math.max(0.08, Math.min(1, item.page / item.pages))
+      ? progress(item) !== undefined
+        ? Math.max(0.08, progress(item) as number)
         : 0.25
       : 0;
   const r = 7;
@@ -151,7 +153,11 @@ function StatusMarker({
 }
 
 const pageText = (item: ReadingItem) =>
-  item.page ? `p. ${item.page}${item.pages ? ` of ${item.pages}` : ""}` : "";
+  item.bookmark
+    ? `Bookmark p. ${item.bookmark}${item.pages ? ` of ${item.pages}` : ""}`
+    : item.page
+      ? `p. ${item.page}${item.pages ? ` of ${item.pages}` : ""}`
+      : "";
 
 function Pill({
   label,
@@ -406,7 +412,7 @@ function ReadingRow({
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
           <Pills item={item} />
-          {item.page && item.status !== "to-read" && (
+          {(item.bookmark || item.page) && item.status !== "to-read" && (
             <span className="text-[11px] text-muted-foreground tabular-nums">
               {pageText(item)}
             </span>
@@ -415,6 +421,22 @@ function ReadingRow({
             <span className="flex max-w-32 items-center gap-1 text-[11px] text-muted-foreground">
               {context.icon}
               <span className="truncate">{context.name}</span>
+            </span>
+          )}
+          {item.status !== "read" && (
+            <span
+              className={cn(
+                !item.task.due &&
+                  "opacity-0 focus-within:opacity-100 group-hover:opacity-100",
+              )}
+            >
+              <DueButton
+                due={item.task.due}
+                label="Read by"
+                onChange={(due) =>
+                  void editPlan(list, (p) => updateTask(p, item.ref, { due }))
+                }
+              />
             </span>
           )}
         </span>
@@ -835,7 +857,7 @@ function ReadingCard({ list, item }: { list: PlanList; item: ReadingItem }) {
           {(item.marks.length > 0 || !item.itemKey || item.page) && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-[26px]">
               <Pills item={item} />
-              {item.page && item.status !== "to-read" && (
+              {(item.bookmark || item.page) && item.status !== "to-read" && (
                 <span className="text-[11px] text-muted-foreground tabular-nums">
                   {pageText(item)}
                 </span>

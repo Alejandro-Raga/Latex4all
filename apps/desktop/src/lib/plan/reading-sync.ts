@@ -13,7 +13,13 @@ import {
   usePlanStore,
   writePlan,
 } from "./plan-store";
-import { addMark, markOpened, markPage, type ReadingMark } from "./reading";
+import {
+  addMark,
+  markBookmark,
+  markOpened,
+  markPage,
+  type ReadingMark,
+} from "./reading";
 import type { Plan } from "./plan-file";
 
 /** Every plan a paper could be listed in: the general list and projects. */
@@ -73,4 +79,15 @@ export function noteReading(
 /** The last page read of a paper, on its reading lists. */
 export function notePage(itemKey: string, page: number, pages?: number) {
   return changeAll(itemKey, (plan, key) => markPage(plan, key, page, pages));
+}
+
+/** A paper's bookmark, on its reading lists (none: taken away). */
+export function noteBookmark(
+  itemKey: string,
+  page: number | undefined,
+  pages?: number,
+) {
+  return changeAll(itemKey, (plan, key) =>
+    markBookmark(plan, key, page, pages),
+  );
 }
