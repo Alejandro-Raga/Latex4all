@@ -89,6 +89,9 @@ interface SettingsState {
   /** The Planner's summary of the day, on first opening the app each day. */
   dailySummary: boolean;
   setDailySummary: (on: boolean) => void;
+  /** Papers to read a week, tracked in Reading; 0 is off (the default). */
+  readingGoal: number;
+  setReadingGoal: (papers: number) => void;
   pdfThemeMain: PdfTheme;
   setPdfThemeMain: (theme: PdfTheme) => void;
   pdfThemeReference: PdfTheme;
@@ -189,6 +192,9 @@ export const useSettingsStore = create<SettingsState>()(
       setBackground: (style) => set({ background: style }),
       dailySummary: true,
       setDailySummary: (on) => set({ dailySummary: on }),
+      readingGoal: 0,
+      setReadingGoal: (papers) =>
+        set({ readingGoal: Math.max(0, Math.min(50, Math.round(papers))) }),
       pdfThemeMain: "light",
       setPdfThemeMain: (theme) => set({ pdfThemeMain: theme }),
       pdfThemeReference: "light",

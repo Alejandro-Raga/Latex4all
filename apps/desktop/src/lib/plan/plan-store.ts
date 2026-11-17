@@ -22,6 +22,8 @@ import { useVaultStore } from "@/stores/vault-store";
 import { PLAN_FILE } from "./plan-file";
 
 export const INBOX = "inbox";
+/** Reading that belongs to no project: its own file, not a task list. */
+export const READING = "reading";
 export const INBOX_PATH = "Tasks/Inbox.md";
 
 /** A plan's key: "inbox", "list:" and a list's file name, or "project:"
@@ -36,7 +38,11 @@ export const isPersonalKey = (key: PlanKey) => !isProjectKey(key);
 
 /** A personal plan's file name, without ".md": "Inbox", "Teaching". */
 const fileOf = (key: PlanKey) =>
-  key === INBOX ? "Inbox" : key.slice("list:".length);
+  key === INBOX
+    ? "Inbox"
+    : key === READING
+      ? "Reading"
+      : key.slice("list:".length);
 /** Where it is in the vault. */
 export const vaultPathOf = (key: PlanKey) =>
   key === INBOX ? INBOX_PATH : `Tasks/${fileOf(key)}.md`;
@@ -247,7 +253,7 @@ export const useOwnLists = create<{
           .replace(/\s+/g, " ")
           .trim()
           .slice(0, 60);
-        if (!file || /^inbox$/i.test(file)) return null;
+        if (!file || /^(inbox|reading)$/i.test(file)) return null;
         if (
           !get().lists.some((l) => l.file.toLowerCase() === file.toLowerCase())
         ) {
@@ -271,12 +277,15 @@ function vaultLists(paths: string[], known: OwnList[]): OwnList[] {
   const out: OwnList[] = [];
   for (const path of paths) {
     const m = /^Tasks\/([^/]+)\.md$/.exec(path);
-    if (!m || /^inbox$/i.test(m[1])) continue;
+    if (!m || /^(inbox|reading)$/i.test(m[1])) continue;
     if (known.some((l) => l.file === m[1])) continue;
     out.push({ file: m[1] });
   }
   return out;
 }
+
+/** General reading, as a list (it isn't among the task lists). */
+export const READING_LIST: PlanList = { key: READING, name: "Reading" };
 
 /** The plans the Planner shows: the Inbox, then recent projects. */
 export function usePlanLists(): PlanList[] {

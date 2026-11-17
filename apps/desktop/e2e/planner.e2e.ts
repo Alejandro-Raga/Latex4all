@@ -210,7 +210,10 @@ test("a reading list apart from tasks, and tasks dragged to another project", as
   await main.getByRole("radio", { name: "Tasks" }).click();
   await expect(main.getByText("Absorptive capacity")).toHaveCount(0);
   // The Reading list gathers it.
-  await page.getByRole("button", { name: /^Reading list/ }).click();
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /^Reading/ })
+    .click();
   await expect(main.getByText("Absorptive capacity")).toBeVisible();
   if (process.env.SHOTS) {
     await page.screenshot({ path: `${process.env.SHOTS}/planner-reading.png` });
@@ -831,6 +834,38 @@ test("a repeat of one's own: some days a week, for some weeks", async ({
   if (process.env.SHOTS) {
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${process.env.SHOTS}/pin-menu.png` });
+  }
+  expect(errors).toEqual([]);
+});
+
+test("reading: general papers apart from the Inbox, now reading and up next", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /^Reading/ })
+    .click();
+  const main = page.getByRole("main");
+  await main.getByLabel("Add a paper").fill("The economics of science");
+  await main.getByLabel("Add a paper").press("Enter");
+  // In general reading's own file, not the Inbox.
+  await expect
+    .poll(() => vault(page, "Tasks/Reading.md"))
+    .toContain("The economics of science #reading/to-read");
+  await expect(main.getByText("Up next")).toBeVisible();
+  await main
+    .getByRole("button", { name: "To read: mark as reading", exact: true })
+    .first()
+    .click();
+  await expect(main.getByText("Now reading")).toBeVisible();
+  await expect(main.getByRole("button", { name: /Resume/ })).toBeVisible();
+  // No goal unless asked for in Settings.
+  await expect(main.getByText("This week")).toHaveCount(0);
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/reading-home.png` });
   }
   expect(errors).toEqual([]);
 });

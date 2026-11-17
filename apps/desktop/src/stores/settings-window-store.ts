@@ -12,6 +12,7 @@ export type SettingsSection =
   | "zotero-sync"
   | "environment"
   | "languages"
+  | "planner"
   | "updates";
 
 /** The Settings window over a project, and which section it shows. */

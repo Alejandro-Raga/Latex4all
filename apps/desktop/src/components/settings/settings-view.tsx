@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
+  ListTodoIcon,
   BookOpenIcon,
   CheckCircle2Icon,
   DownloadIcon,
@@ -64,6 +65,50 @@ import { PanelBoundary } from "@/components/panel-boundary";
 export type { SettingsSection };
 
 /** A labelled setting: name and one line of context on the left, control on the right. */
+function PlannerSettings() {
+  const dailySummary = useSettingsStore((s) => s.dailySummary);
+  const setDailySummary = useSettingsStore((s) => s.setDailySummary);
+  const goal = useSettingsStore((s) => s.readingGoal);
+  const setGoal = useSettingsStore((s) => s.setReadingGoal);
+  return (
+    <div className="divide-y divide-border/60">
+      <SettingRow
+        label="Daily summary"
+        detail="What's due, the first time you open the app each day"
+      >
+        <Toggle
+          checked={dailySummary}
+          onChange={setDailySummary}
+          label="Daily summary"
+        />
+      </SettingRow>
+      <SettingRow
+        label="Weekly reading goal"
+        detail="Papers to finish each week, with pages read and a streak in Reading"
+      >
+        <Toggle
+          checked={goal > 0}
+          onChange={(on) => setGoal(on ? 3 : 0)}
+          label="Weekly reading goal"
+        />
+      </SettingRow>
+      {goal > 0 && (
+        <SettingRow label="Papers a week">
+          <Input
+            type="number"
+            min={1}
+            max={50}
+            value={goal}
+            onChange={(e) => setGoal(Number(e.target.value) || 1)}
+            className="h-7 w-20 text-xs"
+            aria-label="Papers a week"
+          />
+        </SettingRow>
+      )}
+    </div>
+  );
+}
+
 function EditorSettings() {
   const vimMode = useSettingsStore((s) => s.vimMode);
   const setVimMode = useSettingsStore((s) => s.setVimMode);
@@ -462,6 +507,7 @@ export function SettingsView({
   const [appVersion, setAppVersion] = useState("");
   const isClaudeReady = useClaudeSetupStore((s) => s.status === "ready");
   const updateChannel = useSettingsStore((s) => s.updateChannel);
+  const readingGoal = useSettingsStore((s) => s.readingGoal);
   const vim = useSettingsStore((s) => s.vimMode);
   const { theme = "system" } = useTheme();
   const pdfTheme = useSettingsStore((s) => s.pdfThemeMain);
@@ -591,6 +637,14 @@ export function SettingsView({
         : "Spelling",
       icon: LanguagesIcon,
       body: <LanguagePacksSettings />,
+      flush: true,
+    },
+    {
+      id: "planner",
+      label: "Planner",
+      meta: readingGoal ? `${readingGoal} papers a week` : "Reading goal off",
+      icon: ListTodoIcon,
+      body: <PlannerSettings />,
       flush: true,
     },
     {

@@ -22,7 +22,7 @@ The app opens on **All projects**.
 Folders group projects by what they are for, such as Thesis or Teaching. Nothing moves on your disk.
 
 1. Click **Add**, then **New folder…** and give it a name.
-2. Right-click a project and choose **Move to folder**.
+2. Right-click a project and choose **Add to folder**.
 
 Folders show at the top when projects are in the Recent order. Click one to open it, and click **All projects** in the title to go back. Right-click a folder to rename it, give it a color, mark it as a favourite or delete it. Deleting a folder keeps its projects.
 
@@ -183,7 +183,7 @@ To add a task from anywhere in the app, press ⌘⇧A.
 
 - Click a task to open it on the right. There you can change its date, repeat and priority, write a description, add subtasks, and pin notes to it.
 - Subtasks are tasks too. Click one to open it, with its own date and its own subtasks. The link at the top takes you back to the task it belongs to.
-- Click **Pin a note** to attach a paper, idea or topic from your vault. Click a pinned note to open it.
+- Click **Pin a note** to attach a paper, idea, topic or project note from your vault. Click a pinned note to open it. A pinned project has **Open**, which opens the project, and a pinned paper has **Read**.
 - Right-click a task to set its date or priority, move it, make it a subtask of another, turn it into a project, or delete it.
 - Drag a task to reorder it or to move it to another section. Drop it on the middle of another task to make it a subtask. Drop it on a list in the sidebar to move it there, or on **Today** or **Tomorrow** to give it that date.
 
@@ -217,15 +217,18 @@ Switch between **List** and **Board** at the top. On the board, each section is 
 
 The first time you open Latex4All each day, a short note tells you what is due or overdue. You can turn it off at the bottom of the Planner's sidebar.
 
-### Reading lists
+### Reading
 
-Every list has a **Reading** tab for the papers you plan to read. **Reading list** in the sidebar shows all of them together.
+Open **Reading** in the Planner's sidebar to keep up your reading.
 
-- Add a paper by its title, DOI or a link. **Add from Zotero** searches your library. You can also right-click a paper in the Zotero library or the vault and choose **Add to reading list**.
-- The circle next to a paper shows how far you are. It is empty before you start, fills up as you read, and shows a check when you finish. Click it to change the status. Opening a paper marks it as being read.
-- Papers are grouped into **Reading now**, **Up next**, **To re-read** and **Read**. Drag them to change the order or the group.
-- Hover a paper and click **Read by** to set a date for finishing it. The date shows in the Calendar.
-- The labels next to a paper show what you've done with it: **Highlighted**, **Quoted** in a note, or **Cited** in your project.
+- **Now reading** lists the papers you've started. Click **Resume** to open one at your bookmark.
+- **Today** shows papers with a "Read by" date that has come.
+- **Up next** is everything still to read, from every list. Drag papers to put them in the order you'll read them.
+- **Finished lately** shows what you've read in the last two weeks.
+- Add a paper by its title, DOI or a link, or with **Add from Zotero**. Papers added here are general reading; a project's papers go in its own **Reading** tab. You can also right-click a paper in the Zotero library or the vault and choose **Add to reading list**.
+- The circle next to a paper shows how far you are. Click it to change the status. Hover a paper and click **Read by** to give it a date.
+
+To set yourself a weekly goal, open **Settings → Planner** and turn on **Weekly reading goal**. Reading then shows how many papers you've finished this week, the pages you've read, and how many days in a row you've read.
 
 While writing, the **Plan** panel (⌘⌥4) shows the project's tasks and reading list next to your text.
 

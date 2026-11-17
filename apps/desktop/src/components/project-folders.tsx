@@ -218,7 +218,7 @@ export function FolderTiles({
   );
 }
 
-/** "Move to folder ▸" in a project's menu. */
+/** "Add to folder ▸" in a project's menu. */
 export function MoveToFolderMenu({
   path,
   onNew,
@@ -230,7 +230,7 @@ export function MoveToFolderMenu({
   const current = useProjectFolders((s) => s.of[path]);
   return (
     <ContextMenuSub>
-      <ContextMenuSubTrigger>Move to folder</ContextMenuSubTrigger>
+      <ContextMenuSubTrigger>Add to folder</ContextMenuSubTrigger>
       <ContextMenuSubContent className="max-h-80 w-48 overflow-y-auto">
         {folders.map((f) => (
           <ContextMenuItem

@@ -9,7 +9,8 @@ import {
 } from "@/components/ui/context-menu";
 import { newPlanText, parsePlan, serializePlan } from "@/lib/plan/plan-file";
 import {
-  INBOX,
+  READING,
+  READING_LIST,
   isProjectKey,
   type PlanList,
   planTextNow,
@@ -28,7 +29,7 @@ export interface Paper {
 }
 
 /** The general reading list's name, for papers that belong to no project. */
-export const MY_READING = "My reading list";
+export const MY_READING = "My reading";
 
 async function addTo(list: PlanList, paper: Paper) {
   try {
@@ -40,7 +41,7 @@ async function addTo(list: PlanList, paper: Paper) {
     const plan = parsePlan(text ?? newPlanText(list.name));
     const next = addReading(plan, paper);
     const name =
-      list.key === INBOX
+      list.key === READING
         ? MY_READING
         : list.personal
           ? `the ${list.name} reading list`
@@ -71,9 +72,9 @@ export function AddToReadingMenu({ paper }: { paper: Paper }) {
         (b.lastOpened ?? 0) - (a.lastOpened ?? 0),
     )
     .slice(0, 12);
-  const general = lists.find((l) => l.key === INBOX);
+  const general = READING_LIST;
   const texts = usePlanTexts([
-    INBOX,
+    READING,
     ...own.map((l) => l.key),
     ...projects.map((p) => p.key),
   ]);

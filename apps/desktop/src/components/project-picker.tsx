@@ -601,9 +601,14 @@ export function ProjectPicker() {
   const listedProjects = useMemo(
     () =>
       showFolders
-        ? visibleProjects.filter((p) => filedIn(p.path) === openFolder)
+        ? visibleProjects.filter(
+            (p) =>
+              filedIn(p.path) === openFolder ||
+              // Favourites stay in sight at the top, filed or not.
+              (!openFolder && favorites.includes(p.path)),
+          )
         : visibleProjects,
-    [showFolders, visibleProjects, openFolder, folderOf, folders],
+    [showFolders, visibleProjects, openFolder, folderOf, folders, favorites],
   );
   // A folder deleted while open: back to the top.
   useEffect(() => {
@@ -1828,7 +1833,7 @@ function ProjectMenu({
       <ContextMenuItem onSelect={actions.onDuplicate}>
         Duplicate
       </ContextMenuItem>
-      <ContextMenuItem onSelect={actions.onMove}>Move to…</ContextMenuItem>
+      <ContextMenuItem onSelect={actions.onMove}>Move on disk…</ContextMenuItem>
       <MoveToFolderMenu path={project.path} onNew={actions.onNewFolder} />
       <ContextMenuSeparator />
       <ContextMenuItem onSelect={actions.onRemove}>Remove…</ContextMenuItem>

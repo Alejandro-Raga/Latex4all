@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState, useEffect } from "react";
 import {
   LayoutDashboardIcon,
   FlagIcon,
@@ -42,6 +42,7 @@ import {
 } from "@/lib/plan/plan-file";
 import {
   INBOX,
+  READING_LIST,
   isProjectKey,
   useOwnLists,
   type PlanKey,
@@ -78,6 +79,7 @@ import {
 import { CalendarView } from "./calendar-view";
 import { MatrixView, quadrantOf } from "./matrix-view";
 import { OverviewView } from "./overview-view";
+import { useMoveInboxReading } from "./reading-move";
 import { TimelineView } from "./timeline-view";
 import { ProjectIcon, typeColor, listColor } from "./project-icon";
 import {
@@ -299,7 +301,10 @@ function useStored<T>(key: string, fallback: T): [T, (v: T) => void] {
  */
 export function PlannerView() {
   const lists = usePlanLists();
-  const keys = useMemo(() => lists.map((l) => l.key), [lists]);
+  // General reading counts and shows with the rest, though it isn't a list.
+  const withReading = useMemo(() => [...lists, READING_LIST], [lists]);
+  const keys = useMemo(() => withReading.map((l) => l.key), [withReading]);
+  useMoveInboxReading();
   useReloadPlans(keys);
   const texts = usePlanTexts(keys);
   const [selected, select] = useStored<Selection>("selected", {
@@ -312,6 +317,12 @@ export function PlannerView() {
     "list",
   );
   const [tab, setTab] = useStored<Tab>("tab", "tasks");
+  // The Inbox has no reading of its own any more.
+  useEffect(() => {
+    if (tab === "reading" && "plan" in selected && selected.plan === INBOX) {
+      setTab("tasks");
+    }
+  }, [tab, selected, setTab]);
   const mode = tab === "reading" ? readMode : taskMode;
   const setMode = tab === "reading" ? setReadMode : setTaskMode;
   const [sort, setSort] = useStored<ProjectSort>("sort", "recent");
@@ -744,11 +755,16 @@ export function PlannerView() {
                       <ListTodoIcon key="t" className="size-3.5" />,
                       "Tasks",
                     ],
-                    [
-                      "reading",
-                      <BookOpenIcon key="r" className="size-3.5" />,
-                      "Reading",
-                    ],
+                    // The Inbox is for tasks; general reading has its place.
+                    ...(current.key === INBOX
+                      ? []
+                      : ([
+                          [
+                            "reading",
+                            <BookOpenIcon key="r" className="size-3.5" />,
+                            "Reading",
+                          ],
+                        ] as [Tab, ReactNode, string][])),
                     ...(!isProjectKey(current.key)
                       ? []
                       : ([
@@ -791,7 +807,7 @@ export function PlannerView() {
             >
               <div className={cn(fullBleed ? "h-full" : "mx-auto max-w-3xl")}>
                 {"smart" in selected && selected.smart === "calendar" ? (
-                  <CalendarView lists={lists} />
+                  <CalendarView lists={withReading} />
                 ) : "smart" in selected && selected.smart === "overview" ? (
                   <OverviewView
                     lists={lists}
@@ -806,7 +822,7 @@ export function PlannerView() {
                 ) : "smart" in selected ? (
                   <SmartView
                     filter={selected.smart}
-                    lists={lists}
+                    lists={withReading}
                     onOpenPlan={(l) => choose({ plan: l.key })}
                     selected={picked}
                     onSelect={setPicked}

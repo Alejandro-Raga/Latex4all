@@ -166,3 +166,21 @@ describe("bookmarks", () => {
     expect(progress(readingItems(cleared)[0])).toBe(3 / 40);
   });
 });
+
+describe("moving the Inbox's reading", () => {
+  it("takes its papers, as written, to the general list", async () => {
+    const { moveReading, readingItems } = await import("./reading");
+    const inbox = parsePlan(
+      "# Inbox\n\n- [ ] Call the bank\n\n## Reading list\n\n- [ ] [Absorptive capacity](zotero://select/library/items/ABCD1234) #reading/reading [page:: 3/40]\n- [ ] A paper someone mentioned #reading/to-read\n",
+    );
+    const general = parsePlan(newPlanText("Reading"));
+    const moved = moveReading(inbox, general);
+    expect(serializePlan(moved.from)).toBe("# Inbox\n\n- [ ] Call the bank\n");
+    expect(
+      readingItems(moved.to).map((r) => [r.title, r.status, r.page]),
+    ).toEqual([
+      ["Absorptive capacity", "reading", 3],
+      ["A paper someone mentioned", "to-read", undefined],
+    ]);
+  });
+});

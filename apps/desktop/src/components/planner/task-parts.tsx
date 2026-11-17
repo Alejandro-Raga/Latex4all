@@ -15,6 +15,9 @@ import { openInVault } from "@/components/workspace/highlight-quote";
 import { NoteMenuAt } from "@/components/workspace/topic-menu";
 import { findNote } from "@/lib/vault/vault-index";
 import { useVaultStore } from "@/stores/vault-store";
+import { useDocumentStore } from "@/stores/document-store";
+import { useProjectStore } from "@/stores/project-store";
+import { openToRead } from "./open-paper";
 import {
   Popover,
   PopoverContent,
@@ -762,6 +765,17 @@ function Pins({
   const index = useVaultStore((s) => s.index);
   const titleOf = (name: string) =>
     (index && findNote(index, name)?.title) || name;
+  // A project's note opens the project; a paper opens to read.
+  const projectOf = (name: string) => {
+    const root = index && findNote(index, name)?.frontmatter.project;
+    return typeof root === "string" && root ? root : null;
+  };
+  const paperOf = (name: string) => {
+    const note = index ? findNote(index, name) : undefined;
+    return note?.kind === "paper" && note.zoteroKey
+      ? { key: note.zoteroKey, title: note.title }
+      : null;
+  };
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {pins.map((p) => (
@@ -777,6 +791,35 @@ function Pins({
           >
             {titleOf(p)}
           </button>
+          {projectOf(p) && (
+            <button
+              type="button"
+              title="Open the project"
+              aria-label={`Open the project ${titleOf(p)}`}
+              onClick={async () => {
+                const root = projectOf(p) as string;
+                await useDocumentStore.getState().openProject(root);
+                useProjectStore.getState().addRecentProject(root);
+              }}
+              className="rounded px-1 font-medium text-[11px] text-primary hover:bg-primary/10"
+            >
+              Open
+            </button>
+          )}
+          {paperOf(p) && (
+            <button
+              type="button"
+              title="Read it"
+              aria-label={`Read ${titleOf(p)}`}
+              onClick={() => {
+                const paper = paperOf(p);
+                if (paper) openToRead(paper.key, paper.title);
+              }}
+              className="rounded px-1 font-medium text-[11px] text-primary hover:bg-primary/10"
+            >
+              Read
+            </button>
+          )}
           <button
             type="button"
             aria-label={`Unpin ${titleOf(p)}`}

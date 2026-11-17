@@ -23,6 +23,15 @@ tag.
 
 ### Added
 
+- Planner: Reading, a place for reading as a habit: Now reading (with
+  Resume, back to your bookmark), what's due today, one Up next queue
+  across all your lists in your own order, and what you finished lately.
+  General reading has its own list now, apart from the Inbox; papers on
+  the Inbox's reading list move there by themselves.
+- Settings → Planner: an optional weekly reading goal, with pages read
+  and the days in a row you've read. Off unless you turn it on.
+- A pinned project note opens its project, and a pinned paper opens to
+  read, from the task.
 - Library: Recently opened, at the top of the Zotero library, to go back
   to the papers you were reading.
 - Planner: repeats of your own: every few days, weeks, months or years,
@@ -155,6 +164,9 @@ tag.
 
 ### Changed
 
+- A project's menu says Add to folder (to sort the list) and Move on
+  disk… (to move its folder), so the two aren't confused.
+- Starred projects stay in Favourites when they're in a folder.
 - The Matrix is now the Eisenhower matrix, its boxes named plainly:
   Urgent & important, Important, not urgent, Urgent, not important,
   Neither.

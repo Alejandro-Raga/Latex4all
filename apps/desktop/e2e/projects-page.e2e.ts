@@ -35,7 +35,7 @@ test("folders: made, filled from a project's menu, opened, and named on cards in
   await expect(async () => {
     await page.keyboard.press("Escape");
     await page.getByText("Grant proposal").first().click({ button: "right" });
-    await page.getByRole("menuitem", { name: "Move to folder" }).focus();
+    await page.getByRole("menuitem", { name: "Add to folder" }).focus();
     await page.keyboard.press("ArrowRight");
     await expect(newFolder).toBeFocused({ timeout: 1000 });
   }).toPass({ timeout: 10_000 });

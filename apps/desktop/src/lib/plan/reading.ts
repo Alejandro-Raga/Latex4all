@@ -417,3 +417,21 @@ export function progress(item: ReadingItem): number | undefined {
   if (!at || !item.pages) return undefined;
   return Math.min(1, at / item.pages);
 }
+
+/**
+ * Moves the reading list out of one plan into another's (the Inbox's into
+ * the general one), the papers as they were written, in their order.
+ */
+export function moveReading(from: Plan, to: Plan): { from: Plan; to: Plan } {
+  const at = from.sections.findIndex((s) => isReadingSection(s.title));
+  if (at < 0) return { from, to };
+  const tasks = from.sections[at].items.flatMap((i) =>
+    i.kind === "task" ? [i.task] : [],
+  );
+  const without = structuredClone(from);
+  without.sections.splice(at, 1);
+  if (tasks.length === 0) return { from: without, to };
+  let { plan: next, index } = readingSection(to);
+  for (const task of tasks) next = addTask(next, task, index);
+  return { from: without, to: next };
+}

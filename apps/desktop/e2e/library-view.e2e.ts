@@ -67,9 +67,7 @@ test("the vault opens on the whole vault's map there", async ({ page }) => {
   }
 });
 
-test("recently opened papers, at the top of the library", async ({
-  page,
-}) => {
+test("recently opened papers, at the top of the library", async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem(
       "latex4all-bookmarks",

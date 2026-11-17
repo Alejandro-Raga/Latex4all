@@ -75,7 +75,6 @@ import {
   workTasks,
 } from "@/lib/plan/reading";
 import { cn } from "@/lib/utils";
-import { AllReading } from "./reading-views";
 import {
   dropOnSection,
   dropOnTask,
@@ -1224,6 +1223,7 @@ function Board({ list, plan, selected, onSelect }: ViewProps) {
 }
 
 export { ReadingView } from "./reading-views";
+import { ReadingHome } from "./reading-home";
 import { ReadingRow } from "./reading-views";
 
 /* ─────────────────────────── Smart lists ─────────────────────────── */
@@ -1246,7 +1246,7 @@ export const SMART_LABEL: Record<SmartFilter, string> = {
   calendar: "Calendar",
   matrix: "Eisenhower matrix",
   overview: "Overview",
-  reading: "Reading list",
+  reading: "Reading",
   all: "All tasks",
   completed: "Completed",
 };
@@ -1332,18 +1332,7 @@ export function SmartView({
   });
 
   if (filter === "reading") {
-    return (
-      <AllReading
-        general={inbox}
-        rows={plans.flatMap(({ list, plan }) =>
-          readingItems(plan).map((item) => ({
-            list,
-            item,
-            context: contextOf(list),
-          })),
-        )}
-      />
-    );
+    return <ReadingHome lists={lists} />;
   }
 
   const dated =

@@ -79,8 +79,11 @@ import {
 } from "./planner-dnd";
 import { DueButton, type TaskContext } from "./task-parts";
 
-const setStatus = (list: PlanList, ref: TaskRef, status: ReadingStatus) =>
-  editPlan(list, (p) => setReadingStatus(p, ref, status, today()));
+export const setStatus = (
+  list: PlanList,
+  ref: TaskRef,
+  status: ReadingStatus,
+) => editPlan(list, (p) => setReadingStatus(p, ref, status, today()));
 
 /* ─────────────────────────── The marker and pills ─────────────────────────── */
 
@@ -88,7 +91,7 @@ const setStatus = (list: PlanList, ref: TaskRef, status: ReadingStatus) =>
  * A paper's status at a glance: an empty ring to read, a ring filling with
  * the pages read while reading, a check once read. A click moves it on.
  */
-function StatusMarker({
+export function StatusMarker({
   item,
   onChange,
 }: {
@@ -211,7 +214,7 @@ function Pills({ item }: { item: ReadingItem }) {
 
 /* ─────────────────────────── Opening, Zotero ─────────────────────────── */
 
-function open(item: ReadingItem) {
+export function open(item: ReadingItem) {
   if (item.itemKey) openToRead(item.itemKey, item.title);
   else if (item.url)
     void shellOpen(item.url).catch(() =>
@@ -369,16 +372,22 @@ export function ReadingRow({
   item,
   rank,
   context,
+  where = "list",
+  onDropHere,
 }: {
   list: PlanList;
   item: ReadingItem;
   rank?: number;
   context?: TaskContext;
+  /** Where it's shown, to keep its drag apart from the same paper elsewhere. */
+  where?: string;
+  /** A paper dropped on it, if not to reorder its own list. */
+  onDropHere?: (d: DragTask, zone: Zone) => void;
 }) {
   const dnd = useTaskDnd(
-    `read:${list.key}:${item.ref.section}:${item.ref.item}`,
+    `read:${where}:${list.key}:${item.ref.section}:${item.ref.item}`,
     { list, ref: item.ref, reading: true, label: item.title },
-    { accepts: "reading", onDrop: dropOnPaper(list, item) },
+    { accepts: "reading", onDrop: onDropHere ?? dropOnPaper(list, item) },
   );
   return (
     <ReadingMenu list={list} item={item}>
@@ -539,7 +548,7 @@ function dropOnGroup(list: PlanList, status: ReadingStatus) {
  * Papers from the Zotero library, found by typing or by collection, added
  * with a click; the list stays open to add several.
  */
-function ZoteroPicker({
+export function ZoteroPicker({
   list,
   listed,
 }: {
@@ -662,7 +671,13 @@ function ZoteroPicker({
 }
 
 /** Adds by title, DOI or link; a DOI alone is named from Crossref. */
-function AddPaper({ list, className }: { list: PlanList; className?: string }) {
+export function AddPaper({
+  list,
+  className,
+}: {
+  list: PlanList;
+  className?: string;
+}) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   return (
