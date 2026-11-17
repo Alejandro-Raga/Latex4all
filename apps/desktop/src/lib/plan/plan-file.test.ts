@@ -317,3 +317,28 @@ describe("the project's priority", () => {
     expect(projectPriority(none)).toBe(0);
   });
 });
+
+describe("pins", () => {
+  it("are links under the task, apart from its description", async () => {
+    const { pinsOf, withPins, notesText, notesLines } = await import(
+      "./plan-file"
+    );
+    const plan = parsePlan(
+      "# P\n\n- [ ] Read for the intro\n    Start with the review.\n    📌 [[Cohen 1990]]\n",
+    );
+    const task = plan.sections[0].items.find((i) => i.kind === "task");
+    if (task?.kind !== "task") throw new Error("no task");
+    expect(pinsOf(task.task)).toEqual(["Cohen 1990"]);
+    expect(notesText(task.task)).toBe("Start with the review.");
+    expect(withPins(task.task, ["Cohen 1990", "Absorptive capacity"])).toEqual([
+      "    Start with the review.",
+      "    📌 [[Cohen 1990]]",
+      "    📌 [[Absorptive capacity]]",
+    ]);
+    // A new description keeps them.
+    expect(notesLines("Read it twice.", pinsOf(task.task))).toEqual([
+      "    Read it twice.",
+      "    📌 [[Cohen 1990]]",
+    ]);
+  });
+});

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  ListPlusIcon,
   CheckIcon,
   LinkIcon,
   NotebookPenIcon,
@@ -9,6 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { create } from "zustand";
+import { useQuickTask } from "@/components/planner/quick-task";
 import { AddToReadingMenu } from "@/components/planner/reading-menu";
 import { Button } from "@/components/ui/button";
 import {
@@ -259,6 +261,16 @@ export function NoteMenuItems({ noteName }: { noteName: string }) {
     <>
       <NoteKindMenu noteName={note.name} />
       <ConnectNoteMenu noteName={note.name} resolve={async () => note.name} />
+      <ContextMenuItem
+        onClick={() =>
+          useQuickTask
+            .getState()
+            .show({ pin: { name: note.name, title: note.title } })
+        }
+      >
+        <ListPlusIcon className="size-3.5" />
+        Add a task
+      </ContextMenuItem>
       {note.kind === "paper" && (
         <AddToReadingMenu
           paper={{ title: note.title, itemKey: note.zoteroKey ?? undefined }}
@@ -500,11 +512,14 @@ export function NoteMenuAt({
   done,
   onPick,
   onClose,
+  label = "Add to note",
 }: {
   anchor: { left: number; top: number };
   done: (note: VaultNote) => boolean;
   onPick: (note: string) => void;
   onClose: () => void;
+  /** Over the list: what picking one does. */
+  label?: string;
 }) {
   return (
     <DropdownMenu open onOpenChange={(open) => !open && onClose()}>
@@ -517,7 +532,7 @@ export function NoteMenuAt({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="glass w-44">
         <DropdownMenuLabel className="text-muted-foreground text-xs">
-          Add to note
+          {label}
         </DropdownMenuLabel>
         <NotesByType
           parts={DROPDOWN_PARTS}

@@ -13,6 +13,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import { useReaderFull } from "@/stores/reader-full-store";
 import {
+  ListPlusIcon,
   ArrowLeftIcon,
   ChevronRightIcon,
   ChevronDownIcon,
@@ -125,6 +126,7 @@ import { AddToReadingMenu } from "@/components/planner/reading-menu";
 import { ConnectionPills } from "./connection-pills";
 import { openInVault } from "./highlight-quote";
 import { ConnectNoteMenu } from "./topic-menu";
+import { useQuickTask } from "@/components/planner/quick-task";
 import { groupProjects } from "@/lib/project-grouping";
 import { LibraryFilterRow } from "./library-filter";
 import { FilterToggle } from "./vault-filter";
@@ -1638,6 +1640,20 @@ function ZoteroItemRow({
         <ContextMenuItem onClick={addToVault}>
           <NotebookTextIcon className="size-3.5" />
           Add to vault
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() =>
+            useQuickTask
+              .getState()
+              .show(
+                vaultNote
+                  ? { pin: { name: vaultNote.name, title: vaultNote.title } }
+                  : { text: `Read “${item.title}”` },
+              )
+          }
+        >
+          <ListPlusIcon className="size-3.5" />
+          Add a task
         </ContextMenuItem>
         <AddToReadingMenu paper={{ title: item.title, itemKey: item.key }} />
         <ConnectNoteMenu

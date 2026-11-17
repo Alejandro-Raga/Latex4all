@@ -811,7 +811,16 @@ if (scenario === "planner") {
     ],
   ]);
   (window as any).__disk = disk;
-  const files = new Map<string, string>();
+  const files = new Map<string, string>(
+    params.get("notes")
+      ? [
+          [
+            "Ideas/Absorptive capacity.md",
+            "---\ntype: idea\n---\n# Absorptive capacity\n",
+          ],
+        ]
+      : [],
+  );
   (window as any).vaultFiles = files;
   // ?novault=1: no vault connected, and none to find.
   if (params.get("novault")) {
@@ -916,7 +925,10 @@ if (scenario === "planner") {
       },
     } as never),
   );
-  import("@/components/planner/planner-view").then(({ PlannerView }) =>
+  Promise.all([
+    import("@/components/planner/planner-view"),
+    import("@/components/planner/quick-task"),
+  ]).then(([{ PlannerView }, { QuickTask }]) =>
     root.render(
       <ThemeProvider
         attribute="class"
@@ -926,6 +938,7 @@ if (scenario === "planner") {
         <ThemeBridge />
         <div className="h-full" style={chrome}>
           <PlannerView />
+          <QuickTask />
         </div>
       </ThemeProvider>,
     ),

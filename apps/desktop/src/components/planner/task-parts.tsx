@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
+  PinIcon,
   ChevronLeftIcon,
   CalendarIcon,
   CheckIcon,
@@ -10,6 +11,9 @@ import {
   XIcon,
 } from "lucide-react";
 import { openInVault } from "@/components/workspace/highlight-quote";
+import { NoteMenuAt } from "@/components/workspace/topic-menu";
+import { findNote } from "@/lib/vault/vault-index";
+import { useVaultStore } from "@/stores/vault-store";
 import {
   Popover,
   PopoverContent,
@@ -22,6 +26,8 @@ import {
   type Priority,
   type Task,
   sectionName,
+  pinsOf,
+  withPins,
 } from "@/lib/plan/plan-file";
 import { parseQuickAdd, type QuickTask } from "@/lib/plan/quick-add";
 import { cn } from "@/lib/utils";
@@ -442,7 +448,7 @@ export function TaskDetails({
   };
   const saveNotes = () => {
     if (notes.trim() !== notesText(task)) {
-      actions.change({ notes: notesLines(notes) });
+      actions.change({ notes: notesLines(notes, pinsOf(task)) });
     }
   };
   return (
@@ -507,6 +513,10 @@ export function TaskDetails({
           placeholder="Add a description"
           aria-label="Description"
           className="min-h-12 w-full resize-none bg-transparent text-muted-foreground text-sm leading-relaxed outline-none placeholder:text-muted-foreground/60"
+        />
+        <Pins
+          pins={pinsOf(task)}
+          onChange={(pins) => actions.change({ notes: withPins(task, pins) })}
         />
         <div className="space-y-0.5">
           {task.subtasks.map((s, i) => (
@@ -718,5 +728,66 @@ export function PriorityMenu({
         />
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** Papers, ideas and topics pinned to a task: open one, pin more. */
+function Pins({
+  pins,
+  onChange,
+}: {
+  pins: string[];
+  onChange: (pins: string[]) => void;
+}) {
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+  const index = useVaultStore((s) => s.index);
+  const titleOf = (name: string) =>
+    (index && findNote(index, name)?.title) || name;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {pins.map((p) => (
+        <span
+          key={p}
+          className="group/pin flex max-w-full items-center gap-1 rounded-full border border-border bg-muted/50 py-0.5 pr-1 pl-2 text-xs"
+        >
+          <PinIcon className="size-3 shrink-0 text-muted-foreground" />
+          <button
+            type="button"
+            onClick={() => openInVault(p)}
+            className="min-w-0 truncate hover:underline"
+          >
+            {titleOf(p)}
+          </button>
+          <button
+            type="button"
+            aria-label={`Unpin ${titleOf(p)}`}
+            onClick={() => onChange(pins.filter((x) => x !== p))}
+            className="text-muted-foreground opacity-0 hover:text-foreground group-hover/pin:opacity-100"
+          >
+            <XIcon className="size-3" />
+          </button>
+        </span>
+      ))}
+      <button
+        type="button"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setAt({ left: r.left, top: r.bottom + 4 });
+        }}
+        className="flex items-center gap-1 rounded-full px-2 py-0.5 text-muted-foreground text-xs hover:bg-muted hover:text-foreground"
+      >
+        <PinIcon className="size-3" />
+        Pin a note
+      </button>
+      {at && (
+        <NoteMenuAt
+          anchor={at}
+          label="Pin to this task"
+          done={(n) => pins.includes(n.name)}
+          onClose={() => setAt(null)}
+          onPick={(name) => onChange([...pins, name])}
+        />
+      )}
+    </div>
   );
 }

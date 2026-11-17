@@ -436,20 +436,37 @@ export function renameSection(plan: Plan, index: number, title: string): Plan {
 }
 
 /** A task's description: its note lines, without their indent. */
+const PIN = /^\s*📌\s*\[\[([^\]|]+)(?:\|[^\]]*)?\]\]\s*$/;
+
+/** A task's description: its note lines (pins apart), without their indent. */
 export const notesText = (task: Task) =>
   task.notes
+    .filter((n) => !PIN.test(n))
     .map((n) => n.replace(/^\s{1,4}/, ""))
     .join("\n")
     .trim();
 
-/** Description text as note lines under the task. */
-export const notesLines = (text: string) =>
-  text.trim()
+/** Description text as note lines under the task, its pins kept after. */
+export const notesLines = (text: string, pins: string[] = []) => [
+  ...(text.trim()
     ? text
         .trim()
         .split("\n")
         .map((l) => `    ${l}`)
-    : [];
+    : []),
+  ...pins.map((p) => `    📌 [[${p}]]`),
+];
+
+/** The notes pinned to a task (papers, ideas, topics), by name. */
+export const pinsOf = (task: Task): string[] =>
+  task.notes.flatMap((n) => {
+    const m = PIN.exec(n);
+    return m ? [m[1].trim()] : [];
+  });
+
+/** The task's notes with these pins (its description as it was). */
+export const withPins = (task: Task, pins: string[]): string[] =>
+  notesLines(notesText(task), [...new Set(pins)]);
 
 /** A copy of a task to put in another plan (its line rewritten there). */
 export const detached = (task: Task): Task => {

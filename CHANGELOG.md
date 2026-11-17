@@ -23,6 +23,11 @@ tag.
 
 ### Added
 
+- Planner: pin papers, ideas and topics to a task; they show in its
+  details, one click from the note.
+- Add a task from anywhere with ⌘⇧A (Ctrl+Shift+A on Windows), into any
+  list. "Add a task" on a paper or note in the Library and Vault pins it
+  to the new task.
 - Planner: an Overview of every list and project, each with its
   sections, what's open in them and what's next.
 - Planner: right-click a task and choose Make it a project. It gets a

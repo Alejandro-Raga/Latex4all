@@ -699,3 +699,48 @@ test("the overview: every list's sections at a glance", async ({
   await expect(main.getByRole("heading", { name: "Paper 2" })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("a note pinned to a task, kept as a link under it", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner&notes=1");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  await page.getByRole("main").getByText("Reply to reviewers").click();
+  const detail = page.getByRole("complementary").last();
+  await detail.getByRole("button", { name: "Pin a note" }).click();
+  await page.getByRole("menuitem", { name: /^Ideas/ }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    page.getByRole("menuitem", { name: /Absorptive capacity/ }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toContain("- [ ] Reply to reviewers\n    📌 [[Absorptive capacity]]\n");
+  await expect(
+    detail.getByRole("button", { name: "Absorptive capacity", exact: true }),
+  ).toBeVisible();
+  // Not part of the description.
+  await expect(detail.getByLabel("Description")).toHaveValue("");
+  expect(errors).toEqual([]);
+});
+
+test("a task added from anywhere, into the list picked", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).waitFor();
+  await page.keyboard.press("Meta+Shift+A");
+  const dialog = page.getByRole("dialog", { name: "Add a task" });
+  await dialog.getByLabel("Task").fill("Book the room tomorrow");
+  await dialog.getByLabel("List").selectOption({ label: "Paper 2" });
+  await dialog.getByRole("button", { name: "Add" }).click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/- \[ \] Book the room 📅 \d{4}-\d{2}-\d{2}\n/);
+  expect(errors).toEqual([]);
+});
