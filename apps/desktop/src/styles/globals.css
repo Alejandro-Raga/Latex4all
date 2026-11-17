@@ -502,40 +502,21 @@
  * it, so the color frames the work instead of running behind it.
  */
 :root {
-  --frame-wash:
-    radial-gradient(
-      120vw 90vh at 0% 0%,
-      color-mix(in oklab, var(--primary) 16%, transparent),
-      transparent 65%
-    ),
-    radial-gradient(
-      110vw 90vh at 100% 100%,
-      color-mix(in oklab, var(--chart-2) 18%, transparent),
-      transparent 65%
-    ),
-    linear-gradient(
-      135deg,
-      color-mix(in oklab, var(--chart-4) 8%, transparent),
-      color-mix(in oklab, var(--chart-3) 8%, transparent)
-    );
+  /* Even from edge to edge: every gap and corner of the frame has color. */
+  --frame-wash: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--chart-1) 20%, transparent) 0%,
+    color-mix(in oklab, var(--chart-3) 14%, transparent) 50%,
+    color-mix(in oklab, var(--chart-2) 22%, transparent) 100%
+  );
 }
 :is(.dark, .theme-dark) {
-  --frame-wash:
-    radial-gradient(
-      120vw 90vh at 0% 0%,
-      color-mix(in oklab, var(--primary) 22%, transparent),
-      transparent 65%
-    ),
-    radial-gradient(
-      110vw 90vh at 100% 100%,
-      color-mix(in oklab, var(--chart-2) 22%, transparent),
-      transparent 65%
-    ),
-    linear-gradient(
-      135deg,
-      color-mix(in oklab, var(--chart-4) 10%, transparent),
-      color-mix(in oklab, var(--chart-3) 10%, transparent)
-    );
+  --frame-wash: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--chart-1) 26%, transparent) 0%,
+    color-mix(in oklab, var(--chart-3) 18%, transparent) 50%,
+    color-mix(in oklab, var(--chart-2) 26%, transparent) 100%
+  );
 }
 /* The frame: one wash across the window, whatever part of it shows. */
 [data-background="gradient"] body,
@@ -551,7 +532,7 @@
 [data-background="gradient"] .inset-card {
   margin: 6px 6px 6px 0;
   border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
-  border-radius: 12px;
+  border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
 }
@@ -563,7 +544,7 @@
   /* Solid, whatever the pane is made of: the wash stays outside. */
   background-color: var(--background);
   border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
-  border-radius: 12px;
+  border-radius: 10px;
   overflow: hidden;
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
 }
