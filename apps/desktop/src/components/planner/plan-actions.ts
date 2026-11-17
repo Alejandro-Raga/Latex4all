@@ -2,7 +2,12 @@
  * Changing plans from the Planner: edits against a plan's latest text,
  * moving tasks between plans, and what's being dragged.
  */
+import { open } from "@tauri-apps/plugin-dialog";
+import { mkdir, writeTextFile } from "@tauri-apps/plugin-fs";
 import { toast } from "sonner";
+import { exists, join } from "@/lib/tauri/fs";
+import { useDocumentStore } from "@/stores/document-store";
+import { useProjectStore } from "@/stores/project-store";
 import { dayFromToday } from "@/lib/plan/dates";
 import {
   addSection,
@@ -13,6 +18,9 @@ import {
   deleteTask,
   detached,
   newPlanText,
+  PLAN_FILE,
+  setProjectDue,
+  setProjectPriority,
   type Plan,
   parsePlan,
   serializePlan,
@@ -195,4 +203,69 @@ export function dropOnSection(
     const { plan, ref } = lifted(p, drag);
     return moveTask(plan, ref, section);
   });
+}
+
+/** A folder name from a task's title: its words, without tags or marks. */
+const folderName = (title: string) =>
+  title
+    .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, n, a) => a ?? n)
+    .replace(/(^|\s)#[\p{L}\p{N}_/-]+/gu, " ")
+    .replace(/[\\/:*?"<>|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80) || "New project";
+
+/**
+ * A task grown into a project: a folder of its own (in the usual place for
+ * projects), its subtasks the project's tasks, its description, date and
+ * priority the project's notes, deadline and priority. It leaves its list.
+ */
+export async function makeProject(list: PlanList, ref: TaskRef) {
+  try {
+    const text = await textNow(list.key);
+    if (!text) return;
+    const task = taskAt(parsePlan(text), ref);
+    if (!task) return;
+    const store = useProjectStore.getState();
+    let parent = store.lastProjectFolder;
+    if (!parent) {
+      const picked = await open({
+        directory: true,
+        multiple: false,
+        title: "Where should the project go?",
+      });
+      if (typeof picked !== "string") return;
+      parent = picked;
+      store.setLastProjectFolder(picked);
+    }
+    const base = folderName(task.title);
+    let name = base;
+    let path = await join(parent, name);
+    for (let n = 2; await exists(path); n++) {
+      name = `${base} ${n}`;
+      path = await join(parent, name);
+    }
+    await mkdir(path, { recursive: true });
+    let plan = parsePlan(newPlanText(name));
+    if (task.notes.length) {
+      plan.sections[0].items.push(
+        { kind: "line", line: "" },
+        ...task.notes.map((n) => ({ kind: "line" as const, line: n.trim() })),
+      );
+    }
+    for (const sub of task.subtasks) plan = addTask(plan, detached(sub));
+    plan = setProjectDue(plan, task.due);
+    plan = setProjectPriority(plan, task.priority);
+    await writeTextFile(await join(path, PLAN_FILE), serializePlan(plan));
+    store.addRecentProject(path);
+    await editPlan(list, (p) => deleteTask(p, ref));
+    toast.success(`“${name}” is now a project`, {
+      action: {
+        label: "Open",
+        onClick: () => void useDocumentStore.getState().openProject(path),
+      },
+    });
+  } catch (err) {
+    toast.error(`Couldn't make it a project: ${errorText(err)}`);
+  }
 }

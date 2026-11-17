@@ -23,6 +23,9 @@ tag.
 
 ### Added
 
+- Planner: right-click a task and choose Make it a project. It gets a
+  folder of its own; its subtasks become the project's tasks, and its
+  date and priority the project's deadline and priority.
 - Projects have a priority, set in the Planner or when making the
   project, shown as a flag in the Planner and on project cards, with a
   Priority sort in both. A new project can also get its type and

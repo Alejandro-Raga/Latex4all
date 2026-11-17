@@ -653,3 +653,27 @@ test("a project's priority, in its plan and beside its name", async ({
   ).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("a task made a project, its subtasks the project's tasks", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByText("Draft the discussion").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Make it a project" }).click();
+  await expect
+    .poll(() => disk(page, "/papers/Draft the discussion/Plan.md"))
+    .toBe(
+      "---\ndue: 2020-01-01\npriority: high\n---\n# Draft the discussion\n\n- [ ] Compare with Cohen\n",
+    );
+  await expect
+    .poll(() => disk(page, PLAN))
+    .not.toContain("Draft the discussion");
+  await expect(
+    page.getByRole("button", { name: /^Draft the discussion/ }),
+  ).toBeVisible();
+  expect(errors).toEqual([]);
+});

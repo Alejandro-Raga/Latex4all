@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from "react";
 import {
+  FolderPlusIcon,
   ArrowUpFromLineIcon,
   CalendarIcon,
   CheckCircle2Icon,
@@ -79,6 +80,7 @@ import {
   dropOnTask,
   editPlan,
   moveToPlan,
+  makeProject,
 } from "./plan-actions";
 import {
   type DragTask,
@@ -351,6 +353,10 @@ function TaskMenu({
             </ContextMenuSubContent>
           </ContextMenuSub>
         )}
+        <ContextMenuItem onClick={() => void makeProject(list, taskRef)}>
+          <FolderPlusIcon className="size-3.5" />
+          Make it a project
+        </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
           variant="destructive"

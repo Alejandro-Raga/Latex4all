@@ -849,6 +849,7 @@ if (scenario === "planner") {
       index: null,
     } as never);
   useProjectStore.setState({
+    lastProjectFolder: "/papers",
     recentProjects: [
       { path: "/papers/Paper 2", name: "Paper 2", lastOpened: 1 },
       { path: "/papers/Thesis", name: "Thesis", lastOpened: 2 },
