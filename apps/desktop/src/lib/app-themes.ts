@@ -232,7 +232,8 @@ function stripesRule(t: AppTheme): string {
   const bands = t.stripes
     .map((c, i) => `${c} ${(i * 100) / n}% ${((i + 1) * 100) / n}%`)
     .join(", ");
-  return `html.${t.id} body::before { content: ""; position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 100; pointer-events: none; background: linear-gradient(90deg, ${bands}); }`;
+  // The bar across the top of the window, in the theme's bands.
+  return `html.${t.id} .app-titlebar { background: linear-gradient(90deg, ${bands}); }`;
 }
 
 /**

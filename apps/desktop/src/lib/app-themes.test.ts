@@ -61,7 +61,7 @@ describe("app themes", () => {
       expect(css).toContain(`.${t.id} {`);
       expect(css).toContain(`--syn-command: ${t.palette.command};`);
     }
-    expect(css).toContain("html.spectrum body::before");
+    expect(css).toContain("html.spectrum .app-titlebar");
     expect(css).toMatch(
       /\.custom \{[^}]*--syn-env: oklch\(from var\(--t-accent\)/,
     );
