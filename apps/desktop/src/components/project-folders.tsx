@@ -8,6 +8,16 @@ import {
   StarIcon,
   Trash2Icon,
 } from "lucide-react";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  pointerWithin,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -146,11 +156,7 @@ export function FolderTiles({
         {sorted.map((f) => (
           <ContextMenu key={f.id}>
             <ContextMenuTrigger asChild>
-              <button
-                type="button"
-                onClick={() => onOpen(f.id)}
-                className="flex items-center gap-2.5 rounded-xl border border-border/70 bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/60"
-              >
+              <DropTile id={f.id} onClick={() => onOpen(f.id)}>
                 <FolderIcon
                   className="size-5 shrink-0"
                   style={{ color: folderColor(f) }}
@@ -165,7 +171,7 @@ export function FolderTiles({
                 <span className="text-muted-foreground text-xs tabular-nums">
                   {counts[f.id] ?? 0}
                 </span>
-              </button>
+              </DropTile>
             </ContextMenuTrigger>
             <ContextMenuContent className="w-48">
               <ContextMenuItem onSelect={() => onOpen(f.id)}>
@@ -289,15 +295,128 @@ export function FolderTrail({
   const folder = useProjectFolders((s) => s.folders.find((f) => f.id === id));
   return (
     <span className="flex min-w-0 items-center gap-1">
-      <button
-        type="button"
-        onClick={onBack}
-        className="truncate text-muted-foreground hover:text-foreground"
-      >
-        All projects
-      </button>
+      <TrailRoot onBack={onBack} />
       <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
       <span className="truncate">{folder?.name ?? "Folder"}</span>
     </span>
+  );
+}
+
+/* ─────────────────────────── Dragging projects into folders ─────────────────────────── */
+
+/** The projects page's drag and drop: a project onto a folder (or out). */
+export function FolderDnd({ children }: { children: React.ReactNode }) {
+  const sensors = useSensors(
+    // A short move first: a click on a card still opens it.
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+  const [dragging, setDragging] = useState<string | null>(null);
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragStart={(e) => setDragging(String(e.active.id))}
+      onDragCancel={() => setDragging(null)}
+      onDragEnd={(e) => {
+        setDragging(null);
+        const path = String(e.active.id).replace(/^project:/, "");
+        const over = e.over ? String(e.over.id) : null;
+        if (!over) return;
+        if (over === "folder:none")
+          useProjectFolders.getState().put(path, null);
+        else if (over.startsWith("folder:")) {
+          useProjectFolders.getState().put(path, over.slice("folder:".length));
+        }
+      }}
+    >
+      {children}
+      <DragOverlay dropAnimation={null}>
+        {dragging && (
+          <div className="rounded-lg border bg-background px-3 py-1.5 text-sm shadow-lg">
+            {dragging
+              .replace(/^project:/, "")
+              .split(/[\\/]/)
+              .pop()}
+          </div>
+        )}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
+/** A project that can be dragged onto a folder. */
+export function DraggableProject({
+  path,
+  children,
+}: {
+  path: string;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
+    id: `project:${path}`,
+  });
+  // Not a button of its own: the card inside is what's clicked and tabbed to.
+  const { role: _role, tabIndex: _tab, ...dragAttributes } = attributes;
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...dragAttributes}
+      className={cn("min-w-0", isDragging && "opacity-40")}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Somewhere a project can be dropped: a folder, or out of folders. */
+export function useFolderDrop(id: string) {
+  const { setNodeRef, isOver } = useDroppable({ id: `folder:${id}` });
+  return { ref: setNodeRef, over: isOver };
+}
+
+/** A folder's tile: opens on a click, takes a project dropped on it. */
+function DropTile({
+  id,
+  onClick,
+  children,
+  ...rest
+}: {
+  id: string;
+  onClick: () => void;
+  children: React.ReactNode;
+} & React.HTMLAttributes<HTMLButtonElement>) {
+  const drop = useFolderDrop(id);
+  return (
+    <button
+      {...rest}
+      ref={drop.ref}
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-2.5 rounded-xl border bg-card px-3 py-2.5 text-left transition-colors hover:bg-muted/60",
+        drop.over ? "border-primary bg-primary/10" : "border-border/70",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** "All projects" in the trail: back up, or a project dropped out of the folder. */
+function TrailRoot({ onBack }: { onBack: () => void }) {
+  const drop = useFolderDrop("none");
+  return (
+    <button
+      ref={drop.ref}
+      type="button"
+      onClick={onBack}
+      className={cn(
+        "truncate rounded px-1 text-muted-foreground hover:text-foreground",
+        drop.over && "bg-primary/10 text-foreground ring-1 ring-primary",
+      )}
+    >
+      All projects
+    </button>
   );
 }

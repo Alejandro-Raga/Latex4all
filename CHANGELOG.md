@@ -175,6 +175,14 @@ tag.
 
 ### Fixed
 
+- Drag a project onto a folder on All projects to put it there, or onto
+  All projects in the title to take it out.
+- Opening a paper from a reading list no longer marks it as being read;
+  reading through it does. The reader's header shows its status on your
+  reading list, to change it there.
+- Library: going full window and back fits the paper to its new width,
+  on the page you were on.
+- The Plan panel beside the editor fits its reading list's buttons.
 - Priorities have their own colors (red, orange, amber, blue) in every
   theme; medium and low looked alike in some.
 - Cards show their priority as a slim bar inside, clear of the corners.

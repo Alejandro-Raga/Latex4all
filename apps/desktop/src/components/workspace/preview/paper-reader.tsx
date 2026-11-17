@@ -5,11 +5,11 @@ import {
   useMemo,
   useRef,
   useState,
-  useLayoutEffect,
 } from "react";
 import { noteBookmark, notePage, noteReading } from "@/lib/plan/reading-sync";
 import { useBookmarkStore } from "@/stores/bookmark-store";
 import { useReaderFull } from "@/stores/reader-full-store";
+import { ReadingStatusButton } from "./reading-status";
 import { addPassageToNote } from "@/lib/vault/add-passage";
 import { useDockStore } from "@/stores/dock-store";
 import { filedToast, NotePicker } from "./group-picker";
@@ -243,42 +243,59 @@ export function PaperReader({
     if (visible) fitIfNew();
   }, [visible, fitIfNew]);
 
-  // In the Library, going full window and back: the paper zooms with the
-  // room it gets (as wide on the page as before), not just more margin,
-  // and stays on its page. The width before is the last one seen.
+  // In the Library, going full window and back: once the reader has its
+  // new size, the page is fitted to its width again (it zooms with the
+  // room, rather than gaining margin), on the page it was on.
   const readerFull = useReaderFull((st) => st.on);
-  const lastWidth = useRef<number | null>(null);
+  const refit = useRef<{ page?: number; width: number } | null>(null);
+  const pageRef = useRef<number | undefined>(undefined);
+  const firstSwitch = useRef(true);
+  useEffect(() => {
+    if (firstSwitch.current) {
+      firstSwitch.current = false;
+      return;
+    }
+    if (!inline) return;
+    refit.current = {
+      page: pageRef.current,
+      width: wrapperRef.current?.clientWidth ?? 0,
+    };
+    // Nothing changed size after all: forget it.
+    const timer = setTimeout(() => {
+      refit.current = null;
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [readerFull, inline]);
   useEffect(() => {
     const el = wrapperRef.current;
     if (!el) return;
     const seen = new ResizeObserver(() => {
-      lastWidth.current = el.clientWidth;
+      const asked = refit.current;
+      const width = el.clientWidth;
+      if (!asked || !pageWidthRef.current || Math.abs(width - asked.width) < 8)
+        return;
+      refit.current = null;
+      changeScale((width - 40) / pageWidthRef.current);
+      const page = asked.page;
+      if (page) {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => scrollToPageRef.current?.(page)),
+        );
+      }
     });
     seen.observe(el);
     return () => seen.disconnect();
-  }, []);
-  const scaleRef = useRef(scale);
-  scaleRef.current = scale;
-  const pageRef = useRef<number | undefined>(undefined);
-  useLayoutEffect(() => {
-    if (!inline) return;
-    const width = wrapperRef.current?.clientWidth;
-    const before = lastWidth.current;
-    lastWidth.current = width ?? before;
-    if (!width || !before || Math.abs(before - width) < 8) return;
-    changeScale((scaleRef.current * (width - 40)) / Math.max(1, before - 40));
-    const page = pageRef.current;
-    if (page) requestAnimationFrame(() => scrollToPageRef.current?.(page));
-  }, [readerFull]);
+  }, [changeScale]);
 
-  // Opened: being read, on the reading lists it's on, and the last page
-  // read kept there (once the page has stayed put a moment).
+  // Opened: among the recently opened. It's only "reading" on its lists
+  // once you move through it (a look isn't reading), and the last page is
+  // kept there once it has stayed put a moment.
   const itemKey = paper.zotero?.itemKey;
   useEffect(() => {
     if (!visible || !itemKey) return;
-    void noteReading(itemKey, "opened");
     useBookmarkStore.getState().opened(itemKey, paper.label);
   }, [visible, itemKey, paper.label]);
+  const firstPage = useRef<number | undefined>(undefined);
   const [pageCount, setPageCount] = useState<number | undefined>();
   const [readingPage, setReadingPage] = useState<number | undefined>();
   pageRef.current = readingPage;
@@ -286,9 +303,13 @@ export function PaperReader({
   const bookmark = useBookmarkStore((s) => s.places[placeKey]?.bookmark);
   useEffect(() => {
     if (!visible || !readingPage) return;
+    firstPage.current ??= readingPage;
     const timer = setTimeout(() => {
       useBookmarkStore.getState().setLast(placeKey, readingPage);
-      if (itemKey) void notePage(itemKey, readingPage, pageCount);
+      // Opened where it was: not read further yet.
+      if (itemKey && readingPage !== firstPage.current) {
+        void notePage(itemKey, readingPage, pageCount);
+      }
     }, 3000);
     return () => clearTimeout(timer);
   }, [visible, itemKey, placeKey, readingPage, pageCount]);
@@ -522,6 +543,7 @@ export function PaperReader({
             </span>
           ))}
         {inline && !status && count === 0 && <span className="flex-1" />}
+        {itemKey && <ReadingStatusButton itemKey={itemKey} />}
         {bookmark && readingPage !== bookmark && (
           <Button
             variant="ghost"

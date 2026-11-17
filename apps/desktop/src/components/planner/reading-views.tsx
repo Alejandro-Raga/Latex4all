@@ -551,9 +551,12 @@ function dropOnGroup(list: PlanList, status: ReadingStatus) {
 export function ZoteroPicker({
   list,
   listed,
+  compact,
 }: {
   list: PlanList;
   listed: Set<string>;
+  /** Its icon only (a narrow panel). */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -591,10 +594,15 @@ export function ZoteroPicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-muted/60 px-3 text-sm hover:bg-muted"
+          className={cn(
+            "flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-muted/60 text-sm hover:bg-muted",
+            compact ? "w-9 justify-center" : "px-3",
+          )}
+          title="Add from Zotero"
+          aria-label="Add from Zotero"
         >
           <LibraryBigIcon className="size-4 text-primary" />
-          Add from Zotero
+          {!compact && "Add from Zotero"}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-96 p-0">
@@ -817,9 +825,10 @@ export function ReadingView({
   return (
     <div className={cn(inline ? "p-2" : "px-8 py-5")}>
       <div className="flex gap-2">
-        <AddPaper list={list} className="flex-1" />
+        <AddPaper list={list} className="min-w-0 flex-1" />
         <ZoteroPicker
           list={list}
+          compact={inline}
           listed={new Set(items.flatMap((r) => (r.itemKey ? [r.itemKey] : [])))}
         />
       </div>

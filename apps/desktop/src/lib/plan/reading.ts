@@ -435,3 +435,18 @@ export function moveReading(from: Plan, to: Plan): { from: Plan; to: Plan } {
   for (const task of tasks) next = addTask(next, task, index);
   return { from: without, to: next };
 }
+
+/** A paper's status set on every entry of it (from the reader). */
+export const markStatus = (
+  plan: Plan,
+  itemKey: string,
+  status: ReadingStatus,
+  today?: string,
+) => {
+  let next = plan;
+  for (const item of readingItems(plan)) {
+    if (item.itemKey !== itemKey || item.status === status) continue;
+    next = rewrite(next, item, { status }, today);
+  }
+  return next;
+};

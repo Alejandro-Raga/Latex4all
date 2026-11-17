@@ -134,6 +134,8 @@ import { useReaderFull } from "@/stores/reader-full-store";
 import { useProjectFolders } from "@/stores/project-folders-store";
 import {
   afterMenu,
+  FolderDnd,
+  DraggableProject,
   FolderNameDialog,
   type FolderPrompt,
   FolderTag,
@@ -694,529 +696,559 @@ export function ProjectPicker() {
   }
 
   return (
-    <div className="app-shell flex h-full bg-background text-foreground">
-      <aside
-        className={cn(
-          readerFull && activeSection === "library" && "hidden",
-          "flex shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out",
-          isSidebarCollapsed ? "w-12" : "w-56",
-        )}
-      >
-        <div
+    <FolderDnd>
+      <div className="app-shell flex h-full bg-background text-foreground">
+        <aside
           className={cn(
-            "flex h-[calc(48px+var(--titlebar-height))] items-center gap-2 px-3 pt-[var(--titlebar-height)]",
-            isSidebarCollapsed ? "justify-center" : "justify-between",
+            readerFull && activeSection === "library" && "hidden",
+            "flex shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out",
+            isSidebarCollapsed ? "w-12" : "w-56",
           )}
         >
-          {!isSidebarCollapsed && (
-            <div className="flex min-w-0 items-center gap-2">
-              <img src="/icon-192.png" alt="Latex4All" className="size-6" />
-              <span className="truncate font-semibold text-sm">Latex4All</span>
-            </div>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
+          <div
             className={cn(
-              "rounded-lg text-muted-foreground hover:text-foreground",
-              isSidebarCollapsed ? "size-7" : "size-8",
+              "flex h-[calc(48px+var(--titlebar-height))] items-center gap-2 px-3 pt-[var(--titlebar-height)]",
+              isSidebarCollapsed ? "justify-center" : "justify-between",
             )}
-            onClick={() => setIsSidebarCollapsed((value) => !value)}
-            aria-label={
-              isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
-            }
           >
-            <PanelLeftIcon
+            {!isSidebarCollapsed && (
+              <div className="flex min-w-0 items-center gap-2">
+                <img src="/icon-192.png" alt="Latex4All" className="size-6" />
+                <span className="truncate font-semibold text-sm">
+                  Latex4All
+                </span>
+              </div>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
               className={cn(
-                "size-3.5 transition-transform duration-200",
-                isSidebarCollapsed && "rotate-180",
+                "rounded-lg text-muted-foreground hover:text-foreground",
+                isSidebarCollapsed ? "size-7" : "size-8",
               )}
-            />
-          </Button>
-        </div>
+              onClick={() => setIsSidebarCollapsed((value) => !value)}
+              aria-label={
+                isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+              }
+            >
+              <PanelLeftIcon
+                className={cn(
+                  "size-3.5 transition-transform duration-200",
+                  isSidebarCollapsed && "rotate-180",
+                )}
+              />
+            </Button>
+          </div>
 
-        <nav
-          className={cn(
-            "flex flex-col gap-1",
-            isSidebarCollapsed ? "items-center px-0" : "px-2",
-          )}
-        >
-          <ProjectNavButton
-            active={activeSection === "projects"}
-            collapsed={isSidebarCollapsed}
-            icon={FolderOpenIcon}
-            onClick={() => setActiveSection("projects")}
+          <nav
+            className={cn(
+              "flex flex-col gap-1",
+              isSidebarCollapsed ? "items-center px-0" : "px-2",
+            )}
           >
-            All projects
-          </ProjectNavButton>
-          <ProjectNavButton
-            active={activeSection === "library"}
-            collapsed={isSidebarCollapsed}
-            icon={LibraryIcon}
-            onClick={() => setActiveSection("library")}
-          >
-            Library & Vault
-          </ProjectNavButton>
-          <ProjectNavButton
-            active={activeSection === "planner"}
-            collapsed={isSidebarCollapsed}
-            icon={ListTodoIcon}
-            onClick={() => setActiveSection("planner")}
-          >
-            Planner
-          </ProjectNavButton>
-          <ProjectNavButton
-            active={activeSection === "settings"}
-            collapsed={isSidebarCollapsed}
-            icon={SettingsIcon}
-            onClick={() => setActiveSection("settings")}
-          >
-            Settings
-          </ProjectNavButton>
-          <ProjectNavButton
-            active={activeSection === "help"}
-            collapsed={isSidebarCollapsed}
-            icon={CircleHelpIcon}
-            onClick={() => setActiveSection("help")}
-          >
-            Help
-          </ProjectNavButton>
-          <ProjectNavButton
-            active={false}
-            collapsed={isSidebarCollapsed}
-            icon={BugIcon}
-            onClick={() => useBugReport.getState().show()}
-          >
-            Report a bug
-          </ProjectNavButton>
-        </nav>
+            <ProjectNavButton
+              active={activeSection === "projects"}
+              collapsed={isSidebarCollapsed}
+              icon={FolderOpenIcon}
+              onClick={() => setActiveSection("projects")}
+            >
+              All projects
+            </ProjectNavButton>
+            <ProjectNavButton
+              active={activeSection === "library"}
+              collapsed={isSidebarCollapsed}
+              icon={LibraryIcon}
+              onClick={() => setActiveSection("library")}
+            >
+              Library & Vault
+            </ProjectNavButton>
+            <ProjectNavButton
+              active={activeSection === "planner"}
+              collapsed={isSidebarCollapsed}
+              icon={ListTodoIcon}
+              onClick={() => setActiveSection("planner")}
+            >
+              Planner
+            </ProjectNavButton>
+            <ProjectNavButton
+              active={activeSection === "settings"}
+              collapsed={isSidebarCollapsed}
+              icon={SettingsIcon}
+              onClick={() => setActiveSection("settings")}
+            >
+              Settings
+            </ProjectNavButton>
+            <ProjectNavButton
+              active={activeSection === "help"}
+              collapsed={isSidebarCollapsed}
+              icon={CircleHelpIcon}
+              onClick={() => setActiveSection("help")}
+            >
+              Help
+            </ProjectNavButton>
+            <ProjectNavButton
+              active={false}
+              collapsed={isSidebarCollapsed}
+              icon={BugIcon}
+              onClick={() => useBugReport.getState().show()}
+            >
+              Report a bug
+            </ProjectNavButton>
+          </nav>
 
-        <div
-          className={cn(
-            "mt-auto flex h-9 items-center border-sidebar-border border-t text-muted-foreground text-xs",
-            isSidebarCollapsed ? "justify-center px-0" : "justify-between px-3",
-          )}
-        >
-          {isSidebarCollapsed ? (
-            <img src="/icon-192.png" alt="Latex4All" className="size-4" />
+          <div
+            className={cn(
+              "mt-auto flex h-9 items-center border-sidebar-border border-t text-muted-foreground text-xs",
+              isSidebarCollapsed
+                ? "justify-center px-0"
+                : "justify-between px-3",
+            )}
+          >
+            {isSidebarCollapsed ? (
+              <img src="/icon-192.png" alt="Latex4All" className="size-4" />
+            ) : (
+              <>
+                <span className="truncate">Latex4All v{appVersion}</span>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    asChild
+                  >
+                    <a
+                      href="https://github.com/Alejandro-Raga/Latex4all"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="GitHub"
+                    >
+                      <GithubIcon className="size-3.5" />
+                    </a>
+                  </Button>
+                  <ThemeMenuButton />
+                </div>
+              </>
+            )}
+          </div>
+        </aside>
+
+        <main className="inset-card flex min-w-0 flex-1 flex-col bg-background">
+          {activeSection === "library" ? (
+            <LibraryView />
+          ) : activeSection === "planner" ? (
+            <PlannerView />
+          ) : activeSection === "help" ? (
+            <div className="flex h-full min-h-0 flex-col">
+              <header className="flex h-[calc(48px+var(--titlebar-height))] shrink-0 items-center border-border/70 border-b bg-background px-5 pt-[var(--titlebar-height)]">
+                <h1 className="font-semibold text-lg leading-none">Help</h1>
+              </header>
+              <HelpView
+                onNavigate={(target) => {
+                  if (target.kind === "settings") {
+                    setSettingsDetailSection(target.section);
+                    setActiveSection("settings");
+                  } else {
+                    setActiveSection(target.kind);
+                  }
+                }}
+              />
+            </div>
           ) : (
             <>
-              <span className="truncate">Latex4All v{appVersion}</span>
-              <div className="flex shrink-0 items-center gap-1">
-                <Button variant="ghost" size="icon" className="size-6" asChild>
-                  <a
-                    href="https://github.com/Alejandro-Raga/Latex4all"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="GitHub"
-                  >
-                    <GithubIcon className="size-3.5" />
-                  </a>
-                </Button>
-                <ThemeMenuButton />
-              </div>
-            </>
-          )}
-        </div>
-      </aside>
-
-      <main className="inset-card flex min-w-0 flex-1 flex-col bg-background">
-        {activeSection === "library" ? (
-          <LibraryView />
-        ) : activeSection === "planner" ? (
-          <PlannerView />
-        ) : activeSection === "help" ? (
-          <div className="flex h-full min-h-0 flex-col">
-            <header className="flex h-[calc(48px+var(--titlebar-height))] shrink-0 items-center border-border/70 border-b bg-background px-5 pt-[var(--titlebar-height)]">
-              <h1 className="font-semibold text-lg leading-none">Help</h1>
-            </header>
-            <HelpView
-              onNavigate={(target) => {
-                if (target.kind === "settings") {
-                  setSettingsDetailSection(target.section);
-                  setActiveSection("settings");
-                } else {
-                  setActiveSection(target.kind);
-                }
-              }}
-            />
-          </div>
-        ) : (
-          <>
-            <header className="flex h-[calc(48px+var(--titlebar-height))] shrink-0 flex-nowrap items-center gap-3 border-border/70 border-b bg-background px-5 pt-[var(--titlebar-height)]">
-              <div className="mr-auto flex min-w-0 items-center">
-                <h1 className="truncate font-semibold text-lg leading-none">
-                  {activeSection === "settings" ? (
-                    "Settings"
-                  ) : openFolder && showFolders ? (
-                    <FolderTrail
-                      id={openFolder}
-                      onBack={() => setOpenFolder(null)}
-                    />
-                  ) : (
-                    "All projects"
-                  )}
-                </h1>
-              </div>
-
-              {activeSection === "projects" && (
-                <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2">
-                  <div className="relative flex min-w-40 flex-1 items-center sm:max-w-sm">
-                    <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                      ref={searchInputRef}
-                      value={searchQuery}
-                      onChange={(event) => setSearchQuery(event.target.value)}
-                      placeholder="Search"
-                      className="h-9 w-full rounded-lg border border-input bg-background pr-16 pl-9 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
-                    />
-                    <kbd className="pointer-events-none absolute top-1/2 right-2 flex h-6 min-w-10 -translate-y-1/2 items-center justify-center rounded-md border border-border/70 bg-muted/30 px-1.5 font-medium text-[11px] text-muted-foreground leading-none">
-                      {searchShortcutLabel}
-                    </kbd>
-                  </div>
-
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="secondary"
-                        className="h-9 shrink-0 gap-1 rounded-lg px-3"
-                      >
-                        Add
-                        <ChevronDownIcon className="size-3.5 opacity-70" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onSelect={() => setShowJoinDialog(true)}
-                      >
-                        <UsersIcon className="size-4" />
-                        Join a shared project…
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onSelect={() => void handleOpenFolder()}
-                      >
-                        <FolderOpenIcon className="size-4" />
-                        Import a folder…
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onSelect={() =>
-                          afterMenu(() => setFolderPrompt({ kind: "new" }))
-                        }
-                      >
-                        <FolderPlusIcon className="size-4" />
-                        New folder…
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <Button
-                    onClick={() => setShowModeDialog(true)}
-                    className="h-9 shrink-0 gap-1.5 rounded-lg px-4"
-                  >
-                    <PlusIcon className="size-4" />
-                    New
-                  </Button>
+              <header className="flex h-[calc(48px+var(--titlebar-height))] shrink-0 flex-nowrap items-center gap-3 border-border/70 border-b bg-background px-5 pt-[var(--titlebar-height)]">
+                <div className="mr-auto flex min-w-0 items-center">
+                  <h1 className="truncate font-semibold text-lg leading-none">
+                    {activeSection === "settings" ? (
+                      "Settings"
+                    ) : openFolder && showFolders ? (
+                      <FolderTrail
+                        id={openFolder}
+                        onBack={() => setOpenFolder(null)}
+                      />
+                    ) : (
+                      "All projects"
+                    )}
+                  </h1>
                 </div>
-              )}
-            </header>
 
-            <div className="min-h-0 flex-1 overflow-auto">
-              {activeSection === "settings" ? (
-                <SettingsView
-                  section={settingsDetailSection}
-                  onSectionChange={setSettingsDetailSection}
-                />
-              ) : (
-                <div className="flex w-full flex-col gap-4 px-5 py-5">
-                  {visibleProjects.length === 0 ? (
-                    <div className="flex min-h-80 flex-col items-center justify-center rounded-lg border border-border border-dashed bg-muted/10 px-6 text-center">
-                      <FileTextIcon className="mb-4 size-10 text-muted-foreground/70" />
-                      <h2 className="font-semibold text-lg">
-                        {normalizedSearch
-                          ? "No matching projects"
-                          : "No projects"}
-                      </h2>
-                      <div className="mt-5 flex flex-wrap justify-center gap-3">
-                        <Button onClick={() => setShowModeDialog(true)}>
-                          <PlusIcon className="mr-2 size-4" />
-                          New
-                        </Button>
-                        <Button onClick={handleOpenFolder} variant="outline">
-                          <FolderOpenIcon className="mr-2 size-4" />
-                          Import
-                        </Button>
-                      </div>
+                {activeSection === "projects" && (
+                  <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2">
+                    <div className="relative flex min-w-40 flex-1 items-center sm:max-w-sm">
+                      <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <input
+                        ref={searchInputRef}
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                        placeholder="Search"
+                        className="h-9 w-full rounded-lg border border-input bg-background pr-16 pl-9 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
+                      />
+                      <kbd className="pointer-events-none absolute top-1/2 right-2 flex h-6 min-w-10 -translate-y-1/2 items-center justify-center rounded-md border border-border/70 bg-muted/30 px-1.5 font-medium text-[11px] text-muted-foreground leading-none">
+                        {searchShortcutLabel}
+                      </kbd>
                     </div>
-                  ) : (
-                    <>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-                          {typeChips.map((chip) => (
-                            <button
-                              key={chip.label}
-                              type="button"
-                              onClick={() => setTypeFilter(chip.value)}
-                              className={cn(
-                                "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors",
-                                activeType === chip.value
-                                  ? "border-foreground/20 bg-accent font-medium text-accent-foreground"
-                                  : "border-transparent text-muted-foreground hover:bg-muted/60",
-                              )}
-                            >
-                              {chip.label}
-                              <span className="text-muted-foreground/70 tabular-nums">
-                                {chip.count}
-                              </span>
-                            </button>
-                          ))}
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="secondary"
+                          className="h-9 shrink-0 gap-1 rounded-lg px-3"
+                        >
+                          Add
+                          <ChevronDownIcon className="size-3.5 opacity-70" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onSelect={() => setShowJoinDialog(true)}
+                        >
+                          <UsersIcon className="size-4" />
+                          Join a shared project…
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => void handleOpenFolder()}
+                        >
+                          <FolderOpenIcon className="size-4" />
+                          Import a folder…
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() =>
+                            afterMenu(() => setFolderPrompt({ kind: "new" }))
+                          }
+                        >
+                          <FolderPlusIcon className="size-4" />
+                          New folder…
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button
+                      onClick={() => setShowModeDialog(true)}
+                      className="h-9 shrink-0 gap-1.5 rounded-lg px-4"
+                    >
+                      <PlusIcon className="size-4" />
+                      New
+                    </Button>
+                  </div>
+                )}
+              </header>
+
+              <div className="min-h-0 flex-1 overflow-auto">
+                {activeSection === "settings" ? (
+                  <SettingsView
+                    section={settingsDetailSection}
+                    onSectionChange={setSettingsDetailSection}
+                  />
+                ) : (
+                  <div className="flex w-full flex-col gap-4 px-5 py-5">
+                    {visibleProjects.length === 0 ? (
+                      <div className="flex min-h-80 flex-col items-center justify-center rounded-lg border border-border border-dashed bg-muted/10 px-6 text-center">
+                        <FileTextIcon className="mb-4 size-10 text-muted-foreground/70" />
+                        <h2 className="font-semibold text-lg">
+                          {normalizedSearch
+                            ? "No matching projects"
+                            : "No projects"}
+                        </h2>
+                        <div className="mt-5 flex flex-wrap justify-center gap-3">
+                          <Button onClick={() => setShowModeDialog(true)}>
+                            <PlusIcon className="mr-2 size-4" />
+                            New
+                          </Button>
+                          <Button onClick={handleOpenFolder} variant="outline">
+                            <FolderOpenIcon className="mr-2 size-4" />
+                            Import
+                          </Button>
                         </div>
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 gap-1 px-2 text-muted-foreground text-xs"
-                              >
-                                <ArrowUpDownIcon className="size-3.5" />
-                                {SORTS.find((x) => x.value === projectSort)
-                                  ?.label ?? "Sort"}
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuRadioGroup
-                                value={projectSort}
-                                onValueChange={(v) =>
-                                  setProjectSort(v as ProjectSort)
-                                }
-                              >
-                                {SORTS.map(({ value, label }) => (
-                                  <DropdownMenuRadioItem
-                                    key={value}
-                                    value={value}
-                                  >
-                                    {label}
-                                  </DropdownMenuRadioItem>
-                                ))}
-                              </DropdownMenuRadioGroup>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                          {projectView === "grid" && (
-                            <label
-                              className="flex items-center gap-1.5 text-muted-foreground"
-                              title="Card size"
-                            >
-                              <ZoomOutIcon className="size-3.5" />
-                              <input
-                                type="range"
-                                min={CARD_SIZE_MIN}
-                                max={CARD_SIZE_MAX}
-                                step={10}
-                                value={cardSize}
-                                onChange={(e) =>
-                                  setCardSize(Number(e.currentTarget.value))
-                                }
-                                className="h-1 w-24 accent-primary"
-                                aria-label="Card size"
-                              />
-                              <ZoomInIcon className="size-3.5" />
-                            </label>
-                          )}
-                          <div className="flex rounded-md border p-0.5">
-                            {(
-                              [
-                                ["grid", LayoutGridIcon, "Cards"],
-                                ["list", ListIcon, "List"],
-                              ] as const
-                            ).map(([view, Icon, label]) => (
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+                            {typeChips.map((chip) => (
                               <button
-                                key={view}
+                                key={chip.label}
                                 type="button"
-                                title={label}
-                                aria-label={label}
-                                aria-pressed={projectView === view}
-                                onClick={() => setProjectView(view)}
+                                onClick={() => setTypeFilter(chip.value)}
                                 className={cn(
-                                  "rounded p-1 transition-colors",
-                                  projectView === view
-                                    ? "bg-muted text-foreground"
-                                    : "text-muted-foreground hover:text-foreground",
+                                  "flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors",
+                                  activeType === chip.value
+                                    ? "border-foreground/20 bg-accent font-medium text-accent-foreground"
+                                    : "border-transparent text-muted-foreground hover:bg-muted/60",
                                 )}
                               >
-                                <Icon className="size-3.5" />
+                                {chip.label}
+                                <span className="text-muted-foreground/70 tabular-nums">
+                                  {chip.count}
+                                </span>
                               </button>
                             ))}
                           </div>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 gap-1 px-2 text-muted-foreground text-xs"
+                                >
+                                  <ArrowUpDownIcon className="size-3.5" />
+                                  {SORTS.find((x) => x.value === projectSort)
+                                    ?.label ?? "Sort"}
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuRadioGroup
+                                  value={projectSort}
+                                  onValueChange={(v) =>
+                                    setProjectSort(v as ProjectSort)
+                                  }
+                                >
+                                  {SORTS.map(({ value, label }) => (
+                                    <DropdownMenuRadioItem
+                                      key={value}
+                                      value={value}
+                                    >
+                                      {label}
+                                    </DropdownMenuRadioItem>
+                                  ))}
+                                </DropdownMenuRadioGroup>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            {projectView === "grid" && (
+                              <label
+                                className="flex items-center gap-1.5 text-muted-foreground"
+                                title="Card size"
+                              >
+                                <ZoomOutIcon className="size-3.5" />
+                                <input
+                                  type="range"
+                                  min={CARD_SIZE_MIN}
+                                  max={CARD_SIZE_MAX}
+                                  step={10}
+                                  value={cardSize}
+                                  onChange={(e) =>
+                                    setCardSize(Number(e.currentTarget.value))
+                                  }
+                                  className="h-1 w-24 accent-primary"
+                                  aria-label="Card size"
+                                />
+                                <ZoomInIcon className="size-3.5" />
+                              </label>
+                            )}
+                            <div className="flex rounded-md border p-0.5">
+                              {(
+                                [
+                                  ["grid", LayoutGridIcon, "Cards"],
+                                  ["list", ListIcon, "List"],
+                                ] as const
+                              ).map(([view, Icon, label]) => (
+                                <button
+                                  key={view}
+                                  type="button"
+                                  title={label}
+                                  aria-label={label}
+                                  aria-pressed={projectView === view}
+                                  onClick={() => setProjectView(view)}
+                                  className={cn(
+                                    "rounded p-1 transition-colors",
+                                    projectView === view
+                                      ? "bg-muted text-foreground"
+                                      : "text-muted-foreground hover:text-foreground",
+                                  )}
+                                >
+                                  <Icon className="size-3.5" />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         </div>
-                      </div>
 
-                      {showFolders && !openFolder && (
-                        <FolderTiles
-                          counts={folderCounts}
-                          onOpen={setOpenFolder}
-                          onPrompt={setFolderPrompt}
-                        />
-                      )}
-                      {projectView === "list" && <ProjectListHeader />}
-                      {projectGroups.map((group) => (
-                        <section
-                          key={group.key}
-                          className="flex flex-col gap-3"
-                        >
-                          {group.label && (
-                            <div className="flex items-center gap-2">
-                              {group.key === "favorites" && (
-                                <StarIcon className="size-3.5 fill-current text-amber-500" />
-                              )}
-                              <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-                                {group.label}
-                              </span>
-                              <span className="text-muted-foreground/60 text-xs tabular-nums">
-                                {group.projects.length}
-                              </span>
-                              <span className="h-px flex-1 bg-border/60" />
-                            </div>
-                          )}
-                          {projectView === "list" ? (
-                            <div role="table" className="flex flex-col">
-                              {group.projects.map((project) => (
-                                <ProjectRow
-                                  key={project.path}
-                                  project={project}
-                                  isFavorite={favorites.includes(project.path)}
-                                  type={projectTypes[project.path] ?? null}
-                                  typeOptions={typeOptions}
-                                  actions={actionsFor(project)}
-                                />
-                              ))}
-                            </div>
-                          ) : (
-                            <div
-                              className="grid gap-5"
-                              style={{
-                                gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))`,
-                              }}
-                            >
-                              {group.projects.map((project) => (
-                                <ProjectPreviewCard
-                                  key={project.path}
-                                  project={project}
-                                  priority={priorities.get(project.path) ?? 0}
-                                  showFolder={!showFolders}
-                                  isFavorite={favorites.includes(project.path)}
-                                  type={projectTypes[project.path] ?? null}
-                                  typeOptions={typeOptions}
-                                  actions={actionsFor(project)}
-                                />
-                              ))}
-                            </div>
-                          )}
-                        </section>
-                      ))}
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </main>
-
-      <JoinDialog open={showJoinDialog} onOpenChange={setShowJoinDialog} />
-
-      {/* New Project mode selection dialog */}
-      <Dialog open={showModeDialog} onOpenChange={setShowModeDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Create new project</DialogTitle>
-            <DialogDescription>How would you like to start?</DialogDescription>
-          </DialogHeader>
-          <div className="flex gap-3 pt-2">
-            <button
-              onClick={() => handleSelectMode("template")}
-              className="group flex flex-1 flex-col items-center gap-3 rounded-lg border border-border/70 p-4 text-center transition-colors hover:border-border hover:bg-muted/50"
-            >
-              <div className="flex size-10 items-center justify-center rounded-md bg-muted/50 transition-colors group-hover:bg-muted">
-                <LayoutTemplateIcon className="size-5 text-muted-foreground transition-colors group-hover:text-foreground" />
+                        {showFolders && !openFolder && (
+                          <FolderTiles
+                            counts={folderCounts}
+                            onOpen={setOpenFolder}
+                            onPrompt={setFolderPrompt}
+                          />
+                        )}
+                        {projectView === "list" && <ProjectListHeader />}
+                        {projectGroups.map((group) => (
+                          <section
+                            key={group.key}
+                            className="flex flex-col gap-3"
+                          >
+                            {group.label && (
+                              <div className="flex items-center gap-2">
+                                {group.key === "favorites" && (
+                                  <StarIcon className="size-3.5 fill-current text-amber-500" />
+                                )}
+                                <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+                                  {group.label}
+                                </span>
+                                <span className="text-muted-foreground/60 text-xs tabular-nums">
+                                  {group.projects.length}
+                                </span>
+                                <span className="h-px flex-1 bg-border/60" />
+                              </div>
+                            )}
+                            {projectView === "list" ? (
+                              <div role="table" className="flex flex-col">
+                                {group.projects.map((project) => (
+                                  <DraggableProject
+                                    key={project.path}
+                                    path={project.path}
+                                  >
+                                    <ProjectRow
+                                      project={project}
+                                      isFavorite={favorites.includes(
+                                        project.path,
+                                      )}
+                                      type={projectTypes[project.path] ?? null}
+                                      typeOptions={typeOptions}
+                                      actions={actionsFor(project)}
+                                    />
+                                  </DraggableProject>
+                                ))}
+                              </div>
+                            ) : (
+                              <div
+                                className="grid gap-5"
+                                style={{
+                                  gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))`,
+                                }}
+                              >
+                                {group.projects.map((project) => (
+                                  <DraggableProject
+                                    key={project.path}
+                                    path={project.path}
+                                  >
+                                    <ProjectPreviewCard
+                                      project={project}
+                                      priority={
+                                        priorities.get(project.path) ?? 0
+                                      }
+                                      showFolder={!showFolders}
+                                      isFavorite={favorites.includes(
+                                        project.path,
+                                      )}
+                                      type={projectTypes[project.path] ?? null}
+                                      typeOptions={typeOptions}
+                                      actions={actionsFor(project)}
+                                    />
+                                  </DraggableProject>
+                                ))}
+                              </div>
+                            )}
+                          </section>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
-              <div>
-                <div className="font-semibold text-sm">From a template</div>
-                <p className="mt-1 text-muted-foreground text-xs leading-relaxed">
-                  Papers, slides, CVs and letters
-                </p>
-              </div>
-              <span className="rounded-md bg-muted px-2 py-0.5 font-medium text-[10px] text-muted-foreground">
-                Recommended
-              </span>
-            </button>
+            </>
+          )}
+        </main>
 
-            <button
-              onClick={() => handleSelectMode("scratch")}
-              className="group flex flex-1 flex-col items-center gap-3 rounded-lg border border-border/70 p-4 text-center transition-colors hover:border-border hover:bg-muted/50"
-            >
-              <div className="flex size-10 items-center justify-center rounded-md bg-muted/50 transition-colors group-hover:bg-muted">
-                <FileTextIcon className="size-5 text-muted-foreground transition-colors group-hover:text-foreground" />
-              </div>
-              <div>
-                <div className="font-semibold text-sm">Blank document</div>
-                <p className="mt-1 text-muted-foreground text-xs leading-relaxed">
-                  An empty .tex file
-                </p>
-              </div>
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        <JoinDialog open={showJoinDialog} onOpenChange={setShowJoinDialog} />
 
-      <Dialog
-        open={typePrompt !== null}
-        onOpenChange={(open) => {
-          if (!open) setTypePrompt(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Project type</DialogTitle>
-          </DialogHeader>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (typePrompt === null) return;
-              const value = normalizeType(customType);
-              void setProjectType(typePrompt, value.length > 0 ? value : null);
-              setTypePrompt(null);
-            }}
-          >
-            <Input
-              autoFocus
-              value={customType}
-              onChange={(e) => setCustomType(e.target.value)}
-              placeholder="Referee report"
-            />
-            <DialogFooter className="mt-4">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setTypePrompt(null)}
+        {/* New Project mode selection dialog */}
+        <Dialog open={showModeDialog} onOpenChange={setShowModeDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create new project</DialogTitle>
+              <DialogDescription>
+                How would you like to start?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => handleSelectMode("template")}
+                className="group flex flex-1 flex-col items-center gap-3 rounded-lg border border-border/70 p-4 text-center transition-colors hover:border-border hover:bg-muted/50"
               >
-                Cancel
-              </Button>
-              <Button type="submit">Save</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+                <div className="flex size-10 items-center justify-center rounded-md bg-muted/50 transition-colors group-hover:bg-muted">
+                  <LayoutTemplateIcon className="size-5 text-muted-foreground transition-colors group-hover:text-foreground" />
+                </div>
+                <div>
+                  <div className="font-semibold text-sm">From a template</div>
+                  <p className="mt-1 text-muted-foreground text-xs leading-relaxed">
+                    Papers, slides, CVs and letters
+                  </p>
+                </div>
+                <span className="rounded-md bg-muted px-2 py-0.5 font-medium text-[10px] text-muted-foreground">
+                  Recommended
+                </span>
+              </button>
 
-      <FolderNameDialog
-        prompt={folderPrompt}
-        onClose={() => setFolderPrompt(null)}
-      />
+              <button
+                onClick={() => handleSelectMode("scratch")}
+                className="group flex flex-1 flex-col items-center gap-3 rounded-lg border border-border/70 p-4 text-center transition-colors hover:border-border hover:bg-muted/50"
+              >
+                <div className="flex size-10 items-center justify-center rounded-md bg-muted/50 transition-colors group-hover:bg-muted">
+                  <FileTextIcon className="size-5 text-muted-foreground transition-colors group-hover:text-foreground" />
+                </div>
+                <div>
+                  <div className="font-semibold text-sm">Blank document</div>
+                  <p className="mt-1 text-muted-foreground text-xs leading-relaxed">
+                    An empty .tex file
+                  </p>
+                </div>
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
-      <RemoveProjectDialog
-        project={removeProjectTarget}
-        onClose={() => setRemoveProjectTarget(null)}
-        onRemoved={(path) => removeRecentProject(path)}
-      />
-    </div>
+        <Dialog
+          open={typePrompt !== null}
+          onOpenChange={(open) => {
+            if (!open) setTypePrompt(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Project type</DialogTitle>
+            </DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (typePrompt === null) return;
+                const value = normalizeType(customType);
+                void setProjectType(
+                  typePrompt,
+                  value.length > 0 ? value : null,
+                );
+                setTypePrompt(null);
+              }}
+            >
+              <Input
+                autoFocus
+                value={customType}
+                onChange={(e) => setCustomType(e.target.value)}
+                placeholder="Referee report"
+              />
+              <DialogFooter className="mt-4">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setTypePrompt(null)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit">Save</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        <FolderNameDialog
+          prompt={folderPrompt}
+          onClose={() => setFolderPrompt(null)}
+        />
+
+        <RemoveProjectDialog
+          project={removeProjectTarget}
+          onClose={() => setRemoveProjectTarget(null)}
+          onRemoved={(path) => removeRecentProject(path)}
+        />
+      </div>
+    </FolderDnd>
   );
 }
 

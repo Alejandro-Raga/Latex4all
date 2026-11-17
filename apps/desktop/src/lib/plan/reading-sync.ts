@@ -21,6 +21,8 @@ import {
   markBookmark,
   markOpened,
   markPage,
+  markStatus,
+  type ReadingStatus,
   type ReadingMark,
 } from "./reading";
 import type { Plan } from "./plan-file";
@@ -94,5 +96,15 @@ export function noteBookmark(
 ) {
   return changeAll(itemKey, (plan, key) =>
     markBookmark(plan, key, page, pages),
+  );
+}
+
+/** A paper's status, on every reading list it's on. */
+export function noteStatus(itemKey: string, status: ReadingStatus) {
+  const day = new Date();
+  const z = new Date(day.getTime() - day.getTimezoneOffset() * 60_000);
+  const today = z.toISOString().slice(0, 10);
+  return changeAll(itemKey, (plan, key) =>
+    markStatus(plan, key, status, today),
   );
 }
