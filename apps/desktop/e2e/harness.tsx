@@ -36,6 +36,7 @@ import { useVaultStore } from "@/stores/vault-store";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { useZoteroLibrary } from "@/lib/zotero-library";
 import { useDocumentStore } from "@/stores/document-store";
+import { installFullTextOnHover } from "@/lib/full-text-on-hover";
 import { installWheelSideways } from "@/lib/wheel-sideways";
 import { ChatComposer } from "@/components/claude-chat/chat-composer";
 import { LibraryView } from "@/components/library-view";
@@ -49,6 +50,7 @@ import { useProjectStore } from "@/stores/project-store";
 
 // As the app does at startup.
 installWheelSideways();
+installFullTextOnHover();
 const params = new URLSearchParams(location.search);
 const scenario = params.get("scenario");
 const root = createRoot(document.getElementById("root") as HTMLElement);

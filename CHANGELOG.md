@@ -102,6 +102,8 @@ tag.
 
 ### Fixed
 
+- Names cut short with "…" (projects, files, papers) show in full when
+  you hover over them.
 - Shared projects no longer pass around hidden Git files and system
   clutter (.DS_Store, Thumbs.db) or conflicted copies of them, which
   could stop a project compiling on Windows with "access denied" and
