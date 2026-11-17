@@ -51,6 +51,7 @@ test("folders: made, filled from a project's menu, opened, and named on cards in
   }
   // Dragged onto the folder: in it too.
   const card = page.getByText("Reading notes", { exact: true }).first();
+  await card.evaluate((el) => el.scrollIntoView({ block: "center" }));
   const from = await card.boundingBox();
   if (!from) throw new Error("not on screen");
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
@@ -104,4 +105,33 @@ test("folders: made, filled from a project's menu, opened, and named on cards in
   await expect(page.getByText("Grant proposal").first()).toBeVisible();
   await expect(page.getByText("Teaching").first()).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test("the menu on the left: icons only, widened with names, moves between parts", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 900 });
+  await page.goto("/e2e/harness.html?scenario=projects");
+  const menu = page.getByRole("navigation", { name: "Latex4All" });
+  const home = menu.getByRole("button", { name: "Home", exact: true });
+  await expect(home).toHaveAttribute("aria-current", "page");
+  // Icons only to begin with.
+  await expect(menu.getByText("Planner", { exact: true })).toHaveCount(0);
+  await menu.getByRole("button", { name: "Planner", exact: true }).click();
+  await expect(
+    menu.getByRole("button", { name: "Planner", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(home).not.toHaveAttribute("aria-current", "page");
+  await menu.getByRole("button", { name: "Expand the menu" }).click();
+  await expect(
+    menu.getByText("Library & Vault", { exact: true }),
+  ).toBeVisible();
+  await menu.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(
+    menu.getByRole("button", { name: "Settings", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await home.click();
+  await expect(
+    page.getByRole("heading", { name: "All projects" }),
+  ).toBeVisible();
 });

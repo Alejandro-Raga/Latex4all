@@ -268,11 +268,11 @@ export function CommandPalette() {
                   onSelect={() => run(() => void syncProjectNote())}
                 />
               )}
-              {PLACES.filter((p) => p.section || projectRoot).map((p) => (
+              {PLACES.map((p) => (
                 <Item
                   key={p.key}
                   icon={CornerUpLeftIcon}
-                  label={`Go to ${p.label === "Back to the project" ? "the project" : p.label}`}
+                  label={`Go to ${p.label}`}
                   value={`Go to ${p.label} open switch`}
                   hint={`⌘${p.key}`}
                   onSelect={() => run(() => goToPlace(p.section))}

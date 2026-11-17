@@ -23,6 +23,10 @@ tag.
 
 ### Added
 
+- One menu on the left in every part of the app: Home, Writing, Planner,
+  Library & Vault, then Settings, Help and Report a bug. It shows icons
+  only until you widen it. Writing reopens your last project when none
+  is open.
 - From a project, the Planner opens on its list and the Library on its
   folder. Open in Planner on the project strip, the Plan panel and
   project cards.

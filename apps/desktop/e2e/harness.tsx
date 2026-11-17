@@ -45,6 +45,7 @@ import { BugReportDialog, useBugReport } from "@/components/bug-report-dialog";
 import { useAiUsage } from "@/lib/ai-usage";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 import { DeckSurface } from "@/components/deck-surface";
+import { AppRail } from "@/components/app-rail";
 import { ProjectPicker } from "@/components/project-picker";
 import { useProjectStore } from "@/stores/project-store";
 
@@ -239,8 +240,11 @@ if (scenario === "projects") {
   });
   root.render(
     <ThemeProvider attribute="class" defaultTheme="light">
-      <div style={{ height: "100vh", ...chrome }}>
-        <ProjectPicker />
+      <div style={{ height: "100vh", display: "flex", ...chrome }}>
+        <AppRail />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <ProjectPicker />
+        </div>
       </div>
     </ThemeProvider>,
   );
@@ -489,8 +493,11 @@ if (scenario === "workspace") {
       root.render(
         <ThemeProvider attribute="class" themes={THEME_IDS} forcedTheme={theme}>
           <ThemeBridge />
-          <div className="h-full" style={chrome}>
-            <WorkspaceLayout />
+          <div className="flex h-full" style={chrome}>
+            <AppRail />
+            <div className="h-full min-w-0 flex-1">
+              <WorkspaceLayout />
+            </div>
           </div>
         </ThemeProvider>,
       ),

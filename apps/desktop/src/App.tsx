@@ -16,6 +16,7 @@ import { BugReportDialog } from "@/components/bug-report-dialog";
 import { DailySummary } from "@/components/planner/daily-summary";
 import { QuickTask } from "@/components/planner/quick-task";
 import { BackPill } from "@/components/back-pill";
+import { AppRail } from "@/components/app-rail";
 import { followPlaceKeys, followProjectNav, useNav } from "@/stores/nav-store";
 import { cn } from "@/lib/utils";
 import { HelpDialog } from "@/components/help-view";
@@ -261,13 +262,19 @@ export function App({ onReady }: { onReady?: () => void }) {
             data-tauri-drag-region
             className="fixed inset-x-0 top-0 z-[9999] h-[var(--titlebar-height)]"
           />
-          {/* The project stays as it was while you're elsewhere. */}
-          {projectRoot && (
-            <div className={cn("h-full", away && "hidden")}>
-              <WorkspaceWithClaude />
+          {/* The app's menu on the left everywhere; beside it, the part
+              you're in. The project stays as it was while you're elsewhere. */}
+          <div className="flex h-full">
+            <AppRail />
+            <div className="h-full min-w-0 flex-1">
+              {projectRoot && (
+                <div className={cn("h-full", away && "hidden")}>
+                  <WorkspaceWithClaude />
+                </div>
+              )}
+              {(!projectRoot || away) && <ProjectPicker />}
             </div>
-          )}
-          {(!projectRoot || away) && <ProjectPicker />}
+          </div>
           <EnvironmentOnboarding />
           <BugReportDialog />
           <ZoteroPdfDialog />

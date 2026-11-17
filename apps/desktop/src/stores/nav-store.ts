@@ -17,28 +17,31 @@ export type HomeSection =
 export const useNav = create<{
   /** On the start page while a project is open. */
   away: boolean;
-  /** Which part of the start page to show on getting there. */
-  section: HomeSection | null;
+  /** Which part of the start page shows (when it shows). */
+  section: HomeSection;
   /** Counts the asks, so asking for the same part again still goes there. */
   asked: number;
   /** What to show there: a project's list in the Planner, its folder in
    *  the Library (the project you came from, say). */
   focus: string | null;
   goHome: (section?: HomeSection, focus?: string | null) => void;
+  /** Another part of the start page, staying there. */
+  setSection: (section: HomeSection) => void;
   backToProject: () => void;
 }>((set) => ({
   away: false,
-  section: null,
+  section: "projects",
   asked: 0,
   focus: null,
   goHome: (section, focus) =>
     set((s) => ({
       away: true,
-      section: section ?? null,
+      section: section ?? s.section,
       focus: focus ?? null,
       asked: s.asked + 1,
     })),
-  backToProject: () => set({ away: false, section: null }),
+  setSection: (section) => set({ section, away: true }),
+  backToProject: () => set({ away: false }),
 }));
 
 /** In the project's own view (not on the start page). */
@@ -80,7 +83,7 @@ export const PLACES: {
   { key: "1", section: "projects", label: "All projects" },
   { key: "2", section: "library", label: "Library & Vault" },
   { key: "3", section: "planner", label: "Planner" },
-  { key: "4", section: null, label: "Back to the project" },
+  { key: "4", section: null, label: "Writing" },
 ];
 
 /**
@@ -95,9 +98,7 @@ export function goToPlace(section: HomeSection | null) {
   } else if (section === "library") {
     useNav.getState().goHome("library", here);
   } else if (section) useNav.getState().goHome(section);
-  else if (useDocumentStore.getState().projectRoot) {
-    useNav.getState().backToProject();
-  }
+  else void toWriting();
 }
 
 export function followPlaceKeys() {
@@ -115,4 +116,30 @@ export function followPlaceKeys() {
 /** A project's list in the Planner, from anywhere (its card, its strip…). */
 export function openInPlanner(root: string) {
   useNav.getState().goHome("planner", `project:${root}`);
+}
+
+/** Writing: the open project, else the last one you worked on. */
+export async function toWriting() {
+  const doc = useDocumentStore.getState();
+  if (doc.projectRoot) {
+    useNav.getState().backToProject();
+    return;
+  }
+  const { useProjectStore } = await import("@/stores/project-store");
+  const last = [...useProjectStore.getState().recentProjects].sort(
+    (a, b) => (b.lastOpened ?? 0) - (a.lastOpened ?? 0),
+  )[0];
+  const { toast } = await import("sonner");
+  if (!last) {
+    useNav.getState().setSection("projects");
+    toast.info("Open or create a project to write.");
+    return;
+  }
+  try {
+    await doc.openProject(last.path);
+    useProjectStore.getState().addRecentProject(last.path);
+  } catch {
+    useNav.getState().setSection("projects");
+    toast.error(`Couldn't open “${last.name}”. Pick a project to write.`);
+  }
 }

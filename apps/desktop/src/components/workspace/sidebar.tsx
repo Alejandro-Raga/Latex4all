@@ -7,14 +7,11 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { ResizeHandle } from "@/components/ui/resize-handle";
-import { getVersion } from "@tauri-apps/api/app";
 import {
   BookOpenIcon,
   ListPlusIcon,
-  ListTodoIcon,
   FileTextIcon,
   FolderIcon,
-  HomeIcon,
   FolderPlusIcon,
   ImageIcon,
   PlusIcon,
@@ -35,11 +32,9 @@ import {
   FlaskConicalIcon,
   TerminalIcon,
   LibraryIcon,
-  SettingsIcon,
   NotebookTextIcon,
   type LucideIcon,
   FolderOpenIcon,
-  CircleHelpIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -58,13 +53,10 @@ import { useDocumentStore, type ProjectFile } from "@/stores/document-store";
 import { revealInFileManager, revealLabel } from "@/lib/reveal";
 import { useHistoryStore } from "@/stores/history-store";
 import { cn } from "@/lib/utils";
-import { goToPlace, useNav } from "@/stores/nav-store";
 import { ProjectStrip } from "./project-strip";
 import { useQuickTask } from "@/components/planner/quick-task";
 import { AddToReadingMenu } from "@/components/planner/reading-menu";
 import { ConflictedCopies } from "./conflicted-copies";
-import { useSettingsWindow } from "@/stores/settings-window-store";
-import { useHelp } from "@/components/help-view";
 import { useReadingStore } from "@/stores/reading-store";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { Button } from "@/components/ui/button";
@@ -102,7 +94,6 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useUvSetupStore } from "@/stores/uv-setup-store";
 import { UvSetupDialog } from "@/components/uv-setup";
 import { createLogger } from "@/lib/debug/logger";
-import { ThemeMenuButton } from "@/components/theme-picker";
 
 const log = createLogger("sidebar");
 const FILES_AUTO_REFRESH_INTERVAL_MS = 12_000;
@@ -284,20 +275,6 @@ function getFileIcon(file: ProjectFile) {
   if (file.type === "other")
     return <FileIcon className="size-4 shrink-0 text-muted-foreground" />;
   return <FileTextIcon className="size-4 shrink-0 text-[var(--syn-command)]" />;
-}
-
-// ─── App Version (resolved once from Tauri) ───
-
-let _appVersion = "";
-getVersion().then((v) => {
-  _appVersion = v;
-});
-function useAppVersion() {
-  const [version, setVersion] = useState(_appVersion);
-  useEffect(() => {
-    if (!version) getVersion().then(setVersion);
-  }, [version]);
-  return version || "…";
 }
 
 // ─── Sidebar ───
@@ -504,7 +481,6 @@ export function Sidebar({
   onToggleCollapsed,
   layoutControls,
 }: SidebarProps) {
-  const _appVersion = useAppVersion();
   const files = useDocumentStore((s) => s.files);
   const activeFileId = useDocumentStore((s) => s.activeFileId);
   const setActiveFile = useDocumentStore((s) => s.setActiveFile);
@@ -1310,18 +1286,6 @@ export function Sidebar({
           <AppWindowIcon className="size-3.5" />
         </Button>
       </div>
-      <div className="flex h-9 w-full items-center justify-center border-sidebar-border border-t">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-7 transition-transform duration-300 ease-in-out hover:scale-105"
-          onClick={() => useNav.getState().goHome("projects")}
-          title="Start page (the project stays open)"
-          aria-label="Start page"
-        >
-          <HomeIcon className="size-3.5" />
-        </Button>
-      </div>
     </div>
   );
 
@@ -1350,19 +1314,7 @@ export function Sidebar({
         <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
           {/* Reserved, content-free lane for the macOS traffic lights */}
           <div className="h-[var(--titlebar-height)] w-full shrink-0 bg-frame" />
-          <div className="pane-header grid h-[var(--workspace-topbar-height)] shrink-0 grid-cols-[2rem_minmax(0,1fr)_2rem] items-center gap-2 border-b px-3">
-            <div className="flex items-center justify-start">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-6 transition-all duration-150 ease-out hover:scale-105"
-                onClick={() => useNav.getState().goHome("projects")}
-                title="Start page (the project stays open)"
-                aria-label="Start page"
-              >
-                <HomeIcon className="size-3.5" />
-              </Button>
-            </div>
+          <div className="pane-header grid h-[var(--workspace-topbar-height)] shrink-0 grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 border-b px-3">
             <ContextMenu>
               <ContextMenuTrigger asChild>
                 <button
@@ -1612,55 +1564,6 @@ export function Sidebar({
 
           {/* Environment section — Python + Skills */}
           <EnvironmentSection projectPath={projectRoot} />
-
-          {/* Footer */}
-          <div className="flex h-9 items-center border-sidebar-border border-t px-2 text-muted-foreground text-xs">
-            {/* Icons only: the rest of the app, help and settings. */}
-            <div className="flex min-w-0 flex-1 items-center justify-between gap-0.5">
-              {/* The rest of the app, the project kept open. */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-6"
-                onClick={() => goToPlace("planner")}
-                title="Planner (⌘3)"
-                aria-label="Planner"
-              >
-                <ListTodoIcon className="size-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-6"
-                onClick={() => goToPlace("library")}
-                title="Library & Vault (⌘2)"
-                aria-label="Library & Vault"
-              >
-                <LibraryIcon className="size-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-6"
-                onClick={() => useHelp.getState().show()}
-                title="Help"
-                aria-label="Help"
-              >
-                <CircleHelpIcon className="size-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-6"
-                onClick={() => useSettingsWindow.getState().show()}
-                title="Settings (⌘,)"
-                aria-label="Settings"
-              >
-                <SettingsIcon className="size-3.5" />
-              </Button>
-              <ThemeMenuButton />
-            </div>
-          </div>
 
           {/* New File Dialog */}
           <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>

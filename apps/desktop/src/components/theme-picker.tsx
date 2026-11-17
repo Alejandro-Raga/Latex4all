@@ -1,14 +1,4 @@
-import { CheckIcon, MonitorIcon, PaletteIcon, PipetteIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   APP_THEMES,
   type AppTheme,
@@ -70,75 +60,6 @@ function Swatch({
 
 const swatchAccents = (t: AppTheme) =>
   t.stripes ?? [t.palette.accent2, t.palette.env];
-
-/** A small button opening the list of color themes. */
-export function ThemeMenuButton() {
-  const { theme = "system", setTheme } = useTheme();
-  const custom = useSettingsStore((s) => s.customTheme);
-  const openSettings = () =>
-    import("@/stores/settings-window-store").then(({ useSettingsWindow }) =>
-      useSettingsWindow.getState().show("appearance"),
-    );
-  const current =
-    theme === CUSTOM_THEME
-      ? "Custom"
-      : (APP_THEMES.find((t) => t.id === theme)?.label ?? "System");
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-6"
-          title={`Theme: ${current}`}
-          aria-label="Color theme"
-        >
-          <PaletteIcon className="size-3.5" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        side="top"
-        align="end"
-        className="max-h-[70vh] w-48 overflow-y-auto"
-      >
-        <DropdownMenuItem onSelect={() => setTheme("system")}>
-          <MonitorIcon className="size-4" />
-          <span className="flex-1">System</span>
-          {theme === "system" && <CheckIcon className="size-3.5" />}
-        </DropdownMenuItem>
-        {GROUPS.map((group) => (
-          <div key={group}>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="py-1 text-muted-foreground text-xs">
-              {group}
-            </DropdownMenuLabel>
-            {APP_THEMES.filter((t) => t.group === group).map((t) => (
-              <DropdownMenuItem key={t.id} onSelect={() => setTheme(t.id)}>
-                <Swatch
-                  colors={t.colors}
-                  accents={swatchAccents(t)}
-                  className="h-4 w-6"
-                />
-                <span className="flex-1">{t.label}</span>
-                {theme === t.id && <CheckIcon className="size-3.5" />}
-              </DropdownMenuItem>
-            ))}
-          </div>
-        ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => setTheme(CUSTOM_THEME)}>
-          <Swatch colors={custom} className="h-4 w-6" />
-          <span className="flex-1">Custom</span>
-          {theme === CUSTOM_THEME && <CheckIcon className="size-3.5" />}
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={openSettings}>
-          <PipetteIcon className="size-4" />
-          Edit custom colors…
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
 
 const COLOR_FIELDS: { key: keyof ThemeColors; label: string }[] = [
   { key: "bg", label: "Background" },

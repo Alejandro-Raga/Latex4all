@@ -32,8 +32,8 @@ import { useDocumentStore } from "@/stores/document-store";
 import { usePreviewStore } from "@/stores/preview-store";
 import { setEditorFull, useEditorFull } from "@/stores/reader-full-store";
 
-const SIDEBAR_DEFAULT_SIZE = 15;
-const SIDEBAR_MIN_SIZE = 10;
+const SIDEBAR_DEFAULT_SIZE = 18;
+const SIDEBAR_MIN_SIZE = 12;
 const SIDEBAR_COLLAPSED_WIDTH_PX = 48;
 const SIDEBAR_COLLAPSED_SIZE_FALLBACK = 8;
 const SIDEBAR_ANIMATION_MS = 280;

@@ -7,7 +7,6 @@ import {
   useState,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readFile, readTextFile, stat } from "@tauri-apps/plugin-fs";
 import { rememberedRoots } from "@/lib/workspace-memory";
@@ -34,27 +33,19 @@ import {
 import { toast } from "sonner";
 import { leaveSharedProject } from "@/stores/collab-store";
 import {
-  ArrowLeftIcon,
   CheckCircle2Icon,
   FolderPlusIcon,
   FlagIcon,
-  BugIcon,
   CheckIcon,
   StarIcon,
   FolderOpenIcon,
   XIcon,
   FileTextIcon,
   LayoutTemplateIcon,
-  LibraryIcon,
-  ListTodoIcon,
   Loader2Icon,
   SearchIcon,
-  PanelLeftIcon,
   PlusIcon,
-  SettingsIcon,
-  GithubIcon,
   UsersIcon,
-  CircleHelpIcon,
   ArrowUpDownIcon,
   ChevronDownIcon,
   CopyIcon,
@@ -77,7 +68,6 @@ import { editedLabel } from "@/lib/edited-label";
 import { openConflicts } from "@/lib/collab/open-conflicts";
 import { loadDoc } from "@/lib/tauri/collab";
 import { revealInFileManager, revealLabel } from "@/lib/reveal";
-import type { LucideIcon } from "lucide-react";
 import {
   CARD_SIZE_MAX,
   CARD_SIZE_MIN,
@@ -114,7 +104,6 @@ import {
 import { JoinDialog } from "@/components/collab/join-dialog";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
-import { ThemeMenuButton } from "@/components/theme-picker";
 import { LibraryView } from "@/components/library-view";
 import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import { PlannerView } from "@/components/planner/planner-view";
@@ -133,7 +122,6 @@ import {
   PRIORITY_COLOR,
   PRIORITY_LABEL,
 } from "@/components/planner/task-parts";
-import { useReaderFull } from "@/stores/reader-full-store";
 import { inProject, openInPlanner, useNav } from "@/stores/nav-store";
 import { ProjectPriorityMenu } from "@/components/planner/project-priority-menu";
 import { useProjectFolders } from "@/stores/project-folders-store";
@@ -149,7 +137,6 @@ import {
   MoveToFolderMenu,
 } from "@/components/project-folders";
 import { HelpView } from "@/components/help-view";
-import { useBugReport } from "@/components/bug-report-dialog";
 
 const log = createLogger("project-picker");
 
@@ -209,20 +196,11 @@ export function ProjectPicker() {
   const [showModeDialog, setShowModeDialog] = useState(false);
   const [showJoinDialog, setShowJoinDialog] = useState(false);
   const [wizardMode, setWizardMode] = useState<CreationMode | null>(null);
-  const [appVersion, setAppVersion] = useState("");
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  // The part asked for on getting here (from the project: the Planner…).
-  const [activeSection, setActiveSection] = useState<ProjectPickerSection>(
-    () => useNav.getState().section ?? "projects",
-  );
-  const openRoot = useDocumentStore((st) => st.projectRoot);
-  const asked = useNav((st) => st.asked);
-  useEffect(() => {
-    const wanted = useNav.getState().section;
-    if (asked && wanted) setActiveSection(wanted);
-  }, [asked]);
+  // Which part shows is the app's (the menu on the left sets it).
+  const activeSection = useNav((st) => st.section) as ProjectPickerSection;
+  const setActiveSection = (section: ProjectPickerSection) =>
+    useNav.getState().setSection(section);
   // The Planner asked for (from the day's summary).
-  const readerFull = useReaderFull((st) => st.on);
   const plannerAsked = usePlannerRequest((st) => st.asked);
   useEffect(() => {
     if (!plannerAsked) return;
@@ -257,7 +235,6 @@ export function ProjectPicker() {
 
   useEffect(() => {
     checkClaudeStatus();
-    getVersion().then(setAppVersion);
   }, [checkClaudeStatus]);
 
   useEffect(() => {
@@ -721,150 +698,6 @@ export function ProjectPicker() {
   return (
     <FolderDnd>
       <div className="app-shell flex h-full bg-background text-foreground">
-        <aside
-          className={cn(
-            readerFull && activeSection === "library" && "hidden",
-            "flex shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out",
-            isSidebarCollapsed ? "w-12" : "w-56",
-          )}
-        >
-          <div
-            className={cn(
-              "flex h-[calc(48px+var(--titlebar-height))] items-center gap-2 px-3 pt-[var(--titlebar-height)]",
-              isSidebarCollapsed ? "justify-center" : "justify-between",
-            )}
-          >
-            {!isSidebarCollapsed && (
-              <div className="flex min-w-0 items-center gap-2">
-                <img src="/icon-192.png" alt="Latex4All" className="size-6" />
-                <span className="truncate font-semibold text-sm">
-                  Latex4All
-                </span>
-              </div>
-            )}
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "rounded-lg text-muted-foreground hover:text-foreground",
-                isSidebarCollapsed ? "size-7" : "size-8",
-              )}
-              onClick={() => setIsSidebarCollapsed((value) => !value)}
-              aria-label={
-                isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
-              }
-            >
-              <PanelLeftIcon
-                className={cn(
-                  "size-3.5 transition-transform duration-200",
-                  isSidebarCollapsed && "rotate-180",
-                )}
-              />
-            </Button>
-          </div>
-
-          <nav
-            className={cn(
-              "flex flex-col gap-1",
-              isSidebarCollapsed ? "items-center px-0" : "px-2",
-            )}
-          >
-            {openRoot && (
-              <ProjectNavButton
-                active={false}
-                collapsed={isSidebarCollapsed}
-                icon={ArrowLeftIcon}
-                onClick={() => useNav.getState().backToProject()}
-              >
-                {`Back to ${openRoot.split(/[/\\]/).pop()}`}
-              </ProjectNavButton>
-            )}
-            <ProjectNavButton
-              active={activeSection === "projects"}
-              collapsed={isSidebarCollapsed}
-              icon={FolderOpenIcon}
-              onClick={() => setActiveSection("projects")}
-            >
-              All projects
-            </ProjectNavButton>
-            <ProjectNavButton
-              active={activeSection === "library"}
-              collapsed={isSidebarCollapsed}
-              icon={LibraryIcon}
-              onClick={() => setActiveSection("library")}
-            >
-              Library & Vault
-            </ProjectNavButton>
-            <ProjectNavButton
-              active={activeSection === "planner"}
-              collapsed={isSidebarCollapsed}
-              icon={ListTodoIcon}
-              onClick={() => setActiveSection("planner")}
-            >
-              Planner
-            </ProjectNavButton>
-            <ProjectNavButton
-              active={activeSection === "settings"}
-              collapsed={isSidebarCollapsed}
-              icon={SettingsIcon}
-              onClick={() => setActiveSection("settings")}
-            >
-              Settings
-            </ProjectNavButton>
-            <ProjectNavButton
-              active={activeSection === "help"}
-              collapsed={isSidebarCollapsed}
-              icon={CircleHelpIcon}
-              onClick={() => setActiveSection("help")}
-            >
-              Help
-            </ProjectNavButton>
-            <ProjectNavButton
-              active={false}
-              collapsed={isSidebarCollapsed}
-              icon={BugIcon}
-              onClick={() => useBugReport.getState().show()}
-            >
-              Report a bug
-            </ProjectNavButton>
-          </nav>
-
-          <div
-            className={cn(
-              "mt-auto flex h-9 items-center border-sidebar-border border-t text-muted-foreground text-xs",
-              isSidebarCollapsed
-                ? "justify-center px-0"
-                : "justify-between px-3",
-            )}
-          >
-            {isSidebarCollapsed ? (
-              <img src="/icon-192.png" alt="Latex4All" className="size-4" />
-            ) : (
-              <>
-                <span className="truncate">Latex4All v{appVersion}</span>
-                <div className="flex shrink-0 items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    asChild
-                  >
-                    <a
-                      href="https://github.com/Alejandro-Raga/Latex4all"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="GitHub"
-                    >
-                      <GithubIcon className="size-3.5" />
-                    </a>
-                  </Button>
-                  <ThemeMenuButton />
-                </div>
-              </>
-            )}
-          </div>
-        </aside>
-
         <main className="inset-card flex min-w-0 flex-1 flex-col bg-background">
           {activeSection === "library" ? (
             <LibraryView />
@@ -2380,39 +2213,5 @@ function ProjectPreviewSurface({
       <FileTextIcon className="mb-2 size-5" />
       <span className="text-xs">No preview</span>
     </div>
-  );
-}
-
-function ProjectNavButton({
-  active,
-  collapsed,
-  icon: Icon,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  collapsed: boolean;
-  icon: LucideIcon;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex items-center rounded-lg font-medium text-sm transition-colors",
-        collapsed
-          ? "size-8 justify-center"
-          : "h-10 w-full justify-start gap-3 px-3 text-left",
-        active
-          ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-      )}
-      title={typeof children === "string" ? children : undefined}
-    >
-      <Icon className="size-3.5 shrink-0" />
-      {!collapsed && <span className="truncate">{children}</span>}
-    </button>
   );
 }

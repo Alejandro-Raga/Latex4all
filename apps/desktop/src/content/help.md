@@ -40,13 +40,19 @@ Under the project's name, a small strip shows when the project is due, its next 
 
 ### Move around the app
 
-You can go anywhere without closing your project:
+The menu on the far left is there in every part of the app. Click the arrow at its top to show names next to the icons.
 
-- Press ⌘1 for your projects, ⌘2 for Library & Vault, ⌘3 for the Planner and ⌘4 to go back to the open project. They're in ⌘K too. From a project, the Planner opens on its list and the Library on its folder.
+- **Home** shows your projects.
+- **Writing** opens the project you're working on. If none is open, it opens the last one you used.
+- **Planner** and **Library & Vault** open with your project still open. From a project, the Planner opens on its list and the Library on its folder.
+- **Settings**, **Help** and **Report a bug** are at the bottom.
+
+You can also press ⌘1 for Home, ⌘2 for Library & Vault, ⌘3 for the Planner and ⌘4 for Writing. They're in ⌘K too.
+
+Other ways to move around:
+
 - **Open in Planner** (the arrow on the strip under the project's name, in the Plan panel, or on a project's card) shows the project's full plan: calendar, matrix, timeline.
-- In a project, the full-window button above a PDF (or ⌘⇧F) gives it the whole window to read; Esc brings everything back.
-- The house at the top left takes you to the start page. **Planner** and **Library & Vault** are at the bottom of the project's sidebar.
-- On the start page, **Back to** and the project's name, at the top of the sidebar, return you to it as you left it.
+- In a project, the full-window button above a PDF (or ⌘⇧F) gives it the whole window to read. Press Esc to bring everything back.
 - After opening a project or a paper from the Planner, **Back to Planner** at the bottom of the window takes you back.
 - To close the project, right-click its name and choose **Close project**.
 
