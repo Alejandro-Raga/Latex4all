@@ -11,6 +11,7 @@ import { ResizeHandle } from "@/components/ui/resize-handle";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Panel, PanelGroup } from "react-resizable-panels";
+import { useReaderFull } from "@/stores/reader-full-store";
 import {
   ArrowLeftIcon,
   ChevronRightIcon,
@@ -631,7 +632,21 @@ export function QuickReferencePanel({
     "below",
     ["below", "beside"],
   );
-  const [previewFull, setPreviewFull] = useState(false);
+  const previewFull = useReaderFull((s) => s.on);
+  const setPreviewFull = (next: boolean | ((on: boolean) => boolean)) => {
+    const { on, set } = useReaderFull.getState();
+    set(typeof next === "function" ? next(on) : next);
+  };
+  // Off when the panel goes (or a project opens): never stuck on.
+  useEffect(() => () => useReaderFull.getState().set(false), []);
+  useEffect(() => {
+    if (!previewFull) return;
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") useReaderFull.getState().set(false);
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [previewFull]);
   const beside = previewSide === "beside";
   const fullPreview = previewFull && !currentProjectRoot;
   const direction = beside && !currentProjectRoot ? "horizontal" : "vertical";
@@ -2057,8 +2072,12 @@ function FilePreview({
               size="icon"
               className="mr-1 size-6 shrink-0"
               onClick={reader.toggleFull}
-              title={reader.full ? "Show the list" : "Hide the list"}
-              aria-label={reader.full ? "Show the list" : "Hide the list"}
+              title={
+                reader.full ? "Exit full window (Esc)" : "Read in full window"
+              }
+              aria-label={
+                reader.full ? "Exit full window" : "Read in full window"
+              }
             >
               {reader.full ? (
                 <Minimize2Icon className="size-3.5" />

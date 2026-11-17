@@ -14,6 +14,7 @@ import { QuickReferencePanel } from "@/components/workspace/quick-reference-pane
 import { VaultPanel } from "@/components/workspace/vault-panel";
 import { VaultStandalone } from "@/components/workspace/vault-standalone";
 import { cn } from "@/lib/utils";
+import { useReaderFull } from "@/stores/reader-full-store";
 import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import { confirmLeaveVaultEdit, useVaultStore } from "@/stores/vault-store";
 
@@ -97,7 +98,10 @@ export function LibraryView() {
     if (side === "vault" && layout.vault && !confirmLeaveVaultEdit()) return;
     setLayout({ ...layout, [side]: !layout[side] });
   };
-  const both = layout.reference && layout.vault;
+  // Reading across the whole window: the Zotero library alone, the same
+  // pane (not a new one), so the paper open stays open.
+  const readerFull = useReaderFull((s) => s.on);
+  const both = layout.reference && layout.vault && !readerFull;
 
   const reference = layout.reference && (
     <Panel
@@ -115,7 +119,7 @@ export function LibraryView() {
       </PanelBoundary>
     </Panel>
   );
-  const vault = layout.vault && (
+  const vault = layout.vault && !readerFull && (
     <Panel
       key="vault"
       id="vault"
@@ -141,9 +145,20 @@ export function LibraryView() {
   const arrangeLabel = layout.stacked ? "Side by side" : "One above the other";
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-sidebar">
+    <div
+      className={cn(
+        "flex h-full min-h-0 flex-col bg-sidebar",
+        // Below the window's drag strip, with the bar gone.
+        readerFull && "pt-[var(--titlebar-height)]",
+      )}
+    >
       {/* Below the window's drag strip, which takes clicks at the very top. */}
-      <div className="flex h-[calc(32px+var(--titlebar-height))] shrink-0 items-center gap-1 border-b px-2 pt-[var(--titlebar-height)]">
+      <div
+        className={cn(
+          "flex h-[calc(32px+var(--titlebar-height))] shrink-0 items-center gap-1 border-b px-2 pt-[var(--titlebar-height)]",
+          readerFull && "hidden",
+        )}
+      >
         <PaneToggle
           on={layout.reference}
           onClick={() => toggle("reference")}
@@ -183,7 +198,7 @@ export function LibraryView() {
         key={layout.stacked ? "stacked" : "side"}
         direction={layout.stacked ? "vertical" : "horizontal"}
         autoSaveId={
-          both
+          both && !readerFull
             ? `library-view${layout.stacked ? "-stacked" : ""}${layout.swapped ? "-swapped" : ""}`
             : undefined
         }

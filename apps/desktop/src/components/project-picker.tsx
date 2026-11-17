@@ -115,6 +115,7 @@ import { LibraryView } from "@/components/library-view";
 import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import { PlannerView } from "@/components/planner/planner-view";
 import { usePlannerRequest } from "@/lib/plan/plan-store";
+import { useReaderFull } from "@/stores/reader-full-store";
 import { HelpView } from "@/components/help-view";
 import { useBugReport } from "@/components/bug-report-dialog";
 
@@ -180,6 +181,7 @@ export function ProjectPicker() {
   const [activeSection, setActiveSection] =
     useState<ProjectPickerSection>("projects");
   // The Planner asked for (from the day's summary).
+  const readerFull = useReaderFull((st) => st.on);
   const plannerAsked = usePlannerRequest((st) => st.asked);
   useEffect(() => {
     if (plannerAsked) setActiveSection("planner");
@@ -606,6 +608,7 @@ export function ProjectPicker() {
     <div className="app-shell flex h-full bg-background text-foreground">
       <aside
         className={cn(
+          readerFull && activeSection === "library" && "hidden",
           "flex shrink-0 flex-col border-sidebar-border border-r bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out",
           isSidebarCollapsed ? "w-12" : "w-56",
         )}

@@ -23,6 +23,8 @@ tag.
 
 ### Added
 
+- Library: "Read in full window" in the reader hides the paper list,
+  the vault and the sidebar; Esc brings them back.
 - Reading: a bookmark button in the reader. The bookmark sets the
   paper's progress on the reading list, and papers reopen at the
   bookmark or the page last open.
