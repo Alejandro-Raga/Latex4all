@@ -44,6 +44,9 @@ tag.
 - Settings → Appearance → Background: Gradient runs the theme's colors
   through the window's frame and sets the editor, the PDF and the panels
   on cards inset into it; Flat keeps single colors.
+- Planner: projects can have a deadline of their own (Deadline, at the
+  top of a project). It shows in the sidebar, counts when sorting by due
+  date, and appears under Deadlines in Today, Tomorrow and Next 7 days.
 - Pane dividers are a hairline with a grip that shows when you point at
   one, easier to catch than they look; the same everywhere.
 - Planner: the project list is grouped by the chosen order (opened today,

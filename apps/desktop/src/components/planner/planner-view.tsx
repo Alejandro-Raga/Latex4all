@@ -21,7 +21,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { daysUntil } from "@/lib/plan/dates";
-import { parsePlan, taskAt } from "@/lib/plan/plan-file";
+import {
+  parsePlan,
+  projectDue,
+  setProjectDue,
+  taskAt,
+} from "@/lib/plan/plan-file";
 import {
   INBOX,
   type PlanKey,
@@ -47,7 +52,8 @@ import {
   SmartView,
 } from "./plan-views";
 import { ProjectIcon, typeColor } from "./project-icon";
-import { TaskDetails } from "./task-parts";
+import { DueBadge, DueButton, TaskDetails } from "./task-parts";
+import { editPlan } from "./plan-actions";
 
 type Selection = { smart: SmartFilter } | { plan: PlanKey };
 type Tab = "tasks" | "reading";
@@ -258,8 +264,10 @@ export function PlannerView() {
 
   // Per plan: open tasks, due today or before, the soonest date.
   const stats = useMemo(() => {
-    const plans: Record<PlanKey, { open: number; due: number; next?: string }> =
-      {};
+    const plans: Record<
+      PlanKey,
+      { open: number; due: number; next?: string; deadline?: string }
+    > = {};
     const smart: Record<SmartFilter, number> = {
       today: 0,
       tomorrow: 0,
@@ -276,7 +284,10 @@ export function PlannerView() {
         .filter((t) => t.task.due)
         .map((t) => t.task.due as string);
       const due = dated.filter((d) => daysUntil(d) <= 0).length;
-      plans[key] = { open: open.length, due, next: dated.sort()[0] };
+      // The project's own deadline counts among its dates.
+      const deadline = plan ? projectDue(plan) : undefined;
+      const next = [...dated, ...(deadline ? [deadline] : [])].sort()[0];
+      plans[key] = { open: open.length, due, next, deadline };
       smart.today += due;
       smart.tomorrow += dated.filter((d) => daysUntil(d) === 1).length;
       smart.week += dated.filter((d) => daysUntil(d) <= 6).length;
@@ -464,6 +475,7 @@ export function PlannerView() {
                     icon={<ProjectIcon list={p} className="size-4" />}
                     label={p.name}
                     count={stats.plans[p.key]?.open}
+                    deadline={stats.plans[p.key]?.deadline}
                     alert={(stats.plans[p.key]?.due ?? 0) > 0}
                     active={"plan" in selected && selected.plan === p.key}
                     onClick={() => choose({ plan: p.key })}
@@ -499,6 +511,15 @@ export function PlannerView() {
                 </p>
               )}
             </div>
+            {current && current.key !== INBOX && (
+              <DueButton
+                label="Deadline"
+                due={stats.plans[current.key]?.deadline}
+                onChange={(due) =>
+                  void editPlan(current, (p) => setProjectDue(p, due))
+                }
+              />
+            )}
             {current && (
               <>
                 <Segmented
@@ -555,6 +576,7 @@ export function PlannerView() {
                   <SmartView
                     filter={selected.smart}
                     lists={lists}
+                    onOpenPlan={(l) => choose({ plan: l.key })}
                     selected={picked}
                     onSelect={setPicked}
                   />
@@ -699,6 +721,7 @@ function SideItem({
   color,
   label,
   count,
+  deadline,
   alert,
   active,
   onClick,
@@ -710,6 +733,8 @@ function SideItem({
   color?: string;
   label: string;
   count?: number;
+  /** The project's own deadline. */
+  deadline?: string;
   /** Something in it is due today or overdue. */
   alert?: boolean;
   active: boolean;
@@ -743,6 +768,7 @@ function SideItem({
         {icon}
       </span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
+      {deadline && <DueBadge due={deadline} />}
       {alert && (
         <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
       )}

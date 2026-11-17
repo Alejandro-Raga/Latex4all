@@ -317,9 +317,12 @@ export function TaskRow({
 export function DueButton({
   due,
   onChange,
+  label = "Date",
 }: {
   due?: string;
   onChange: (due?: string) => void;
+  /** What it says when there's none ("Date", "Deadline"). */
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
   const pick = (d?: string) => {
@@ -332,14 +335,19 @@ export function DueButton({
         <button
           type="button"
           className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-muted"
-          aria-label="Due date"
+          aria-label={label === "Date" ? "Due date" : label}
         >
           {due ? (
-            <DueBadge due={due} icon />
+            <>
+              {label !== "Date" && (
+                <span className="text-muted-foreground">{label}</span>
+              )}
+              <DueBadge due={due} icon />
+            </>
           ) : (
             <span className="flex items-center gap-1.5 text-muted-foreground">
               <CalendarIcon className="size-3.5" />
-              Date
+              {label}
             </span>
           )}
         </button>

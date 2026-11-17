@@ -157,6 +157,7 @@ The **Planner**, on the start screen, keeps your to-dos and what you mean to rea
 - **Drag tasks** to reorder them or move them between headings. Drop one on the middle of another task to make it a subtask. Drop it on a project or the Inbox in the sidebar to move it there, or on **Today** or **Tomorrow** to set its date.
 - **Headings** split a project into parts, such as "Literature review" or "Writing". **Add heading** is at the end of the list; the **…** beside a heading renames or deletes it (its tasks stay).
 - **List or Board:** the board shows each heading as a column. Drag tasks between columns.
+- **A project can have a deadline**, such as a submission date: **Deadline** at the top of the project sets it. It shows beside the project in the sidebar, counts when sorting by due date, and appears under **Deadlines** in Today, Tomorrow and Next 7 days when it comes up.
 - **Projects** show an icon for their type. The arrows beside **Projects** sort them (recently opened, type, due date, number of tasks, name) and group them to match; click a group to fold it.
 
 ### Reading lists

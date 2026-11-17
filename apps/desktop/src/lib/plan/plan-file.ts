@@ -446,3 +446,63 @@ export function promoteSubtask(plan: Plan, ref: TaskRef, sub: number): Plan {
   });
   return next;
 }
+
+/** The plan's opening lines, where its properties are (between "---"s). */
+function frontmatter(plan: Plan): { start: number; end: number } | null {
+  const items = plan.sections[0]?.items ?? [];
+  const line = (i: number) => {
+    const item = items[i];
+    return item?.kind === "line" ? item.line : null;
+  };
+  if (line(0)?.trim() !== "---") return null;
+  for (let i = 1; i < items.length; i++) {
+    if (line(i)?.trim() === "---") return { start: 0, end: i };
+  }
+  return null;
+}
+
+/** The project's own deadline, as its plan's `due` property. */
+export function projectDue(plan: Plan): string | undefined {
+  const fm = frontmatter(plan);
+  if (!fm) return undefined;
+  for (let i = fm.start + 1; i < fm.end; i++) {
+    const item = plan.sections[0].items[i];
+    const m =
+      item.kind === "line" &&
+      /^due:\s*['"]?(\d{4}-\d{2}-\d{2})['"]?\s*$/.exec(item.line);
+    if (m) return m[1];
+  }
+  return undefined;
+}
+
+/** Sets the project's deadline (or takes it away), its other properties kept. */
+export function setProjectDue(plan: Plan, due: string | undefined): Plan {
+  const next = clone(plan);
+  const items = next.sections[0].items;
+  const fm = frontmatter(next);
+  if (fm) {
+    const at = items.findIndex(
+      (item, i) =>
+        i > fm.start &&
+        i < fm.end &&
+        item.kind === "line" &&
+        /^due:/.test(item.line),
+    );
+    if (due && at >= 0) items[at] = { kind: "line", line: `due: ${due}` };
+    else if (due)
+      items.splice(fm.end, 0, { kind: "line", line: `due: ${due}` });
+    else if (at >= 0) {
+      items.splice(at, 1);
+      // Nothing left between the "---"s: no properties at all.
+      if (fm.end - 1 === fm.start + 1) items.splice(fm.start, 2);
+    }
+    return next;
+  }
+  if (!due) return plan;
+  items.unshift(
+    { kind: "line", line: "---" },
+    { kind: "line", line: `due: ${due}` },
+    { kind: "line", line: "---" },
+  );
+  return next;
+}

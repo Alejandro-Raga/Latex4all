@@ -352,3 +352,33 @@ test("projects grouped by the chosen order; list or board apart for tasks and re
   );
   expect(errors).toEqual([]);
 });
+
+test("a project's deadline: set in its header, shown in the sidebar and in Today", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByRole("button", { name: "Deadline", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Today" }).click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/^---\ndue: \d{4}-\d{2}-\d{2}\n---\n# Paper 2\n/);
+  await expect(
+    page.getByRole("navigation", { name: "Projects" }).getByText("Today"),
+  ).toBeVisible();
+
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /\bToday\b/ })
+    .click();
+  await expect(main.getByRole("button", { name: /^Deadlines/ })).toBeVisible();
+  await main.getByRole("button", { name: /Paper 2 is due/ }).click();
+  await expect(main.getByRole("heading", { name: "Paper 2" })).toBeVisible();
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/deadline.png` });
+  }
+  expect(errors).toEqual([]);
+});

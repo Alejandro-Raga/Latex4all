@@ -44,6 +44,7 @@ import {
   type Plan,
   type Priority,
   parsePlan,
+  projectDue,
   promoteSubtask,
   renameSection,
   type Task,
@@ -1223,11 +1224,14 @@ export function SmartView({
   lists,
   selected,
   onSelect,
+  onOpenPlan,
 }: {
   filter: SmartFilter;
   lists: PlanList[];
   selected?: Selected | null;
   onSelect?: (s: Selected) => void;
+  /** Opens a project's own list (from its deadline). */
+  onOpenPlan?: (list: PlanList) => void;
 }) {
   const texts = usePlanTexts(lists.map((l) => l.key));
   const inbox = lists.find((l) => l.key === INBOX);
@@ -1265,6 +1269,24 @@ export function SmartView({
     return days <= 6;
   });
 
+  // Projects due in the range: their deadlines, apart from the tasks.
+  const deadlines =
+    filter === "today" || filter === "tomorrow" || filter === "week"
+      ? plans
+          .flatMap(({ list, plan }) => {
+            const due = list.key === INBOX ? undefined : projectDue(plan);
+            if (!due) return [];
+            const days = daysUntil(due);
+            const inRange =
+              filter === "today"
+                ? days <= 0
+                : filter === "tomorrow"
+                  ? days === 1
+                  : days <= 6;
+            return inRange ? [{ list, due }] : [];
+          })
+          .sort((a, b) => a.due.localeCompare(b.due))
+      : [];
   const groups = new Map<string, typeof shown>();
   const groupOf = (t: (typeof shown)[number]) => {
     if (filter === "completed") {
@@ -1314,7 +1336,31 @@ export function SmartView({
           onAdd={(task) => addQuick(inbox, task)}
         />
       )}
-      {shown.length === 0 && (
+      {deadlines.length > 0 && (
+        <Group
+          title="Deadlines"
+          count={deadlines.length}
+          color="var(--destructive)"
+        >
+          {deadlines.map(({ list, due }) => (
+            <button
+              key={list.key}
+              type="button"
+              onClick={() => onOpenPlan?.(list)}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2 py-[7px] text-left hover:bg-muted/70"
+            >
+              <FlagIcon className="size-[18px] shrink-0 text-destructive" />
+              <span className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
+                <ProjectIcon list={list} className="size-3.5" />
+                <span className="truncate">{list.name}</span>
+                <span className="text-muted-foreground text-xs">is due</span>
+              </span>
+              <DueBadge due={due} />
+            </button>
+          ))}
+        </Group>
+      )}
+      {shown.length === 0 && deadlines.length === 0 && (
         <Empty
           icon={
             filter === "completed" ? (

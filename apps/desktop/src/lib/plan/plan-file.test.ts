@@ -3,7 +3,9 @@ import {
   addSection,
   deleteSection,
   nestTask,
+  projectDue,
   promoteSubtask,
+  setProjectDue,
   addTask,
   allTasks,
   deleteTask,
@@ -203,5 +205,31 @@ describe("headings and subtasks", () => {
       "Send the outline",
       "Comments from María 🔁 every week",
     ]);
+  });
+});
+
+describe("the project's deadline", () => {
+  it("is the plan's due property, set, changed and taken away", () => {
+    const plan = parsePlan(newPlanText("P"));
+    expect(projectDue(plan)).toBeUndefined();
+    const set = setProjectDue(plan, "2026-12-15");
+    expect(serializePlan(set)).toBe(
+      "---\ndue: 2026-12-15\n---\n# P\n\n## To do\n\n## In progress\n\n## Waiting\n",
+    );
+    expect(projectDue(set)).toBe("2026-12-15");
+    const moved = setProjectDue(set, "2027-01-10");
+    expect(projectDue(moved)).toBe("2027-01-10");
+    expect(serializePlan(setProjectDue(moved, undefined))).toBe(
+      serializePlan(plan),
+    );
+  });
+
+  it("keeps the other properties", () => {
+    const plan = parsePlan(SAMPLE);
+    const set = setProjectDue(plan, "2026-12-15");
+    expect(serializePlan(set)).toMatch(
+      /^---\nproject: paper 2\ndue: 2026-12-15\n---\n/,
+    );
+    expect(serializePlan(setProjectDue(set, undefined))).toBe(SAMPLE);
   });
 });
