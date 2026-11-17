@@ -2,8 +2,6 @@ import { expect, open, test } from "./fixtures";
 
 const disk = (page: import("@playwright/test").Page, path: string) =>
   page.evaluate((p) => (window as any).__disk.get(p) as string, path);
-const vault = (page: import("@playwright/test").Page, path: string) =>
-  page.evaluate((p) => (window as any).vaultFiles.get(p) as string, path);
 
 const PLAN = "/papers/Paper 2/Plan.md";
 

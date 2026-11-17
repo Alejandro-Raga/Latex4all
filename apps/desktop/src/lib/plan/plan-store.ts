@@ -128,7 +128,6 @@ export const usePlanStore = create<PlanState>((set, get) => ({
 }));
 
 async function saveTo(key: PlanKey, root: string | null, text: string) {
-  const get = usePlanStore.getState;
   const set = usePlanStore.setState;
   if (root) {
     const open = openPlanFile(root);
