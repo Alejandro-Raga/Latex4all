@@ -23,9 +23,10 @@ tag.
 
 ### Added
 
-- Add to Zotero for the PDFs in your projects (in the reader and their
-  right-click menu): the PDF becomes a paper in your Zotero library, with
-  highlights, comments and passages in notes like any other.
+- Highlight and comment on the PDFs in your projects (drafts you're
+  revising) in the Library's reader, as on a Zotero paper. They're kept
+  on this computer, each with the text it marked. Add to Zotero, in a
+  PDF's right-click menu, is there for a finished one.
 - Go anywhere from anywhere: ⌘1 projects, ⌘2 Library & Vault, ⌘3
   Planner, ⌘4 back to the open project (Ctrl on Windows); also in ⌘K.
 - Reading: drag papers between Now reading, On hold, Up next, To re-read

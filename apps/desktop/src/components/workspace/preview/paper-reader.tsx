@@ -9,6 +9,7 @@ import {
 import { noteBookmark, notePage, noteReading } from "@/lib/plan/reading-sync";
 import { useBookmarkStore } from "@/stores/bookmark-store";
 import { useReaderFull } from "@/stores/reader-full-store";
+import { loadPdfNotes, localKey, savePdfNotes } from "@/lib/pdf-notes";
 import { ReadingStatusButton } from "./reading-status";
 import { addPassageToNote } from "@/lib/vault/add-passage";
 import { useDockStore } from "@/stores/dock-store";
@@ -93,7 +94,6 @@ async function saveHighlight(
   onAdded: (annotation: PdfAnnotationRect) => void,
 ): Promise<string | null> {
   const { apiKey, userID } = useZoteroStore.getState();
-  if (!paper.zotero || !apiKey || !userID) return null;
   if (selection.rects.length === 0) {
     toast.error("Couldn't tell where that text is on the page.");
     return null;
@@ -101,6 +101,22 @@ async function saveHighlight(
   const hex = ZOTERO_COLOR[color];
   // Saved as one band per line, as Zotero makes them, not a piece per word.
   const rects = mergeLineRects(selection.rects);
+  // A PDF of your own (not in Zotero): kept on this computer.
+  if (!paper.zotero && paper.filePath) {
+    const key = localKey();
+    onAdded({
+      key,
+      pageIndex: selection.pageNumber - 1,
+      rects,
+      color: hex,
+      type: "highlight",
+      text: selection.text,
+      comment,
+    });
+    if (!quiet) toast.success(comment ? "Comment saved" : "Highlight saved");
+    return key;
+  }
+  if (!paper.zotero || !apiKey || !userID) return null;
   try {
     const key = await createZoteroHighlight(
       apiKey,
@@ -328,17 +344,42 @@ export function PaperReader({
   const [changed, setChanged] = useState<
     Record<string, Partial<PdfAnnotationRect> | null>
   >({});
+  // A PDF of your own: its highlights from this computer, kept as they change.
+  const local = !paper.zotero && !!paper.filePath;
+  const [localNotes, setLocalNotes] = useState<PdfAnnotationRect[] | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!local || !paper.filePath) return;
+    let live = true;
+    void loadPdfNotes(paper.filePath).then((notes) => {
+      if (live) setLocalNotes(notes);
+    });
+    return () => {
+      live = false;
+    };
+  }, [local, paper.filePath]);
+  const base = local ? (localNotes ?? []) : (paper.annotations ?? []);
   const annotations = useMemo(() => {
-    const known = new Set((paper.annotations ?? []).map((a) => a.key));
+    const known = new Set(base.map((a) => a.key));
     return [
-      ...(paper.annotations ?? []),
+      ...base,
       ...added.filter((a) => !a.key || !known.has(a.key)),
     ].flatMap((a) => {
       const change = a.key ? changed[a.key] : undefined;
       if (change === null) return [];
       return change ? [{ ...a, ...change }] : [a];
     });
-  }, [paper.annotations, added, changed]);
+  }, [paper.annotations, localNotes, local, added, changed]);
+  // Saved whenever they change (after the first load).
+  useEffect(() => {
+    if (!local || !paper.filePath || localNotes === null) return;
+    const timer = setTimeout(
+      () => void savePdfNotes(paper.filePath as string, annotations),
+      300,
+    );
+    return () => clearTimeout(timer);
+  }, [local, paper.filePath, localNotes, annotations]);
   const change = useCallback(
     (key: string, next: Partial<PdfAnnotationRect> | null) => {
       setChanged((c) => ({ ...c, [key]: next }));
@@ -390,7 +431,7 @@ export function PaperReader({
     return () => clearTimeout(timer);
   }, [loaded, focus]);
   const zoteroConnected = useZoteroStore((s) => s.isAuthenticated);
-  const canHighlight = Boolean(paper.zotero && zoteroConnected);
+  const canHighlight = Boolean((paper.zotero && zoteroConnected) || local);
   const [selection, setSelection] = useState<PdfTextSelection | null>(null);
   const [noteFor, setNoteFor] = useState<PdfTextSelection | null>(null);
   const [filing, setFiling] = useState<PdfTextSelection | null>(null);
@@ -426,18 +467,27 @@ export function PaperReader({
               label: "Add comment",
               icon: <MessageSquarePlusIcon className="size-4" />,
             },
-            {
-              id: "file",
-              label: "Add to note…",
-              icon: <NotebookPenIcon className="size-4" />,
-            },
+            // Passages in notes link to Zotero's highlight: Zotero papers.
+            ...(local
+              ? []
+              : [
+                  {
+                    id: "file",
+                    label: "Add to note…",
+                    icon: <NotebookPenIcon className="size-4" />,
+                  },
+                ]),
           ]
         : []),
     ],
-    [canHighlight],
+    [canHighlight, local],
   );
 
   const recolor = async (a: PdfAnnotationRect, color: AnnotationColor) => {
+    if (local && a.key) {
+      change(a.key, { color: ZOTERO_COLOR[color] });
+      return;
+    }
     const { apiKey, userID } = useZoteroStore.getState();
     if (!a.key || !apiKey || !userID) return;
     const before = a.color;
@@ -452,6 +502,12 @@ export function PaperReader({
   };
 
   const renote = async (a: PdfAnnotationRect, comment: string) => {
+    if (local && a.key) {
+      if (comment === (a.comment ?? "")) return;
+      change(a.key, { comment });
+      toast.success(comment ? "Comment saved" : "Comment removed");
+      return;
+    }
     const { apiKey, userID } = useZoteroStore.getState();
     if (!a.key || !apiKey || !userID) return;
     if (comment === (a.comment ?? "")) return;
@@ -467,6 +523,11 @@ export function PaperReader({
   };
 
   const removeHighlight = async (a: PdfAnnotationRect) => {
+    if (local && a.key) {
+      change(a.key, null);
+      toast.success("Highlight deleted");
+      return;
+    }
     const { apiKey, userID } = useZoteroStore.getState();
     if (!a.key || !apiKey || !userID) return;
     change(a.key, null);
@@ -725,45 +786,48 @@ export function PaperReader({
                 ? "Edit comment"
                 : "Add comment"}
             </button>
-            <button
-              type="button"
-              onClick={() =>
-                setHighlightMenu({ ...highlightMenu, picking: true })
-              }
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
-            >
-              <NotebookPenIcon className="size-3.5" />
-              Add to note…
-            </button>
-            {(() => {
-              const quoting = highlightMenu.annotation.key
-                ? (quotedIn.get(highlightMenu.annotation.key) ?? []).filter(
-                    (n) => n.kind !== "paper",
-                  )
-                : [];
-              return quoting.length > 0 ? (
-                <>
-                  <div className="my-1 h-px bg-border" />
-                  <div className="px-2 py-1 text-muted-foreground text-xs">
-                    In your vault
-                  </div>
-                  {quoting.map((n) => (
-                    <button
-                      key={n.path}
-                      type="button"
-                      onClick={() => {
-                        openInVault(n.name);
-                        setHighlightMenu(null);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
-                    >
-                      <Link2Icon className="size-3.5 shrink-0" />
-                      <span className="truncate">{n.title}</span>
-                    </button>
-                  ))}
-                </>
-              ) : null;
-            })()}
+            {!local && (
+              <button
+                type="button"
+                onClick={() =>
+                  setHighlightMenu({ ...highlightMenu, picking: true })
+                }
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
+              >
+                <NotebookPenIcon className="size-3.5" />
+                Add to note…
+              </button>
+            )}
+            {!local &&
+              (() => {
+                const quoting = highlightMenu.annotation.key
+                  ? (quotedIn.get(highlightMenu.annotation.key) ?? []).filter(
+                      (n) => n.kind !== "paper",
+                    )
+                  : [];
+                return quoting.length > 0 ? (
+                  <>
+                    <div className="my-1 h-px bg-border" />
+                    <div className="px-2 py-1 text-muted-foreground text-xs">
+                      In your vault
+                    </div>
+                    {quoting.map((n) => (
+                      <button
+                        key={n.path}
+                        type="button"
+                        onClick={() => {
+                          openInVault(n.name);
+                          setHighlightMenu(null);
+                        }}
+                        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
+                      >
+                        <Link2Icon className="size-3.5 shrink-0" />
+                        <span className="truncate">{n.title}</span>
+                      </button>
+                    ))}
+                  </>
+                ) : null;
+              })()}
             <div className="my-1 h-px bg-border" />
             <button
               type="button"
@@ -779,7 +843,9 @@ export function PaperReader({
             >
               <Trash2Icon className="size-3.5" />
               {highlightMenu.confirmDelete
-                ? "Delete it, here and in Zotero"
+                ? local
+                  ? "Delete it"
+                  : "Delete it, here and in Zotero"
                 : "Delete highlight"}
             </button>
           </div>

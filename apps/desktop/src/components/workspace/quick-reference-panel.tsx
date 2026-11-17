@@ -2116,7 +2116,6 @@ function FilePreview({
   preview: Preview | null;
   reader?: ReaderControls;
 }) {
-  const zoteroConnected = useZoteroStore((s) => s.isAuthenticated);
   if (!selectedFile) {
     return (
       <div className="flex h-full items-center justify-center p-4 text-center text-muted-foreground text-xs">
@@ -2219,28 +2218,6 @@ function FilePreview({
       actions={
         reader ? (
           <>
-            {selectedFile.source === "fs" && zoteroConnected && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="mr-1 h-6 shrink-0 gap-1 px-2 text-xs"
-                title="Add it to your Zotero library to highlight it, comment on it and file passages in your notes"
-                onClick={() =>
-                  void addProjectPdfToZotero(
-                    selectedFile.absolutePath,
-                    selectedFile.label.split(/[\\/]/).pop() ??
-                      selectedFile.label,
-                    (itemKey, title) =>
-                      useLibraryPreview
-                        .getState()
-                        .ask({ itemKey, label: title }),
-                  )
-                }
-              >
-                <LibraryIcon className="size-3" />
-                Add to Zotero
-              </Button>
-            )}
             {!reader.full && (
               <Button
                 variant="ghost"
