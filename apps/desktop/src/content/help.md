@@ -230,7 +230,7 @@ Switch between **List** and **Board** at the top. On the board, each section is 
 - **Overview** shows each list and project as a card with its sections and what comes next. Click a card's name to open that list.
 - **All tasks** lists everything open, and **Completed** what you've finished.
 
-The first time you open Latex4All each day, a short note tells you what is due or overdue. You can turn it off at the bottom of the Planner's sidebar.
+The first time you open Latex4All each day, a short note tells you what is due or overdue. You can turn it off in **Settings → Planner**.
 
 ### Reading
 

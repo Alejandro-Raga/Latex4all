@@ -25,7 +25,6 @@ import {
   RefreshCwIcon,
   ListIcon,
   HashIcon,
-  GithubIcon,
   PanelLeftIcon,
   ChevronRightIcon,
   ChevronDownIcon,
@@ -505,7 +504,7 @@ export function Sidebar({
   onToggleCollapsed,
   layoutControls,
 }: SidebarProps) {
-  const appVersion = useAppVersion();
+  const _appVersion = useAppVersion();
   const files = useDocumentStore((s) => s.files);
   const activeFileId = useDocumentStore((s) => s.activeFileId);
   const setActiveFile = useDocumentStore((s) => s.setActiveFile);
@@ -1615,9 +1614,9 @@ export function Sidebar({
           <EnvironmentSection projectPath={projectRoot} />
 
           {/* Footer */}
-          <div className="flex h-9 items-center justify-between border-sidebar-border border-t px-3 text-muted-foreground text-xs">
-            <span className="truncate">Latex4All v{appVersion}</span>
-            <div className="flex shrink-0 items-center gap-1">
+          <div className="flex h-9 items-center border-sidebar-border border-t px-2 text-muted-foreground text-xs">
+            {/* Icons only: the rest of the app, help and settings. */}
+            <div className="flex min-w-0 flex-1 items-center justify-between gap-0.5">
               {/* The rest of the app, the project kept open. */}
               <Button
                 variant="ghost"
@@ -1658,16 +1657,6 @@ export function Sidebar({
                 aria-label="Settings"
               >
                 <SettingsIcon className="size-3.5" />
-              </Button>
-              <Button variant="ghost" size="icon" className="size-6" asChild>
-                <a
-                  href="https://github.com/Alejandro-Raga/Latex4all"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="GitHub"
-                >
-                  <GithubIcon className="size-3.5" />
-                </a>
               </Button>
               <ThemeMenuButton />
             </div>

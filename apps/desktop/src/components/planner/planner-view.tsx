@@ -363,8 +363,8 @@ export function PlannerView() {
   // Groups of projects folded away, per order ("recent:earlier").
   const [folded, setFolded] = useStored<string[]>("folded", []);
   const [projectQuery, setProjectQuery] = useState("");
-  const dailySummary = useSettingsStore((st) => st.dailySummary);
-  const setDailySummary = useSettingsStore((st) => st.setDailySummary);
+  const _dailySummary = useSettingsStore((st) => st.dailySummary);
+  const _setDailySummary = useSettingsStore((st) => st.setDailySummary);
   const [picked, setPicked] = useState<Selected | null>(null);
 
   // Per plan: open tasks, due today or before, the soonest date.
@@ -738,15 +738,6 @@ export function PlannerView() {
               </ProjectGroupBlock>
             ))}
           </nav>
-          <label className="flex items-center gap-2 border-border border-t px-4 py-2.5 text-muted-foreground text-xs">
-            <input
-              type="checkbox"
-              checked={dailySummary}
-              onChange={(e) => setDailySummary(e.target.checked)}
-              className="size-3.5 accent-primary"
-            />
-            Daily summary when the app opens
-          </label>
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col">

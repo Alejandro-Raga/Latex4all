@@ -45,7 +45,8 @@ import { type TaskContext } from "./task-parts";
 interface Row {
   list: PlanList;
   item: ReadingItem;
-  context: TaskContext;
+  /** The project or list it's for; none for general reading. */
+  context?: TaskContext;
   id: string;
 }
 
@@ -148,10 +149,12 @@ function NowReading({
           {item.pages ? ` of ${item.pages}` : ""}
         </span>
       )}
-      <span className="flex max-w-32 shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
-        {context.icon}
-        <span className="truncate">{context.name}</span>
-      </span>
+      {context && (
+        <span className="flex max-w-32 shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+          {context.icon}
+          <span className="truncate">{context.name}</span>
+        </span>
+      )}
       <button
         type="button"
         onClick={() => open(item)}
@@ -220,10 +223,7 @@ export function ReadingHome({ lists }: { lists: PlanList[] }) {
     const text = texts[list.key];
     if (!text) return [];
     const plan: Plan = parsePlan(text);
-    const context =
-      list.key === READING_LIST.key
-        ? { name: "General", icon: null }
-        : contextOf(list);
+    const context = list.key === READING_LIST.key ? undefined : contextOf(list);
     return readingItems(plan).map((item) => ({
       list,
       item,
