@@ -16,6 +16,12 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { open as shellOpen } from "@tauri-apps/plugin-shell";
 import {
   ContextMenu,
@@ -56,7 +62,6 @@ import {
   MARK_COLOR,
   MARK_HINT,
   MARK_LABEL,
-  nextStatus,
   progress,
   parsePaperInput,
   type ReadingItem,
@@ -106,60 +111,80 @@ export function StatusMarker({
   item: ReadingItem;
   onChange: (status: ReadingStatus) => void;
 }) {
-  const next = nextStatus(item.status);
   const color = STATUS_COLOR[item.status];
+  // Pages read, whatever its status; a paper just started shows a sliver.
+  const done = progress(item);
   const share =
-    item.status === "reading"
-      ? progress(item) !== undefined
-        ? Math.max(0.08, progress(item) as number)
-        : 0.25
-      : 0;
+    done !== undefined
+      ? Math.max(0.08, done)
+      : item.status === "reading"
+        ? 0.25
+        : 0;
   const r = 7;
   const around = 2 * Math.PI * r;
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onChange(next);
-      }}
-      onPointerDown={(e) => e.stopPropagation()}
-      title={`${STATUS_LABEL[item.status]}${pageText(item) ? ` · ${pageText(item)}` : ""}. Click: ${STATUS_LABEL[next]}`}
-      aria-label={`${STATUS_LABEL[item.status]}: mark as ${STATUS_LABEL[next].toLowerCase()}`}
-      className="flex size-[18px] shrink-0 items-center justify-center transition-transform hover:scale-110"
-    >
-      {item.status === "read" ? (
-        <span
-          className="flex size-[18px] items-center justify-center rounded-full"
-          style={{ backgroundColor: color }}
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          title={`${STATUS_LABEL[item.status]}${pageText(item) ? ` · ${pageText(item)}` : ""}. Click to change`}
+          aria-label={`${STATUS_LABEL[item.status]}: change status`}
+          className="flex size-[18px] shrink-0 items-center justify-center rounded-full transition-transform hover:scale-110 data-[state=open]:ring-2 data-[state=open]:ring-ring/40"
         >
-          <CheckIcon className="size-3 text-white" strokeWidth={3.5} />
-        </span>
-      ) : (
-        <svg viewBox="0 0 18 18" className="size-[18px] -rotate-90" aria-hidden>
-          <circle
-            cx="9"
-            cy="9"
-            r={r}
-            fill="none"
-            strokeWidth="1.75"
-            style={{ stroke: `color-mix(in oklab, ${color} 45%, transparent)` }}
-          />
-          {share > 0 && (
-            <circle
-              cx="9"
-              cy="9"
-              r={r}
-              fill="none"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeDasharray={`${around * share} ${around}`}
-              style={{ stroke: color }}
-            />
+          {item.status === "read" ? (
+            <span
+              className="flex size-[18px] items-center justify-center rounded-full"
+              style={{ backgroundColor: color }}
+            >
+              <CheckIcon className="size-3 text-white" strokeWidth={3.5} />
+            </span>
+          ) : (
+            <svg
+              viewBox="0 0 18 18"
+              className="size-[18px] -rotate-90"
+              aria-hidden
+            >
+              <circle
+                cx="9"
+                cy="9"
+                r={r}
+                fill="none"
+                strokeWidth="1.75"
+                style={{
+                  stroke: `color-mix(in oklab, ${color} 45%, transparent)`,
+                }}
+              />
+              {share > 0 && (
+                <circle
+                  cx="9"
+                  cy="9"
+                  r={r}
+                  fill="none"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeDasharray={`${around * share} ${around}`}
+                  style={{ stroke: color }}
+                />
+              )}
+            </svg>
           )}
-        </svg>
-      )}
-    </button>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-44">
+        {STATUSES.map((st) => (
+          <DropdownMenuItem key={st} onSelect={() => onChange(st)}>
+            <span
+              className="size-2 rounded-full"
+              style={{ backgroundColor: STATUS_COLOR[st] }}
+            />
+            {STATUS_LABEL[st]}
+            {st === item.status && <CheckIcon className="ml-auto size-3.5" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -288,7 +313,7 @@ async function addToZotero(list: PlanList, item: ReadingItem) {
 }
 
 /** A paper's right-click menu. */
-function ReadingMenu({
+export function ReadingMenu({
   list,
   item,
   children,
@@ -413,7 +438,10 @@ export function Byline({ itemKey }: { itemKey?: string }) {
   const text = item ? byline(item.creators, item.year) : "";
   if (!text) return null;
   return (
-    <span className="shrink-0 truncate text-[11px] text-muted-foreground">
+    <span
+      className="block truncate text-muted-foreground text-xs leading-snug"
+      title={text}
+    >
       {text}
     </span>
   );
@@ -462,19 +490,17 @@ export function ReadingRow({
           item={item}
           onChange={(s) => void setStatus(list, item.ref, s)}
         />
-        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+        <span className="flex min-w-0 flex-1 flex-col">
           <span
             className={cn(
-              "min-w-0 truncate text-sm",
+              "truncate text-sm leading-snug",
               item.status === "read" && "text-muted-foreground",
             )}
             title={item.title}
           >
             {item.title}
           </span>
-          <span className="min-w-0 max-w-[45%] truncate">
-            <Byline itemKey={item.itemKey} />
-          </span>
+          <Byline itemKey={item.itemKey} />
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
           <Pills item={item} />

@@ -37,6 +37,7 @@ import {
   open,
   ReadingRow,
   setStatus,
+  ReadingMenu,
   StatusMarker,
   ZoteroPicker,
 } from "./reading-views";
@@ -122,48 +123,48 @@ function NowReading({
     { accepts: "reading", onDrop: (d) => onDropHere(d) },
   );
   return (
-    <div
-      ref={dnd.ref}
-      {...(dnd.handlers as React.HTMLAttributes<HTMLDivElement>)}
-      className={cn(
-        "group relative flex cursor-default items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-muted/70",
-        dnd.dragging && "opacity-30",
-      )}
-    >
-      <DropMarker zone={dnd.over} />
-      <StatusMarker
-        item={item}
-        onChange={(s) => void setStatus(list, item.ref, s)}
-      />
-      <span className="flex min-w-0 flex-1 items-baseline gap-2">
-        <span className="min-w-0 truncate text-sm" title={item.title}>
-          {item.title}
-        </span>
-        <span className="min-w-0 max-w-[45%] truncate">
+    <ReadingMenu list={list} item={item}>
+      <div
+        ref={dnd.ref}
+        {...(dnd.handlers as React.HTMLAttributes<HTMLDivElement>)}
+        className={cn(
+          "group relative flex cursor-default items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-muted/70",
+          dnd.dragging && "opacity-30",
+        )}
+      >
+        <DropMarker zone={dnd.over} />
+        <StatusMarker
+          item={item}
+          onChange={(s) => void setStatus(list, item.ref, s)}
+        />
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-sm leading-snug" title={item.title}>
+            {item.title}
+          </span>
           <Byline itemKey={item.itemKey} />
         </span>
-      </span>
-      {at && (
-        <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-          {item.bookmark ? "Bookmark " : ""}p. {at}
-          {item.pages ? ` of ${item.pages}` : ""}
-        </span>
-      )}
-      {context && (
-        <span className="flex max-w-32 shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
-          {context.icon}
-          <span className="truncate">{context.name}</span>
-        </span>
-      )}
-      <button
-        type="button"
-        onClick={() => open(item)}
-        className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 font-medium text-primary text-xs hover:bg-primary/10"
-      >
-        Resume
-        <ArrowRightIcon className="size-3.5" />
-      </button>
-    </div>
+        {at && (
+          <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+            {item.bookmark ? "Bookmark " : ""}p. {at}
+            {item.pages ? ` of ${item.pages}` : ""}
+          </span>
+        )}
+        {context && (
+          <span className="flex max-w-32 shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+            {context.icon}
+            <span className="truncate">{context.name}</span>
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => open(item)}
+          className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 font-medium text-primary text-xs hover:bg-primary/10"
+        >
+          Resume
+          <ArrowRightIcon className="size-3.5" />
+        </button>
+      </div>
+    </ReadingMenu>
   );
 }
 

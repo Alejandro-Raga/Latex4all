@@ -19,6 +19,13 @@ URL changed. Branch layout, CI, refactors and tests belong in commit messages.
 Write entries under `## [Unreleased]` and rename it to `## [x.y.z]` when you
 tag.
 
+### Fixed
+
+- Reading: click a paper's circle to pick its status (Reading, On hold,
+  To re-read…). Papers you're reading now have the right-click menu too.
+- Reading: authors and year show in full under the title, and the circle
+  fills with the pages read for every paper, not only the ones being read.
+
 ## [Unreleased]
 
 ### Added

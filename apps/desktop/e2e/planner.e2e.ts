@@ -181,11 +181,12 @@ test("a reading list apart from tasks, and tasks dragged to another project", as
   await expect
     .poll(() => disk(page, PLAN))
     .toContain("- [ ] [A talk](https://example.org/talk) #reading/to-read");
-  // The marker: a click starts it, another finishes it.
+  // The marker: a click shows the statuses to pick from.
   await main
-    .getByRole("button", { name: "To read: mark as reading", exact: true })
+    .locator('button[aria-label="To read: change status"]')
     .first()
     .click();
+  await page.getByRole("menuitem", { name: "Reading", exact: true }).click();
   await expect
     .poll(() => disk(page, PLAN))
     .toContain("- [ ] Absorptive capacity #reading/reading");
@@ -860,9 +861,10 @@ test("reading: general papers apart from the Inbox, now reading and up next", as
     .toContain("The economics of science #reading/to-read");
   await expect(main.getByText("Up next")).toBeVisible();
   await main
-    .getByRole("button", { name: "To read: mark as reading", exact: true })
+    .locator('button[aria-label="To read: change status"]')
     .first()
     .click();
+  await page.getByRole("menuitem", { name: "Reading", exact: true }).click();
   await expect(main.getByText("Now reading")).toBeVisible();
   await expect(
     main.getByRole("button", { name: "Resume", exact: true }),
@@ -933,9 +935,10 @@ test("reading: papers dragged between groups change status; on hold", async ({
   await main.getByLabel("Add a paper").fill("The economics of science");
   await main.getByLabel("Add a paper").press("Enter");
   await main
-    .getByRole("button", { name: "To read: mark as reading", exact: true })
+    .locator('button[aria-label="To read: change status"]')
     .first()
     .click();
+  await page.getByRole("menuitem", { name: "Reading", exact: true }).click();
   await expect(main.getByText("Now reading")).toBeVisible();
   // Dragged: every group shows, to drop it in.
   const paper = main.getByText("The economics of science").first();
@@ -970,4 +973,42 @@ test("a project's priority from its right-click menu", async ({
   await page.getByRole("menuitem", { name: "High", exact: true }).click();
   await expect.poll(() => disk(page, PLAN)).toMatch(/priority: high/);
   expect(errors).toEqual([]);
+});
+
+test("reading home: any paper's status picked from its circle or its right-click menu", async ({
+  page,
+}) => {
+  await page.goto("/e2e/harness.html?scenario=planner");
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /^Reading/ })
+    .click();
+  const main = page.getByRole("main");
+  await main.getByLabel("Add a paper").fill("A quiet paper");
+  await main.getByLabel("Add a paper").press("Enter");
+  // Up next → On hold, from the circle.
+  await main
+    .locator('button[aria-label="To read: change status"]')
+    .first()
+    .click();
+  await page.getByRole("menuitem", { name: "On hold", exact: true }).click();
+  await expect(main.getByRole("heading", { name: /^On hold/ })).toBeVisible();
+  // On hold → Reading, from the right-click menu.
+  await main
+    .getByText("A quiet paper", { exact: true })
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Status" }).hover();
+  await page.getByRole("menuitem", { name: "Reading", exact: true }).click();
+  await expect(
+    main.getByRole("heading", { name: /^Now reading/ }),
+  ).toBeVisible();
+  // Now reading → To re-read, its right-click menu too.
+  await main
+    .getByText("A quiet paper", { exact: true })
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Status" }).hover();
+  await page.getByRole("menuitem", { name: "To re-read", exact: true }).click();
+  await expect(
+    main.getByRole("heading", { name: /^To re-read/ }),
+  ).toBeVisible();
 });
