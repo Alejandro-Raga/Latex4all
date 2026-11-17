@@ -171,6 +171,23 @@ export function workTasks(plan: Plan) {
   return allTasks(plan).filter((t) => !isSpecialSection(t.section));
 }
 
+/**
+ * Subtasks with a date of their own, at any depth: they count in Today,
+ * the week and the calendar like any task.
+ */
+export function datedSubtasks(plan: Plan) {
+  const out: { task: Task; ref: TaskRef; section: string | null }[] = [];
+  const walk = (task: Task, ref: TaskRef, section: string | null) => {
+    task.subtasks.forEach((sub, i) => {
+      const own = { ...ref, path: [...(ref.path ?? []), i] };
+      if (sub.due) out.push({ task: sub, ref: own, section });
+      walk(sub, own, section);
+    });
+  };
+  for (const t of workTasks(plan)) walk(t.task, t.ref, t.section);
+  return out;
+}
+
 /** The reading list's section, made if there's none. */
 export function readingSection(plan: Plan): { plan: Plan; index: number } {
   const index = plan.sections.findIndex((s) => isReadingSection(s.title));

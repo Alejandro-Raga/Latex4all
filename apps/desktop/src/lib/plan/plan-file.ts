@@ -68,7 +68,15 @@ export interface Plan {
 export interface TaskRef {
   section: number;
   item: number;
+  /** For a subtask: its place under the task, level by level. */
+  path?: number[];
 }
+
+/** A subtask's ref: `sub` under the task at `ref`. */
+export const childRef = (ref: TaskRef, sub: number): TaskRef => ({
+  ...ref,
+  path: [...(ref.path ?? []), sub],
+});
 
 const TASK = /^- \[([ xX])\] (.*)$/;
 const SUBTASK = /^\s+- \[([ xX])\] (.*)$/;
@@ -100,10 +108,15 @@ function parseTaskText(done: boolean, text: string): Task {
   };
 }
 
+/** How far a line is indented, a tab counting as four spaces. */
+const indentOf = (line: string) =>
+  (/^\s*/.exec(line)?.[0] ?? "").replace(/\t/g, "    ").length;
+
 export function parsePlan(text: string): Plan {
   const sections: Section[] = [{ title: null, items: [] }];
   let current = sections[0];
   let last: Task | null = null;
+  let stack: { indent: number; task: Task }[] = [];
   for (const line of text.replace(/\r\n?/g, "\n").split("\n")) {
     const heading = /^## (.*)$/.exec(line);
     if (heading) {
@@ -116,16 +129,22 @@ export function parsePlan(text: string): Plan {
     if (task) {
       last = { ...parseTaskText(task[1] !== " ", task[2]), raw: line };
       current.items.push({ kind: "task", task: last });
+      stack = [{ indent: 0, task: last }];
       continue;
     }
     if (last && /^\s+\S/.test(line)) {
+      // Nested as indented: a task under the nearest one less indented.
+      const indent = indentOf(line);
+      while (stack.length > 1 && stack[stack.length - 1].indent >= indent) {
+        stack.pop();
+      }
+      const parent = stack[stack.length - 1].task;
       const sub = SUBTASK.exec(line);
       if (sub) {
-        last.subtasks.push({
-          ...parseTaskText(sub[1] !== " ", sub[2]),
-          raw: line,
-        });
-      } else last.notes.push(line);
+        const child = { ...parseTaskText(sub[1] !== " ", sub[2]), raw: line };
+        parent.subtasks.push(child);
+        stack.push({ indent, task: child });
+      } else parent.notes.push(line);
       continue;
     }
     last = null;
@@ -144,11 +163,12 @@ function taskLine(task: Task, indent = ""): string {
     const was = TASK.exec(task.raw.trimStart());
     if (was) {
       const read = parseTaskText(was[1] !== " ", was[2]);
-      if (canonical(read) === canonical(task)) return task.raw;
+      if (canonical(read) === canonical(task))
+        return indent + task.raw.trimStart();
       // Only checked off, or back: the line as written, its box and date.
       const same = (t: Task) => canonical({ ...t, done: false });
       if (same(read) === same(task)) {
-        const box = task.raw.replace(
+        const box = (indent + task.raw.trimStart()).replace(
           /- \[[ xX]\]/,
           `- [${task.done ? "x" : " "}]`,
         );
@@ -183,9 +203,12 @@ export function serializePlan(plan: Plan): string {
         lines.push(item.line);
         continue;
       }
-      lines.push(taskLine(item.task));
-      for (const sub of item.task.subtasks) lines.push(taskLine(sub, "    "));
-      lines.push(...item.task.notes);
+      const emit = (task: Task, depth: number) => {
+        lines.push(taskLine(task, "    ".repeat(depth)));
+        for (const sub of task.subtasks) emit(sub, depth + 1);
+        lines.push(...task.notes);
+      };
+      emit(item.task, 0);
     }
   }
   return `${lines.join("\n").replace(/\n+$/, "")}\n`;
@@ -230,7 +253,25 @@ export function taskSections(plan: Plan): { index: number; title: string }[] {
 
 export function taskAt(plan: Plan, ref: TaskRef): Task | undefined {
   const item = plan.sections[ref.section]?.items[ref.item];
-  return item?.kind === "task" ? item.task : undefined;
+  let task = item?.kind === "task" ? item.task : undefined;
+  for (const i of ref.path ?? []) task = task?.subtasks[i];
+  return task;
+}
+
+/** `task` with the one at `path` under it changed (null: taken out). */
+function changedAt(
+  task: Task,
+  path: number[],
+  change: (t: Task) => Task | null,
+): Task {
+  const [i, ...rest] = path;
+  const child = task.subtasks[i];
+  if (!child) return task;
+  const next = rest.length ? changedAt(child, rest, change) : change(child);
+  const subtasks = [...task.subtasks];
+  if (next) subtasks[i] = next;
+  else subtasks.splice(i, 1);
+  return { ...task, subtasks };
 }
 
 /** Every task in the plan, with where it is. */
@@ -309,7 +350,9 @@ export function updateTask(
   const next = clone(plan);
   const item = next.sections[ref.section]?.items[ref.item];
   if (item?.kind !== "task") return plan;
-  item.task = { ...item.task, ...patch };
+  item.task = ref.path?.length
+    ? changedAt(item.task, ref.path, (t) => ({ ...t, ...patch }))
+    : { ...item.task, ...patch };
   return next;
 }
 
@@ -323,18 +366,25 @@ export function toggleTask(plan: Plan, ref: TaskRef, now = new Date()): Plan {
   });
 }
 
-export function toggleSubtask(plan: Plan, ref: TaskRef, sub: number): Plan {
-  const task = taskAt(plan, ref);
-  if (!task?.subtasks[sub]) return plan;
-  const subtasks = task.subtasks.map((s, i) =>
-    i === sub ? { ...s, done: !s.done } : s,
-  );
-  return updateTask(plan, ref, { subtasks });
+export function toggleSubtask(
+  plan: Plan,
+  ref: TaskRef,
+  sub: number,
+  now = new Date(),
+): Plan {
+  return toggleTask(plan, childRef(ref, sub), now);
 }
 
 export function deleteTask(plan: Plan, ref: TaskRef): Plan {
   if (!taskAt(plan, ref)) return plan;
   const next = clone(plan);
+  if (ref.path?.length) {
+    const item = next.sections[ref.section].items[ref.item];
+    if (item.kind === "task") {
+      item.task = changedAt(item.task, ref.path, () => null);
+    }
+    return next;
+  }
   next.sections[ref.section].items.splice(ref.item, 1);
   return next;
 }
@@ -351,10 +401,17 @@ export function moveTask(
 ): Plan {
   const task = taskAt(plan, ref);
   if (!task || !plan.sections[section]) return plan;
-  const next = clone(plan);
-  next.sections[ref.section].items.splice(ref.item, 1);
+  // A subtask: out of its parent, then a task of the section.
+  const next = ref.path?.length ? deleteTask(plan, ref) : clone(plan);
+  if (!ref.path?.length) next.sections[ref.section].items.splice(ref.item, 1);
   let at = before;
-  if (at !== undefined && section === ref.section && ref.item < at) at--;
+  if (
+    at !== undefined &&
+    section === ref.section &&
+    ref.item < at &&
+    !ref.path?.length
+  )
+    at--;
   const target = next.sections[section];
   insertTask(target, at ?? endOfTasks(target), structuredClone(task));
   return next;
@@ -397,10 +454,7 @@ export const notesLines = (text: string) =>
 /** A copy of a task to put in another plan (its line rewritten there). */
 export const detached = (task: Task): Task => {
   const { raw: _raw, ...rest } = task;
-  return {
-    ...rest,
-    subtasks: task.subtasks.map(({ raw: _r, ...s }) => s),
-  };
+  return { ...rest, subtasks: task.subtasks.map(detached) };
 };
 
 /**
@@ -427,7 +481,7 @@ export function deleteSection(plan: Plan, index: number): Plan {
   return next;
 }
 
-/** Makes a task a subtask of another (its own subtasks come along, flat). */
+/** Makes a task a subtask of another, its own subtasks under it. */
 export function nestTask(plan: Plan, ref: TaskRef, parent: TaskRef): Plan {
   const task = taskAt(plan, ref);
   const host = taskAt(plan, parent);
@@ -438,13 +492,9 @@ export function nestTask(plan: Plan, ref: TaskRef, parent: TaskRef): Plan {
   ) {
     return plan;
   }
-  const { subtasks, notes: _notes, raw: _raw, ...rest } = task;
-  const added = [
-    { ...rest, subtasks: [], notes: [] },
-    ...subtasks.map((s) => ({ ...s, raw: undefined })),
-  ];
+  // Its own subtasks come along, under it.
   const withSubs = updateTask(plan, parent, {
-    subtasks: [...host.subtasks, ...added],
+    subtasks: [...host.subtasks, detached(task)],
   });
   return deleteTask(withSubs, ref);
 }
@@ -460,7 +510,7 @@ export function promoteSubtask(plan: Plan, ref: TaskRef, sub: number): Plan {
   const section = next.sections[ref.section];
   section.items.splice(ref.item + 1, 0, {
     kind: "task",
-    task: { ...child, raw: undefined, subtasks: [], notes: [] },
+    task: detached(child),
   });
   return next;
 }

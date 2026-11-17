@@ -31,6 +31,7 @@ import {
   parsePlan,
   projectDue,
   setProjectDue,
+  childRef,
   taskAt,
 } from "@/lib/plan/plan-file";
 import {
@@ -44,7 +45,7 @@ import {
   usePlanTexts,
   useReloadPlans,
 } from "@/lib/plan/plan-store";
-import { readingItems, workTasks } from "@/lib/plan/reading";
+import { datedSubtasks, readingItems, workTasks } from "@/lib/plan/reading";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -307,7 +308,11 @@ export function PlannerView() {
       const text = texts[key];
       const plan = text ? parsePlan(text) : null;
       const open = plan ? workTasks(plan).filter((t) => !t.task.done) : [];
-      const dated = open
+      // Dates: the tasks' and their subtasks' own.
+      const dated = [
+        ...open,
+        ...(plan ? datedSubtasks(plan).filter((t) => !t.task.done) : []),
+      ]
         .filter((t) => t.task.due)
         .map((t) => t.task.due as string);
       const due = dated.filter((d) => daysUntil(d) <= 0).length;
@@ -728,7 +733,11 @@ export function PlannerView() {
             </div>
             {picked && (
               <aside className="w-[360px] shrink-0 border-border border-l">
-                <DetailPane selected={picked} onClose={() => setPicked(null)} />
+                <DetailPane
+                  selected={picked}
+                  onClose={() => setPicked(null)}
+                  onOpen={setPicked}
+                />
               </aside>
             )}
           </div>
@@ -742,9 +751,12 @@ export function PlannerView() {
 function DetailPane({
   selected,
   onClose,
+  onOpen,
 }: {
   selected: Selected;
   onClose: () => void;
+  /** Opens another task here: a subtask, or the task it's under. */
+  onOpen: (s: Selected) => void;
 }) {
   const text = usePlanText(selected.list.key);
   const plan = text ? parsePlan(text) : null;
@@ -759,8 +771,26 @@ function DetailPane({
   const ctx = contextOf(selected.list);
   return (
     <TaskDetails
-      key={`${selected.list.key}-${selected.ref.section}-${selected.ref.item}`}
+      key={`${selected.list.key}-${selected.ref.section}-${selected.ref.item}-${(selected.ref.path ?? []).join(".")}`}
       task={task}
+      onOpenSub={(i) => onOpen({ ...selected, ref: childRef(selected.ref, i) })}
+      parent={
+        selected.ref.path?.length
+          ? (() => {
+              const up = {
+                ...selected.ref,
+                path: selected.ref.path.slice(0, -1),
+              };
+              const t = taskAt(plan, up);
+              return t
+                ? {
+                    title: t.title,
+                    open: () => onOpen({ ...selected, ref: up }),
+                  }
+                : undefined;
+            })()
+          : undefined
+      }
       actions={{
         ...actionsFor(selected.list, selected.ref, plan),
         remove: () => {

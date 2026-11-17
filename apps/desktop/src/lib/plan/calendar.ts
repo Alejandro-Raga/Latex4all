@@ -12,7 +12,12 @@ import {
   type TaskRef,
   today,
 } from "./plan-file";
-import { isSpecialSection, readingItems, workTasks } from "./reading";
+import {
+  datedSubtasks,
+  isSpecialSection,
+  readingItems,
+  workTasks,
+} from "./reading";
 
 export type EntryKind = "task" | "milestone" | "deadline" | "reading";
 
@@ -35,7 +40,7 @@ export function calendarEntries(
 ): CalendarEntry[] {
   const out: CalendarEntry[] = [];
   for (const { key, name, plan, project } of plans) {
-    for (const t of workTasks(plan)) {
+    for (const t of [...workTasks(plan), ...datedSubtasks(plan)]) {
       if (!t.task.due) continue;
       out.push({
         kind: "task",

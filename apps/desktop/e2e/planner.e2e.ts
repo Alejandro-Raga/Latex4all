@@ -565,3 +565,33 @@ test("a section with a date, kept in its heading", async ({ page, errors }) => {
   await expect(main.getByText("In progress", { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("subtasks are tasks too: opened, dated, with their own subtasks", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByText("Compare with Cohen").click();
+  const detail = page.getByRole("complementary").last();
+  await expect(detail.getByLabel("Task", { exact: true })).toHaveValue("Compare with Cohen");
+  await detail.getByLabel("Add subtask").fill("Read section 3");
+  await detail.getByLabel("Add subtask").press("Enter");
+  await detail.getByRole("button", { name: "Due date" }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Tomorrow" })
+    .click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(
+      / {4}- \[ \] Compare with Cohen 📅 \d{4}-\d{2}-\d{2}\n {8}- \[ \] Read section 3\n/,
+    );
+  // Shown nested in the list, and back up to its parent.
+  await expect(main.getByText("Read section 3")).toHaveCount(2);
+  await detail.getByRole("button", { name: "Draft the discussion" }).click();
+  await expect(detail.getByLabel("Task", { exact: true })).toHaveValue("Draft the discussion #writing");
+  expect(errors).toEqual([]);
+});

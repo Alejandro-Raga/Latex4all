@@ -23,6 +23,9 @@ tag.
 
 ### Added
 
+- Planner: subtasks are tasks in their own right, nested as deep as you
+  like. Click one to open it, with its own date, priority, description
+  and subtasks; dated ones show in Today, the week and the Calendar.
 - Planner: sections can have a date, shown in their header and in the
   Calendar. New projects start with no sections; tasks go under the
   title until you add some, and the board shows them as "No section".

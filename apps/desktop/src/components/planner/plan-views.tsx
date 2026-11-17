@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { daysUntil, dayFromToday } from "@/lib/plan/dates";
 import {
+  childRef,
   addSection,
   addTask,
   deleteSection,
@@ -65,7 +66,12 @@ import {
   usePlanTexts,
 } from "@/lib/plan/plan-store";
 import type { QuickTask } from "@/lib/plan/quick-add";
-import { isSpecialSection, readingItems, workTasks } from "@/lib/plan/reading";
+import {
+  datedSubtasks,
+  isSpecialSection,
+  readingItems,
+  workTasks,
+} from "@/lib/plan/reading";
 import { cn } from "@/lib/utils";
 import { AllReading } from "./reading-views";
 import {
@@ -93,6 +99,7 @@ import {
   TaskRow,
   TitleText,
   DueButton,
+  Progress,
 } from "./task-parts";
 
 export type PlanViewMode = "list" | "board";
@@ -104,7 +111,11 @@ export interface Selected {
 }
 
 const sameRef = (a?: TaskRef, b?: TaskRef) =>
-  !!a && !!b && a.section === b.section && a.item === b.item;
+  !!a &&
+  !!b &&
+  a.section === b.section &&
+  a.item === b.item &&
+  (a.path ?? []).join(".") === (b.path ?? []).join(".");
 
 /** The sections tasks go in (the reading list apart). */
 export const workSections = (plan: Plan) =>
@@ -360,13 +371,16 @@ function SubtaskRow({
   parent,
   index,
   sub,
+  onSelect,
 }: {
   list: PlanList;
   parent: TaskRef;
   index: number;
   sub: Task;
+  onSelect?: (s: Selected) => void;
 }) {
-  const id = `sub:${list.key}:${parent.section}:${parent.item}:${index}`;
+  const own = childRef(parent, index);
+  const id = `sub:${list.key}:${parent.section}:${parent.item}:${[...(parent.path ?? []), index].join(".")}`;
   const dnd = useTaskDnd(
     id,
     { list, ref: parent, sub: index, label: sub.title },
@@ -379,59 +393,80 @@ function SubtaskRow({
   );
   const edit = (change: (p: Plan) => Plan) => void editPlan(list, change);
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div
-          ref={dnd.ref}
-          {...(dnd.handlers as React.HTMLAttributes<HTMLDivElement>)}
-          className={cn(
-            "relative flex cursor-default items-center gap-2 rounded-md px-2 py-1 hover:bg-muted/70",
-            dnd.dragging && "opacity-30",
-          )}
-        >
-          <DropMarker zone={dnd.over === "inside" ? null : dnd.over} />
-          <Check
-            small
-            done={sub.done}
-            priority={sub.priority}
-            onToggle={() => edit((p) => toggleSubtask(p, parent, index))}
-          />
-          <span
+    <>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div
+            ref={dnd.ref}
+            {...(dnd.handlers as React.HTMLAttributes<HTMLDivElement>)}
+            onClick={(e) => {
+              // Its own: not its parent's; and the checkbox only checks.
+              e.stopPropagation();
+              if ((e.target as HTMLElement).closest("button")) return;
+              onSelect?.({ list, ref: own });
+            }}
             className={cn(
-              "min-w-0 flex-1 truncate text-[13px]",
-              sub.done && "text-muted-foreground line-through",
+              "relative flex cursor-default items-center gap-2 rounded-md px-2 py-1 hover:bg-muted/70",
+              dnd.dragging && "opacity-30",
             )}
           >
-            <TitleText title={sub.title} />
-          </span>
-          {sub.due && !sub.done && <DueBadge due={sub.due} />}
+            <DropMarker zone={dnd.over === "inside" ? null : dnd.over} />
+            <Check
+              small
+              done={sub.done}
+              priority={sub.priority}
+              onToggle={() => edit((p) => toggleSubtask(p, parent, index))}
+            />
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-[13px]",
+                sub.done && "text-muted-foreground line-through",
+              )}
+            >
+              <TitleText title={sub.title} />
+            </span>
+            {sub.subtasks.length > 0 && <Progress subtasks={sub.subtasks} />}
+            {sub.due && !sub.done && <DueBadge due={sub.due} />}
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-48">
+          <ContextMenuItem
+            onClick={() =>
+              edit((p) =>
+                parent.path?.length
+                  ? moveTask(p, own, parent.section, parent.item + 1)
+                  : promoteSubtask(p, parent, index),
+              )
+            }
+          >
+            <ArrowUpFromLineIcon className="size-3.5" />
+            Make it a task
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            variant="destructive"
+            onClick={() => edit((p) => deleteTask(p, own))}
+          >
+            <Trash2Icon className="size-3.5" />
+            Delete
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      {sub.subtasks.length > 0 && (
+        <div className="ml-4 border-border/70 border-l pl-1">
+          {sub.subtasks.map((s, i) => (
+            <SubtaskRow
+              key={`${i}-${s.title}`}
+              list={list}
+              parent={own}
+              index={i}
+              sub={s}
+              onSelect={onSelect}
+            />
+          ))}
         </div>
-      </ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
-        <ContextMenuItem
-          onClick={() => edit((p) => promoteSubtask(p, parent, index))}
-        >
-          <ArrowUpFromLineIcon className="size-3.5" />
-          Make it a task
-        </ContextMenuItem>
-        <ContextMenuSeparator />
-        <ContextMenuItem
-          variant="destructive"
-          onClick={() =>
-            edit((p) => {
-              const host = p.sections[parent.section]?.items[parent.item];
-              if (host?.kind !== "task") return p;
-              return updateTask(p, parent, {
-                subtasks: host.task.subtasks.filter((_, i) => i !== index),
-              });
-            })
-          }
-        >
-          <Trash2Icon className="size-3.5" />
-          Delete
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+      )}
+    </>
   );
 }
 
@@ -486,6 +521,7 @@ function TaskItem({
           parent={taskRef}
           index={i}
           sub={s}
+          onSelect={onSelect}
         />
       ))}
     />
@@ -1291,8 +1327,14 @@ export function SmartView({
     );
   }
 
+  const dated =
+    filter === "today" || filter === "tomorrow" || filter === "week";
   const tasks = plans.flatMap(({ list, plan }) =>
-    workTasks(plan).map((t) => ({ ...t, list, plan })),
+    [...workTasks(plan), ...(dated ? datedSubtasks(plan) : [])].map((t) => ({
+      ...t,
+      list,
+      plan,
+    })),
   );
   const shown = tasks.filter((t) => {
     if (filter === "completed") return t.task.done;

@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
+  ChevronLeftIcon,
   CalendarIcon,
   CheckIcon,
   FlagIcon,
@@ -417,11 +418,17 @@ export function TaskDetails({
   actions,
   footer,
   onClose,
+  onOpenSub,
+  parent,
 }: {
   task: Task;
   actions: TaskActions;
   footer?: ReactNode;
   onClose?: () => void;
+  /** Opens a subtask as a task of its own, here. */
+  onOpenSub?: (index: number) => void;
+  /** The task this one is under, to go back up. */
+  parent?: { title: string; open: () => void };
 }) {
   const [title, setTitle] = useState(task.title);
   const [notes, setNotes] = useState(notesText(task));
@@ -466,6 +473,16 @@ export function TaskDetails({
         )}
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
+        {parent && (
+          <button
+            type="button"
+            onClick={parent.open}
+            className="flex max-w-full items-center gap-1 text-muted-foreground text-xs hover:text-foreground"
+          >
+            <ChevronLeftIcon className="size-3.5 shrink-0" />
+            <span className="truncate">{parent.title}</span>
+          </button>
+        )}
         <Grow
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -503,14 +520,20 @@ export function TaskDetails({
                 priority={s.priority}
                 onToggle={() => actions.toggleSub(i)}
               />
-              <span
+              <button
+                type="button"
+                onClick={() => onOpenSub?.(i)}
+                disabled={!onOpenSub}
+                title={onOpenSub ? "Open it" : undefined}
                 className={cn(
-                  "min-w-0 flex-1 text-sm",
+                  "min-w-0 flex-1 text-left text-sm",
                   s.done && "text-muted-foreground line-through",
                 )}
               >
                 <TitleText title={s.title} />
-              </span>
+              </button>
+              {s.subtasks.length > 0 && <Progress subtasks={s.subtasks} />}
+              {s.due && !s.done && <DueBadge due={s.due} />}
               <button
                 type="button"
                 onClick={() =>
@@ -518,7 +541,7 @@ export function TaskDetails({
                     subtasks: task.subtasks.filter((_, j) => j !== i),
                   })
                 }
-                aria-label="Remove step"
+                aria-label="Remove subtask"
                 className="text-muted-foreground/0 hover:text-foreground group-hover:text-muted-foreground"
               >
                 <XIcon className="size-3.5" />

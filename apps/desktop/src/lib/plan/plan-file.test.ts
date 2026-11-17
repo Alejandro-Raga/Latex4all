@@ -11,6 +11,8 @@ import {
   deleteTask,
   moveTask,
   newPlanText,
+  childRef,
+  taskAt,
   sectionDue,
   sectionName,
   withSectionDue,
@@ -249,3 +251,51 @@ describe("the project's deadline", () => {
 function threeSections(name: string) {
   return `# ${name}\n\n## To do\n\n## In progress\n\n## Waiting\n`;
 }
+
+describe("nested subtasks", () => {
+  const TEXT = `# P
+
+## To do
+
+- [ ] Write the paper 📅 2027-01-10
+    - [ ] Draft the intro 📅 2026-12-01
+        - [ ] Find the opening quote
+            - [x] Ask María ✅ 2026-11-15
+            A note on the quote.
+    - [ ] Methods
+`;
+
+  it("are read at any depth, each with its own date, and written back as they were", () => {
+    const plan = parsePlan(TEXT);
+    const ref = { section: 1, item: 1 };
+    const top = taskAt(plan, ref);
+    expect(top?.subtasks.map((s) => s.title)).toEqual([
+      "Draft the intro",
+      "Methods",
+    ]);
+    const intro = taskAt(plan, childRef(ref, 0));
+    expect(intro?.due).toBe("2026-12-01");
+    const quote = taskAt(plan, { ...ref, path: [0, 0] });
+    expect(quote?.title).toBe("Find the opening quote");
+    expect(quote?.notes).toEqual(["            A note on the quote."]);
+    expect(taskAt(plan, { ...ref, path: [0, 0, 0] })?.done).toBe(true);
+    expect(serializePlan(plan)).toBe(TEXT);
+  });
+
+  it("are changed, checked off and taken out where they are", () => {
+    const plan = parsePlan(TEXT);
+    const deep = { section: 1, item: 1, path: [0, 0] };
+    const dated = updateTask(plan, deep, { due: "2026-11-30" });
+    expect(serializePlan(dated)).toContain(
+      "        - [ ] Find the opening quote 📅 2026-11-30\n",
+    );
+    const done = toggleTask(plan, deep, new Date("2026-11-17T12:00:00"));
+    expect(serializePlan(done)).toContain(
+      "        - [x] Find the opening quote ✅ 2026-11-17\n",
+    );
+    const gone = deleteTask(plan, deep);
+    expect(serializePlan(gone)).not.toContain("opening quote");
+    expect(serializePlan(gone)).not.toContain("Ask María");
+    expect(serializePlan(gone)).toContain("    - [ ] Methods\n");
+  });
+});
