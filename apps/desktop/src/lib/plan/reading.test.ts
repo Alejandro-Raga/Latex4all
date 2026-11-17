@@ -184,3 +184,21 @@ describe("moving the Inbox's reading", () => {
     ]);
   });
 });
+
+describe("a project's PDF on a reading list", () => {
+  it("keeps its file link, to open it in the Library", async () => {
+    const { addReading, readingItems } = await import("./reading");
+    const plan = addReading(parsePlan("# P\n"), {
+      title: "Draft chapter",
+      url: `file://${encodeURI("/Users/me/Thesis/Draft chapter.pdf")}`,
+    });
+    expect(serializePlan(plan)).toContain(
+      "[Draft chapter](file:///Users/me/Thesis/Draft%20chapter.pdf) #reading/to-read",
+    );
+    const [item] = readingItems(plan);
+    expect(item.title).toBe("Draft chapter");
+    expect(decodeURI(item.url?.slice("file://".length) ?? "")).toBe(
+      "/Users/me/Thesis/Draft chapter.pdf",
+    );
+  });
+});

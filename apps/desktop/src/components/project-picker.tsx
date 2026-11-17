@@ -222,7 +222,9 @@ export function ProjectPicker() {
   useEffect(
     () =>
       useLibraryPreview.subscribe((st) => {
-        if (st.request && st.listening === 0) setActiveSection("library");
+        if ((st.request || st.file) && st.listening === 0) {
+          setActiveSection("library");
+        }
       }),
     [],
   );

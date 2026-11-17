@@ -4,12 +4,12 @@
  * - A project's plan is Plan.md at its root. While the project is open it
  *   goes through the open files, so a shared project's collaborators get
  *   each change as it's made; otherwise it's read from and written to disk.
- * - The Inbox, for what belongs to no project, is kept in the app's own
- *   folder; with a vault connected, it's Tasks/Inbox.md there instead (on
- *   the phone too, through the vault's sync), taking along what was kept
- *   in the app the first time it's saved.
- * - Lists of one's own (Teaching, Admin…) are kept the same way, each in
- *   its own file beside the Inbox: Tasks/Teaching.md.
+ * - The Inbox, for what belongs to no project, lists of one's own
+ *   (Teaching, Admin…) and general reading are kept in the app's own
+ *   folder, one file each. Not in the vault: it's for ideas, not for
+ *   organising. Earlier versions kept them in the vault's Tasks folder;
+ *   what's there comes along the first time a list is read (the vault's
+ *   copy is left as it was, and lists found there join the Planner).
  */
 import { useEffect, useMemo } from "react";
 import { appDataDir, join as joinPath } from "@tauri-apps/api/path";
@@ -104,22 +104,9 @@ export const usePlanStore = create<PlanState>((set, get) => ({
         entry = { text: null };
       }
     } else {
-      await useVaultStore
-        .getState()
-        .ensureVault()
-        .catch(() => {});
-      const source = useVaultStore.getState().source;
-      if (!source) {
-        entry = { text: await readLocal(key) };
-      } else {
-        try {
-          const { text, version } = await source.readNote(vaultPathOf(key));
-          entry = { text, version, inVault: true };
-        } catch {
-          // Not in the vault yet: what the app kept, moved there on saving.
-          entry = { text: await readLocal(key), inVault: false };
-        }
-      }
+      let text = await readLocal(key);
+      if (text === null) text = await fromVault(key);
+      entry = { text };
     }
     set((s) => ({ entries: { ...s.entries, [key]: entry } }));
   },
@@ -143,48 +130,44 @@ export const usePlanStore = create<PlanState>((set, get) => ({
 async function saveTo(key: PlanKey, root: string | null, text: string) {
   const get = usePlanStore.getState;
   const set = usePlanStore.setState;
-  {
-    if (root) {
-      const open = openPlanFile(root);
-      if (open) {
-        const doc = useDocumentStore.getState();
-        doc.updateFileContent(open.id, text);
-        await doc.saveFile(open.id);
-        return;
-      }
-      await writeTextFile(join(root, PLAN_FILE), text);
-      if (open === null) {
-        // A new file in the open project: it joins its files (and the share).
-        await useDocumentStore.getState().refreshFiles();
-        return;
-      }
-      set((s) => ({ entries: { ...s.entries, [key]: { text } } }));
+  if (root) {
+    const open = openPlanFile(root);
+    if (open) {
+      const doc = useDocumentStore.getState();
+      doc.updateFileContent(open.id, text);
+      await doc.saveFile(open.id);
       return;
     }
+    await writeTextFile(join(root, PLAN_FILE), text);
+    if (open === null) {
+      // A new file in the open project: it joins its files (and the share).
+      await useDocumentStore.getState().refreshFiles();
+      return;
+    }
+    set((s) => ({ entries: { ...s.entries, [key]: { text } } }));
+    return;
+  }
+  await writeTextFile(await localFile(key), text);
+  set((s) => ({ entries: { ...s.entries, [key]: { text } } }));
+}
+
+/**
+ * A list once kept in the vault (Tasks/Inbox.md…), copied to the app's
+ * folder the first time it's read there; null if there's none.
+ */
+async function fromVault(key: PlanKey): Promise<string | null> {
+  try {
     await useVaultStore
       .getState()
       .ensureVault()
       .catch(() => {});
     const source = useVaultStore.getState().source;
-    if (!source) {
-      await writeTextFile(await localFile(key), text);
-      set((s) => ({ entries: { ...s.entries, [key]: { text } } }));
-      return;
-    }
-    const known = get().entries[key];
-    const path = vaultPathOf(key);
-    if (!known?.inVault) {
-      try {
-        await source.createNote(path, text);
-      } catch {
-        await source.writeNote(path, text);
-      }
-    } else {
-      await source.writeNote(path, text, known.version);
-    }
-    useVaultStore.getState().noteWritten(path, text);
-    // The new version, for the next write.
-    await get().load(key);
+    if (!source) return null;
+    const { text } = await source.readNote(vaultPathOf(key));
+    if (text) await writeTextFile(await localFile(key), text);
+    return text ?? null;
+  } catch {
+    return null;
   }
 }
 

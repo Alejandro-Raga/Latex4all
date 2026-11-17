@@ -78,7 +78,7 @@ const TAGS = /\s*#reading\/([a-z-]+)/g;
 const PAGE = /\s*\[page::\s*(\d+)(?:\s*\/\s*(\d+))?\]/;
 const BOOKMARK = /\s*\[bookmark::\s*(\d+)\]/;
 const LINK =
-  /\[([^\]]*)\]\((?:zotero:\/\/select\/library\/items\/([A-Z0-9]+)|(https?:\/\/[^)\s]+))\)/;
+  /\[([^\]]*)\]\((?:zotero:\/\/select\/library\/items\/([A-Z0-9]+)|((?:https?|file):\/\/[^)\s]+))\)/;
 const DOI = /\b(10\.\d{4,9}\/[^\s"<>]+[^\s"<>.,;)])/i;
 
 export interface ReadingItem {

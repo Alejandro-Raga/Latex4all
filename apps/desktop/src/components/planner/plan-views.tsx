@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from "react";
 import {
+  PinIcon,
   CopyIcon,
   RepeatIcon,
   FolderPlusIcon,
@@ -60,6 +61,8 @@ import {
   sectionDue,
   sectionName,
   withSectionDue,
+  sectionPins,
+  setSectionPins,
 } from "@/lib/plan/plan-file";
 import {
   INBOX,
@@ -105,6 +108,7 @@ import {
   TitleText,
   DueButton,
   Progress,
+  Pins,
 } from "./task-parts";
 
 export type PlanViewMode = "list" | "board";
@@ -552,11 +556,14 @@ function HeadingMenu({
   onRename,
   onDelete,
   onDate,
+  onPin,
 }: {
   onRename: () => void;
   onDelete: () => void;
   /** Gives the section a date (shown once it has one). */
   onDate?: () => void;
+  /** Pins a note to the section. */
+  onPin?: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -583,6 +590,12 @@ function HeadingMenu({
           <DropdownMenuItem onSelect={() => setTimeout(onDate, 0)}>
             <CalendarIcon className="size-3.5" />
             Set a date
+          </DropdownMenuItem>
+        )}
+        {onPin && (
+          <DropdownMenuItem onSelect={() => setTimeout(onPin, 0)}>
+            <PinIcon className="size-3.5" />
+            Pin a note
           </DropdownMenuItem>
         )}
         <DropdownMenuItem variant="destructive" onSelect={onDelete}>
@@ -633,14 +646,18 @@ function Heading({
   index,
   title,
   count,
+  pins = [],
   children,
 }: {
   list: PlanList;
   index: number;
   title: string;
   count: number;
+  /** Notes pinned to the section. */
+  pins?: string[];
   children: ReactNode;
 }) {
+  const [pinning, setPinning] = useState(false);
   const [open, setOpen] = useState(true);
   const [editing, setEditing] = useState(false);
   const [dating, setDating] = useState(false);
@@ -701,8 +718,21 @@ function Heading({
           onRename={() => setEditing(true)}
           onDelete={() => void editPlan(list, (p) => deleteSection(p, index))}
           onDate={sectionDue(title) ? undefined : () => setDating(true)}
+          onPin={() => setPinning(true)}
         />
       </div>
+      {(pins.length > 0 || pinning) && (
+        <div className="px-1 pt-2">
+          <Pins
+            pins={pins}
+            pickNow={pinning}
+            onPicked={() => setPinning(false)}
+            onChange={(next) =>
+              void editPlan(list, (p) => setSectionPins(p, index, next))
+            }
+          />
+        </div>
+      )}
       {open && <div className="pt-1">{children}</div>}
       {open && count === 0 && (
         <p className="px-3 py-2 text-muted-foreground/70 text-xs">
@@ -889,6 +919,7 @@ function ListView({
               index={s.index}
               title={s.title}
               count={items.length}
+              pins={sectionPins(plan, s.index)}
             >
               {items.map(item)}
             </Heading>

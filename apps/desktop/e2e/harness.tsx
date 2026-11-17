@@ -812,14 +812,16 @@ if (scenario === "planner") {
   ]);
   (window as any).__disk = disk;
   const files = new Map<string, string>(
-    params.get("notes")
-      ? [
-          [
-            "Ideas/Absorptive capacity.md",
-            "---\ntype: idea\n---\n# Absorptive capacity\n",
-          ],
-        ]
-      : [],
+    (window as any).__seedVault
+      ? Object.entries((window as any).__seedVault)
+      : params.get("notes")
+        ? [
+            [
+              "Ideas/Absorptive capacity.md",
+              "---\ntype: idea\n---\n# Absorptive capacity\n",
+            ],
+          ]
+        : [],
   );
   (window as any).vaultFiles = files;
   // ?novault=1: no vault connected, and none to find.

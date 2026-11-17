@@ -810,14 +810,25 @@ export function PriorityMenu({
 }
 
 /** Papers, ideas and topics pinned to a task: open one, pin more. */
-function Pins({
+export function Pins({
   pins,
   onChange,
+  pickNow,
+  onPicked,
 }: {
   pins: string[];
   onChange: (pins: string[]) => void;
+  /** Opens the note list at once (asked for from a menu). */
+  pickNow?: boolean;
+  onPicked?: () => void;
 }) {
   const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+  const pinButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!pickNow) return;
+    const r = pinButton.current?.getBoundingClientRect();
+    if (r) setAt({ left: r.left, top: r.bottom + 4 });
+  }, [pickNow]);
   const index = useVaultStore((s) => s.index);
   const titleOf = (name: string) =>
     (index && findNote(index, name)?.title) || name;
@@ -894,6 +905,7 @@ function Pins({
         </span>
       ))}
       <button
+        ref={pinButton}
         type="button"
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
@@ -907,9 +919,12 @@ function Pins({
       {at && (
         <NoteMenuAt
           anchor={at}
-          label="Pin to this task"
+          label="Pin a note"
           done={(n) => pins.includes(n.name)}
-          onClose={() => setAt(null)}
+          onClose={() => {
+            setAt(null);
+            onPicked?.();
+          }}
           onPick={(name) => onChange([...pins, name])}
         />
       )}

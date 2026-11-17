@@ -48,7 +48,7 @@ test("Today gathers what's due from every plan; quick add goes to the Inbox", as
   await expect(main.getByText("Enter to add")).toBeVisible();
   await add.press("Enter");
   await expect
-    .poll(() => vault(page, "Tasks/Inbox.md"))
+    .poll(() => disk(page, "/appdata/planner/Inbox.md"))
     .toMatch(/- \[ \] Email the editor #admin ⏫ 📅 \d{4}-\d{2}-\d{2}/);
   await expect(main.getByText("Email the editor")).toBeVisible();
   if (process.env.SHOTS) {
@@ -281,7 +281,7 @@ test("drag a task into another to nest it; right-click to move; headings", async
   await page.keyboard.press("ArrowRight");
   await page.getByRole("menuitem", { name: "Inbox" }).click();
   await expect
-    .poll(() => vault(page, "Tasks/Inbox.md"))
+    .poll(() => disk(page, "/appdata/planner/Inbox.md"))
     .toContain("- [ ] Reply to reviewers");
 
   // A heading of one's own, then deleted: its tasks stay.
@@ -438,10 +438,10 @@ test("the calendar: a task added on a day, dragged to the next", async ({
   await main.getByLabel("Add a task").fill("Write the abstract");
   await main.getByLabel("Add a task").press("Enter");
   await expect
-    .poll(() => vault(page, "Tasks/Inbox.md"))
+    .poll(() => disk(page, "/appdata/planner/Inbox.md"))
     .toMatch(/- \[ \] Write the abstract 📅 (\d{4}-\d{2}-\d{2})/);
   const before = /📅 (\d{4}-\d{2}-\d{2})/.exec(
-    await vault(page, "Tasks/Inbox.md"),
+    await disk(page, "/appdata/planner/Inbox.md"),
   )?.[1];
   // In today's cell, and in the day's list on the right.
   await expect(main.getByText("Write the abstract").first()).toBeVisible();
@@ -460,7 +460,7 @@ test("the calendar: a task added on a day, dragged to the next", async ({
     .first();
   await drag(page, chip, cell);
   await expect
-    .poll(() => vault(page, "Tasks/Inbox.md"))
+    .poll(() => disk(page, "/appdata/planner/Inbox.md"))
     .not.toContain(`📅 ${before}`);
   if (process.env.SHOTS) {
     await page.screenshot({ path: `${process.env.SHOTS}/calendar.png` });
@@ -533,13 +533,13 @@ test("a list of one's own, with its tasks and its reading", async ({
   await main.getByLabel("Add a task").fill("Grade the essays");
   await main.getByLabel("Add a task").press("Enter");
   await expect
-    .poll(() => vault(page, "Tasks/Teaching.md"))
+    .poll(() => disk(page, "/appdata/planner/Teaching.md"))
     .toContain("- [ ] Grade the essays");
   await main.getByRole("radio", { name: "Reading" }).click();
   await main.getByLabel("Add a paper").fill("The economics of science");
   await main.getByLabel("Add a paper").press("Enter");
   await expect
-    .poll(() => vault(page, "Tasks/Teaching.md"))
+    .poll(() => disk(page, "/appdata/planner/Teaching.md"))
     .toContain("The economics of science #reading/to-read");
   // No deadline or timeline: those are a project's.
   await expect(main.getByRole("radio", { name: "Timeline" })).toHaveCount(0);
@@ -858,7 +858,7 @@ test("reading: general papers apart from the Inbox, now reading and up next", as
   await main.getByLabel("Add a paper").press("Enter");
   // In general reading's own file, not the Inbox.
   await expect
-    .poll(() => vault(page, "Tasks/Reading.md"))
+    .poll(() => disk(page, "/appdata/planner/Reading.md"))
     .toContain("The economics of science #reading/to-read");
   await expect(main.getByText("Up next")).toBeVisible();
   await main
@@ -872,5 +872,49 @@ test("reading: general papers apart from the Inbox, now reading and up next", as
   if (process.env.SHOTS) {
     await page.screenshot({ path: `${process.env.SHOTS}/reading-home.png` });
   }
+  expect(errors).toEqual([]);
+});
+
+test("lists once in the vault come along to the app's own folder", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await page.addInitScript(() => {
+    (window as any).__seedVault = {
+      "Tasks/Inbox.md": "# Inbox\n\n- [ ] Renew the library card\n",
+    };
+  });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Inbox/ }).click();
+  await expect(
+    page.getByRole("main").getByText("Renew the library card"),
+  ).toBeVisible();
+  await expect
+    .poll(() => disk(page, "/appdata/planner/Inbox.md"))
+    .toContain("- [ ] Renew the library card");
+  expect(errors).toEqual([]);
+});
+
+test("a note pinned to a section, under its heading", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner&notes=1");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  const heading = main.locator("section").filter({ hasText: "In progress" });
+  await heading.hover();
+  await heading.getByRole("button", { name: "Heading options" }).click();
+  await page.getByRole("menuitem", { name: "Pin a note" }).click();
+  await page.getByRole("menuitem", { name: /^Ideas/ }).hover();
+  await page.getByRole("menuitem", { name: /Absorptive capacity/ }).click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toContain("## In progress\n📌 [[Absorptive capacity]]\n");
+  await expect(
+    heading.getByRole("button", { name: "Absorptive capacity", exact: true }),
+  ).toBeVisible();
   expect(errors).toEqual([]);
 });

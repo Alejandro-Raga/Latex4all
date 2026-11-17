@@ -462,8 +462,26 @@ export function QuickReferencePanel({
         focus: request.focus,
       });
     };
+    // A PDF on this computer (a project's, from a reading list).
+    const showFile = (
+      file: ReturnType<typeof useLibraryPreview.getState>["file"],
+    ) => {
+      if (!file) return;
+      useLibraryPreview.getState().done();
+      setSelectedFile({
+        source: "fs",
+        id: file.path,
+        label: file.label,
+        absolutePath: file.path,
+        type: "pdf",
+      });
+    };
     show(useLibraryPreview.getState().request);
-    const unsubscribe = useLibraryPreview.subscribe((s) => show(s.request));
+    showFile(useLibraryPreview.getState().file);
+    const unsubscribe = useLibraryPreview.subscribe((s) => {
+      show(s.request);
+      showFile(s.file);
+    });
     return () => {
       unsubscribe();
       useLibraryPreview.setState((s) => ({ listening: s.listening - 1 }));
@@ -1993,6 +2011,23 @@ function TreeView({
                   fileName: child.name,
                 }}
               />
+              {/* As for a Zotero paper: on a reading list, or a task. */}
+              <AddToReadingMenu
+                paper={{
+                  title: child.name.replace(/\.pdf$/i, ""),
+                  url: `file://${encodeURI(child.absolutePath)}`,
+                }}
+              />
+              <ContextMenuItem
+                onClick={() =>
+                  useQuickTask.getState().show({
+                    text: `Read “${child.name.replace(/\.pdf$/i, "")}”`,
+                  })
+                }
+              >
+                <ListPlusIcon className="size-3.5" />
+                Add a task
+              </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
         );

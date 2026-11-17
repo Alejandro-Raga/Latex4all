@@ -677,3 +677,41 @@ export const projectDone = (plan: Plan) =>
 
 export const setProjectDone = (plan: Plan, done: boolean) =>
   setProperty(plan, "status", done ? "completed" : undefined);
+
+/** The notes pinned to a section: 📌 [[…]] lines under its heading. */
+export function sectionPins(plan: Plan, index: number): string[] {
+  return (plan.sections[index]?.items ?? []).flatMap((i) => {
+    if (i.kind !== "line") return [];
+    const m = PIN.exec(i.line);
+    return m ? [m[1].trim()] : [];
+  });
+}
+
+/** A section with these pins, right under its heading; the rest kept. */
+export function setSectionPins(
+  plan: Plan,
+  index: number,
+  pins: string[],
+): Plan {
+  const section = plan.sections[index];
+  if (!section || section.title === null) return plan;
+  const next = clone(plan);
+  const items = next.sections[index].items.filter(
+    (i) => !(i.kind === "line" && PIN.test(i.line)),
+  );
+  // Under the heading, apart from its tasks by a blank line.
+  while (items[0]?.kind === "line" && items[0].line.trim() === "")
+    items.shift();
+  const lines = [...new Set(pins)].map((p) => ({
+    kind: "line" as const,
+    line: `📌 [[${p}]]`,
+  }));
+  next.sections[index].items = [
+    ...lines,
+    ...(items.length || lines.length
+      ? [{ kind: "line" as const, line: "" }]
+      : []),
+    ...items,
+  ];
+  return next;
+}

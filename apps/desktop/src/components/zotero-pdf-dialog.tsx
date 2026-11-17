@@ -51,6 +51,9 @@ export const useLibraryPreview = create<{
   /** Whether a Library page is there to show it. */
   listening: number;
   request: { itemKey: string; label: string; focus?: PaperFocus } | null;
+  /** A PDF on this computer (a project's) to show, by its path. */
+  file: { path: string; label: string } | null;
+  askFile: (file: { path: string; label: string }) => void;
   ask: (request: {
     itemKey: string;
     label: string;
@@ -60,8 +63,10 @@ export const useLibraryPreview = create<{
 }>((set) => ({
   listening: 0,
   request: null,
+  file: null,
   ask: (request) => set({ request }),
-  done: () => set({ request: null }),
+  askFile: (file) => set({ file }),
+  done: () => set({ request: null, file: null }),
 }));
 
 /** The paper (Zotero item) a PDF attachment belongs to. */

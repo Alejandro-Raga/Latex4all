@@ -26,6 +26,8 @@ import { ProjectIcon } from "./project-icon";
 export interface Paper {
   title: string;
   itemKey?: string;
+  /** A link instead: the web, or a PDF on this computer (file://). */
+  url?: string;
 }
 
 /** The general reading list's name, for papers that belong to no project. */

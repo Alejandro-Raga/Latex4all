@@ -72,6 +72,8 @@ import { createZoteroItems } from "@/lib/zotero-api";
 import { cn } from "@/lib/utils";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { openToRead } from "./open-paper";
+import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
+import { useDockStore } from "@/stores/dock-store";
 import { useBack } from "@/stores/back-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { editPlan, moveToPlan } from "./plan-actions";
@@ -227,7 +229,18 @@ export function open(item: ReadingItem) {
     useBack.getState().set("Back to Planner", backToPlanner);
   }
   if (item.itemKey) openToRead(item.itemKey, item.title);
-  else if (item.url)
+  else if (item.url?.startsWith("file://")) {
+    // A project's PDF: read in the Library, like a Zotero paper.
+    if (!useDocumentStore.getState().projectRoot) {
+      useBack.getState().set("Back to Planner", backToPlanner);
+    } else {
+      useDockStore.getState().setOpen("reference", true);
+    }
+    useLibraryPreview.getState().askFile({
+      path: decodeURI(item.url.slice("file://".length)),
+      label: item.title,
+    });
+  } else if (item.url)
     void shellOpen(item.url).catch(() =>
       toast.error("Couldn't open the link."),
     );

@@ -23,6 +23,9 @@ tag.
 
 ### Added
 
+- Pin papers, ideas and topics to a section too, from its … menu.
+- PDFs in your projects, in the Library, can go on a reading list or get
+  a task, like Zotero papers; from the list they open in the Library.
 - Reading shows each paper's authors and year.
 - Duplicate to…: a copy of a task, subtasks and all, in another section,
   list or project.
@@ -171,6 +174,12 @@ tag.
 
 ### Changed
 
+- The Planner's sidebar is grouped: Today, Tomorrow, Next 7 days and
+  Reading on top, then Lists, then Views, then Projects.
+- The Inbox, your own lists and general reading are kept in the app's
+  folder, not your vault (the vault is for ideas). Lists in the vault's
+  Tasks folder are brought over the first time they open; the vault's
+  copies are left as they were.
 - "Make subtask of" lists only the tasks in the same section; drag a
   task onto any other.
 - A project's menu says Add to folder (to sort the list) and Move on

@@ -191,11 +191,11 @@ To add a task from anywhere in the app, press ⌘⇧A.
 
 Click **New list** under the Inbox for things that don't belong to a project, such as Teaching. Each list has its own tasks and its own reading list. Right-click a list to change its color or remove it.
 
-If you use a vault, your lists and the Inbox are saved in its `Tasks` folder, so they appear on every computer that uses the vault.
+Your lists, the Inbox and general reading are kept by Latex4All on this computer, not in your vault.
 
 ### Sections
 
-New projects start without sections. Click **Add heading** at the end of a list to add one, such as "Literature review" or "Writing". To give a section a date, open its **…** menu and choose **Set a date**. The **…** next to a section renames or deletes it; its tasks stay.
+New projects start without sections. Click **Add heading** at the end of a list to add one, such as "Literature review" or "Writing". To give a section a date, open its **…** menu and choose **Set a date**. **Pin a note** in the same menu attaches a paper, idea or topic to the section. The **…** next to a section renames or deletes it; its tasks stay.
 
 Switch between **List** and **Board** at the top. On the board, each section is a column.
 

@@ -89,8 +89,10 @@ export function LibraryView() {
       if (!asked) return;
       setLayoutState((l) => (l.reference ? l : { ...l, reference: true }));
     };
-    show(!!useLibraryPreview.getState().request);
-    return useLibraryPreview.subscribe((st) => show(!!st.request));
+    const asked = (st: ReturnType<typeof useLibraryPreview.getState>) =>
+      !!st.request || !!st.file;
+    show(asked(useLibraryPreview.getState()));
+    return useLibraryPreview.subscribe((st) => show(asked(st)));
   }, []);
   const toggle = (side: Side) => {
     const other = side === "reference" ? "vault" : "reference";

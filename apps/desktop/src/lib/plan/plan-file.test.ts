@@ -361,3 +361,20 @@ describe("repeating tasks", () => {
     );
   });
 });
+
+describe("section pins", () => {
+  it("sit under the heading, apart from its tasks", async () => {
+    const { sectionPins, setSectionPins } = await import("./plan-file");
+    const plan = parsePlan("# P\n\n## Literature\n\n- [ ] Read Cohen\n");
+    const pinned = setSectionPins(plan, 1, ["Absorptive capacity"]);
+    expect(serializePlan(pinned)).toBe(
+      "# P\n\n## Literature\n📌 [[Absorptive capacity]]\n\n- [ ] Read Cohen\n",
+    );
+    expect(sectionPins(parsePlan(serializePlan(pinned)), 1)).toEqual([
+      "Absorptive capacity",
+    ]);
+    expect(serializePlan(setSectionPins(pinned, 1, []))).toBe(
+      "# P\n\n## Literature\n\n- [ ] Read Cohen\n",
+    );
+  });
+});

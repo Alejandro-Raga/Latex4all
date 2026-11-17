@@ -528,30 +528,26 @@ export function PlannerView() {
       <div className="flex h-full min-h-0 bg-background">
         <aside className="flex w-60 shrink-0 flex-col border-border border-r bg-sidebar pt-[var(--titlebar-height)]">
           <nav className="flex flex-col gap-0.5 p-2 pt-3" aria-label="Lists">
-            {(
-              [
-                "today",
-                "tomorrow",
-                "week",
-                "calendar",
-                "matrix",
-              ] as SmartFilter[]
-            ).map((f) => (
-              <SmartItem
-                key={f}
-                filter={f}
-                count={stats.smart[f]}
-                active={"smart" in selected && selected.smart === f}
-                onClick={() => choose({ smart: f })}
-                onDrop={
-                  f === "today"
-                    ? (d) => dueOn(d, 0)
-                    : f === "tomorrow"
-                      ? (d) => dueOn(d, 1)
-                      : undefined
-                }
-              />
-            ))}
+            {/* Every day: what's due, and what you're reading. */}
+            {(["today", "tomorrow", "week", "reading"] as SmartFilter[]).map(
+              (f) => (
+                <SmartItem
+                  key={f}
+                  filter={f}
+                  count={stats.smart[f]}
+                  active={"smart" in selected && selected.smart === f}
+                  onClick={() => choose({ smart: f })}
+                  onDrop={
+                    f === "today"
+                      ? (d) => dueOn(d, 0)
+                      : f === "tomorrow"
+                        ? (d) => dueOn(d, 1)
+                        : undefined
+                  }
+                />
+              ),
+            )}
+            <SideHeading>Lists</SideHeading>
             {inbox && (
               <SideItem
                 icon={<InboxIcon className="size-4" />}
@@ -579,19 +575,29 @@ export function PlannerView() {
               />
             ))}
             <NewList onMade={(key) => choose({ plan: key })} />
-            <span className="my-1.5 h-px bg-border" />
-            {(["overview", "reading", "all", "completed"] as SmartFilter[]).map(
-              (f) => (
-                <SmartItem
-                  key={f}
-                  filter={f}
-                  count={f === "completed" ? undefined : stats.smart[f]}
-                  active={"smart" in selected && selected.smart === f}
-                  onClick={() => choose({ smart: f })}
-                  onDrop={f === "completed" ? completeDrag : undefined}
-                />
-              ),
-            )}
+            <SideHeading>Views</SideHeading>
+            {(
+              [
+                "calendar",
+                "matrix",
+                "overview",
+                "all",
+                "completed",
+              ] as SmartFilter[]
+            ).map((f) => (
+              <SmartItem
+                key={f}
+                filter={f}
+                count={
+                  f === "completed" || f === "overview" || f === "calendar"
+                    ? undefined
+                    : stats.smart[f]
+                }
+                active={"smart" in selected && selected.smart === f}
+                onClick={() => choose({ smart: f })}
+                onDrop={f === "completed" ? completeDrag : undefined}
+              />
+            ))}
           </nav>
           <div className="flex items-center px-4 pt-3 pb-1">
             <span className="flex-1 font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">
@@ -1207,5 +1213,14 @@ function NewList({ onMade }: { onMade: (key: string) => void }) {
         className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
       />
     </form>
+  );
+}
+
+/** A small heading in the Planner's sidebar. */
+function SideHeading({ children }: { children: ReactNode }) {
+  return (
+    <span className="px-2 pt-3 pb-1 font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">
+      {children}
+    </span>
   );
 }
