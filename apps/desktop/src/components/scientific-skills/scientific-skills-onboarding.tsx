@@ -329,7 +329,7 @@ export function ScientificSkillsOnboarding({
             <XIcon className="size-4" />
           </button>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-sm">
+            <DialogTitle className="flex items-center gap-2">
               {isComplete ? (
                 <CheckCircle2Icon className="size-5 text-foreground" />
               ) : error ? (
@@ -415,7 +415,7 @@ export function ScientificSkillsOnboarding({
           <DialogHeader className="shrink-0 border-border border-b px-6 py-3">
             <div className="flex items-center gap-4">
               <div className="min-w-0 flex-1">
-                <DialogTitle className="text-sm">Skills</DialogTitle>
+                <DialogTitle>Skills</DialogTitle>
                 <DialogDescription className="mt-0.5 text-xs">
                   {totalSkills} skills across {displayCategories.length} groups
                   - install curated scientific skills or import a local Claude

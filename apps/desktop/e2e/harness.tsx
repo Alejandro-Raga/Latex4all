@@ -1,3 +1,4 @@
+import * as React from "react";
 /**
  * Pages for the WebKit end-to-end tests: one piece of the app at a time,
  * picked by ?scenario=, with Tauri stubbed out (no native side here).
@@ -646,7 +647,11 @@ if (scenario === "zotero-sync") {
 if (scenario === "join") {
   import("@/components/collab/join-dialog").then(({ JoinDialog }) =>
     root.render(
-      <ThemeProvider attribute="class" themes={THEME_IDS}>
+      <ThemeProvider
+        attribute="class"
+        themes={THEME_IDS}
+        forcedTheme={params.get("theme") ?? undefined}
+      >
         <ThemeBridge />
         <div className="h-full bg-background" />
         <JoinDialog open onOpenChange={() => {}} />
@@ -884,6 +889,30 @@ if (scenario === "planner") {
       </ThemeProvider>,
     ),
   );
+}
+
+if (scenario === "settings") {
+  // Settings, at the section asked for.
+  import("@/components/settings/settings-view").then(({ SettingsView }) => {
+    const Settings = () => {
+      const [section, setSection] = React.useState(
+        (params.get("section") ?? "appearance") as never,
+      );
+      return <SettingsView section={section} onSectionChange={setSection} />;
+    };
+    root.render(
+      <ThemeProvider
+        attribute="class"
+        themes={THEME_IDS}
+        forcedTheme={params.get("theme") ?? undefined}
+      >
+        <ThemeBridge />
+        <div className="h-full bg-background text-foreground">
+          <Settings />
+        </div>
+      </ThemeProvider>,
+    );
+  });
 }
 
 if (scenario === "appearance") {

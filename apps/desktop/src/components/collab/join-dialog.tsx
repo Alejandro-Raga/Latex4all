@@ -8,6 +8,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -260,14 +261,20 @@ export function JoinDialog({
               Choose which files to download
             </label>
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={!looksLikeLink(link) || joining}
-            >
-              {joining && <Loader2Icon className="size-4 animate-spin" />}
-              {progress ?? "Join"}
-            </Button>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={joining}
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!looksLikeLink(link) || joining}>
+                {joining && <Loader2Icon className="size-4 animate-spin" />}
+                {progress ?? "Join"}
+              </Button>
+            </DialogFooter>
           </form>
         )}
       </DialogContent>
