@@ -27,3 +27,20 @@ export function setReaderFull(on: boolean) {
   if (doc.startViewTransition && !still) doc.startViewTransition(apply);
   else apply();
 }
+
+/**
+ * In a project: the PDF pane across the whole window (the code, the
+ * sidebar and the side panels make way), to read a paper or the draft.
+ */
+export const useEditorFull = create<{ on: boolean }>(() => ({ on: false }));
+
+export function setEditorFull(on: boolean) {
+  if (useEditorFull.getState().on === on) return;
+  const apply = () => flushSync(() => useEditorFull.setState({ on }));
+  const doc = document as Document & {
+    startViewTransition?: (update: () => void) => unknown;
+  };
+  const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  if (doc.startViewTransition && !still) doc.startViewTransition(apply);
+  else apply();
+}

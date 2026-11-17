@@ -42,7 +42,9 @@ Under the project's name, a small strip shows when the project is due, its next 
 
 You can go anywhere without closing your project:
 
-- Press ⌘1 for your projects, ⌘2 for Library & Vault, ⌘3 for the Planner and ⌘4 to go back to the open project. They're in ⌘K too.
+- Press ⌘1 for your projects, ⌘2 for Library & Vault, ⌘3 for the Planner and ⌘4 to go back to the open project. They're in ⌘K too. From a project, the Planner opens on its list and the Library on its folder.
+- **Open in Planner** (the arrow on the strip under the project's name, in the Plan panel, or on a project's card) shows the project's full plan: calendar, matrix, timeline.
+- In a project, the full-window button above a PDF (or ⌘⇧F) gives it the whole window to read; Esc brings everything back.
 - The house at the top left takes you to the start page. **Planner** and **Library & Vault** are at the bottom of the project's sidebar.
 - On the start page, **Back to** and the project's name, at the top of the sidebar, return you to it as you left it.
 - After opening a project or a paper from the Planner, **Back to Planner** at the bottom of the window takes you back.
@@ -216,7 +218,7 @@ Switch between **List** and **Board** at the top. On the board, each section is 
 
 - **Deadline** and **Priority**, at the top of a project, set its submission date and how important it is. Both show next to the project in the sidebar and on its card on the projects page.
 - **Timeline** shows the project's milestones, such as a first draft, on a line from today to the deadline. Add one like a task: "First draft dec 1". Click its diamond when you reach it.
-- Right-click a project in the sidebar and choose **Open in editor** to start writing.
+- Right-click a project in the sidebar and choose **Open project** to start writing, or **Priority** to set its priority or mark it completed.
 - To turn a task into a project, right-click it and choose **Make it a project**. Its subtasks become the project's tasks, and its date and priority become the project's deadline and priority.
 - The arrows next to **Projects** sort them by recent use, type, priority, due date, number of tasks or name.
 

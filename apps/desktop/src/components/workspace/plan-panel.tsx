@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   BookOpenIcon,
+  ExternalLinkIcon,
   KanbanIcon,
   ListIcon,
   ListTodoIcon,
@@ -16,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { projectKey, usePlanLists } from "@/lib/plan/plan-store";
 import { cn } from "@/lib/utils";
 import { useDocumentStore } from "@/stores/document-store";
+import { openInPlanner } from "@/stores/nav-store";
 import { DockHeaderBar, DockWideButton } from "./dock/dock-section";
 
 function Toggle({
@@ -104,6 +106,18 @@ export function PlanPanel({ onClose }: { onClose: () => void }) {
             <KanbanIcon className="size-3.5" />
           </Toggle>
         </span>
+        {root && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6"
+            onClick={() => openInPlanner(root)}
+            title="Open in Planner (calendar, matrix, timeline…)"
+            aria-label="Open in Planner"
+          >
+            <ExternalLinkIcon className="size-3.5" />
+          </Button>
+        )}
         <DockWideButton />
         <Button
           variant="ghost"

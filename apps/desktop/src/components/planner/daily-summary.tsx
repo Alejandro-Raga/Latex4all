@@ -14,6 +14,7 @@ import {
 } from "@/lib/plan/plan-store";
 import { useDockStore } from "@/stores/dock-store";
 import { useDocumentStore } from "@/stores/document-store";
+import { useNav } from "@/stores/nav-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useSettingsStore } from "@/stores/settings-store";
 
@@ -105,8 +106,9 @@ export function DailySummary() {
         action: {
           label: "Open Planner",
           onClick: () => {
+            // The Planner itself, the project (if one is open) kept open.
             if (useDocumentStore.getState().projectRoot) {
-              useDockStore.getState().setOpen("plan", true);
+              useNav.getState().goHome("planner");
             } else {
               usePlannerRequest.getState().ask();
             }

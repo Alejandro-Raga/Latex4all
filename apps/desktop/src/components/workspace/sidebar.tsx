@@ -9,6 +9,8 @@ import {
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { getVersion } from "@tauri-apps/api/app";
 import {
+  BookOpenIcon,
+  ListPlusIcon,
   ListTodoIcon,
   FileTextIcon,
   FolderIcon,
@@ -58,8 +60,10 @@ import { useDocumentStore, type ProjectFile } from "@/stores/document-store";
 import { revealInFileManager, revealLabel } from "@/lib/reveal";
 import { useHistoryStore } from "@/stores/history-store";
 import { cn } from "@/lib/utils";
-import { useNav } from "@/stores/nav-store";
+import { goToPlace, useNav } from "@/stores/nav-store";
 import { ProjectStrip } from "./project-strip";
+import { useQuickTask } from "@/components/planner/quick-task";
+import { AddToReadingMenu } from "@/components/planner/reading-menu";
 import { ConflictedCopies } from "./conflicted-copies";
 import { useSettingsWindow } from "@/stores/settings-window-store";
 import { useHelp } from "@/components/help-view";
@@ -1620,7 +1624,7 @@ export function Sidebar({
                 variant="ghost"
                 size="icon"
                 className="size-6"
-                onClick={() => useNav.getState().goHome("planner")}
+                onClick={() => goToPlace("planner")}
                 title="Planner (⌘3)"
                 aria-label="Planner"
               >
@@ -1630,7 +1634,7 @@ export function Sidebar({
                 variant="ghost"
                 size="icon"
                 className="size-6"
-                onClick={() => useNav.getState().goHome("library")}
+                onClick={() => goToPlace("library")}
                 title="Library & Vault (⌘2)"
                 aria-label="Library & Vault"
               >
@@ -2176,9 +2180,28 @@ function FileTreeNode({
                 }
               }}
             >
-              <Maximize2Icon className="mr-2 size-4" />
-              Open in PDF pane
+              <BookOpenIcon className="mr-2 size-4" />
+              Read
             </ContextMenuItem>
+          )}
+          {/* As for papers and notes elsewhere: a task, a reading list. */}
+          {!batchOperation && (
+            <ContextMenuItem
+              onClick={() =>
+                useQuickTask.getState().show({ text: `“${file.name}”` })
+              }
+            >
+              <ListPlusIcon className="mr-2 size-4" />
+              Add a task
+            </ContextMenuItem>
+          )}
+          {file.name.toLowerCase().endsWith(".pdf") && !batchOperation && (
+            <AddToReadingMenu
+              paper={{
+                title: file.name.replace(/\.pdf$/i, ""),
+                url: `file://${encodeURI(file.absolutePath)}`,
+              }}
+            />
           )}
           {!batchOperation && (
             <ContextMenuItem

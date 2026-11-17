@@ -304,7 +304,7 @@ function ReadingMenu({
         {item.itemKey ? (
           <ContextMenuItem onClick={() => open(item)}>
             <BookOpenIcon className="size-3.5" />
-            Open to read
+            Read
           </ContextMenuItem>
         ) : (
           <>

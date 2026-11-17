@@ -58,6 +58,7 @@ import {
   type PdfTextSelection,
   PdfViewer,
 } from "./pdf-viewer";
+import { FullWindowButton } from "./full-window-button";
 
 /** The app's highlight swatches, in Zotero's own colors. */
 const ZOTERO_COLOR: Record<AnnotationColor, string> = {
@@ -639,6 +640,7 @@ export function PaperReader({
           />
         </Button>
         {headerActions}
+        {!inline && <FullWindowButton />}
         {!inline && paper.zotero && (
           <Button
             variant="ghost"

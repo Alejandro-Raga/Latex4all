@@ -134,7 +134,7 @@ import {
   PRIORITY_LABEL,
 } from "@/components/planner/task-parts";
 import { useReaderFull } from "@/stores/reader-full-store";
-import { inProject, useNav } from "@/stores/nav-store";
+import { inProject, openInPlanner, useNav } from "@/stores/nav-store";
 import { ProjectPriorityMenu } from "@/components/planner/project-priority-menu";
 import { useProjectFolders } from "@/stores/project-folders-store";
 import {
@@ -1859,7 +1859,7 @@ function ProjectMenu({
   }
   return (
     <ContextMenuContent>
-      <ContextMenuItem onSelect={actions.onOpen}>Open</ContextMenuItem>
+      <ContextMenuItem onSelect={actions.onOpen}>Open project</ContextMenuItem>
       <ContextMenuItem onSelect={() => void openProjectPdf(project)}>
         Open PDF
       </ContextMenuItem>
@@ -1900,6 +1900,9 @@ function ProjectMenu({
         Duplicate
       </ContextMenuItem>
       <ContextMenuItem onSelect={actions.onMove}>Move on disk…</ContextMenuItem>
+      <ContextMenuItem onSelect={() => openInPlanner(project.path)}>
+        Open in Planner
+      </ContextMenuItem>
       <MoveToFolderMenu path={project.path} onNew={actions.onNewFolder} />
       <ProjectPriorityMenu root={project.path} name={project.name} />
       <ContextMenuSeparator />

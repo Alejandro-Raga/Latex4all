@@ -1,6 +1,8 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Command } from "cmdk";
 import {
+  ListPlusIcon,
+  BookOpenIcon,
   CornerUpLeftIcon,
   BrainIcon,
   BugIcon,
@@ -17,6 +19,9 @@ import {
   CircleHelpIcon,
 } from "lucide-react";
 import { goToPlace, PLACES } from "@/stores/nav-store";
+import { useBookmarkStore } from "@/stores/bookmark-store";
+import { openToRead } from "@/components/planner/open-paper";
+import { useQuickTask } from "@/components/planner/quick-task";
 import { useHelp } from "@/components/help-view";
 import { useTheme } from "next-themes";
 import { create } from "zustand";
@@ -148,6 +153,7 @@ export function CommandPalette() {
   const setOpen = useCommandPalette((s) => s.setOpen);
   const files = useDocumentStore((s) => s.files);
   const projectRoot = useDocumentStore((s) => s.projectRoot);
+  const recentPapers = useBookmarkStore((s) => s.recent).slice(0, 6);
   const notes = useVaultStore((s) => s.index?.list);
   const papers = useReadingStore((s) => s.papers);
   const projectLinked = useVaultStore((s) =>
@@ -273,6 +279,13 @@ export function CommandPalette() {
                 />
               ))}
               <Item
+                icon={ListPlusIcon}
+                label="Add a task"
+                value="Add a task to do todo planner"
+                hint="⌘⇧A"
+                onSelect={() => run(() => useQuickTask.getState().show())}
+              />
+              <Item
                 icon={CircleHelpIcon}
                 label="Help"
                 value="Help manual how to guide shortcuts keyboard"
@@ -296,6 +309,20 @@ export function CommandPalette() {
                 />
               ))}
             </Command.Group>
+
+            {recentPapers.length > 0 && (
+              <Command.Group heading="Recently opened" className={groupClass}>
+                {recentPapers.map((r) => (
+                  <Item
+                    key={r.itemKey}
+                    icon={BookOpenIcon}
+                    label={r.label}
+                    value={`Read ${r.label}`}
+                    onSelect={() => run(() => openToRead(r.itemKey, r.label))}
+                  />
+                ))}
+              </Command.Group>
+            )}
 
             {query && (
               <Command.Group heading="Themes" className={groupClass}>

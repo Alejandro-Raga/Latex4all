@@ -23,6 +23,13 @@ tag.
 
 ### Added
 
+- From a project, the Planner opens on its list and the Library on its
+  folder. Open in Planner on the project strip, the Plan panel and
+  project cards.
+- Read a PDF in the full window in a project too (the button above it, or
+  ⌘⇧F).
+- ⌘K lists the papers you opened lately.
+- Files in a project: Add a task, and for PDFs Add to reading list.
 - Highlight and comment on the PDFs in your projects (drafts you're
   revising) in the Library's reader, as on a Zotero paper. They're kept
   on this computer, each with the text it marked. Add to Zotero, in a
@@ -192,6 +199,9 @@ tag.
 
 ### Changed
 
+- Menus say the same things everywhere: Read for papers and PDFs, Open
+  project for projects. The daily summary's Open Planner opens the
+  Planner itself.
 - The Zotero library panel is now just the Library: it holds your
   projects' PDFs too.
 - The Planner's sidebar is grouped: Today, Tomorrow, Next 7 days and

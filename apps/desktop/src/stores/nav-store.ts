@@ -21,14 +21,23 @@ export const useNav = create<{
   section: HomeSection | null;
   /** Counts the asks, so asking for the same part again still goes there. */
   asked: number;
-  goHome: (section?: HomeSection) => void;
+  /** What to show there: a project's list in the Planner, its folder in
+   *  the Library (the project you came from, say). */
+  focus: string | null;
+  goHome: (section?: HomeSection, focus?: string | null) => void;
   backToProject: () => void;
 }>((set) => ({
   away: false,
   section: null,
   asked: 0,
-  goHome: (section) =>
-    set((s) => ({ away: true, section: section ?? null, asked: s.asked + 1 })),
+  focus: null,
+  goHome: (section, focus) =>
+    set((s) => ({
+      away: true,
+      section: section ?? null,
+      focus: focus ?? null,
+      asked: s.asked + 1,
+    })),
   backToProject: () => set({ away: false, section: null }),
 }));
 
@@ -74,8 +83,18 @@ export const PLACES: {
   { key: "4", section: null, label: "Back to the project" },
 ];
 
+/**
+ * To a part of the app. From a project, the Planner opens on its list and
+ * the Library on its folder: where you were, in the new place.
+ */
 export function goToPlace(section: HomeSection | null) {
-  if (section) useNav.getState().goHome(section);
+  const root = useDocumentStore.getState().projectRoot;
+  const here = root && !useNav.getState().away ? root : null;
+  if (section === "planner") {
+    useNav.getState().goHome("planner", here ? `project:${here}` : null);
+  } else if (section === "library") {
+    useNav.getState().goHome("library", here);
+  } else if (section) useNav.getState().goHome(section);
   else if (useDocumentStore.getState().projectRoot) {
     useNav.getState().backToProject();
   }
@@ -91,4 +110,9 @@ export function followPlaceKeys() {
   };
   window.addEventListener("keydown", key);
   return () => window.removeEventListener("keydown", key);
+}
+
+/** A project's list in the Planner, from anywhere (its card, its strip…). */
+export function openInPlanner(root: string) {
+  useNav.getState().goHome("planner", `project:${root}`);
 }

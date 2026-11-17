@@ -30,6 +30,7 @@ import {
 } from "@/stores/dock-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { usePreviewStore } from "@/stores/preview-store";
+import { setEditorFull, useEditorFull } from "@/stores/reader-full-store";
 
 const SIDEBAR_DEFAULT_SIZE = 15;
 const SIDEBAR_MIN_SIZE = 10;
@@ -65,6 +66,30 @@ export function WorkspaceLayout() {
   );
   const [codeVisible, setCodeVisible] = useState(true);
   const dockPanels = useOpenDockPanels();
+  const editorFull = useEditorFull((st) => st.on);
+  // ⌘⇧F (Ctrl+Shift+F) in and out; Esc out. Off on leaving the project.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && useEditorFull.getState().on) {
+        setEditorFull(false);
+        return;
+      }
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.shiftKey &&
+        !e.altKey &&
+        e.key.toLowerCase() === "f"
+      ) {
+        e.preventDefault();
+        setEditorFull(!useEditorFull.getState().on);
+      }
+    };
+    window.addEventListener("keydown", key);
+    return () => {
+      window.removeEventListener("keydown", key);
+      useEditorFull.setState({ on: false });
+    };
+  }, []);
   const dockedPanels = useDockedPanels();
   const setDockOpen = useDockStore((s) => s.setOpen);
   useWorkspaceShortcuts();
@@ -209,43 +234,48 @@ export function WorkspaceLayout() {
   return (
     <div ref={workspaceRef} className="app-shell flex h-full">
       <PanelGroup direction="horizontal" className="h-full min-w-0 flex-1">
-        <Panel
-          ref={sidebarPanelRef}
-          defaultSize={SIDEBAR_DEFAULT_SIZE}
-          minSize={SIDEBAR_MIN_SIZE}
-          maxSize={25}
-          collapsible
-          collapsedSize={sidebarCollapsedSize}
-          onCollapse={() => setSidebarCollapsed(true)}
-          onExpand={() => setSidebarCollapsed(false)}
-          onResize={(size) => {
-            if (!sidebarAnimatingRef.current && size >= SIDEBAR_MIN_SIZE) {
-              expandedSidebarSizeRef.current = size;
-            }
-          }}
-          className="min-w-0 overflow-hidden"
-        >
-          <Sidebar
-            collapsed={sidebarCollapsed}
-            onToggleCollapsed={toggleSidebarCollapsed}
-            layoutControls={{
-              codeVisible,
-              pdfVisible: previewVisible,
-              sidebarVisible: !sidebarCollapsed,
-              referenceVisible: dockPanels.includes("reference"),
-              vaultVisible: dockPanels.includes("vault"),
-              setCodeVisible: setCodePaneVisible,
-              setPdfVisible: setPdfPaneVisible,
-              setSidebarVisible: (visible) => setSidebarPaneCollapsed(!visible),
-              setReferenceVisible: (open) => setDockOpen("reference", open),
-              setVaultVisible: (open) => setDockOpen("vault", open),
+        {/* Reading across the window: the PDF pane alone (in its place,
+            so it keeps its page). */}
+        {!editorFull && (
+          <Panel
+            ref={sidebarPanelRef}
+            defaultSize={SIDEBAR_DEFAULT_SIZE}
+            minSize={SIDEBAR_MIN_SIZE}
+            maxSize={25}
+            collapsible
+            collapsedSize={sidebarCollapsedSize}
+            onCollapse={() => setSidebarCollapsed(true)}
+            onExpand={() => setSidebarCollapsed(false)}
+            onResize={(size) => {
+              if (!sidebarAnimatingRef.current && size >= SIDEBAR_MIN_SIZE) {
+                expandedSidebarSizeRef.current = size;
+              }
             }}
-          />
-        </Panel>
+            className="min-w-0 overflow-hidden"
+          >
+            <Sidebar
+              collapsed={sidebarCollapsed}
+              onToggleCollapsed={toggleSidebarCollapsed}
+              layoutControls={{
+                codeVisible,
+                pdfVisible: previewVisible,
+                sidebarVisible: !sidebarCollapsed,
+                referenceVisible: dockPanels.includes("reference"),
+                vaultVisible: dockPanels.includes("vault"),
+                setCodeVisible: setCodePaneVisible,
+                setPdfVisible: setPdfPaneVisible,
+                setSidebarVisible: (visible) =>
+                  setSidebarPaneCollapsed(!visible),
+                setReferenceVisible: (open) => setDockOpen("reference", open),
+                setVaultVisible: (open) => setDockOpen("vault", open),
+              }}
+            />
+          </Panel>
+        )}
 
-        <PaneDivider />
+        {!editorFull && <PaneDivider />}
 
-        {codeVisible && (
+        {codeVisible && !editorFull && (
           <Panel
             defaultSize={previewVisible ? 42.5 : 85}
             minSize={25}
@@ -255,9 +285,9 @@ export function WorkspaceLayout() {
           </Panel>
         )}
 
-        {codeVisible && previewVisible && <PaneDivider />}
+        {codeVisible && previewVisible && !editorFull && <PaneDivider />}
 
-        {previewVisible && (
+        {(previewVisible || editorFull) && (
           <Panel
             defaultSize={codeVisible ? 42.5 : 85}
             minSize={25}
@@ -267,9 +297,9 @@ export function WorkspaceLayout() {
           </Panel>
         )}
 
-        {dockedPanels.length > 0 && <PaneDivider />}
+        {dockedPanels.length > 0 && !editorFull && <PaneDivider />}
 
-        {dockedPanels.length > 0 && (
+        {dockedPanels.length > 0 && !editorFull && (
           <Panel
             defaultSize={26}
             minSize={16}
@@ -280,7 +310,7 @@ export function WorkspaceLayout() {
           </Panel>
         )}
       </PanelGroup>
-      <DockRail />
+      {!editorFull && <DockRail />}
       <SettingsWindow />
       <ProjectNoteSync />
       <CitationCheckDialog />

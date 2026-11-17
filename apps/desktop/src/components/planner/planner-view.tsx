@@ -64,7 +64,7 @@ import {
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { useBack } from "@/stores/back-store";
-import { goToProject } from "@/stores/nav-store";
+import { goToProject, useNav } from "@/stores/nav-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { completeDrag, dueOn, moveToPlan } from "./plan-actions";
 import { type DragTask, PlannerDnd, useDropArea } from "./planner-dnd";
@@ -336,6 +336,15 @@ export function PlannerView() {
   const [selected, select] = useStored<Selection>("selected", {
     smart: "today",
   });
+  // Asked for a list (a project's, from its editor or card): that one.
+  const navAsked = useNav((st) => st.asked);
+  useEffect(() => {
+    const focus = useNav.getState().focus;
+    if (navAsked && focus && useNav.getState().section === "planner") {
+      select({ plan: focus });
+    }
+    // biome-ignore lint/correctness/useExhaustiveDependencies: on each ask
+  }, [navAsked]);
   // List or board, chosen apart for tasks and for reading.
   const [taskMode, setTaskMode] = useStored<PlanViewMode>("mode-tasks", "list");
   const [readMode, setReadMode] = useStored<PlanViewMode>(
@@ -719,7 +728,7 @@ export function PlannerView() {
                             onClick={() => void openInEditor(p.root as string)}
                           >
                             <SquarePenIcon className="size-3.5" />
-                            Open in editor
+                            Open project
                           </ContextMenuItem>
                           <ProjectPriorityMenu root={p.root} name={p.name} />
                         </>

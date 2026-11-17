@@ -15,7 +15,7 @@ import { Panel, PanelGroup } from "react-resizable-panels";
 import { setReaderFull, useReaderFull } from "@/stores/reader-full-store";
 import { useBookmarkStore } from "@/stores/bookmark-store";
 import { addPdfToZotero } from "@/lib/zotero-file-upload";
-import { inProject } from "@/stores/nav-store";
+import { inProject, useNav } from "@/stores/nav-store";
 import { LibraryPage } from "./vault-standalone";
 
 const FULL_KEY =
@@ -453,6 +453,17 @@ export function QuickReferencePanel({
     },
     [],
   );
+
+  // Asked for a project's folder (from its editor): that one, here.
+  const navAsked = useNav((st) => st.asked);
+  useEffect(() => {
+    if (!onLibraryPage) return;
+    const { focus, section } = useNav.getState();
+    if (navAsked && focus && section === "library") {
+      void openReferenceProject(focus);
+    }
+    // biome-ignore lint/correctness/useExhaustiveDependencies: on each ask
+  }, [navAsked]);
 
   // A note's highlight link, with no project open: shown here.
   useEffect(() => {
@@ -2266,7 +2277,7 @@ function FilePreview({
             title="Opens it in a tab of the big PDF pane, beside your editor"
           >
             <Maximize2Icon className="size-3" />
-            Open in PDF pane
+            Read in PDF pane
           </Button>
         )
       }

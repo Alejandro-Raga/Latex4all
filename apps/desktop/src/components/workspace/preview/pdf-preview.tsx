@@ -87,6 +87,7 @@ import { createLogger } from "@/lib/debug/logger";
 import { addOwnPassageToNote } from "@/lib/vault/own-passage";
 import { filedToast, NotePicker } from "./group-picker";
 import { CompiledCopyButton } from "./compiled-copy-button";
+import { FullWindowButton } from "./full-window-button";
 
 const log = createLogger("pdf-preview");
 
@@ -1177,6 +1178,7 @@ export function PdfPreview() {
               >
                 <PlusIcon className="size-3.5" />
               </Button>
+              <FullWindowButton />
               <Select
                 value={fitMode ?? scale.toString()}
                 onValueChange={(v) => {
