@@ -254,6 +254,8 @@ type SelectedFile =
       label: string;
       absolutePath: string;
       type: ProjectFileType;
+      /** Where to open it (a note's link to a highlight). */
+      focus?: PaperFocus;
     }
   | {
       source: "zotero";
@@ -494,6 +496,7 @@ export function QuickReferencePanel({
         label: file.label,
         absolutePath: file.path,
         type: "pdf",
+        focus: file.focus,
       });
     };
     show(useLibraryPreview.getState().request);
@@ -2336,7 +2339,7 @@ function FilePreview({
             attachmentKey: preview.attachmentKey,
           }
         : undefined,
-    focus: selectedFile.source === "zotero" ? selectedFile.focus : undefined,
+    focus: selectedFile.focus,
   };
   return (
     <PaperReader

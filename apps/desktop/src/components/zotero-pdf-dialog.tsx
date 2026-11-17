@@ -52,8 +52,8 @@ export const useLibraryPreview = create<{
   listening: number;
   request: { itemKey: string; label: string; focus?: PaperFocus } | null;
   /** A PDF on this computer (a project's) to show, by its path. */
-  file: { path: string; label: string } | null;
-  askFile: (file: { path: string; label: string }) => void;
+  file: { path: string; label: string; focus?: PaperFocus } | null;
+  askFile: (file: { path: string; label: string; focus?: PaperFocus }) => void;
   ask: (request: {
     itemKey: string;
     label: string;

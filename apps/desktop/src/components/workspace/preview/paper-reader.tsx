@@ -10,6 +10,7 @@ import { noteBookmark, notePage, noteReading } from "@/lib/plan/reading-sync";
 import { useBookmarkStore } from "@/stores/bookmark-store";
 import { useReaderFull } from "@/stores/reader-full-store";
 import { loadPdfNotes, localKey, savePdfNotes } from "@/lib/pdf-notes";
+import { addPdfPassageToNote } from "@/lib/vault/pdf-passage";
 import { ReadingStatusButton } from "./reading-status";
 import { addPassageToNote } from "@/lib/vault/add-passage";
 import { useDockStore } from "@/stores/dock-store";
@@ -161,6 +162,25 @@ async function fileExisting(
   annotation: PdfAnnotationRect,
   name: string,
 ) {
+  // A PDF of your own: quoted with a link back to it, at the highlight.
+  if (!paper.zotero && paper.filePath && annotation.key) {
+    try {
+      filedToast(
+        await addPdfPassageToNote(name, {
+          path: paper.filePath,
+          key: annotation.key,
+          text: annotation.text ?? "",
+          comment: annotation.comment,
+          page: annotation.pageIndex + 1,
+        }),
+      );
+    } catch (err) {
+      toast.error(
+        `Couldn't add it to the note: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return;
+  }
   if (!paper.zotero || !annotation.key) return;
   try {
     const note = await addPassageToNote(name, {
@@ -195,6 +215,23 @@ async function fileHighlight(
     true,
     onAdded,
   );
+  if (key && !paper.zotero && paper.filePath) {
+    try {
+      filedToast(
+        await addPdfPassageToNote(name, {
+          path: paper.filePath,
+          key,
+          text: selection.text,
+          page: selection.pageNumber,
+        }),
+      );
+    } catch (err) {
+      toast.error(
+        `Highlighted, but not added to the note: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return;
+  }
   if (!key || !paper.zotero) return;
   try {
     const note = await addPassageToNote(name, {
@@ -507,6 +544,8 @@ export function PaperReader({
       if (comment === (a.comment ?? "")) return;
       change(a.key, { comment });
       toast.success(comment ? "Comment saved" : "Comment removed");
+      // The notes quoting it show the new comment too.
+      void updatePassageComment(a.key, a.comment, comment).catch(() => []);
       return;
     }
     const { apiKey, userID } = useZoteroStore.getState();
@@ -526,7 +565,15 @@ export function PaperReader({
   const removeHighlight = async (a: PdfAnnotationRect) => {
     if (local && a.key) {
       change(a.key, null);
-      toast.success("Highlight deleted");
+      // Its passage leaves the notes it was added to.
+      const notes = await removePassageEverywhere(a.key, a.comment).catch(
+        () => [] as string[],
+      );
+      toast.success(
+        notes.length
+          ? `Highlight deleted, and its passage from ${notes.map((n) => `“${n}”`).join(", ")}`
+          : "Highlight deleted",
+      );
       return;
     }
     const { apiKey, userID } = useZoteroStore.getState();
@@ -788,7 +835,7 @@ export function PaperReader({
                 ? "Edit comment"
                 : "Add comment"}
             </button>
-            {!local && (
+            {
               <button
                 type="button"
                 onClick={() =>
@@ -799,37 +846,36 @@ export function PaperReader({
                 <NotebookPenIcon className="size-3.5" />
                 Add to note…
               </button>
-            )}
-            {!local &&
-              (() => {
-                const quoting = highlightMenu.annotation.key
-                  ? (quotedIn.get(highlightMenu.annotation.key) ?? []).filter(
-                      (n) => n.kind !== "paper",
-                    )
-                  : [];
-                return quoting.length > 0 ? (
-                  <>
-                    <div className="my-1 h-px bg-border" />
-                    <div className="px-2 py-1 text-muted-foreground text-xs">
-                      In your vault
-                    </div>
-                    {quoting.map((n) => (
-                      <button
-                        key={n.path}
-                        type="button"
-                        onClick={() => {
-                          openInVault(n.name);
-                          setHighlightMenu(null);
-                        }}
-                        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
-                      >
-                        <Link2Icon className="size-3.5 shrink-0" />
-                        <span className="truncate">{n.title}</span>
-                      </button>
-                    ))}
-                  </>
-                ) : null;
-              })()}
+            }
+            {(() => {
+              const quoting = highlightMenu.annotation.key
+                ? (quotedIn.get(highlightMenu.annotation.key) ?? []).filter(
+                    (n) => n.kind !== "paper",
+                  )
+                : [];
+              return quoting.length > 0 ? (
+                <>
+                  <div className="my-1 h-px bg-border" />
+                  <div className="px-2 py-1 text-muted-foreground text-xs">
+                    In your vault
+                  </div>
+                  {quoting.map((n) => (
+                    <button
+                      key={n.path}
+                      type="button"
+                      onClick={() => {
+                        openInVault(n.name);
+                        setHighlightMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
+                    >
+                      <Link2Icon className="size-3.5 shrink-0" />
+                      <span className="truncate">{n.title}</span>
+                    </button>
+                  ))}
+                </>
+              ) : null;
+            })()}
             <div className="my-1 h-px bg-border" />
             <button
               type="button"

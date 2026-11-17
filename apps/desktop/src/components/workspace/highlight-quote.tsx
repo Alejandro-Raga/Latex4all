@@ -23,7 +23,8 @@ import { AddToNoteMenu } from "./topic-menu";
 
 const PDF_LINK =
   /open-pdf\/library\/items\/([A-Z0-9]{8})\?(?:page=(\d+)&)?annotation=([A-Z0-9]{8})/;
-const ANNOTATION = /annotation=([A-Z0-9]{8})/g;
+// Zotero's keys, and those of highlights kept on this computer.
+const ANNOTATION = /annotation=([A-Z0-9]{8}|local-[a-z0-9]+)/g;
 
 /** Zotero's highlight colours, by the names the sync writes (`#hl/yellow`). */
 export const HIGHLIGHT_COLORS: Record<string, string> = {

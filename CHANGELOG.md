@@ -23,6 +23,9 @@ tag.
 
 - The theme button is back, at the bottom of the left menu.
 - The left menu has its own shade, apart from the file list beside it.
+- Highlights in a project's PDF have the same menu as on a Zotero paper:
+  Add to note, and the notes they're already in. The note links back to
+  the highlight; deleting it or changing its comment updates the note.
 - Library: a project opens in place on its PDFs, ready to read. Code,
   Word and other files stay out of the way (Show all files lists them).
 - Reading: click a paper's circle to pick its status (Reading, On hold,
