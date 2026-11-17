@@ -16,8 +16,6 @@ import { openInVault } from "@/components/workspace/highlight-quote";
 import { NoteMenuAt } from "@/components/workspace/topic-menu";
 import { findNote } from "@/lib/vault/vault-index";
 import { useVaultStore } from "@/stores/vault-store";
-import { useDocumentStore } from "@/stores/document-store";
-import { useProjectStore } from "@/stores/project-store";
 import { openToRead } from "./open-paper";
 import { useBack } from "@/stores/back-store";
 import { goToProject, inProject } from "@/stores/nav-store";

@@ -76,7 +76,6 @@ import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import { useDockStore } from "@/stores/dock-store";
 import { useBack } from "@/stores/back-store";
 import { inProject } from "@/stores/nav-store";
-import { useDocumentStore } from "@/stores/document-store";
 import { editPlan, moveToPlan } from "./plan-actions";
 import { BoardFrame, Card, Column, Empty, MoveToMenu } from "./plan-views";
 import {

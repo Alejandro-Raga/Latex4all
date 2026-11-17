@@ -63,8 +63,6 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
-import { useDocumentStore } from "@/stores/document-store";
-import { useProjectStore } from "@/stores/project-store";
 import { useBack } from "@/stores/back-store";
 import { goToProject } from "@/stores/nav-store";
 import { useSettingsStore } from "@/stores/settings-store";
