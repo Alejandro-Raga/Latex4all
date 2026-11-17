@@ -36,7 +36,6 @@ import {
   FlaskConicalIcon,
   TerminalIcon,
   LibraryIcon,
-  Maximize2Icon,
   SettingsIcon,
   NotebookTextIcon,
   type LucideIcon,

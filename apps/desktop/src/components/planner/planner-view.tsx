@@ -343,7 +343,6 @@ export function PlannerView() {
     if (navAsked && focus && useNav.getState().section === "planner") {
       select({ plan: focus });
     }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: on each ask
   }, [navAsked]);
   // List or board, chosen apart for tasks and for reading.
   const [taskMode, setTaskMode] = useStored<PlanViewMode>("mode-tasks", "list");

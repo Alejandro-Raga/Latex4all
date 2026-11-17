@@ -462,7 +462,6 @@ export function QuickReferencePanel({
     if (navAsked && focus && section === "library") {
       void openReferenceProject(focus);
     }
-    // biome-ignore lint/correctness/useExhaustiveDependencies: on each ask
   }, [navAsked]);
 
   // A note's highlight link, with no project open: shown here.

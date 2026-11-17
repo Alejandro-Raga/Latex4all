@@ -12,7 +12,6 @@ import {
   usePlanStore,
   usePlannerRequest,
 } from "@/lib/plan/plan-store";
-import { useDockStore } from "@/stores/dock-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { useNav } from "@/stores/nav-store";
 import { useProjectStore } from "@/stores/project-store";
