@@ -131,6 +131,16 @@ export function HelpView({
                       {children}
                     </ul>
                   ),
+                  ol: ({ children }) => (
+                    <ol className="mb-3 list-decimal space-y-1.5 pl-5 text-sm leading-relaxed">
+                      {children}
+                    </ol>
+                  ),
+                  h3: ({ children }) => (
+                    <h3 className="mt-5 mb-1.5 font-semibold text-sm">
+                      {children}
+                    </h3>
+                  ),
                   code: ({ children }) => (
                     <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]">
                       {children}

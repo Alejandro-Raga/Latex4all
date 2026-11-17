@@ -145,6 +145,11 @@ tag.
 - New notes can be a topic, an idea or a plain note, not only what the
   vault's templates offer. A topic or idea gets its usual sections.
 
+### Changed
+
+- Help rewritten as a plain manual, with steps for each task and every
+  new Planner, Library and projects feature.
+
 ### Fixed
 
 - Menus and popups are more opaque, so text behind them doesn't show
