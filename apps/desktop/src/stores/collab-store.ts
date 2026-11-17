@@ -40,7 +40,7 @@ import {
   writeLink,
 } from "@/lib/tauri/collab";
 import { join, scanProjectFolder } from "@/lib/tauri/fs";
-import { useDocumentStore } from "@/stores/document-store";
+import { setSharedSaving, useDocumentStore } from "@/stores/document-store";
 import { useHistoryStore } from "@/stores/history-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -959,3 +959,8 @@ export const useCollabStore = create<CollabState>()(
     },
   ),
 );
+
+// A shared project saves after everyone pauses (document-store.ts).
+useCollabStore.subscribe((state, prev) => {
+  if (!!state.link !== !!prev.link) setSharedSaving(!!state.link);
+});

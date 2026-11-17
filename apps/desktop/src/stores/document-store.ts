@@ -370,6 +370,17 @@ function savedAs(file: ProjectFile, written: string): ProjectFile {
   };
 }
 
+/**
+ * In a shared project, saving waits until everyone has paused for a while:
+ * every edit, here or from someone else, starts the wait again. All the
+ * computers then save the same text, so a cloud folder (Seafile, Dropbox…)
+ * holding the project doesn't see two versions at once.
+ */
+let autoSaveDelay = 2000;
+export function setSharedSaving(shared: boolean) {
+  autoSaveDelay = shared ? 10_000 : 2000;
+}
+
 function scheduleAutoSave() {
   if (autoSaveTimer) clearTimeout(autoSaveTimer);
   autoSaveTimer = setTimeout(async () => {
@@ -382,7 +393,7 @@ function scheduleAutoSave() {
     if (dirtyFiles.length > 0) {
       await state.saveAllFiles();
     }
-  }, 2000);
+  }, autoSaveDelay);
 }
 
 type StoreSet = StoreApi<DocumentState>["setState"];

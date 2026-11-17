@@ -106,6 +106,9 @@ tag.
 
 ### Fixed
 
+- Shared projects in a Seafile, Dropbox or similar folder make far fewer
+  conflicted copies: while people type, files are saved once everyone
+  has paused, so every computer saves the same text.
 - The pills under papers and notes are readable on any theme color.
 - Submenus in right-click menus no longer center their label.
 - Names cut short with "…" (projects, files, papers) show in full when

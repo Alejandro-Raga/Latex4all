@@ -159,7 +159,6 @@ function Compare({ root, c }: { root: string; c: ConflictedCopy }) {
           : `${state.diffs.length} differences. Red is the original, green the copy.`}
       </p>
       {shown.map((d, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: fixed list
         <div key={i} className="rounded-md bg-muted/60 px-2 py-1.5">
           <span className="mr-2 font-sans text-[10px] text-muted-foreground">
             Line {d.line}
