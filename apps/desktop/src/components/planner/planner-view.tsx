@@ -2,6 +2,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import {
   ArrowUpDownIcon,
   BookOpenIcon,
+  CalendarDaysIcon,
   CalendarRangeIcon,
   CheckCircle2Icon,
   CheckIcon,
@@ -11,6 +12,7 @@ import {
   LayersIcon,
   ListIcon,
   ListTodoIcon,
+  MilestoneIcon,
   SearchIcon,
   SunIcon,
 } from "lucide-react";
@@ -39,6 +41,7 @@ import {
 } from "@/lib/plan/plan-store";
 import { readingItems, workTasks } from "@/lib/plan/reading";
 import { cn } from "@/lib/utils";
+import { useSettingsStore } from "@/stores/settings-store";
 import { completeDrag, dueOn, moveToPlan } from "./plan-actions";
 import { type DragTask, PlannerDnd, useDropArea } from "./planner-dnd";
 import {
@@ -52,12 +55,14 @@ import {
   type SmartFilter,
   SmartView,
 } from "./plan-views";
+import { CalendarView } from "./calendar-view";
+import { TimelineView } from "./timeline-view";
 import { ProjectIcon, typeColor } from "./project-icon";
 import { DueBadge, DueButton, TaskDetails } from "./task-parts";
 import { editPlan } from "./plan-actions";
 
 type Selection = { smart: SmartFilter } | { plan: PlanKey };
-type Tab = "tasks" | "reading";
+type Tab = "tasks" | "reading" | "timeline";
 type ProjectSort = "recent" | "type" | "due" | "count" | "name";
 
 const SORT_LABEL: Record<ProjectSort, string> = {
@@ -177,6 +182,10 @@ const SMART: Record<SmartFilter, { color: string; icon: ReactNode }> = {
     color: "var(--chart-3)",
     icon: <CalendarRangeIcon className="size-4" />,
   },
+  calendar: {
+    color: "var(--chart-1)",
+    icon: <CalendarDaysIcon className="size-4" />,
+  },
   reading: {
     color: "color-mix(in oklab, var(--chart-4) 50%, var(--chart-5))",
     icon: <BookOpenIcon className="size-4" />,
@@ -262,6 +271,8 @@ export function PlannerView() {
   // Groups of projects folded away, per order ("recent:earlier").
   const [folded, setFolded] = useStored<string[]>("folded", []);
   const [projectQuery, setProjectQuery] = useState("");
+  const dailySummary = useSettingsStore((st) => st.dailySummary);
+  const setDailySummary = useSettingsStore((st) => st.setDailySummary);
   const [picked, setPicked] = useState<Selected | null>(null);
 
   // Per plan: open tasks, due today or before, the soonest date.
@@ -274,6 +285,7 @@ export function PlannerView() {
       today: 0,
       tomorrow: 0,
       week: 0,
+      calendar: 0,
       reading: 0,
       all: 0,
       completed: 0,
@@ -325,6 +337,10 @@ export function PlannerView() {
 
   const current: PlanList | undefined =
     "plan" in selected ? lists.find((l) => l.key === selected.plan) : undefined;
+  // The calendar and boards take the whole width.
+  const fullBleed =
+    ("smart" in selected && selected.smart === "calendar") ||
+    (!!current && mode === "board" && tab !== "timeline");
   const choose = (s: Selection) => {
     select(s);
     setPicked(null);
@@ -345,9 +361,11 @@ export function PlannerView() {
                 day: "numeric",
                 month: "long",
               })
-            : selected.smart === "completed"
-              ? "What you've finished, most recent first"
-              : `${count} ${selected.smart === "reading" ? "to read" : count === 1 ? "task" : "tasks"}`,
+            : selected.smart === "calendar"
+              ? "Every project's dates in one place"
+              : selected.smart === "completed"
+                ? "What you've finished, most recent first"
+                : `${count} ${selected.smart === "reading" ? "to read" : count === 1 ? "task" : "tasks"}`,
       };
     }
     if (!current) return { title: "", color: "#64748b", icon: null, sub: "" };
@@ -376,22 +394,24 @@ export function PlannerView() {
       <div className="flex h-full min-h-0 bg-background">
         <aside className="flex w-60 shrink-0 flex-col border-border border-r bg-sidebar pt-[var(--titlebar-height)]">
           <nav className="flex flex-col gap-0.5 p-2 pt-3" aria-label="Lists">
-            {(["today", "tomorrow", "week"] as SmartFilter[]).map((f) => (
-              <SmartItem
-                key={f}
-                filter={f}
-                count={stats.smart[f]}
-                active={"smart" in selected && selected.smart === f}
-                onClick={() => choose({ smart: f })}
-                onDrop={
-                  f === "today"
-                    ? (d) => dueOn(d, 0)
-                    : f === "tomorrow"
-                      ? (d) => dueOn(d, 1)
-                      : undefined
-                }
-              />
-            ))}
+            {(["today", "tomorrow", "week", "calendar"] as SmartFilter[]).map(
+              (f) => (
+                <SmartItem
+                  key={f}
+                  filter={f}
+                  count={stats.smart[f]}
+                  active={"smart" in selected && selected.smart === f}
+                  onClick={() => choose({ smart: f })}
+                  onDrop={
+                    f === "today"
+                      ? (d) => dueOn(d, 0)
+                      : f === "tomorrow"
+                        ? (d) => dueOn(d, 1)
+                        : undefined
+                  }
+                />
+              ),
+            )}
             {inbox && (
               <SideItem
                 icon={<InboxIcon className="size-4" />}
@@ -529,6 +549,15 @@ export function PlannerView() {
               </ProjectGroupBlock>
             ))}
           </nav>
+          <label className="flex items-center gap-2 border-border border-t px-4 py-2.5 text-muted-foreground text-xs">
+            <input
+              type="checkbox"
+              checked={dailySummary}
+              onChange={(e) => setDailySummary(e.target.checked)}
+              className="size-3.5 accent-primary"
+            />
+            Daily summary when the app opens
+          </label>
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col">
@@ -583,21 +612,36 @@ export function PlannerView() {
                       <BookOpenIcon key="r" className="size-3.5" />,
                       "Reading",
                     ],
+                    ...(current.key === INBOX
+                      ? []
+                      : ([
+                          [
+                            "timeline",
+                            <MilestoneIcon key="m" className="size-3.5" />,
+                            "Timeline",
+                          ],
+                        ] as [Tab, ReactNode, string][])),
                   ]}
                 />
-                <Segmented
-                  label="View"
-                  value={mode}
-                  onChange={setMode}
-                  options={[
-                    ["list", <ListIcon key="l" className="size-3.5" />, "List"],
-                    [
-                      "board",
-                      <KanbanIcon key="b" className="size-3.5" />,
-                      "Board",
-                    ],
-                  ]}
-                />
+                {tab !== "timeline" && (
+                  <Segmented
+                    label="View"
+                    value={mode}
+                    onChange={setMode}
+                    options={[
+                      [
+                        "list",
+                        <ListIcon key="l" className="size-3.5" />,
+                        "List",
+                      ],
+                      [
+                        "board",
+                        <KanbanIcon key="b" className="size-3.5" />,
+                        "Board",
+                      ],
+                    ]}
+                  />
+                )}
               </>
             )}
           </header>
@@ -605,17 +649,13 @@ export function PlannerView() {
             <div
               className={cn(
                 "min-h-0 min-w-0 flex-1",
-                current && mode === "board"
-                  ? "overflow-hidden"
-                  : "overflow-y-auto",
+                fullBleed ? "overflow-hidden" : "overflow-y-auto",
               )}
             >
-              <div
-                className={cn(
-                  !(current && mode === "board") && "mx-auto max-w-3xl",
-                )}
-              >
-                {"smart" in selected ? (
+              <div className={cn(fullBleed ? "h-full" : "mx-auto max-w-3xl")}>
+                {"smart" in selected && selected.smart === "calendar" ? (
+                  <CalendarView lists={lists} />
+                ) : "smart" in selected ? (
                   <SmartView
                     filter={selected.smart}
                     lists={lists}
@@ -627,6 +667,8 @@ export function PlannerView() {
                   <p className="p-6 text-muted-foreground text-sm">
                     That list isn't here any more.
                   </p>
+                ) : tab === "timeline" && current.key !== INBOX ? (
+                  <TimelineView key={current.key} list={current} />
                 ) : tab === "reading" ? (
                   <ReadingView key={current.key} list={current} mode={mode} />
                 ) : (

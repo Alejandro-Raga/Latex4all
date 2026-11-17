@@ -28,7 +28,11 @@ import {
   usePlanStore,
   writePlan,
 } from "@/lib/plan/plan-store";
-import { isReadingSection, READING_SECTION } from "@/lib/plan/reading";
+import {
+  isReadingSection,
+  isSpecialSection,
+  READING_SECTION,
+} from "@/lib/plan/reading";
 import type { DragTask, Zone } from "./planner-dnd";
 
 async function textNow(key: PlanKey): Promise<string | null> {
@@ -81,7 +85,7 @@ export async function moveToPlan(
         return addTask(withList, detached(task), withList.sections.length - 1);
       }
       const first = plan.sections.findIndex(
-        (s) => s.title !== null && !isReadingSection(s.title),
+        (s) => s.title !== null && !isSpecialSection(s.title),
       );
       return addTask(plan, detached(task), first >= 0 ? first : undefined);
     });

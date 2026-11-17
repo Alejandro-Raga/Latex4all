@@ -47,6 +47,13 @@ tag.
   single colors.
 - The editor's and the PDF's toolbars line up with the sidebars and the
   side panels, and the start page's title with its sidebar.
+- Planner calendar: every dated task, milestone and deadline by month or
+  week; drag things between days; add a task to a day. Export to
+  calendar saves them as an .ics file for Apple, Google or Outlook.
+- Project timelines: milestones on the way to the deadline, on a line
+  from today, added like tasks and checked off when reached.
+- A daily summary on first opening the app each day: what's due and
+  overdue, and milestones or deadlines today or tomorrow.
 - Reading lists: Add from Zotero searches the library (or a collection)
   and adds papers with a click. The Planner's project list has a search
   box.

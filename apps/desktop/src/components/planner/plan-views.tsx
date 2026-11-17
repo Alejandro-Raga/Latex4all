@@ -61,7 +61,7 @@ import {
   usePlanTexts,
 } from "@/lib/plan/plan-store";
 import type { QuickTask } from "@/lib/plan/quick-add";
-import { isReadingSection, readingItems, workTasks } from "@/lib/plan/reading";
+import { isSpecialSection, readingItems, workTasks } from "@/lib/plan/reading";
 import { cn } from "@/lib/utils";
 import { AllReading } from "./reading-views";
 import {
@@ -104,7 +104,7 @@ const sameRef = (a?: TaskRef, b?: TaskRef) =>
 /** The sections tasks go in (the reading list apart). */
 export const workSections = (plan: Plan) =>
   plan.sections.flatMap((s, index) =>
-    s.title === null || isReadingSection(s.title)
+    s.title === null || isSpecialSection(s.title)
       ? []
       : [{ index, title: s.title }],
   );
@@ -132,7 +132,7 @@ const addQuick = (list: PlanList, task: QuickTask, section?: number) =>
     const first = section ?? workSections(p)[0]?.index;
     if (first !== undefined) return addTask(p, task, first);
     // None yet: a To do section, before any reading list.
-    const reading = p.sections.findIndex((s) => isReadingSection(s.title));
+    const reading = p.sections.findIndex((s) => isSpecialSection(s.title));
     if (reading < 0) return addTask(p, task);
     const withTodo = addSection(p, "To do");
     const moved = withTodo.sections.pop();
@@ -648,7 +648,7 @@ function AddHeading({ list }: { list: PlanList }) {
             // Before the reading list, which stays last.
             const next = addSection(p, name);
             const reading = next.sections.findIndex((s) =>
-              isReadingSection(s.title),
+              isSpecialSection(s.title),
             );
             if (reading >= 0 && reading < next.sections.length - 1) {
               const added = next.sections.pop();
@@ -1142,6 +1142,7 @@ export type SmartFilter =
   | "today"
   | "tomorrow"
   | "week"
+  | "calendar"
   | "reading"
   | "all"
   | "completed";
@@ -1150,6 +1151,7 @@ export const SMART_LABEL: Record<SmartFilter, string> = {
   today: "Today",
   tomorrow: "Tomorrow",
   week: "Next 7 days",
+  calendar: "Calendar",
   reading: "Reading list",
   all: "All tasks",
   completed: "Completed",
@@ -1307,7 +1309,7 @@ export function SmartView({
     groups.set(g, [...(groups.get(g) ?? []), t]);
   }
 
-  const empty: Record<Exclude<SmartFilter, "reading">, string> = {
+  const empty: Record<Exclude<SmartFilter, "reading" | "calendar">, string> = {
     today: "Nothing due today.",
     tomorrow: "Nothing due tomorrow.",
     week: "Nothing due this week.",
@@ -1369,7 +1371,7 @@ export function SmartView({
               <CoffeeIcon className="size-6" />
             )
           }
-          title={empty[filter]}
+          title={empty[filter as keyof typeof empty]}
         />
       )}
       {[...groups].map(([title, group]) => (

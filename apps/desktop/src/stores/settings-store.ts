@@ -86,6 +86,9 @@ interface SettingsState {
   setGlass: (level: GlassLevel) => void;
   background: BackgroundStyle;
   setBackground: (style: BackgroundStyle) => void;
+  /** The Planner's summary of the day, on first opening the app each day. */
+  dailySummary: boolean;
+  setDailySummary: (on: boolean) => void;
   pdfThemeMain: PdfTheme;
   setPdfThemeMain: (theme: PdfTheme) => void;
   pdfThemeReference: PdfTheme;
@@ -184,6 +187,8 @@ export const useSettingsStore = create<SettingsState>()(
       setGlass: (level) => set({ glass: level }),
       background: "flat",
       setBackground: (style) => set({ background: style }),
+      dailySummary: true,
+      setDailySummary: (on) => set({ dailySummary: on }),
       pdfThemeMain: "light",
       setPdfThemeMain: (theme) => set({ pdfThemeMain: theme }),
       pdfThemeReference: "light",

@@ -256,3 +256,8 @@ export function usePlanTexts(
     return out;
   }, [keys.join("\n"), openRoot, openText, entries]);
 }
+
+/** Asks the start page to show the Planner (from a notice, say). */
+export const usePlannerRequest = create<{ asked: number; ask: () => void }>(
+  (set) => ({ asked: 0, ask: () => set((s) => ({ asked: s.asked + 1 })) }),
+);

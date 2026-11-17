@@ -23,6 +23,7 @@ import {
   type TaskRef,
   updateTask,
 } from "./plan-file";
+import { isMilestonesSection } from "./milestones";
 
 export const READING_SECTION = "Reading list";
 
@@ -152,8 +153,13 @@ export function readingItems(plan: Plan): ReadingItem[] {
 }
 
 /** The plan's tasks, the reading list left out. */
+/** Sections that aren't headings of tasks: the reading list, milestones. */
+export const isSpecialSection = (title: string | null) =>
+  isReadingSection(title) || isMilestonesSection(title);
+
+/** The plan's tasks, the reading list and milestones left out. */
 export function workTasks(plan: Plan) {
-  return allTasks(plan).filter((t) => !isReadingSection(t.section));
+  return allTasks(plan).filter((t) => !isSpecialSection(t.section));
 }
 
 /** The reading list's section, made if there's none. */

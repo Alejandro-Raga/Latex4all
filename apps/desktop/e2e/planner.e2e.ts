@@ -424,3 +424,75 @@ test("papers added from the Zotero library; projects found by name", async ({
   }
   expect(errors).toEqual([]);
 });
+
+test("the calendar: a task added on a day, dragged to the next", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await open(page, "scenario=planner");
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /^Calendar/ })
+    .click();
+  const main = page.getByRole("main");
+  await main.getByLabel("Add a task").fill("Write the abstract");
+  await main.getByLabel("Add a task").press("Enter");
+  await expect
+    .poll(() => vault(page, "Tasks/Inbox.md"))
+    .toMatch(/- \[ \] Write the abstract 📅 (\d{4}-\d{2}-\d{2})/);
+  const before = /📅 (\d{4}-\d{2}-\d{2})/.exec(
+    await vault(page, "Tasks/Inbox.md"),
+  )?.[1];
+  // In today's cell, and in the day's list on the right.
+  await expect(main.getByText("Write the abstract").first()).toBeVisible();
+  await main.getByRole("radio", { name: "Week" }).click();
+  const chip = main.getByText("Write the abstract").first();
+  const next = new Date(`${before}T00:00`);
+  next.setDate(next.getDate() + 1);
+  const nextDay = String(next.getDate());
+  // The next day's cell, by its number (wrapping into the next week if
+  // today is Sunday is fine: the week view then lacks it, so use the month).
+  if (next.getDay() === 1)
+    await main.getByRole("radio", { name: "Month" }).click();
+  const cell = main
+    .locator('[role="button"]')
+    .filter({ has: page.getByText(nextDay, { exact: true }) })
+    .first();
+  await drag(page, chip, cell);
+  await expect
+    .poll(() => vault(page, "Tasks/Inbox.md"))
+    .not.toContain(`📅 ${before}`);
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/calendar.png` });
+  }
+  expect(errors).toEqual([]);
+});
+
+test("a project's timeline: milestones on the way to its deadline", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByRole("radio", { name: "Timeline" }).click();
+  await expect(main.getByText("No milestones yet.")).toBeVisible();
+  await main.getByLabel("Add a milestone").fill("First draft in 10 days");
+  await main.getByLabel("Add a milestone").press("Enter");
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/## Milestones\n\n- \[ \] First draft 📅 \d{4}-\d{2}-\d{2}\n/);
+  await expect(main.getByText("Next:")).toBeVisible();
+  // Not among the tasks.
+  await main.getByRole("radio", { name: "Tasks" }).click();
+  await expect(main.getByText("First draft")).toHaveCount(0);
+  await main.getByRole("radio", { name: "Timeline" }).click();
+  await main.getByRole("button", { name: "Mark as reached" }).click();
+  await expect.poll(() => disk(page, PLAN)).toMatch(/- \[x\] First draft/);
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/timeline.png` });
+  }
+  expect(errors).toEqual([]);
+});

@@ -160,6 +160,13 @@ The **Planner**, on the start screen, keeps your to-dos and what you mean to rea
 - **A project can have a deadline**, such as a submission date: **Deadline** at the top of the project sets it. It shows beside the project in the sidebar, counts when sorting by due date, and appears under **Deadlines** in Today, Tomorrow and Next 7 days when it comes up.
 - **Projects** show an icon for their type. **Find a project** filters them by name or type. The arrows beside **Projects** sort them (recently opened, type, due date, number of tasks, name) and group them to match; click a group to fold it.
 
+### Calendar, timeline and reminders
+
+- **Calendar**, in the sidebar, shows every dated task, milestone and project deadline, a month or a week at a time. Drag something to another day to move it there. Click a day to see all it holds and add a task for it.
+- **Export to calendar** saves your dates as a file that Apple Calendar, Google Calendar or Outlook can open, to see them there too.
+- **Timeline**, in a project, lists its milestones (a first draft, the submission…) on a line from today to its deadline. Add them like tasks, "First draft dec 1"; click the diamond once one is reached.
+- **The daily summary**: the first time you open Latex4All each day, a short note says what's due and overdue, and which milestones or deadlines are today or tomorrow. Turn it off at the bottom of the Planner's sidebar.
+
 ### Reading lists
 
 Each project has a **Reading** list apart from its tasks: the papers to read for it, in the order you'll read them. There's one of your own in the Inbox, and **Reading list** in the sidebar gathers them all.

@@ -13,6 +13,7 @@ import { followAnnotations } from "@/stores/annotations-store";
 import { useClaudeChatStore } from "@/stores/claude-chat-store";
 import { ProjectPicker } from "@/components/project-picker";
 import { BugReportDialog } from "@/components/bug-report-dialog";
+import { DailySummary } from "@/components/planner/daily-summary";
 import { HelpDialog } from "@/components/help-view";
 import { ZoteroPdfDialog } from "@/components/zotero-pdf-dialog";
 import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
@@ -259,6 +260,7 @@ export function App({ onReady }: { onReady?: () => void }) {
           <ZoteroPdfDialog />
           <HelpDialog />
           <NewNoteDialog />
+          <DailySummary />
           <UpdateManager />
           <ZoteroTagRegistrySync />
           <ZoteroTagNotesSync />

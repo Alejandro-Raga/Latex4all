@@ -114,6 +114,7 @@ import { ThemeMenuButton } from "@/components/theme-picker";
 import { LibraryView } from "@/components/library-view";
 import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import { PlannerView } from "@/components/planner/planner-view";
+import { usePlannerRequest } from "@/lib/plan/plan-store";
 import { HelpView } from "@/components/help-view";
 import { useBugReport } from "@/components/bug-report-dialog";
 
@@ -178,6 +179,11 @@ export function ProjectPicker() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [activeSection, setActiveSection] =
     useState<ProjectPickerSection>("projects");
+  // The Planner asked for (from the day's summary).
+  const plannerAsked = usePlannerRequest((st) => st.asked);
+  useEffect(() => {
+    if (plannerAsked) setActiveSection("planner");
+  }, [plannerAsked]);
   // A paper asked to open (from a reading list): to Library & Vault.
   useEffect(
     () =>
