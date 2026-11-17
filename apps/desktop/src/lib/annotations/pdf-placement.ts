@@ -68,7 +68,7 @@ export function snippetWords(snippet: string): string[] {
   );
 }
 
-interface Token {
+export interface Token {
   text: string;
   chars: PageChar[];
 }
@@ -77,7 +77,7 @@ interface Token {
  * The words on the page, in reading order. A word broken with a hyphen at the
  * end of a line is joined back into one.
  */
-function pageTokens(chars: PageChar[]): Token[] {
+export function pageTokens(chars: PageChar[]): Token[] {
   const tokens: Token[] = [];
   let current: Token | null = null;
   for (let i = 0; i < chars.length; i++) {
@@ -111,7 +111,18 @@ function pageTokens(chars: PageChar[]): Token[] {
 
 /** Where `words` appear in order: the tokens covering them, or null. */
 function findWords(tokens: Token[], words: string[]): Token[] | null {
+  return findAllWords(tokens, words, 1)[0] ?? null;
+}
+
+/** Every place `words` appear in order (up to `limit`). */
+export function findAllWords(
+  tokens: Token[],
+  words: string[],
+  limit = Number.POSITIVE_INFINITY,
+): Token[][] {
+  const found: Token[][] = [];
   const last = words.length - 1;
+  if (last < 0) return found;
   for (let start = 0; start + last < tokens.length; start++) {
     let matched = true;
     for (let k = 0; k <= last && matched; k++) {
@@ -123,13 +134,16 @@ function findWords(tokens: Token[], words: string[]): Token[] | null {
       else if (k === last) matched = token.startsWith(word);
       else matched = token === word;
     }
-    if (matched) return tokens.slice(start, start + words.length);
+    if (matched) {
+      found.push(tokens.slice(start, start + words.length));
+      if (found.length >= limit) break;
+    }
   }
-  return null;
+  return found;
 }
 
 /** One rectangle per text line the characters are on. */
-function rectsByLine(chars: PageChar[]): PdfRect[] {
+export function rectsByLine(chars: PageChar[]): PdfRect[] {
   const lines = new Map<number, PdfRect>();
   for (const char of chars) {
     const rect = lines.get(char.line);

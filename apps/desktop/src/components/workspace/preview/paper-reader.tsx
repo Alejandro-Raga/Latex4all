@@ -9,7 +9,15 @@ import {
 import { noteBookmark, notePage, noteReading } from "@/lib/plan/reading-sync";
 import { useBookmarkStore } from "@/stores/bookmark-store";
 import { useReaderFull } from "@/stores/reader-full-store";
-import { loadPdfNotes, localKey, savePdfNotes } from "@/lib/pdf-notes";
+import { getMupdfClient } from "@/lib/mupdf/mupdf-client";
+import { getOrOpenDocument } from "@/lib/mupdf/pdf-doc-cache";
+import {
+  loadPdfNotes,
+  localKey,
+  pdfVersion,
+  savePdfNotes,
+} from "@/lib/pdf-notes";
+import { reanchor } from "@/lib/pdf-reanchor";
 import { addPdfPassageToNote } from "@/lib/vault/pdf-passage";
 import { ReadingStatusButton } from "./reading-status";
 import { addPassageToNote } from "@/lib/vault/add-passage";
@@ -33,6 +41,7 @@ import {
   NotebookPenIcon,
   Link2Icon,
   PanelRightIcon,
+  HistoryIcon,
   Trash2Icon,
 } from "lucide-react";
 import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
@@ -43,6 +52,11 @@ import {
   type ToolbarAction,
 } from "@/components/workspace/editor/selection-toolbar";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type { AnnotationColor } from "@/lib/annotations/types";
 import {
   createZoteroHighlight,
@@ -387,16 +401,41 @@ export function PaperReader({
   const [localNotes, setLocalNotes] = useState<PdfAnnotationRect[] | null>(
     null,
   );
+  // Which build of the PDF they're placed on.
+  const versionRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!local || !paper.filePath) return;
+    const path = paper.filePath;
     let live = true;
-    void loadPdfNotes(paper.filePath).then((notes) => {
-      if (live) setLocalNotes(notes);
-    });
+    void (async () => {
+      const { notes, version } = await loadPdfNotes(path);
+      const now = pdfVersion(paper.data);
+      versionRef.current = now;
+      if (notes.length === 0 || version === now) {
+        if (live) setLocalNotes(notes);
+        return;
+      }
+      // Rebuilt since: each highlight found again by its words.
+      try {
+        const { docId, pageSizes } = await getOrOpenDocument(paper.data);
+        const client = getMupdfClient();
+        const placed = await reanchor(notes, {
+          count: pageSizes.length,
+          height: (i) => pageSizes[i]?.height ?? 0,
+          chars: (i) => client.getPageChars(docId, i),
+        });
+        if (!live) return;
+        setLocalNotes(placed);
+        await savePdfNotes(path, placed, now);
+      } catch {
+        // Couldn't read the pages: shown where they were.
+        if (live) setLocalNotes(notes);
+      }
+    })();
     return () => {
       live = false;
     };
-  }, [local, paper.filePath]);
+  }, [local, paper.filePath, paper.data]);
   const base = local ? (localNotes ?? []) : (paper.annotations ?? []);
   const annotations = useMemo(() => {
     const known = new Set(base.map((a) => a.key));
@@ -413,7 +452,12 @@ export function PaperReader({
   useEffect(() => {
     if (!local || !paper.filePath || localNotes === null) return;
     const timer = setTimeout(
-      () => void savePdfNotes(paper.filePath as string, annotations),
+      () =>
+        void savePdfNotes(
+          paper.filePath as string,
+          annotations,
+          versionRef.current,
+        ),
       300,
     );
     return () => clearTimeout(timer);
@@ -432,7 +476,16 @@ export function PaperReader({
     },
     [paper.id],
   );
-  const count = annotations.length;
+  // On the page: the ones this version of the PDF still has the words of.
+  const shown = useMemo(
+    () => annotations.filter((a) => !a.stale),
+    [annotations],
+  );
+  const earlier = useMemo(
+    () => annotations.filter((a) => a.stale),
+    [annotations],
+  );
+  const count = shown.length;
 
   // Brought to the highlight (or page) a link asked for, once the pages
   // are there, and again for each new request.
@@ -652,6 +705,57 @@ export function PaperReader({
             </span>
           ))}
         {inline && !status && count === 0 && <span className="flex-1" />}
+        {earlier.length > 0 && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 shrink-0 gap-1 px-2 text-muted-foreground text-xs"
+                title="Highlights whose text isn't in this version of the PDF"
+              >
+                <HistoryIcon className="size-3.5" />
+                {earlier.length} from earlier versions
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80 p-0">
+              <p className="border-b px-3 py-2 text-muted-foreground text-xs">
+                Not in this version of the PDF
+              </p>
+              <ul className="max-h-80 overflow-y-auto py-1">
+                {earlier.map((a) => (
+                  <li
+                    key={a.key}
+                    className="group flex items-start gap-2 px-3 py-1.5"
+                  >
+                    <span
+                      className="mt-1 size-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: a.color }}
+                    />
+                    <span className="min-w-0 flex-1 text-xs">
+                      <span className="line-clamp-3">{a.text}</span>
+                      {a.comment && (
+                        <span className="mt-0.5 line-clamp-2 block text-muted-foreground">
+                          {a.comment}
+                        </span>
+                      )}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 shrink-0 text-muted-foreground hover:text-destructive"
+                      title="Delete"
+                      aria-label="Delete"
+                      onClick={() => void removeHighlight(a)}
+                    >
+                      <Trash2Icon className="size-3.5" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </PopoverContent>
+          </Popover>
+        )}
         {itemKey && <ReadingStatusButton itemKey={itemKey} />}
         {bookmark && readingPage !== bookmark && (
           <Button
@@ -993,7 +1097,7 @@ export function PaperReader({
           pageWidthRef.current = width;
           fitIfNew();
         }}
-        annotations={annotations}
+        annotations={shown}
         theme={theme}
         onThemeChange={setTheme}
       />

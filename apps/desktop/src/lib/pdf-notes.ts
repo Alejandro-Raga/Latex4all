@@ -15,24 +15,35 @@ async function fileFor(pdfPath: string): Promise<string> {
   return join(dir, `${md5(new TextEncoder().encode(pdfPath))}.json`);
 }
 
-export async function loadPdfNotes(
-  pdfPath: string,
-): Promise<PdfAnnotationRect[]> {
+export interface PdfNotes {
+  notes: PdfAnnotationRect[];
+  /** Which build of the PDF they were placed on (its md5), if known. */
+  version?: string;
+}
+
+export async function loadPdfNotes(pdfPath: string): Promise<PdfNotes> {
   try {
     const data = JSON.parse(await readTextFile(await fileFor(pdfPath)));
-    return Array.isArray(data?.notes) ? data.notes : [];
+    return {
+      notes: Array.isArray(data?.notes) ? data.notes : [],
+      ...(typeof data?.version === "string" ? { version: data.version } : {}),
+    };
   } catch {
-    return [];
+    return { notes: [] };
   }
 }
+
+/** A PDF's version, to tell a rebuilt one from the same one. */
+export const pdfVersion = (data: Uint8Array) => md5(data);
 
 export async function savePdfNotes(
   pdfPath: string,
   notes: PdfAnnotationRect[],
+  version?: string,
 ): Promise<void> {
   await writeTextFile(
     await fileFor(pdfPath),
-    JSON.stringify({ path: pdfPath, notes }, null, 1),
+    JSON.stringify({ path: pdfPath, version, notes }, null, 1),
   );
 }
 

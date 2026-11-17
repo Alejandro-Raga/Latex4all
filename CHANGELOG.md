@@ -23,6 +23,9 @@ tag.
 
 - The theme button is back, at the bottom of the left menu.
 - The left menu has its own shade, apart from the file list beside it.
+- Highlights on a project's PDF stay on their text when you rebuild it.
+  Ones whose text you rewrote are listed under "From earlier versions"
+  instead of sitting on the wrong words.
 - Export PDF suggests the project's name (or where each compile is saved),
   not "main.pdf".
 - Highlights in a project's PDF have the same menu as on a Zotero paper:

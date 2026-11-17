@@ -247,6 +247,8 @@ export interface PdfAnnotationRect {
   rects: [number, number, number, number][];
   color: string;
   type: "highlight" | "underline";
+  /** On a PDF rebuilt since: its words aren't in this version. */
+  stale?: boolean;
 }
 
 interface PdfViewerProps {
