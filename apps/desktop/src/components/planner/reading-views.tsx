@@ -7,6 +7,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import {
   BookOpenIcon,
   CheckIcon,
+  CircleDotIcon,
   ChevronRightIcon,
   ExternalLinkIcon,
   LibraryBigIcon,
@@ -57,7 +58,6 @@ import {
   readingItems,
   readingSection,
   STATUS_COLOR,
-  STATUS_HINT,
   STATUS_LABEL,
   STATUSES,
   setReadingStatus,
@@ -165,12 +165,16 @@ function Pill({
   return (
     <span
       title={hint}
-      className="shrink-0 rounded-full px-1.5 py-px font-medium text-[10px]"
+      className="flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-px font-medium text-[10px] text-foreground"
       style={{
-        color,
-        backgroundColor: `color-mix(in oklab, ${color} 14%, transparent)`,
+        backgroundColor: `color-mix(in oklab, ${color} 16%, var(--background))`,
+        borderColor: `color-mix(in oklab, ${color} 40%, var(--background))`,
       }}
     >
+      <span
+        className="size-1.5 rounded-full"
+        style={{ backgroundColor: color }}
+      />
       {label}
     </span>
   );
@@ -285,21 +289,16 @@ function ReadingMenu({
         )}
         <ContextMenuSub>
           <ContextMenuSubTrigger>
-            <CheckIcon className="size-3.5" />
+            <CircleDotIcon className="size-3.5" />
             Status
           </ContextMenuSubTrigger>
-          <ContextMenuSubContent className="w-56">
+          <ContextMenuSubContent className="w-44">
             {STATUSES.map((s) => (
               <ContextMenuItem
                 key={s}
                 onClick={() => void setStatus(list, item.ref, s)}
               >
-                <span className="flex min-w-0 flex-col">
-                  <span>{STATUS_LABEL[s]}</span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {STATUS_HINT[s]}
-                  </span>
-                </span>
+                {STATUS_LABEL[s]}
                 {s === item.status && (
                   <CheckIcon className="ml-auto size-3.5" />
                 )}
@@ -309,7 +308,7 @@ function ReadingMenu({
         </ContextMenuSub>
         <MoveToMenu
           list={list}
-          label="Move to the reading list of"
+          label="Move to"
           onPick={(target) =>
             void moveToPlan(
               { list, ref: item.ref, reading: true, label: item.title },
@@ -427,6 +426,7 @@ function ReadingRow({
 const GROUPS: { status: ReadingStatus; title: string; folded?: boolean }[] = [
   { status: "reading", title: "Reading now" },
   { status: "to-read", title: "Up next" },
+  { status: "reread", title: "To re-read" },
   { status: "read", title: "Read", folded: true },
 ];
 

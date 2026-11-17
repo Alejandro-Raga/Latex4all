@@ -15,6 +15,7 @@ import {
   MilestoneIcon,
   SearchIcon,
   SunIcon,
+  SquarePenIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -40,7 +41,15 @@ import {
   useReloadPlans,
 } from "@/lib/plan/plan-store";
 import { readingItems, workTasks } from "@/lib/plan/reading";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
+import { useDocumentStore } from "@/stores/document-store";
+import { useProjectStore } from "@/stores/project-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { completeDrag, dueOn, moveToPlan } from "./plan-actions";
 import { type DragTask, PlannerDnd, useDropArea } from "./planner-dnd";
@@ -544,6 +553,16 @@ export function PlannerView() {
                     onClick={() => choose({ plan: p.key })}
                     dropId={`side:${p.key}`}
                     onDrop={(d) => moveToPlan(d, p)}
+                    menu={
+                      p.root ? (
+                        <ContextMenuItem
+                          onClick={() => void openInEditor(p.root as string)}
+                        >
+                          <SquarePenIcon className="size-3.5" />
+                          Open in editor
+                        </ContextMenuItem>
+                      ) : undefined
+                    }
                   />
                 ))}
               </ProjectGroupBlock>
@@ -812,7 +831,10 @@ function SideItem({
   onClick,
   dropId,
   onDrop,
+  menu,
 }: {
+  /** Its right-click menu. */
+  menu?: ReactNode;
   icon: ReactNode;
   /** The icon's color (projects color theirs by type). */
   color?: string;
@@ -832,7 +854,7 @@ function SideItem({
     onDrop: (d) => onDrop?.(d),
   });
   const over = !!onDrop && drop.over;
-  return (
+  const row = (
     <button
       ref={onDrop ? drop.ref : undefined}
       type="button"
@@ -864,4 +886,17 @@ function SideItem({
       )}
     </button>
   );
+  if (!menu) return row;
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+      <ContextMenuContent className="w-44">{menu}</ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+/** Opens a project in the writing view. */
+async function openInEditor(root: string) {
+  await useDocumentStore.getState().openProject(root);
+  useProjectStore.getState().addRecentProject(root);
 }

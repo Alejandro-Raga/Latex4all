@@ -23,6 +23,8 @@ tag.
 
 ### Added
 
+- Reading lists: a To re-read status.
+- Planner: right-click a project to open it in the editor.
 - **Planner**, on the start screen, laid out like TickTick: lists on
   the left, tasks in the middle, the picked task's details on the right.
   Today, Tomorrow, Next 7 days, Inbox, All tasks and Completed gather
@@ -102,6 +104,8 @@ tag.
 
 ### Fixed
 
+- The pills under papers and notes are readable on any theme color.
+- Submenus in right-click menus no longer center their label.
 - Names cut short with "…" (projects, files, papers) show in full when
   you hover over them.
 - Shared projects no longer pass around hidden Git files and system

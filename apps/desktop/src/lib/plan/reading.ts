@@ -27,13 +27,14 @@ import { isMilestonesSection } from "./milestones";
 
 export const READING_SECTION = "Reading list";
 
-export const STATUSES = ["to-read", "reading", "read"] as const;
+export const STATUSES = ["to-read", "reading", "read", "reread"] as const;
 export type ReadingStatus = (typeof STATUSES)[number];
 
 export const STATUS_LABEL: Record<ReadingStatus, string> = {
   "to-read": "To read",
   reading: "Reading",
   read: "Read",
+  reread: "To re-read",
 };
 
 /** What each status means. */
@@ -41,12 +42,14 @@ export const STATUS_HINT: Record<ReadingStatus, string> = {
   "to-read": "Not started",
   reading: "Started: set when you open it",
   read: "Finished",
+  reread: "Read once, to go back to",
 };
 
 export const STATUS_COLOR: Record<ReadingStatus, string> = {
   "to-read": "var(--muted-foreground)",
   reading: "var(--primary)",
   read: "var(--chart-2)",
+  reread: "var(--chart-5)",
 };
 
 /** What's been done with a paper, each set by itself. */
@@ -301,7 +304,7 @@ export function linkReading(
 
 /** The status after this one, as a click on the marker goes. */
 export const nextStatus = (status: ReadingStatus): ReadingStatus =>
-  STATUSES[(STATUSES.indexOf(status) + 1) % STATUSES.length];
+  status === "to-read" ? "reading" : status === "reading" ? "read" : "to-read";
 
 /** Applies a change to every entry of a paper. */
 function eachOf(
@@ -321,7 +324,9 @@ function eachOf(
 /** Opened: being read, unless it's been read already. */
 export const markOpened = (plan: Plan, itemKey: string) =>
   eachOf(plan, itemKey, (item) =>
-    item.status === "to-read" ? { status: "reading" } : null,
+    item.status === "to-read" || item.status === "reread"
+      ? { status: "reading" }
+      : null,
   );
 
 /** The last page opened, of how many; opening it is starting it. */
@@ -334,12 +339,16 @@ export const markPage = (
   eachOf(plan, itemKey, (item) =>
     item.page === page &&
     (pages === undefined || item.pages === pages) &&
-    item.status !== "to-read"
+    item.status !== "to-read" &&
+    item.status !== "reread"
       ? null
       : {
           page,
           pages: pages ?? item.pages,
-          status: item.status === "to-read" ? "reading" : item.status,
+          status:
+            item.status === "to-read" || item.status === "reread"
+              ? "reading"
+              : item.status,
         },
   );
 

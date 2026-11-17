@@ -111,15 +111,21 @@ function Pill({
           // The row opens its note on a click; the pill only its list.
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
-          className="flex items-center gap-1 rounded px-1.5 py-px text-[10px] leading-4 transition-opacity hover:opacity-80"
+          className="flex items-center gap-1 rounded border px-1.5 py-px text-[10px] text-foreground leading-4 transition-[filter] hover:brightness-95"
           style={{
-            color,
-            backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)`,
+            backgroundColor: `color-mix(in oklab, ${color} 16%, var(--background))`,
+            borderColor: `color-mix(in oklab, ${color} 40%, var(--background))`,
           }}
           title={`${notes.length} ${label.toLowerCase()} connected`}
         >
+          <span
+            className="size-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: color }}
+          />
           {label}
-          <span className="tabular-nums opacity-80">{notes.length}</span>
+          <span className="text-muted-foreground tabular-nums">
+            {notes.length}
+          </span>
         </button>
       </PopoverTrigger>
       <PopoverContent
