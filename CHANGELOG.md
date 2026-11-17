@@ -23,6 +23,8 @@ tag.
 
 ### Added
 
+- Library: ⌘F (Ctrl+F) switches the reader to the full window and back,
+  and the change now eases in instead of jumping.
 - Folders on All projects, to group projects by what they're for
   (Thesis, Teaching…), each with its name, color and a star for
   favourites. Right-click a project and choose Move to folder. Folders

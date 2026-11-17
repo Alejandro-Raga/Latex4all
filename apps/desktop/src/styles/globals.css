@@ -551,3 +551,14 @@
   background-color: var(--background);
 }
 
+
+/* The Library's reader going full window and back: eased, not a jump. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+::view-transition-group(library-reader) {
+  animation-duration: 280ms;
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}

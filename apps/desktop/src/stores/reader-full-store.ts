@@ -1,3 +1,4 @@
+import { flushSync } from "react-dom";
 import { create } from "zustand";
 
 /**
@@ -8,3 +9,21 @@ export const useReaderFull = create<{
   on: boolean;
   set: (on: boolean) => void;
 }>((set) => ({ on: false, set: (on) => set({ on }) }));
+
+/**
+ * Into the full window or out of it, the change eased rather than a jump:
+ * the reader grows into (or back from) the room the rest leaves, as the
+ * window's view transition draws it. Without one, or with reduced motion
+ * asked for, at once.
+ */
+export function setReaderFull(on: boolean) {
+  const store = useReaderFull.getState();
+  if (store.on === on) return;
+  const apply = () => flushSync(() => store.set(on));
+  const doc = document as Document & {
+    startViewTransition?: (update: () => void) => unknown;
+  };
+  const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  if (doc.startViewTransition && !still) doc.startViewTransition(apply);
+  else apply();
+}

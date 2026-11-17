@@ -113,7 +113,7 @@ Click a paper that has a PDF to read it. Inside a project it opens in a tab next
 - Right-click a highlight to change its color, add a comment, delete it, or add it to a note. The menu also lists the notes it is already in.
 - Click a link in the PDF, such as a citation, and press ⌘[ to come back.
 - Click the bookmark button at the top of the reader to mark the page where you stopped. The paper opens there next time, and its progress on your reading list follows the bookmark. Without a bookmark, it opens on the last page you had open.
-- On the **Library & Vault** page, click **Read in full window** to hide the list, the vault and the sidebar. Press Esc to bring them back.
+- On the **Library & Vault** page, click **Read in full window**, or press ⌘F, to hide the list, the vault and the sidebar. Press ⌘F or Esc to bring them back.
 - To read offline, turn on **Keep PDFs for offline reading** in **Settings → Zotero**.
 
 ## Your vault
@@ -286,6 +286,7 @@ On Windows and Linux, use Ctrl where it says ⌘.
 | ⌘Y / ⌘N | Keep / undo all of the assistant's changes |
 | ⌘⇧X | Ask about part of the PDF |
 | ⌘⇧A | Add a task |
+| ⌘F | Read in full window (Library & Vault) |
 | ⌘⌥1, 2, 3, 4 | Zotero library, Vault, Notes, Plan panels |
 | ⌘⇧[ / ⌘⇧] | Previous / next PDF tab |
 | ⌘[ | Back after following a link in a PDF |

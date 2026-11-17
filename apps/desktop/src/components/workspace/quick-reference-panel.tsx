@@ -11,7 +11,12 @@ import { ResizeHandle } from "@/components/ui/resize-handle";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Panel, PanelGroup } from "react-resizable-panels";
-import { useReaderFull } from "@/stores/reader-full-store";
+import { setReaderFull, useReaderFull } from "@/stores/reader-full-store";
+
+const FULL_KEY =
+  typeof navigator !== "undefined" && navigator.userAgent.includes("Mac")
+    ? "⌘F"
+    : "Ctrl+F";
 import {
   ListPlusIcon,
   ArrowLeftIcon,
@@ -636,19 +641,34 @@ export function QuickReferencePanel({
   );
   const previewFull = useReaderFull((s) => s.on);
   const setPreviewFull = (next: boolean | ((on: boolean) => boolean)) => {
-    const { on, set } = useReaderFull.getState();
-    set(typeof next === "function" ? next(on) : next);
+    const { on } = useReaderFull.getState();
+    setReaderFull(typeof next === "function" ? next(on) : next);
   };
   // Off when the panel goes (or a project opens): never stuck on.
   useEffect(() => () => useReaderFull.getState().set(false), []);
+  // Esc leaves the full window; ⌘F (Ctrl+F) goes in and out, while a
+  // paper is open here and there's no project (whose editor has ⌘F).
+  const canFull = !currentProjectRoot && !!selectedFile;
   useEffect(() => {
-    if (!previewFull) return;
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") useReaderFull.getState().set(false);
+      if (e.key === "Escape" && useReaderFull.getState().on) {
+        setReaderFull(false);
+        return;
+      }
+      if (
+        canFull &&
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        !e.altKey &&
+        e.key.toLowerCase() === "f"
+      ) {
+        e.preventDefault();
+        setReaderFull(!useReaderFull.getState().on);
+      }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [previewFull]);
+  }, [canFull]);
   const beside = previewSide === "beside";
   const fullPreview = previewFull && !currentProjectRoot;
   const direction = beside && !currentProjectRoot ? "horizontal" : "vertical";
@@ -703,7 +723,11 @@ export function QuickReferencePanel({
         minSize={15}
         className="min-h-0 min-w-0"
       >
-        <div className="flex h-full flex-col">
+        <div
+          className="flex h-full flex-col"
+          // Grows into the full window (and back) rather than jumping.
+          style={{ viewTransitionName: "library-reader" }}
+        >
           <div className="flex shrink-0 items-center gap-1.5 border-border border-b px-2 py-1">
             <span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
               {selectedFile.label}
@@ -2089,7 +2113,9 @@ function FilePreview({
               className="mr-1 size-6 shrink-0"
               onClick={reader.toggleFull}
               title={
-                reader.full ? "Exit full window (Esc)" : "Read in full window"
+                reader.full
+                  ? `Exit full window (Esc or ${FULL_KEY})`
+                  : `Read in full window (${FULL_KEY})`
               }
               aria-label={
                 reader.full ? "Exit full window" : "Read in full window"
