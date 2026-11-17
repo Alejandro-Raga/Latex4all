@@ -23,6 +23,13 @@ tag.
 
 ### Added
 
+- Reading shows each paper's authors and year.
+- Duplicate to…: a copy of a task, subtasks and all, in another section,
+  list or project.
+- Back to Planner: after opening a project or a paper from the Planner, a
+  button at the bottom takes you back.
+- Projects can be marked as completed (in the Priority menu). They move
+  to a Completed group in the Planner and show a check on their card.
 - Planner: Reading, a place for reading as a habit: Now reading (with
   Resume, back to your bookmark), what's due today, one Up next queue
   across all your lists in your own order, and what you finished lately.
@@ -164,6 +171,8 @@ tag.
 
 ### Changed
 
+- "Make subtask of" lists only the tasks in the same section; drag a
+  task onto any other.
 - A project's menu says Add to folder (to sort the list) and Move on
   disk… (to move its folder), so the two aren't confused.
 - Starred projects stay in Favourites when they're in a folder.

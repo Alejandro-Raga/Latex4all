@@ -350,6 +350,20 @@ export function usePlanTexts(
 }
 
 /** Asks the start page to show the Planner (from a notice, say). */
-export const usePlannerRequest = create<{ asked: number; ask: () => void }>(
-  (set) => ({ asked: 0, ask: () => set((s) => ({ asked: s.asked + 1 })) }),
-);
+export const usePlannerRequest = create<{
+  asked: number;
+  ask: () => void;
+  /** Done with: the start page went to the Planner. */
+  done: () => void;
+}>((set) => ({
+  asked: 0,
+  ask: () => set((s) => ({ asked: s.asked + 1 })),
+  done: () => set({ asked: 0 }),
+}));
+
+/** Back to the Planner: out of the open project, to the start page's Planner. */
+export function backToPlanner() {
+  const doc = useDocumentStore.getState();
+  if (doc.projectRoot) doc.closeProject();
+  usePlannerRequest.getState().ask();
+}

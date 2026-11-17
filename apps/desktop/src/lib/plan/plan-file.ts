@@ -670,3 +670,10 @@ export function projectPriority(plan: Plan): Priority {
 
 export const setProjectPriority = (plan: Plan, priority: Priority) =>
   setProperty(plan, "priority", PRIORITY_NAMES[priority] || undefined);
+
+/** The project is finished (its plan's `status: completed`). */
+export const projectDone = (plan: Plan) =>
+  property(plan, "status")?.toLowerCase() === "completed";
+
+export const setProjectDone = (plan: Plan, done: boolean) =>
+  setProperty(plan, "status", done ? "completed" : undefined);

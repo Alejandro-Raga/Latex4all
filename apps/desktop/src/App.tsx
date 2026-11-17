@@ -15,6 +15,7 @@ import { ProjectPicker } from "@/components/project-picker";
 import { BugReportDialog } from "@/components/bug-report-dialog";
 import { DailySummary } from "@/components/planner/daily-summary";
 import { QuickTask } from "@/components/planner/quick-task";
+import { BackPill } from "@/components/back-pill";
 import { HelpDialog } from "@/components/help-view";
 import { ZoteroPdfDialog } from "@/components/zotero-pdf-dialog";
 import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
@@ -263,6 +264,7 @@ export function App({ onReady }: { onReady?: () => void }) {
           <NewNoteDialog />
           <DailySummary />
           <QuickTask />
+          <BackPill />
           <UpdateManager />
           <ZoteroTagRegistrySync />
           <ZoteroTagNotesSync />

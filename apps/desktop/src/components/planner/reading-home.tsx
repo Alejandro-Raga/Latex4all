@@ -21,6 +21,7 @@ import { useSettingsStore } from "@/stores/settings-store";
 import { contextOf } from "./plan-views";
 import {
   AddPaper,
+  Byline,
   open,
   ReadingRow,
   setStatus,
@@ -87,8 +88,13 @@ function NowReading({ row }: { row: Row }) {
         item={item}
         onChange={(s) => void setStatus(list, item.ref, s)}
       />
-      <span className="min-w-0 flex-1 truncate text-sm" title={item.title}>
-        {item.title}
+      <span className="flex min-w-0 flex-1 items-baseline gap-2">
+        <span className="min-w-0 truncate text-sm" title={item.title}>
+          {item.title}
+        </span>
+        <span className="min-w-0 max-w-[45%] truncate">
+          <Byline itemKey={item.itemKey} />
+        </span>
       </span>
       {at && (
         <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">

@@ -41,3 +41,13 @@ describe("the Eisenhower matrix", () => {
     });
   });
 });
+
+describe("bylines", () => {
+  it("name one, two, or the first et al., with the year", async () => {
+    const { byline } = await import("./reading-views");
+    expect(byline("Nelson", "1959")).toBe("Nelson, 1959");
+    expect(byline("Cohen, Levinthal", "1990")).toBe("Cohen & Levinthal, 1990");
+    expect(byline("Zahra, George, Smith", "")).toBe("Zahra et al.");
+    expect(byline("", "2001")).toBe("2001");
+  });
+});

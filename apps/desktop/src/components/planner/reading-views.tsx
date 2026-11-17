@@ -45,7 +45,11 @@ import {
   today,
   updateTask,
 } from "@/lib/plan/plan-file";
-import { type PlanList, usePlanText } from "@/lib/plan/plan-store";
+import {
+  backToPlanner,
+  type PlanList,
+  usePlanText,
+} from "@/lib/plan/plan-store";
 import {
   addReading,
   linkReading,
@@ -68,6 +72,8 @@ import { createZoteroItems } from "@/lib/zotero-api";
 import { cn } from "@/lib/utils";
 import { useZoteroStore } from "@/stores/zotero-store";
 import { openToRead } from "./open-paper";
+import { useBack } from "@/stores/back-store";
+import { useDocumentStore } from "@/stores/document-store";
 import { editPlan, moveToPlan } from "./plan-actions";
 import { BoardFrame, Card, Column, Empty, MoveToMenu } from "./plan-views";
 import {
@@ -215,6 +221,11 @@ function Pills({ item }: { item: ReadingItem }) {
 /* ─────────────────────────── Opening, Zotero ─────────────────────────── */
 
 export function open(item: ReadingItem) {
+  // From the Planner on the start page, the paper opens in the Library:
+  // a way back to the list.
+  if (item.itemKey && !useDocumentStore.getState().projectRoot) {
+    useBack.getState().set("Back to Planner", backToPlanner);
+  }
   if (item.itemKey) openToRead(item.itemKey, item.title);
   else if (item.url)
     void shellOpen(item.url).catch(() =>
@@ -367,6 +378,34 @@ function dropOnPaper(list: PlanList, target: ReadingItem) {
   };
 }
 
+/** "Cohen & Levinthal, 1990", "Nelson et al., 1959": who and when. */
+export function byline(creators: string, year: string): string {
+  const names = creators.split(/,\s*/).filter(Boolean);
+  const who =
+    names.length === 0
+      ? ""
+      : names.length === 1
+        ? names[0]
+        : names.length === 2
+          ? `${names[0]} & ${names[1]}`
+          : `${names[0]} et al.`;
+  return [who, year].filter(Boolean).join(", ");
+}
+
+/** A paper's byline, from your Zotero library. */
+export function Byline({ itemKey }: { itemKey?: string }) {
+  const item = useZoteroLibrary((st) =>
+    itemKey ? st.mirror?.items[itemKey] : undefined,
+  );
+  const text = item ? byline(item.creators, item.year) : "";
+  if (!text) return null;
+  return (
+    <span className="shrink-0 truncate text-[11px] text-muted-foreground">
+      {text}
+    </span>
+  );
+}
+
 export function ReadingRow({
   list,
   item,
@@ -410,14 +449,19 @@ export function ReadingRow({
           item={item}
           onChange={(s) => void setStatus(list, item.ref, s)}
         />
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate text-sm",
-            item.status === "read" && "text-muted-foreground",
-          )}
-          title={item.title}
-        >
-          {item.title}
+        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span
+            className={cn(
+              "min-w-0 truncate text-sm",
+              item.status === "read" && "text-muted-foreground",
+            )}
+            title={item.title}
+          >
+            {item.title}
+          </span>
+          <span className="min-w-0 max-w-[45%] truncate">
+            <Byline itemKey={item.itemKey} />
+          </span>
         </span>
         <span className="flex shrink-0 items-center gap-1.5">
           <Pills item={item} />

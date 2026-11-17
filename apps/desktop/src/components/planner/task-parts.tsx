@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
+  CheckCircle2Icon,
   RepeatIcon,
   PinIcon,
   ChevronLeftIcon,
@@ -18,6 +19,8 @@ import { useVaultStore } from "@/stores/vault-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
 import { openToRead } from "./open-paper";
+import { useBack } from "@/stores/back-store";
+import { backToPlanner } from "@/lib/plan/plan-store";
 import {
   Popover,
   PopoverContent,
@@ -741,9 +744,14 @@ export function QuickAdd({
 export function PriorityMenu({
   priority,
   onChange,
+  done,
+  onDone,
 }: {
   priority: Priority;
   onChange: (p: Priority) => void;
+  /** A project: finished, or not. */
+  done?: boolean;
+  onDone?: (done: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -754,13 +762,21 @@ export function PriorityMenu({
           aria-label="Priority"
           className="flex h-7 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-muted"
         >
-          <FlagIcon
-            className="size-3.5"
-            style={{ color: PRIORITY_COLOR[priority] }}
-            fill={priority ? PRIORITY_COLOR[priority] : "none"}
-          />
-          <span className={cn(!priority && "text-muted-foreground")}>
-            {priority ? PRIORITY_LABEL[priority] : "Priority"}
+          {done ? (
+            <CheckCircle2Icon className="size-3.5 text-emerald-600" />
+          ) : (
+            <FlagIcon
+              className="size-3.5"
+              style={{ color: PRIORITY_COLOR[priority] }}
+              fill={priority ? PRIORITY_COLOR[priority] : "none"}
+            />
+          )}
+          <span className={cn(!priority && !done && "text-muted-foreground")}>
+            {done
+              ? "Completed"
+              : priority
+                ? PRIORITY_LABEL[priority]
+                : "Priority"}
           </span>
         </button>
       </PopoverTrigger>
@@ -772,6 +788,22 @@ export function PriorityMenu({
             setOpen(false);
           }}
         />
+        {onDone && (
+          <>
+            <div className="my-1 h-px bg-border" />
+            <button
+              type="button"
+              onClick={() => {
+                onDone(!done);
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted"
+            >
+              <CheckCircle2Icon className="size-3.5 text-emerald-600" />
+              {done ? "Not completed" : "Mark as completed"}
+            </button>
+          </>
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -822,8 +854,11 @@ function Pins({
               aria-label={`Open the project ${titleOf(p)}`}
               onClick={async () => {
                 const root = projectOf(p) as string;
+                const fromPlanner = !useDocumentStore.getState().projectRoot;
                 await useDocumentStore.getState().openProject(root);
                 useProjectStore.getState().addRecentProject(root);
+                if (fromPlanner)
+                  useBack.getState().set("Back to Planner", backToPlanner);
               }}
               className="rounded px-1 font-medium text-[11px] text-primary hover:bg-primary/10"
             >
@@ -837,7 +872,11 @@ function Pins({
               aria-label={`Read ${titleOf(p)}`}
               onClick={() => {
                 const paper = paperOf(p);
-                if (paper) openToRead(paper.key, paper.title);
+                if (!paper) return;
+                if (!useDocumentStore.getState().projectRoot) {
+                  useBack.getState().set("Back to Planner", backToPlanner);
+                }
+                openToRead(paper.key, paper.title);
               }}
               className="rounded px-1 font-medium text-[11px] text-primary hover:bg-primary/10"
             >

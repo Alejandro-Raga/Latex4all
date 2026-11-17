@@ -39,9 +39,12 @@ import {
   projectPriority,
   setProjectPriority,
   type Priority,
+  projectDone,
+  setProjectDone,
 } from "@/lib/plan/plan-file";
 import {
   INBOX,
+  backToPlanner,
   READING_LIST,
   isProjectKey,
   useOwnLists,
@@ -62,6 +65,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
+import { useBack } from "@/stores/back-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { completeDrag, dueOn, moveToPlan } from "./plan-actions";
 import { type DragTask, PlannerDnd, useDropArea } from "./planner-dnd";
@@ -115,12 +119,34 @@ interface ProjectGroup {
 const DAY = 86_400_000;
 
 /** The project list split into groups that follow the chosen order. */
+/** Finished projects apart, at the end; the rest grouped by the order. */
 function groupProjects(
+  projects: PlanList[],
+  sort: ProjectSort,
+  stats: Parameters<typeof groupOpen>[2],
+): ProjectGroup[] {
+  const done = projects.filter((p) => stats[p.key]?.done);
+  const open = projects.filter((p) => !stats[p.key]?.done);
+  return [
+    ...groupOpen(open, sort, stats),
+    ...(done.length
+      ? [{ key: "completed", title: "Completed", items: done }]
+      : []),
+  ];
+}
+
+function groupOpen(
   projects: PlanList[],
   sort: ProjectSort,
   stats: Record<
     PlanKey,
-    { open: number; due: number; next?: string; priority?: Priority }
+    {
+      open: number;
+      due: number;
+      next?: string;
+      priority?: Priority;
+      done?: boolean;
+    }
   >,
   now = Date.now(),
 ): ProjectGroup[] {
@@ -343,6 +369,7 @@ export function PlannerView() {
         next?: string;
         deadline?: string;
         priority: Priority;
+        done: boolean;
       }
     > = {};
     const smart: Record<SmartFilter, number> = {
@@ -377,6 +404,7 @@ export function PlannerView() {
         next,
         deadline,
         priority: plan ? projectPriority(plan) : 0,
+        done: plan ? projectDone(plan) : false,
       };
       // Papers to read by a date count with the tasks.
       const toRead = plan
@@ -668,7 +696,11 @@ export function PlannerView() {
                     label={p.name}
                     count={stats.plans[p.key]?.open}
                     deadline={stats.plans[p.key]?.deadline}
-                    priority={stats.plans[p.key]?.priority}
+                    priority={
+                      stats.plans[p.key]?.done
+                        ? undefined
+                        : stats.plans[p.key]?.priority
+                    }
                     alert={(stats.plans[p.key]?.due ?? 0) > 0}
                     active={"plan" in selected && selected.plan === p.key}
                     onClick={() => choose({ plan: p.key })}
@@ -728,6 +760,10 @@ export function PlannerView() {
                 priority={stats.plans[current.key]?.priority ?? 0}
                 onChange={(p) =>
                   void editPlan(current, (plan) => setProjectPriority(plan, p))
+                }
+                done={stats.plans[current.key]?.done}
+                onDone={(d) =>
+                  void editPlan(current, (plan) => setProjectDone(plan, d))
                 }
               />
             )}
@@ -1080,6 +1116,7 @@ function SideItem({
 async function openInEditor(root: string) {
   await useDocumentStore.getState().openProject(root);
   useProjectStore.getState().addRecentProject(root);
+  useBack.getState().set("Back to Planner", backToPlanner);
 }
 
 const LIST_COLORS = [

@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { leaveSharedProject } from "@/stores/collab-store";
 import {
+  CheckCircle2Icon,
   FolderPlusIcon,
   FlagIcon,
   BugIcon,
@@ -119,6 +120,7 @@ import { PlannerView } from "@/components/planner/planner-view";
 import {
   parsePlan,
   type Priority,
+  projectDone,
   projectPriority,
 } from "@/lib/plan/plan-file";
 import {
@@ -212,7 +214,9 @@ export function ProjectPicker() {
   const readerFull = useReaderFull((st) => st.on);
   const plannerAsked = usePlannerRequest((st) => st.asked);
   useEffect(() => {
-    if (plannerAsked) setActiveSection("planner");
+    if (!plannerAsked) return;
+    setActiveSection("planner");
+    usePlannerRequest.getState().done();
   }, [plannerAsked]);
   // A paper asked to open (from a reading list): to Library & Vault.
   useEffect(
@@ -657,14 +661,18 @@ export function ProjectPicker() {
   const planTexts = usePlanTexts(
     visibleProjects.map((p) => projectKey(p.path)),
   );
-  const priorities = useMemo(() => {
-    const out = new Map<string, number>();
+  const { priorities, done } = useMemo(() => {
+    const priorities = new Map<string, number>();
+    const done = new Set<string>();
     for (const p of visibleProjects) {
       const text = planTexts[projectKey(p.path)];
-      const level = text ? projectPriority(parsePlan(text)) : 0;
-      if (level) out.set(p.path, level);
+      if (!text) continue;
+      const plan = parsePlan(text);
+      const level = projectPriority(plan);
+      if (level) priorities.set(p.path, level);
+      if (projectDone(plan)) done.add(p.path);
     }
-    return out;
+    return { priorities, done };
   }, [visibleProjects, planTexts]);
 
   const projectGroups = useMemo(
@@ -677,6 +685,7 @@ export function ProjectPicker() {
         addedAt: new Map(Object.entries(addedAt)),
         createdAt: new Map(Object.entries(createdAt)),
         priorities,
+        done,
       }),
     [
       listedProjects,
@@ -686,6 +695,7 @@ export function ProjectPicker() {
       addedAt,
       createdAt,
       priorities,
+      done,
     ],
   );
 
@@ -1124,6 +1134,7 @@ export function ProjectPicker() {
                                       priority={
                                         priorities.get(project.path) ?? 0
                                       }
+                                      completed={done.has(project.path)}
                                       showFolder={!showFolders}
                                       isFavorite={favorites.includes(
                                         project.path,
@@ -1964,8 +1975,11 @@ function ProjectPreviewCard({
   actions,
   priority = 0,
   showFolder = false,
+  completed = false,
 }: {
   priority?: number;
+  /** Marked as completed in its plan. */
+  completed?: boolean;
   /** Folders aren't shown (another order): the card says its folder. */
   showFolder?: boolean;
   project: RecentProject;
@@ -2105,7 +2119,13 @@ function ProjectPreviewCard({
               >
                 {project.name}
               </button>
-              {priority > 0 && (
+              {completed && (
+                <CheckCircle2Icon
+                  className="size-3.5 shrink-0 text-emerald-600"
+                  aria-label="Completed"
+                />
+              )}
+              {!completed && priority > 0 && (
                 <FlagIcon
                   className="size-3 shrink-0"
                   style={{ color: PRIORITY_COLOR[priority as Priority] }}

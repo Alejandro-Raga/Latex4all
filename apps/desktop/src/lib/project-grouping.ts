@@ -43,6 +43,8 @@ export interface GroupingInput<T extends SortableProject> {
   createdAt?: ReadonlyMap<string, number>;
   /** Path to its priority, 1 (low) to 4 (highest). Absent: none. */
   priorities?: ReadonlyMap<string, number>;
+  /** Projects marked as completed. */
+  done?: ReadonlySet<string>;
 }
 
 export const FAVORITES_LABEL = "Favourites";
@@ -83,6 +85,7 @@ export function groupProjects<T extends SortableProject>({
   addedAt,
   createdAt,
   priorities,
+  done,
 }: GroupingInput<T>): ProjectGroup<T>[] {
   const compare =
     sort === "added"
@@ -102,13 +105,19 @@ export function groupProjects<T extends SortableProject>({
   if (sort === "priority") {
     const labels = ["", "Low", "Medium", "High", "Highest"];
     for (const level of [4, 3, 2, 1, 0]) {
-      const here = rest.filter((p) => (priorities?.get(p.path) ?? 0) === level);
+      const here = rest.filter(
+        (p) => !done?.has(p.path) && (priorities?.get(p.path) ?? 0) === level,
+      );
       if (here.length === 0) continue;
       groups.push({
         key: `priority:${level}`,
         label: level ? `${labels[level]} priority` : "No priority",
         projects: here,
       });
+    }
+    const finished = rest.filter((p) => done?.has(p.path));
+    if (finished.length) {
+      groups.push({ key: "completed", label: "Completed", projects: finished });
     }
     return groups;
   }

@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from "react";
 import {
+  CopyIcon,
   RepeatIcon,
   FolderPlusIcon,
   ArrowUpFromLineIcon,
@@ -36,6 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { daysUntil, dayFromToday } from "@/lib/plan/dates";
 import {
+  detached,
   childRef,
   addSection,
   addTask,
@@ -74,6 +76,7 @@ import {
   readingItems,
   workTasks,
 } from "@/lib/plan/reading";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   dropOnSection,
@@ -241,8 +244,12 @@ function TaskMenu({
   const sections = workSections(plan).filter(
     (s) => s.index !== taskRef.section,
   );
+  // Only nearby tasks (its own section): dragging reaches the rest.
   const others = workTasks(plan).filter(
-    (t) => !t.task.done && !sameRef(t.ref, taskRef),
+    (t) =>
+      t.ref.section === taskRef.section &&
+      !t.task.done &&
+      !sameRef(t.ref, taskRef),
   );
   const drag: DragTask = { list, ref: taskRef, label: task.title };
   return (
@@ -340,7 +347,7 @@ function TaskMenu({
               Make subtask of
             </ContextMenuSubTrigger>
             <ContextMenuSubContent className="max-h-72 w-60 overflow-y-auto">
-              {others.slice(0, 30).map((t) => (
+              {others.slice(0, 8).map((t) => (
                 <ContextMenuItem
                   key={`${t.ref.section}-${t.ref.item}`}
                   onClick={() => edit((p) => nestTask(p, taskRef, t.ref))}
@@ -350,9 +357,13 @@ function TaskMenu({
                   </span>
                 </ContextMenuItem>
               ))}
+              <p className="px-2 py-1.5 text-[11px] text-muted-foreground">
+                Or drag it onto any task.
+              </p>
             </ContextMenuSubContent>
           </ContextMenuSub>
         )}
+        <DuplicateMenu list={list} plan={plan} task={task} />
         <ContextMenuItem onClick={() => void makeProject(list, taskRef)}>
           <FolderPlusIcon className="size-3.5" />
           Make it a project
@@ -1605,5 +1616,59 @@ function SectionDate({
         )
       }
     />
+  );
+}
+
+/** "Duplicate to ▸": a copy, subtasks and all, in a section or another list. */
+function DuplicateMenu({
+  list,
+  plan,
+  task,
+}: {
+  list: PlanList;
+  plan: Plan;
+  task: Task;
+}) {
+  const lists = usePlanLists().filter((l) => l.key !== list.key);
+  const sections = workSections(plan);
+  const copy = (target: PlanList, section?: number) =>
+    void editPlan(target, (p) => {
+      const into = section ?? workSections(p)[0]?.index ?? 0;
+      return addTask(
+        p,
+        { ...detached(task), done: false, doneOn: undefined },
+        into,
+      );
+    }).then(() => toast.success(`Duplicated to ${target.name}`));
+  return (
+    <ContextMenuSub>
+      <ContextMenuSubTrigger>
+        <CopyIcon className="size-3.5" />
+        Duplicate to
+      </ContextMenuSubTrigger>
+      <ContextMenuSubContent className="max-h-80 w-56 overflow-y-auto">
+        {sections.length === 0 ? (
+          <ContextMenuItem onClick={() => copy(list, 0)}>
+            This list
+          </ContextMenuItem>
+        ) : (
+          sections.map((sec) => (
+            <ContextMenuItem
+              key={sec.index}
+              onClick={() => copy(list, sec.index)}
+            >
+              <span className="truncate">{sectionName(sec.title)}</span>
+            </ContextMenuItem>
+          ))
+        )}
+        {lists.length > 0 && <ContextMenuSeparator />}
+        {lists.map((l) => (
+          <ContextMenuItem key={l.key} onClick={() => copy(l)}>
+            <ProjectIcon list={l} className="size-3.5" />
+            <span className="truncate">{l.name}</span>
+          </ContextMenuItem>
+        ))}
+      </ContextMenuSubContent>
+    </ContextMenuSub>
   );
 }
