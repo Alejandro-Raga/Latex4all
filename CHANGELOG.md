@@ -23,6 +23,8 @@ tag.
 
 ### Added
 
+- Planner: an Overview of every list and project, each with its
+  sections, what's open in them and what's next.
 - Planner: right-click a task and choose Make it a project. It gets a
   folder of its own; its subtasks become the project's tasks, and its
   date and priority the project's deadline and priority.

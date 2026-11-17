@@ -1229,6 +1229,7 @@ export type SmartFilter =
   | "week"
   | "calendar"
   | "matrix"
+  | "overview"
   | "reading"
   | "all"
   | "completed";
@@ -1239,6 +1240,7 @@ export const SMART_LABEL: Record<SmartFilter, string> = {
   week: "Next 7 days",
   calendar: "Calendar",
   matrix: "Matrix",
+  overview: "Overview",
   reading: "Reading list",
   all: "All tasks",
   completed: "Completed",
@@ -1398,7 +1400,7 @@ export function SmartView({
   }
 
   const empty: Record<
-    Exclude<SmartFilter, "reading" | "calendar" | "matrix">,
+    Exclude<SmartFilter, "reading" | "calendar" | "matrix" | "overview">,
     string
   > = {
     today: "Nothing due today.",

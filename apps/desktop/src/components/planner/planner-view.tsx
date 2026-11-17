@@ -1,5 +1,6 @@
 import { type ReactNode, useMemo, useState } from "react";
 import {
+  LayoutDashboardIcon,
   FlagIcon,
   Grid2x2Icon,
   ArrowUpDownIcon,
@@ -76,6 +77,7 @@ import {
 } from "./plan-views";
 import { CalendarView } from "./calendar-view";
 import { MatrixView, quadrantOf } from "./matrix-view";
+import { OverviewView } from "./overview-view";
 import { TimelineView } from "./timeline-view";
 import { ProjectIcon, typeColor, listColor } from "./project-icon";
 import {
@@ -227,6 +229,10 @@ const SMART: Record<SmartFilter, { color: string; icon: ReactNode }> = {
     color: "var(--destructive)",
     icon: <Grid2x2Icon className="size-4" />,
   },
+  overview: {
+    color: "var(--chart-2)",
+    icon: <LayoutDashboardIcon className="size-4" />,
+  },
   reading: {
     color: "color-mix(in oklab, var(--chart-4) 50%, var(--chart-5))",
     icon: <BookOpenIcon className="size-4" />,
@@ -334,6 +340,7 @@ export function PlannerView() {
       week: 0,
       calendar: 0,
       matrix: 0,
+      overview: 0,
       reading: 0,
       all: 0,
       completed: 0,
@@ -407,7 +414,9 @@ export function PlannerView() {
   // The calendar and boards take the whole width.
   const fullBleed =
     ("smart" in selected &&
-      (selected.smart === "calendar" || selected.smart === "matrix")) ||
+      (selected.smart === "calendar" ||
+        selected.smart === "matrix" ||
+        selected.smart === "overview")) ||
     (!!current && mode === "board" && tab !== "timeline");
   const choose = (s: Selection) => {
     select(s);
@@ -433,9 +442,11 @@ export function PlannerView() {
               ? "Every project's dates in one place"
               : selected.smart === "matrix"
                 ? "By importance and urgency. Drag a task to change it."
-                : selected.smart === "completed"
-                  ? "What you've finished, most recent first"
-                  : `${count} ${selected.smart === "reading" ? "to read" : count === 1 ? "task" : "tasks"}`,
+                : selected.smart === "overview"
+                  ? "Every list and project, section by section"
+                  : selected.smart === "completed"
+                    ? "What you've finished, most recent first"
+                    : `${count} ${selected.smart === "reading" ? "to read" : count === 1 ? "task" : "tasks"}`,
       };
     }
     if (!current) return { title: "", color: "#64748b", icon: null, sub: "" };
@@ -521,16 +532,18 @@ export function PlannerView() {
             ))}
             <NewList onMade={(key) => choose({ plan: key })} />
             <span className="my-1.5 h-px bg-border" />
-            {(["reading", "all", "completed"] as SmartFilter[]).map((f) => (
-              <SmartItem
-                key={f}
-                filter={f}
-                count={f === "completed" ? undefined : stats.smart[f]}
-                active={"smart" in selected && selected.smart === f}
-                onClick={() => choose({ smart: f })}
-                onDrop={f === "completed" ? completeDrag : undefined}
-              />
-            ))}
+            {(["overview", "reading", "all", "completed"] as SmartFilter[]).map(
+              (f) => (
+                <SmartItem
+                  key={f}
+                  filter={f}
+                  count={f === "completed" ? undefined : stats.smart[f]}
+                  active={"smart" in selected && selected.smart === f}
+                  onClick={() => choose({ smart: f })}
+                  onDrop={f === "completed" ? completeDrag : undefined}
+                />
+              ),
+            )}
           </nav>
           <div className="flex items-center px-4 pt-3 pb-1">
             <span className="flex-1 font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">
@@ -770,6 +783,11 @@ export function PlannerView() {
               <div className={cn(fullBleed ? "h-full" : "mx-auto max-w-3xl")}>
                 {"smart" in selected && selected.smart === "calendar" ? (
                   <CalendarView lists={lists} />
+                ) : "smart" in selected && selected.smart === "overview" ? (
+                  <OverviewView
+                    lists={lists}
+                    onOpen={(l) => choose({ plan: l.key })}
+                  />
                 ) : "smart" in selected && selected.smart === "matrix" ? (
                   <MatrixView
                     lists={lists}

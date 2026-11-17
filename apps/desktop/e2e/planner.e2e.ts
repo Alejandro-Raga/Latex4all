@@ -677,3 +677,25 @@ test("a task made a project, its subtasks the project's tasks", async ({
   ).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("the overview: every list's sections at a glance", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await open(page, "scenario=planner");
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /^Overview/ })
+    .click();
+  const main = page.getByRole("main");
+  const card = main.locator("section").filter({ hasText: "Paper 2" });
+  await expect(card.getByText("Waiting", { exact: false })).toBeVisible();
+  await expect(card.getByText("Comments from María")).toBeVisible();
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/overview.png` });
+  }
+  await card.getByRole("button", { name: /Paper 2/ }).click();
+  await expect(main.getByRole("heading", { name: "Paper 2" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
