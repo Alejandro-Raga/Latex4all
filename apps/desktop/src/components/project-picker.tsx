@@ -745,7 +745,7 @@ export function ProjectPicker() {
           </div>
         ) : (
           <>
-            <header className="flex h-[calc(48px+var(--titlebar-height))] shrink-0 flex-nowrap items-center gap-3 border-border/70 border-b bg-background px-5">
+            <header className="flex h-[calc(48px+var(--titlebar-height))] shrink-0 flex-nowrap items-center gap-3 border-border/70 border-b bg-background px-5 pt-[var(--titlebar-height)]">
               <div className="mr-auto flex min-w-0 items-center">
                 <h1 className="truncate font-semibold text-lg leading-none">
                   {activeSection === "settings" ? "Settings" : "All projects"}

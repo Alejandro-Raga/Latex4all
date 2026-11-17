@@ -269,7 +269,7 @@ export function EditorToolbar({
 
   if (fileType === "image") {
     return (
-      <div className="pane-header flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] min-w-0 items-center justify-between border-b px-2">
+      <div className="pane-header flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] min-w-0 items-center justify-between border-b px-2 pt-[var(--titlebar-height)]">
         <div className="flex min-w-0 max-w-[min(18rem,35vw)] items-center gap-1.5">
           <ImageIcon className="size-4 shrink-0 text-muted-foreground" />
           <span
@@ -367,7 +367,7 @@ export function EditorToolbar({
   }
 
   return (
-    <div className="pane-header flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] min-w-0 items-center gap-1 border-b px-2">
+    <div className="pane-header flex h-[calc(var(--workspace-topbar-height)+var(--titlebar-height))] min-w-0 items-center gap-1 border-b px-2 pt-[var(--titlebar-height)]">
       <div className="flex min-w-0 max-w-[min(18rem,35vw)] shrink items-center gap-1.5">
         <FileTextIcon className="size-4 shrink-0 text-muted-foreground" />
         <span

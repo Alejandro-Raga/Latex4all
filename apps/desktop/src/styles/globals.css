@@ -528,6 +528,35 @@
   background-image: var(--frame-wash);
   background-attachment: fixed;
 }
+/*
+ * The window's own title strip, kept apart: inside a card, which starts a
+ * few pixels lower, headers clear only what's left of it, and line up with
+ * the sidebar's.
+ */
+:root {
+  --frame-titlebar: var(--titlebar-height);
+}
+[data-background="gradient"] :is(.inset-panel, .inset-card) {
+  --titlebar-height: max(0px, calc(var(--frame-titlebar) - 6px));
+}
+/*
+ * The cards carry the frame's colors too, faintly: the same wash, fixed to
+ * the window, a third as strong, so the panels belong to the frame.
+ */
+[data-background="gradient"] :is(.inset-panel > *, .inset-card) {
+  position: relative;
+}
+[data-background="gradient"] :is(.inset-panel > *, .inset-card)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  background-image: var(--frame-wash);
+  background-attachment: fixed;
+  opacity: 0.35;
+}
 /* Content on a card of its own, inset into the frame. */
 [data-background="gradient"] .inset-card {
   margin: 6px 6px 6px 0;

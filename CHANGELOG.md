@@ -43,7 +43,10 @@ tag.
   and can be added, renamed and deleted (on the board too).
 - Settings → Appearance → Background: Gradient runs the theme's colors
   through the window's frame and sets the editor, the PDF and the panels
-  on cards inset into it; Flat keeps single colors.
+  on cards inset into it, faintly carrying the same colors; Flat keeps
+  single colors.
+- The editor's and the PDF's toolbars line up with the sidebars and the
+  side panels, and the start page's title with its sidebar.
 - Reading lists: Add from Zotero searches the library (or a collection)
   and adds papers with a click. The Planner's project list has a search
   box.
