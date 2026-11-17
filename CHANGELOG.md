@@ -42,9 +42,9 @@ tag.
   another to nest it. Subtasks show as a tree. Headings divide a project,
   and can be added, renamed and deleted (on the board too).
 - Settings → Appearance → Background: Gradient runs the theme's colors
-  through the window's frame and sets the editor, the PDF and the panels
-  on cards inset into it, faintly carrying the same colors; Flat keeps
-  single colors.
+  through the sidebars and the window's frame, and faintly through the
+  editor, the PDF and the panels, which fill their space edge to edge;
+  Flat keeps single colors.
 - The editor's and the PDF's toolbars line up with the sidebars and the
   side panels, and the start page's title with its sidebar.
 - Planner calendar: every dated task, milestone and deadline by month or

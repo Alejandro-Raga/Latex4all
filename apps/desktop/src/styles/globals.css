@@ -529,19 +529,10 @@
   background-attachment: fixed;
 }
 /*
- * The window's own title strip, kept apart: inside a card, which starts a
- * few pixels lower, headers clear only what's left of it, and line up with
- * the sidebar's.
- */
-:root {
-  --frame-titlebar: var(--titlebar-height);
-}
-[data-background="gradient"] :is(.inset-panel, .inset-card) {
-  --titlebar-height: max(0px, calc(var(--frame-titlebar) - 6px));
-}
-/*
- * The cards carry the frame's colors too, faintly: the same wash, fixed to
- * the window, a third as strong, so the panels belong to the frame.
+ * The content areas (editor, PDF, panels, the start page's main area) fill
+ * their space, edge to edge, and carry the frame's colors faintly: the same
+ * wash, fixed to the window, a third as strong. No cards inside the window:
+ * nothing to clash with the window's own rounded corners.
  */
 [data-background="gradient"] :is(.inset-panel > *, .inset-card) {
   position: relative;
@@ -552,33 +543,11 @@
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  border-radius: inherit;
   background-image: var(--frame-wash);
   background-attachment: fixed;
   opacity: 0.35;
 }
-/* Content on a card of its own, inset into the frame. */
-[data-background="gradient"] .inset-card {
-  margin: 6px 6px 6px 0;
-  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
-}
-/* A resizable pane: room around it, the card inside. */
-[data-background="gradient"] .inset-panel {
-  padding: 6px 3px;
-}
 [data-background="gradient"] .inset-panel > * {
-  /* Solid, whatever the pane is made of: the wash stays outside. */
   background-color: var(--background);
-  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
 }
 
-/* Between the cards, the gap is the frame: no line, the color shows. */
-[data-background="gradient"] .resize-gutter {
-  background-color: transparent;
-}
