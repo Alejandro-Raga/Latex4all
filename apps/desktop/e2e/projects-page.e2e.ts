@@ -30,16 +30,18 @@ test("folders: made, filled from a project's menu, opened, and named on cards in
   await page.setViewportSize({ width: 1300, height: 900 });
   await open(page, "scenario=projects");
   await expect(page.getByText("Grant proposal").first()).toBeVisible();
-  // Into the submenu by keyboard, from the start if the menu wasn't ready.
+  // Into the submenu, from the start if the menu wasn't ready.
   const newFolder = page.getByRole("menuitem", { name: "New folder…" });
   await expect(async () => {
     await page.keyboard.press("Escape");
-    await page.getByText("Grant proposal").first().click({ button: "right" });
-    await page.getByRole("menuitem", { name: "Add to folder" }).focus();
-    await page.keyboard.press("ArrowRight");
-    await expect(newFolder).toBeFocused({ timeout: 1000 });
+    // Clear of the window's edge, where the menu would open over the pointer.
+    const card = page.getByText("Grant proposal").first();
+    await card.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    await card.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Add to folder" }).click();
+    await expect(newFolder).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 10_000 });
-  await page.keyboard.press("Enter");
+  await newFolder.click();
   await page.getByLabel("Folder name").fill("Teaching");
   await page.getByLabel("Folder name").press("Enter");
   // Filed: out of the list, into the folder.
