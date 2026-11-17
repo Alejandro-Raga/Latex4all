@@ -86,6 +86,7 @@ import { currentAuthor, useAnnotationsStore } from "@/stores/annotations-store";
 import { createLogger } from "@/lib/debug/logger";
 import { addOwnPassageToNote } from "@/lib/vault/own-passage";
 import { filedToast, NotePicker } from "./group-picker";
+import { fullPath, readCompiledCopy } from "@/lib/compiled-copy";
 import { CompiledCopyButton } from "./compiled-copy-button";
 import { FullWindowButton } from "./full-window-button";
 
@@ -665,18 +666,25 @@ export function PdfPreview() {
     setExportChoiceOpen(false);
     const currentPdf = getCurrentPdfBytes();
     if (!currentPdf) return;
-    const mainFile = files.find(
-      (f) => f.name === "main.tex" || f.name === "document.tex",
-    );
-    const defaultName = mainFile
-      ? mainFile.name.replace(/\.tex$/, ".pdf")
-      : "document.pdf";
+    // Named after the project ("Thesis.pdf"), not its main file
+    // ("main.pdf"); or where each compile is already saved, if it is.
+    const project = projectRoot
+      ?.replace(/[\\/]+$/, "")
+      .split(/[\\/]/)
+      .pop();
+    const kept = projectRoot
+      ? await readCompiledCopy(projectRoot).catch(() => null)
+      : null;
+    const defaultName = `${project || "document"}.pdf`;
     // Open in the project's own folder. A bare filename leaves the dialog
     // wherever the OS was last pointed, which for most people is not where the
     // document lives.
-    const defaultPath = projectRoot
-      ? await join(projectRoot, defaultName)
-      : defaultName;
+    const defaultPath =
+      kept && projectRoot
+        ? fullPath(projectRoot, kept.path)
+        : projectRoot
+          ? await join(projectRoot, defaultName)
+          : defaultName;
     const filePath = await save({
       title: "Export PDF",
       defaultPath,

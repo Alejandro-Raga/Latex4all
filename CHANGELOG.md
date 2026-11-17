@@ -23,6 +23,8 @@ tag.
 
 - The theme button is back, at the bottom of the left menu.
 - The left menu has its own shade, apart from the file list beside it.
+- Export PDF suggests the project's name (or where each compile is saved),
+  not "main.pdf".
 - Highlights in a project's PDF have the same menu as on a Zotero paper:
   Add to note, and the notes they're already in. The note links back to
   the highlight; deleting it or changing its comment updates the note.
