@@ -27,12 +27,19 @@ import { isMilestonesSection } from "./milestones";
 
 export const READING_SECTION = "Reading list";
 
-export const STATUSES = ["to-read", "reading", "read", "reread"] as const;
+export const STATUSES = [
+  "to-read",
+  "reading",
+  "paused",
+  "read",
+  "reread",
+] as const;
 export type ReadingStatus = (typeof STATUSES)[number];
 
 export const STATUS_LABEL: Record<ReadingStatus, string> = {
   "to-read": "To read",
   reading: "Reading",
+  paused: "On hold",
   read: "Read",
   reread: "To re-read",
 };
@@ -41,6 +48,7 @@ export const STATUS_LABEL: Record<ReadingStatus, string> = {
 export const STATUS_HINT: Record<ReadingStatus, string> = {
   "to-read": "Not started",
   reading: "Started: set when you open it",
+  paused: "Started, set aside for now",
   read: "Finished",
   reread: "Read once, to go back to",
 };
@@ -48,6 +56,7 @@ export const STATUS_HINT: Record<ReadingStatus, string> = {
 export const STATUS_COLOR: Record<ReadingStatus, string> = {
   "to-read": "var(--muted-foreground)",
   reading: "var(--primary)",
+  paused: "var(--chart-3)",
   read: "var(--chart-2)",
   reread: "var(--chart-5)",
 };
@@ -349,7 +358,9 @@ function eachOf(
 /** Opened: being read, unless it's been read already. */
 export const markOpened = (plan: Plan, itemKey: string) =>
   eachOf(plan, itemKey, (item) =>
-    item.status === "to-read" || item.status === "reread"
+    item.status === "to-read" ||
+    item.status === "reread" ||
+    item.status === "paused"
       ? { status: "reading" }
       : null,
   );
@@ -365,13 +376,16 @@ export const markPage = (
     item.page === page &&
     (pages === undefined || item.pages === pages) &&
     item.status !== "to-read" &&
-    item.status !== "reread"
+    item.status !== "reread" &&
+    item.status !== "paused"
       ? null
       : {
           page,
           pages: pages ?? item.pages,
           status:
-            item.status === "to-read" || item.status === "reread"
+            item.status === "to-read" ||
+            item.status === "reread" ||
+            item.status === "paused"
               ? "reading"
               : item.status,
         },

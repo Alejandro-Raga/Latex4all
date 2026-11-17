@@ -42,6 +42,7 @@ Under the project's name, a small strip shows when the project is due, its next 
 
 You can go anywhere without closing your project:
 
+- Press ⌘1 for your projects, ⌘2 for Library & Vault, ⌘3 for the Planner and ⌘4 to go back to the open project. They're in ⌘K too.
 - The house at the top left takes you to the start page. **Planner** and **Library & Vault** are at the bottom of the project's sidebar.
 - On the start page, **Back to** and the project's name, at the top of the sidebar, return you to it as you left it.
 - After opening a project or a paper from the Planner, **Back to Planner** at the bottom of the window takes you back.
@@ -235,6 +236,7 @@ Open **Reading** in the Planner's sidebar to keep up your reading.
 - **Now reading** lists the papers you've started. Click **Resume** to open one at your bookmark.
 - **Today** shows papers with a "Read by" date that has come.
 - **Up next** is everything still to read, from every list. Drag papers to put them in the order you'll read them.
+- Drag a paper to another group to change its status: **On hold** for one you've set aside, **To re-read** for one to go back to, **Finished lately** once read.
 - **Finished lately** shows what you've read in the last two weeks.
 - Add a paper by its title, DOI or a link, or with **Add from Zotero**. Papers added here are general reading; a project's papers go in its own **Reading** tab. You can also right-click a paper in the Zotero library or the vault and choose **Add to reading list**.
 - The circle next to a paper shows how far you are. Click it to change the status. Hover a paper and click **Read by** to give it a date.
@@ -301,6 +303,7 @@ On Windows and Linux, use Ctrl where it says ⌘.
 | ⌘Y / ⌘N | Keep / undo all of the assistant's changes |
 | ⌘⇧X | Ask about part of the PDF |
 | ⌘⇧A | Add a task |
+| ⌘1, 2, 3, 4 | Projects, Library & Vault, Planner, back to the project |
 | ⌘F | Read in full window (Library & Vault) |
 | ⌘⌥1, 2, 3, 4 | Zotero library, Vault, Notes, Plan panels |
 | ⌘⇧[ / ⌘⇧] | Previous / next PDF tab |

@@ -1621,7 +1621,7 @@ export function Sidebar({
                 size="icon"
                 className="size-6"
                 onClick={() => useNav.getState().goHome("planner")}
-                title="Planner"
+                title="Planner (⌘3)"
                 aria-label="Planner"
               >
                 <ListTodoIcon className="size-3.5" />
@@ -1631,7 +1631,7 @@ export function Sidebar({
                 size="icon"
                 className="size-6"
                 onClick={() => useNav.getState().goHome("library")}
-                title="Library & Vault"
+                title="Library & Vault (⌘2)"
                 aria-label="Library & Vault"
               >
                 <LibraryIcon className="size-3.5" />

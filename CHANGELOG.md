@@ -23,6 +23,13 @@ tag.
 
 ### Added
 
+- Go anywhere from anywhere: ⌘1 projects, ⌘2 Library & Vault, ⌘3
+  Planner, ⌘4 back to the open project (Ctrl on Windows); also in ⌘K.
+- Reading: drag papers between Now reading, On hold, Up next, To re-read
+  and Finished to change their status. On hold is new, for papers set
+  aside for now; To re-read has its own group.
+- Right-click a project, in the Planner or on the projects page, to set
+  its priority or mark it completed.
 - Move around without closing your project: the home button, Planner
   and Library & Vault (at the bottom of the project's sidebar) take you
   there with the project kept open, just as you left it; "Back to …" at

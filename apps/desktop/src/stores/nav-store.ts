@@ -19,12 +19,16 @@ export const useNav = create<{
   away: boolean;
   /** Which part of the start page to show on getting there. */
   section: HomeSection | null;
+  /** Counts the asks, so asking for the same part again still goes there. */
+  asked: number;
   goHome: (section?: HomeSection) => void;
   backToProject: () => void;
 }>((set) => ({
   away: false,
   section: null,
-  goHome: (section) => set({ away: true, section: section ?? null }),
+  asked: 0,
+  goHome: (section) =>
+    set((s) => ({ away: true, section: section ?? null, asked: s.asked + 1 })),
   backToProject: () => set({ away: false, section: null }),
 }));
 
@@ -55,4 +59,36 @@ export async function goToProject(root: string) {
   await doc.openProject(root);
   const { useProjectStore } = await import("@/stores/project-store");
   useProjectStore.getState().addRecentProject(root);
+}
+
+/** The app's parts, from anywhere: ⌘1 projects, ⌘2 Library & Vault, ⌘3
+ *  Planner, ⌘4 back to the open project (Ctrl on Windows and Linux). */
+export const PLACES: {
+  key: string;
+  section: HomeSection | null;
+  label: string;
+}[] = [
+  { key: "1", section: "projects", label: "All projects" },
+  { key: "2", section: "library", label: "Library & Vault" },
+  { key: "3", section: "planner", label: "Planner" },
+  { key: "4", section: null, label: "Back to the project" },
+];
+
+export function goToPlace(section: HomeSection | null) {
+  if (section) useNav.getState().goHome(section);
+  else if (useDocumentStore.getState().projectRoot) {
+    useNav.getState().backToProject();
+  }
+}
+
+export function followPlaceKeys() {
+  const key = (e: KeyboardEvent) => {
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
+    const place = PLACES.find((p) => p.key === e.key);
+    if (!place) return;
+    e.preventDefault();
+    goToPlace(place.section);
+  };
+  window.addEventListener("keydown", key);
+  return () => window.removeEventListener("keydown", key);
 }

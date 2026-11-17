@@ -82,6 +82,7 @@ import {
 import { CalendarView } from "./calendar-view";
 import { MatrixView, quadrantOf } from "./matrix-view";
 import { OverviewView } from "./overview-view";
+import { ProjectPriorityMenu } from "./project-priority-menu";
 import { useMoveInboxReading } from "./reading-move";
 import { TimelineView } from "./timeline-view";
 import { ProjectIcon, typeColor, listColor } from "./project-icon";
@@ -713,12 +714,15 @@ export function PlannerView() {
                     onDrop={(d) => moveToPlan(d, p)}
                     menu={
                       p.root ? (
-                        <ContextMenuItem
-                          onClick={() => void openInEditor(p.root as string)}
-                        >
-                          <SquarePenIcon className="size-3.5" />
-                          Open in editor
-                        </ContextMenuItem>
+                        <>
+                          <ContextMenuItem
+                            onClick={() => void openInEditor(p.root as string)}
+                          >
+                            <SquarePenIcon className="size-3.5" />
+                            Open in editor
+                          </ContextMenuItem>
+                          <ProjectPriorityMenu root={p.root} name={p.name} />
+                        </>
                       ) : undefined
                     }
                   />

@@ -15,10 +15,22 @@ import {
   READING_LIST,
   usePlanTexts,
 } from "@/lib/plan/plan-store";
-import { type ReadingItem, readingItems } from "@/lib/plan/reading";
+import {
+  type ReadingItem,
+  type ReadingStatus,
+  readingItems,
+} from "@/lib/plan/reading";
+import { cn } from "@/lib/utils";
 import { useBookmarkStore } from "@/stores/bookmark-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { contextOf } from "./plan-views";
+import {
+  type DragTask,
+  DropMarker,
+  useDropArea,
+  useTaskDnd,
+  useTaskDrag,
+} from "./planner-dnd";
 import {
   AddPaper,
   Byline,
@@ -57,14 +69,29 @@ function weekStart(now = new Date()) {
 function Section({
   title,
   count,
+  status,
+  onDrop,
   children,
 }: {
   title: string;
   count?: number;
+  /** Papers dropped here take this status. */
+  status?: ReadingStatus;
+  onDrop?: (d: DragTask) => void;
   children: React.ReactNode;
 }) {
+  const drop = useDropArea(`home:${status ?? title}`, {
+    accepts: "reading",
+    onDrop: (d) => onDrop?.(d),
+  });
   return (
-    <section className="pt-5">
+    <section
+      ref={onDrop ? drop.ref : undefined}
+      className={cn(
+        "mt-5 rounded-lg transition-colors",
+        onDrop && drop.over && "bg-accent/60 ring-1 ring-primary/40",
+      )}
+    >
       <h2 className="flex items-center gap-2 border-border border-b px-1 pb-1.5 font-semibold text-[15px]">
         {title}
         {count !== undefined && (
@@ -79,11 +106,30 @@ function Section({
 }
 
 /** A paper being read: where you are, and a way back to it. */
-function NowReading({ row }: { row: Row }) {
+function NowReading({
+  row,
+  onDropHere,
+}: {
+  row: Row;
+  onDropHere: (d: DragTask) => void;
+}) {
   const { item, list, context } = row;
   const at = item.bookmark ?? item.page;
+  const dnd = useTaskDnd(
+    `now:${row.id}`,
+    { list, ref: item.ref, reading: true, label: item.title },
+    { accepts: "reading", onDrop: (d) => onDropHere(d) },
+  );
   return (
-    <div className="group flex items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-muted/70">
+    <div
+      ref={dnd.ref}
+      {...(dnd.handlers as React.HTMLAttributes<HTMLDivElement>)}
+      className={cn(
+        "group relative flex cursor-default items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-muted/70",
+        dnd.dragging && "opacity-30",
+      )}
+    >
+      <DropMarker zone={dnd.over} />
       <StatusMarker
         item={item}
         onChange={(s) => void setStatus(list, item.ref, s)}
@@ -195,10 +241,27 @@ export function ReadingHome({ lists }: { lists: PlanList[] }) {
       daysUntil(r.item.task.due) <= 0,
   );
   const queued = rows.filter(
-    (r) =>
-      (r.item.status === "to-read" || r.item.status === "reread") &&
-      !dueToday.includes(r),
+    (r) => r.item.status === "to-read" && !dueToday.includes(r),
   );
+  const paused = rows.filter((r) => r.item.status === "paused");
+  const again = rows.filter(
+    (r) => r.item.status === "reread" && !dueToday.includes(r),
+  );
+  // While a paper is dragged, every group shows, to drop it in.
+  const dragging = useTaskDrag((st) => !!st.drag?.reading);
+  const rowOf = (d: DragTask) =>
+    rows.find(
+      (r) =>
+        r.list.key === d.list.key &&
+        r.item.ref.section === d.ref.section &&
+        r.item.ref.item === d.ref.item,
+    );
+  const toStatus = (status: ReadingStatus) => (d: DragTask) => {
+    const row = rowOf(d);
+    if (row && row.item.status !== status) {
+      void setStatus(row.list, row.item.ref, status);
+    }
+  };
   // Your order first; papers not placed yet after them, as their lists have them.
   const rank = (r: Row) => {
     const i = order.indexOf(r.id);
@@ -219,6 +282,14 @@ export function ReadingHome({ lists }: { lists: PlanList[] }) {
   );
 
   const move = (dragged: string, target: Row, before: boolean) => {
+    // From another group: up next, now.
+    const fromElsewhere = rows.find(
+      (r) =>
+        `${r.list.key}|${r.item.ref.section}:${r.item.ref.item}` === dragged,
+    );
+    if (fromElsewhere && fromElsewhere.item.status !== "to-read") {
+      void setStatus(fromElsewhere.list, fromElsewhere.item.ref, "to-read");
+    }
     const from = upNext.find(
       (r) =>
         `${r.list.key}|${r.item.ref.section}:${r.item.ref.item}` === dragged,
@@ -240,10 +311,34 @@ export function ReadingHome({ lists }: { lists: PlanList[] }) {
         <ZoteroPicker list={READING_LIST} listed={listed} />
       </div>
       {goal > 0 && <Goal finished={finishedThisWeek} goal={goal} />}
-      {reading.length > 0 && (
-        <Section title="Now reading" count={reading.length}>
+      {(reading.length > 0 || dragging) && (
+        <Section
+          title="Now reading"
+          count={reading.length}
+          status="reading"
+          onDrop={toStatus("reading")}
+        >
           {reading.map((r) => (
-            <NowReading key={r.id} row={r} />
+            <NowReading key={r.id} row={r} onDropHere={toStatus("reading")} />
+          ))}
+        </Section>
+      )}
+      {(paused.length > 0 || dragging) && (
+        <Section
+          title="On hold"
+          count={paused.length}
+          status="paused"
+          onDrop={toStatus("paused")}
+        >
+          {paused.map((r) => (
+            <ReadingRow
+              key={r.id}
+              list={r.list}
+              item={r.item}
+              context={r.context}
+              where="home"
+              onDropHere={toStatus("paused")}
+            />
           ))}
         </Section>
       )}
@@ -260,7 +355,12 @@ export function ReadingHome({ lists }: { lists: PlanList[] }) {
           ))}
         </Section>
       )}
-      <Section title="Up next" count={upNext.length}>
+      <Section
+        title="Up next"
+        count={upNext.length}
+        status="to-read"
+        onDrop={toStatus("to-read")}
+      >
         {upNext.length === 0 ? (
           <p className="px-2 py-3 text-muted-foreground text-sm">
             Nothing waiting. Add a paper above, or right-click one in your
@@ -286,8 +386,32 @@ export function ReadingHome({ lists }: { lists: PlanList[] }) {
           ))
         )}
       </Section>
-      {recent.length > 0 && (
-        <Section title="Finished lately" count={recent.length}>
+      {(again.length > 0 || dragging) && (
+        <Section
+          title="To re-read"
+          count={again.length}
+          status="reread"
+          onDrop={toStatus("reread")}
+        >
+          {again.map((r) => (
+            <ReadingRow
+              key={r.id}
+              list={r.list}
+              item={r.item}
+              context={r.context}
+              where="home"
+              onDropHere={toStatus("reread")}
+            />
+          ))}
+        </Section>
+      )}
+      {(recent.length > 0 || dragging) && (
+        <Section
+          title="Finished lately"
+          count={recent.length}
+          status="read"
+          onDrop={toStatus("read")}
+        >
           {recent.map((r) => (
             <ReadingRow
               key={r.id}
@@ -295,6 +419,7 @@ export function ReadingHome({ lists }: { lists: PlanList[] }) {
               item={r.item}
               context={r.context}
               where="home"
+              onDropHere={toStatus("read")}
             />
           ))}
         </Section>

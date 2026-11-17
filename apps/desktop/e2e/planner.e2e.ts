@@ -864,7 +864,7 @@ test("reading: general papers apart from the Inbox, now reading and up next", as
     .first()
     .click();
   await expect(main.getByText("Now reading")).toBeVisible();
-  await expect(main.getByRole("button", { name: /Resume/ })).toBeVisible();
+  await expect(main.getByRole("button", { name: "Resume", exact: true })).toBeVisible();
   // No goal unless asked for in Settings.
   await expect(main.getByText("This week")).toHaveCount(0);
   if (process.env.SHOTS) {
@@ -914,5 +914,58 @@ test("a note pinned to a section, under its heading", async ({
   await expect(
     heading.getByRole("button", { name: "Absorptive capacity", exact: true }),
   ).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("reading: papers dragged between groups change status; on hold", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 900 });
+  await open(page, "scenario=planner");
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /^Reading/ })
+    .click();
+  const main = page.getByRole("main");
+  await main.getByLabel("Add a paper").fill("The economics of science");
+  await main.getByLabel("Add a paper").press("Enter");
+  await main
+    .getByRole("button", { name: "To read: mark as reading", exact: true })
+    .first()
+    .click();
+  await expect(main.getByText("Now reading")).toBeVisible();
+  // Dragged: every group shows, to drop it in.
+  const paper = main.getByText("The economics of science").first();
+  const a = await paper.boundingBox();
+  if (!a) throw new Error("not on screen");
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(a.x + 20, a.y + 20, { steps: 4 });
+  const hold = main.locator("section").filter({ hasText: "On hold" });
+  await expect(hold).toBeVisible();
+  const b = await hold.boundingBox();
+  if (!b) throw new Error("not on screen");
+  await page.mouse.move(b.x + b.width / 2, b.y + 12, { steps: 10 });
+  await page.mouse.up();
+  await expect
+    .poll(() => disk(page, "/appdata/planner/Reading.md"))
+    .toContain("The economics of science #reading/paused");
+  expect(errors).toEqual([]);
+});
+
+test("a project's priority from its right-click menu", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page
+    .getByRole("button", { name: /^Paper 2/ })
+    .click({ button: "right" });
+  const sub = page.getByRole("menuitem", { name: "Priority" });
+  await sub.hover();
+  await page.getByRole("menuitem", { name: "High", exact: true }).click();
+  await expect.poll(() => disk(page, PLAN)).toMatch(/priority: high/);
   expect(errors).toEqual([]);
 });

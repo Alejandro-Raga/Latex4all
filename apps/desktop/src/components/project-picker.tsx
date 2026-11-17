@@ -135,6 +135,7 @@ import {
 } from "@/components/planner/task-parts";
 import { useReaderFull } from "@/stores/reader-full-store";
 import { inProject, useNav } from "@/stores/nav-store";
+import { ProjectPriorityMenu } from "@/components/planner/project-priority-menu";
 import { useProjectFolders } from "@/stores/project-folders-store";
 import {
   afterMenu,
@@ -215,10 +216,11 @@ export function ProjectPicker() {
     () => useNav.getState().section ?? "projects",
   );
   const openRoot = useDocumentStore((st) => st.projectRoot);
-  const askedSection = useNav((st) => st.section);
+  const asked = useNav((st) => st.asked);
   useEffect(() => {
-    if (askedSection) setActiveSection(askedSection);
-  }, [askedSection]);
+    const wanted = useNav.getState().section;
+    if (asked && wanted) setActiveSection(wanted);
+  }, [asked]);
   // The Planner asked for (from the day's summary).
   const readerFull = useReaderFull((st) => st.on);
   const plannerAsked = usePlannerRequest((st) => st.asked);
@@ -1899,6 +1901,7 @@ function ProjectMenu({
       </ContextMenuItem>
       <ContextMenuItem onSelect={actions.onMove}>Move on disk…</ContextMenuItem>
       <MoveToFolderMenu path={project.path} onNew={actions.onNewFolder} />
+      <ProjectPriorityMenu root={project.path} name={project.name} />
       <ContextMenuSeparator />
       <ContextMenuItem onSelect={actions.onRemove}>Remove…</ContextMenuItem>
     </ContextMenuContent>

@@ -514,6 +514,7 @@ export function ReadingRow({
 const GROUPS: { status: ReadingStatus; title: string; folded?: boolean }[] = [
   { status: "reading", title: "Reading now" },
   { status: "to-read", title: "Up next" },
+  { status: "paused", title: "On hold" },
   { status: "reread", title: "To re-read" },
   { status: "read", title: "Read", folded: true },
 ];

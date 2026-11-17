@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Command } from "cmdk";
 import {
+  CornerUpLeftIcon,
   BrainIcon,
   BugIcon,
   FileIcon,
@@ -15,6 +16,7 @@ import {
   SettingsIcon,
   CircleHelpIcon,
 } from "lucide-react";
+import { goToPlace, PLACES } from "@/stores/nav-store";
 import { useHelp } from "@/components/help-view";
 import { useTheme } from "next-themes";
 import { create } from "zustand";
@@ -260,6 +262,16 @@ export function CommandPalette() {
                   onSelect={() => run(() => void syncProjectNote())}
                 />
               )}
+              {PLACES.filter((p) => p.section || projectRoot).map((p) => (
+                <Item
+                  key={p.key}
+                  icon={CornerUpLeftIcon}
+                  label={`Go to ${p.label === "Back to the project" ? "the project" : p.label}`}
+                  value={`Go to ${p.label} open switch`}
+                  hint={`⌘${p.key}`}
+                  onSelect={() => run(() => goToPlace(p.section))}
+                />
+              ))}
               <Item
                 icon={CircleHelpIcon}
                 label="Help"
