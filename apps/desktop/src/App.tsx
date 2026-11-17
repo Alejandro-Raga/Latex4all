@@ -257,22 +257,30 @@ export function App({ onReady }: { onReady?: () => void }) {
         <TooltipProvider>
           <ThemeBridge />
           <NativeWindowThemeBridge />
-          {/* Global macOS titlebar drag region — sits above all content */}
-          <div
-            data-tauri-drag-region
-            className="fixed inset-x-0 top-0 z-[9999] h-[var(--titlebar-height)]"
-          />
-          {/* The app's menu on the left everywhere; beside it, the part
-              you're in. The project stays as it was while you're elsewhere. */}
-          <div className="flex h-full">
-            <AppRail />
-            <div className="h-full min-w-0 flex-1">
-              {projectRoot && (
-                <div className={cn("h-full", away && "hidden")}>
-                  <WorkspaceWithClaude />
-                </div>
-              )}
-              {(!projectRoot || away) && <ProjectPicker />}
+          <div className="flex h-full flex-col">
+            {/* A bar across the top, as browsers have: the window's buttons
+                and a place to drag it by, in the frame's color. */}
+            <div
+              data-tauri-drag-region
+              className="app-titlebar h-[var(--titlebar-height)] shrink-0 bg-frame"
+            />
+            {/* The app's menu on the left everywhere; beside it, the part
+                you're in. The project stays as it was while you're
+                elsewhere. Below the bar, nothing needs to leave room for
+                the window's buttons. */}
+            <div
+              className="flex min-h-0 flex-1"
+              style={{ "--titlebar-height": "0px" } as React.CSSProperties}
+            >
+              <AppRail />
+              <div className="h-full min-w-0 flex-1">
+                {projectRoot && (
+                  <div className={cn("h-full", away && "hidden")}>
+                    <WorkspaceWithClaude />
+                  </div>
+                )}
+                {(!projectRoot || away) && <ProjectPicker />}
+              </div>
             </div>
           </div>
           <EnvironmentOnboarding />

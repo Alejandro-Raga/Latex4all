@@ -109,11 +109,8 @@ export function AppRail() {
     <nav
       aria-label="Latex4All"
       className={cn(
-        "app-rail flex shrink-0 flex-col border-r pt-[var(--titlebar-height)] transition-[width] duration-200 ease-out",
-        wide
-          ? "w-48 px-2"
-          : // On a Mac, wide enough for the window's three buttons above it.
-            cn("items-center px-1.5", mac ? "w-[76px]" : "w-12"),
+        "app-rail flex shrink-0 flex-col border-sidebar-border border-r bg-frame transition-[width] duration-200 ease-out",
+        wide ? "w-48 px-2" : "w-12 items-center px-1.5",
       )}
     >
       <div

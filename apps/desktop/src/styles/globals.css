@@ -573,16 +573,3 @@
     opacity: 0;
   }
 }
-
-/*
- * The app's menu on the far left: a shade apart from the sidebar beside it
- * (files, Planner lists), darker in dark themes and a touch greyer in light
- * ones, so the two read as separate columns.
- */
-.app-rail {
-  background-color: color-mix(in oklab, var(--sidebar) 93%, var(--foreground));
-  border-color: color-mix(in oklab, var(--sidebar-border) 70%, var(--foreground));
-}
-.theme-dark .app-rail {
-  background-color: color-mix(in oklab, var(--sidebar) 55%, black);
-}
