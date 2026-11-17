@@ -245,8 +245,10 @@ export function PaperReader({
   // read kept there (once the page has stayed put a moment).
   const itemKey = paper.zotero?.itemKey;
   useEffect(() => {
-    if (visible && itemKey) void noteReading(itemKey, "opened");
-  }, [visible, itemKey]);
+    if (!visible || !itemKey) return;
+    void noteReading(itemKey, "opened");
+    useBookmarkStore.getState().opened(itemKey, paper.label);
+  }, [visible, itemKey, paper.label]);
   const [pageCount, setPageCount] = useState<number | undefined>();
   const [readingPage, setReadingPage] = useState<number | undefined>();
   const placeKey = itemKey ?? paper.id;

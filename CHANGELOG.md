@@ -23,6 +23,8 @@ tag.
 
 ### Added
 
+- Library: Recently opened, at the top of the Zotero library, to go back
+  to the papers you were reading.
 - Planner: repeats of your own: every few days, weeks, months or years,
   on chosen days of the week, ending on a day or after some weeks. Typed
   too: "every 2 weeks", "every week on mon and thu", "weekdays".
@@ -152,11 +154,16 @@ tag.
 
 ### Changed
 
+- The Matrix is now the Eisenhower matrix, its boxes named plainly:
+  Urgent & important, Important, not urgent, Urgent, not important,
+  Neither.
 - Help rewritten as a plain manual, with steps for each task and every
   new Planner, Library and projects feature.
 
 ### Fixed
 
+- Timeline: labels of milestones close together, or close to the
+  deadline, no longer overlap; the "Next" line stays on one line.
 - A task's Date and Repeat buttons line up and look alike.
 - "Add to note" and other menus with submenus opened them out of sight,
   so a highlight or passage couldn't be filed in a note. They open

@@ -66,3 +66,32 @@ test("the vault opens on the whole vault's map there", async ({ page }) => {
     await map.screenshot({ path: `${process.env.SHOTS}/map-topics.png` });
   }
 });
+
+test("recently opened papers, at the top of the library", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "latex4all-bookmarks",
+      JSON.stringify({
+        state: {
+          places: {},
+          recent: [
+            { itemKey: "AAAA1111", label: "Absorptive capacity", at: 2 },
+            { itemKey: "BBBB2222", label: "The simple economics", at: 1 },
+          ],
+        },
+        version: 0,
+      }),
+    );
+  });
+  await page.setViewportSize({ width: 1300, height: 820 });
+  await page.goto("/e2e/harness.html?scenario=library");
+  await expect(page.getByText("Recently opened")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Absorptive capacity" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "The simple economics" }),
+  ).toBeVisible();
+});

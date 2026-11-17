@@ -29,31 +29,11 @@ export function quadrantOf(t: Task): Quadrant {
   return isUrgent(t) ? "squeeze" : "later";
 }
 
-const BOXES: { id: Quadrant; title: string; hint: string; color: string }[] = [
-  {
-    id: "do",
-    title: "Do first",
-    hint: "Important and urgent",
-    color: "var(--destructive)",
-  },
-  {
-    id: "schedule",
-    title: "Schedule",
-    hint: "Important, not urgent",
-    color: "var(--chart-1)",
-  },
-  {
-    id: "squeeze",
-    title: "Squeeze in",
-    hint: "Urgent, not important",
-    color: "var(--chart-4)",
-  },
-  {
-    id: "later",
-    title: "Later",
-    hint: "Neither",
-    color: "var(--muted-foreground)",
-  },
+const BOXES: { id: Quadrant; title: string; color: string }[] = [
+  { id: "do", title: "Urgent & important", color: "var(--destructive)" },
+  { id: "schedule", title: "Important, not urgent", color: "var(--chart-1)" },
+  { id: "squeeze", title: "Urgent, not important", color: "var(--chart-4)" },
+  { id: "later", title: "Neither", color: "var(--muted-foreground)" },
 ];
 
 /** What a task becomes, dropped in a box. */
@@ -111,14 +91,7 @@ export function MatrixView({
             <Column
               id={`matrix:${box.id}`}
               accepts="tasks"
-              title={
-                <span className="flex min-w-0 flex-col">
-                  <span className="font-semibold text-sm">{box.title}</span>
-                  <span className="font-normal text-[11px] text-muted-foreground">
-                    {box.hint}
-                  </span>
-                </span>
-              }
+              title={<span className="font-semibold text-sm">{box.title}</span>}
               color={box.color}
               count={inBox.length}
               onDrop={(d) => drop(d, box.id, plans)}

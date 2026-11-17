@@ -450,7 +450,7 @@ export function PlannerView() {
             : selected.smart === "calendar"
               ? "Every project's dates in one place"
               : selected.smart === "matrix"
-                ? "By importance and urgency. Drag a task to change it."
+                ? "High-priority tasks are important; tasks due within two days are urgent"
                 : selected.smart === "overview"
                   ? "Every list and project, section by section"
                   : selected.smart === "completed"

@@ -156,7 +156,7 @@ export function DueBadge({ due, icon }: { due: string; icon?: boolean }) {
   return (
     <span
       className={cn(
-        "flex shrink-0 items-center gap-1 text-[11px] tabular-nums",
+        "inline-flex shrink-0 items-center gap-1 text-[11px] tabular-nums",
         TONE_CLASS[tone],
       )}
     >

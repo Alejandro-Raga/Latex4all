@@ -8,9 +8,18 @@ interface Place {
   last?: number;
 }
 
+export interface RecentPaper {
+  itemKey: string;
+  label: string;
+  at: number;
+}
+
 interface BookmarkState {
   /** By paper (its Zotero item, or its id when it isn't in Zotero). */
   places: Record<string, Place>;
+  /** Papers opened lately, the latest first. */
+  recent: RecentPaper[];
+  opened: (itemKey: string, label: string) => void;
   setBookmark: (paper: string, page: number | undefined) => void;
   setLast: (paper: string, page: number) => void;
 }
@@ -20,6 +29,14 @@ export const useBookmarkStore = create<BookmarkState>()(
   persist(
     (set) => ({
       places: {},
+      recent: [],
+      opened: (itemKey, label) =>
+        set((s) => ({
+          recent: [
+            { itemKey, label, at: Date.now() },
+            ...s.recent.filter((r) => r.itemKey !== itemKey),
+          ].slice(0, 10),
+        })),
       setBookmark: (paper, page) =>
         set((s) => ({
           places: {

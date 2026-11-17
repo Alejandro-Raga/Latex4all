@@ -12,6 +12,7 @@ import { readFile } from "@tauri-apps/plugin-fs";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import { setReaderFull, useReaderFull } from "@/stores/reader-full-store";
+import { useBookmarkStore } from "@/stores/bookmark-store";
 
 const FULL_KEY =
   typeof navigator !== "undefined" && navigator.userAgent.includes("Mac")
@@ -705,6 +706,7 @@ export function QuickReferencePanel({
     zoteroSort,
     zoteroFilter,
   ]);
+  const recentPapers = useBookmarkStore((st) => st.recent).slice(0, 8);
   const selectedZoteroItemKey =
     selectedFile?.source === "zotero" ? selectedFile.itemKey : null;
 
@@ -807,6 +809,39 @@ export function QuickReferencePanel({
               className="min-h-0"
             >
               <div className="h-full overflow-y-auto p-2">
+                {recentPapers.length > 0 && (
+                  <FoldSection
+                    id="recent"
+                    title="Recently opened"
+                    count={recentPapers.length}
+                  >
+                    <div className="flex flex-col">
+                      {recentPapers.map((r) => (
+                        <button
+                          key={r.itemKey}
+                          type="button"
+                          onClick={() =>
+                            selectZoteroItem({
+                              key: r.itemKey,
+                              title: r.label,
+                            } as ZoteroItemSummary)
+                          }
+                          className={cn(
+                            "flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-left text-[13px] hover:bg-muted/70",
+                            selectedFile?.source === "zotero" &&
+                              selectedFile.itemKey === r.itemKey &&
+                              "bg-muted",
+                          )}
+                        >
+                          <FileTextIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                          <span className="min-w-0 flex-1 truncate">
+                            {r.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </FoldSection>
+                )}
                 <FoldSection
                   id="projects"
                   title="Projects"

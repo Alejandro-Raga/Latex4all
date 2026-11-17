@@ -608,18 +608,20 @@ test("the matrix: by importance and urgency, changed by dragging", async ({
   await open(page, "scenario=planner");
   await page
     .getByRole("navigation", { name: "Lists" })
-    .getByRole("button", { name: /^Matrix/ })
+    .getByRole("button", { name: /^Eisenhower matrix/ })
     .click();
   const main = page.getByRole("main");
   const box = (name: string) =>
     main.locator("div.group\\/heading").filter({ hasText: name });
   // High priority and overdue: do it first.
-  await expect(box("Do first").getByText("Draft the discussion")).toBeVisible();
-  await expect(box("Later").getByText("Reply to reviewers")).toBeVisible();
+  await expect(
+    box("Urgent & important").getByText("Draft the discussion"),
+  ).toBeVisible();
+  await expect(box("Neither").getByText("Reply to reviewers")).toBeVisible();
   await drag(
     page,
-    box("Later").getByText("Reply to reviewers"),
-    box("Schedule"),
+    box("Neither").getByText("Reply to reviewers"),
+    box("Important, not urgent"),
   );
   await expect
     .poll(() => disk(page, PLAN))

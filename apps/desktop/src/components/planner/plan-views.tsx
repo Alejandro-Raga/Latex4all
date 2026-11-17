@@ -1244,7 +1244,7 @@ export const SMART_LABEL: Record<SmartFilter, string> = {
   tomorrow: "Tomorrow",
   week: "Next 7 days",
   calendar: "Calendar",
-  matrix: "Matrix",
+  matrix: "Eisenhower matrix",
   overview: "Overview",
   reading: "Reading list",
   all: "All tasks",

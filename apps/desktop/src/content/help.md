@@ -114,6 +114,7 @@ Click a paper that has a PDF to read it. Inside a project it opens in a tab next
 - Click a link in the PDF, such as a citation, and press ⌘[ to come back.
 - Click the bookmark button at the top of the reader to mark the page where you stopped. The paper opens there next time, and its progress on your reading list follows the bookmark. Without a bookmark, it opens on the last page you had open.
 - On the **Library & Vault** page, click **Read in full window**, or press ⌘F, to hide the list, the vault and the sidebar. Press ⌘F or Esc to bring them back.
+- **Recently opened**, at the top of the Zotero library, lists the last papers you read. Click one to open it again.
 - To read offline, turn on **Keep PDFs for offline reading** in **Settings → Zotero**.
 
 ## Your vault
@@ -210,7 +211,7 @@ Switch between **List** and **Board** at the top. On the board, each section is 
 
 - **Today**, **Tomorrow** and **Next 7 days** show what is due in every list.
 - **Calendar** shows dated tasks, milestones, sections and deadlines by month or week. Drag something to another day to change its date. Click a day to see everything on it and add a task. **Export to calendar** saves your dates as a file that Apple Calendar, Google Calendar or Outlook can open.
-- **Matrix** sorts open tasks by importance and urgency. Important means high or highest priority; urgent means due within two days or overdue. Drag a task to another box to change its priority or date.
+- **Eisenhower matrix** puts open tasks in four boxes: urgent and important, important but not urgent, urgent but not important, and neither. A task is important if its priority is high or highest, and urgent if it's due within two days or overdue. Drag a task to another box to change its priority or date.
 - **Overview** shows each list and project as a card with its sections and what comes next. Click a card's name to open that list.
 - **All tasks** lists everything open, and **Completed** what you've finished.
 

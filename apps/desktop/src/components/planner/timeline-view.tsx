@@ -58,6 +58,34 @@ function Track({ items, due }: { items: Milestone[]; due?: string }) {
   const at = (iso: string) =>
     ((time(iso) - time(start)) / (time(end) - time(start))) * 100;
   const leftPct = (iso: string) => `${Math.min(97, Math.max(3, at(iso)))}%`;
+  // Milestones and the deadline, left to right; one close to the one before
+  // puts its label on the other side of the line, so labels don't overlap.
+  const markers = [
+    ...dated.map((m) => ({
+      key: `${m.ref.item}-${m.task.title}`,
+      kind: "milestone" as const,
+      title: m.task.title,
+      date: m.task.due,
+      done: m.task.done,
+    })),
+    ...(due
+      ? [
+          {
+            key: "deadline",
+            kind: "deadline" as const,
+            title: "Deadline",
+            date: due,
+            done: false,
+          },
+        ]
+      : []),
+  ]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((mk) => ({ ...mk, row: 0 }));
+  markers.forEach((mk, i) => {
+    const prev = markers[i - 1];
+    if (prev && at(mk.date) - at(prev.date) < 14) mk.row = prev.row ? 0 : 1;
+  });
   return (
     <div className="relative mx-2 mt-6 mb-10 h-20">
       {/* The line, done up to today. */}
@@ -75,50 +103,40 @@ function Track({ items, due }: { items: Milestone[]; due?: string }) {
           Today
         </span>
       </div>
-      {dated.map((m, i) => (
+      {markers.map((mk) => (
         <div
-          key={`${m.ref.item}-${m.task.title}`}
+          key={mk.key}
           className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
-          style={{ left: leftPct(m.task.due) }}
-          title={`${m.task.title} · ${short(m.task.due)}`}
+          style={{ left: leftPct(mk.date) }}
+          title={`${mk.title} · ${short(mk.date)}`}
         >
-          <DiamondIcon
-            className="size-4"
-            style={{ color: "var(--chart-4)" }}
-            fill={m.task.done ? "var(--chart-4)" : "var(--background)"}
-          />
+          {mk.kind === "deadline" ? (
+            <FlagIcon
+              className="size-4 text-destructive"
+              fill="var(--destructive)"
+            />
+          ) : (
+            <DiamondIcon
+              className="size-4"
+              style={{ color: "var(--chart-4)" }}
+              fill={mk.done ? "var(--chart-4)" : "var(--background)"}
+            />
+          )}
           <span
             className={cn(
               "absolute left-1/2 max-w-32 -translate-x-1/2 truncate whitespace-nowrap text-center text-[11px]",
-              i % 2 === 0 ? "top-5" : "bottom-5",
-              m.task.done && "text-muted-foreground line-through",
+              mk.row === 0 ? "top-5" : "bottom-5",
+              mk.kind === "deadline" && "font-medium text-destructive",
+              mk.done && "text-muted-foreground line-through",
             )}
           >
-            {m.task.title}
-            <span className="block text-[10px] text-muted-foreground">
-              {short(m.task.due)}
+            {mk.title}
+            <span className="block font-normal text-[10px] text-muted-foreground">
+              {short(mk.date)}
             </span>
           </span>
         </div>
       ))}
-      {due && (
-        <div
-          className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
-          style={{ left: leftPct(due) }}
-          title={`Deadline · ${short(due)}`}
-        >
-          <FlagIcon
-            className="size-4 text-destructive"
-            fill="var(--destructive)"
-          />
-          <span className="absolute top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-center font-medium text-[11px] text-destructive">
-            Deadline
-            <span className="block font-normal text-[10px] text-muted-foreground">
-              {short(due)}
-            </span>
-          </span>
-        </div>
-      )}
     </div>
   );
 }
@@ -218,7 +236,7 @@ export function TimelineView({ list }: { list: PlanList }) {
         <>
           <Track items={items} due={due} />
           {(next || due) && (
-            <p className="px-2 pb-2 text-muted-foreground text-xs">
+            <p className="flex flex-wrap items-center gap-x-1 px-2 pb-2 text-muted-foreground text-xs">
               {next && (
                 <>
                   Next:{" "}
@@ -249,7 +267,7 @@ export function TimelineView({ list }: { list: PlanList }) {
                   Deadline
                 </span>
                 <DueButton
-                  label="Deadline"
+                  ariaLabel="Deadline"
                   due={due}
                   onChange={(d) =>
                     void editPlan(list, (p) => setProjectDue(p, d))
