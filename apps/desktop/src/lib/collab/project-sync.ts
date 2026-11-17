@@ -11,7 +11,7 @@ import {
 } from "./project-doc";
 import type { Author } from "@/lib/annotations/types";
 import { noteDifferences } from "./concurrent-edits";
-import { isUnder, rejoined } from "./sync-choices";
+import { isUnder, rejoined, neverShared } from "./sync-choices";
 
 /** A file in the open project, as the sync sees it. */
 export interface LocalFile {
@@ -153,7 +153,7 @@ export class ProjectSync {
 
   /** Whether this computer leaves `path` out of the sync. */
   isNotSynced(path: string) {
-    return isUnder(path, this.notSynced);
+    return neverShared(path) || isUnder(path, this.notSynced);
   }
 
   /**

@@ -237,7 +237,7 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
                 continue;
             }
             copy_dir_recursive(&src_path, &dst_path)?;
-        } else {
+        } else if !left_out_of_build(&entry.file_name().to_string_lossy()) {
             copy_file(&src_path, &dst_path)?;
         }
     }
@@ -263,6 +263,8 @@ fn sync_source_files(src: &Path, dst: &Path) -> std::io::Result<()> {
                 continue;
             }
             sync_source_files(&src_path, &dst_path)?;
+        } else if left_out_of_build(&file_name.to_string_lossy()) {
+            continue;
         } else {
             let ext = src_path.extension().and_then(|e| e.to_str()).unwrap_or("");
             let is_artifact = matches!(
@@ -413,6 +415,15 @@ pub fn project_build_dir(project_dir: String) -> String {
 
 /// Copies a file, trying again for a moment while another program (a sync
 /// client, an antivirus) holds it, and saying which file when it can't.
+/// Hidden files (.git, .DS_Store, and copies a sync made of them, like
+/// ".git (conflicted copy)") and system clutter: never part of a document,
+/// and a hidden or read-only one can't be copied over on Windows.
+fn left_out_of_build(name: &str) -> bool {
+    name.starts_with('.')
+        || name.eq_ignore_ascii_case("Thumbs.db")
+        || name.eq_ignore_ascii_case("desktop.ini")
+}
+
 fn copy_file(src: &Path, dst: &Path) -> std::io::Result<u64> {
     let mut wait = 150;
     for _ in 0..5 {
@@ -423,6 +434,15 @@ fn copy_file(src: &Path, dst: &Path) -> std::io::Result<u64> {
             }
             other => return other.map_err(|e| with_path(e, src)),
         }
+    }
+    // Still refused: on Windows a hidden or read-only copy left in the build
+    // folder can't be written over, so it goes first (the original stays).
+    if let Ok(meta) = std::fs::metadata(dst) {
+        let mut perms = meta.permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        let _ = std::fs::set_permissions(dst, perms);
+        let _ = std::fs::remove_file(dst);
     }
     std::fs::copy(src, dst).map_err(|e| with_path(e, src))
 }
@@ -1699,6 +1719,23 @@ Postamble:
                 .unwrap(),
             "bottom"
         );
+    }
+
+    #[test]
+    fn hidden_files_and_clutter_stay_out_of_the_build() {
+        let src = tempfile::tempdir().unwrap();
+        let dst = tempfile::tempdir().unwrap();
+        for name in [".git", ".git (conflicted copy)", ".DS_Store", "Thumbs.db"] {
+            std::fs::write(src.path().join(name), "gitdir: elsewhere").unwrap();
+        }
+        std::fs::write(src.path().join("main.tex"), "doc").unwrap();
+        copy_dir_recursive(src.path(), dst.path()).unwrap();
+        sync_source_files(src.path(), dst.path()).unwrap();
+        let names: Vec<String> = std::fs::read_dir(dst.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, vec!["main.tex".to_string()]);
     }
 
     #[test]

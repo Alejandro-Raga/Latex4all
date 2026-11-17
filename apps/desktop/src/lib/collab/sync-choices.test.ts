@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { foldersOf, isUnder, rejoined, toggled } from "./sync-choices";
+import { neverShared } from "./sync-choices";
 
 describe("sync choices", () => {
   it("covers a file and everything in a folder, not lookalikes", () => {
@@ -35,5 +36,32 @@ describe("sync choices", () => {
     expect(rejoined(["figures", "refs.bib"], ["refs.bib"])).toEqual([
       "figures",
     ]);
+  });
+});
+
+describe("never shared", () => {
+  it("leaves out Git pointers, system clutter and copies of them", () => {
+    for (const p of [
+      ".git",
+      ".git (conflicted copy)",
+      ".git (conflicted copy 2)",
+      ".DS_Store",
+      "figures/.DS_Store",
+      "figures/Thumbs.db",
+      "desktop.ini",
+      ".git/config",
+      "sub/.git/HEAD",
+    ]) {
+      expect(neverShared(p), p).toBe(true);
+    }
+    for (const p of [
+      "main.tex",
+      "main (conflicted copy).tex",
+      ".gitignore",
+      ".latexmkrc",
+      "git.tex",
+    ]) {
+      expect(neverShared(p), p).toBe(false);
+    }
   });
 });

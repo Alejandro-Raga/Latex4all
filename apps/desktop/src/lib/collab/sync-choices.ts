@@ -34,3 +34,29 @@ export function toggled(paths: readonly string[], path: string, sync: boolean) {
 export function rejoined(before: readonly string[], now: readonly string[]) {
   return before.filter((p) => !now.includes(p));
 }
+
+/** "x (conflicted copy 2).y", "x (SFConflict …).y" → "x.y": what it's a copy of. */
+function original(name: string) {
+  return name
+    .replace(
+      / \((?:conflicted copy(?: \d+)?|SFConflict[^)]*)\)(?=\.[^.]*$|$)/,
+      "",
+    )
+    .trim();
+}
+
+/**
+ * Never shared, whoever's computer has them: a Git folder or the pointer
+ * file to one (each computer's own, with its own paths), what macOS and
+ * Windows leave in folders, and copies a sync made of any of these.
+ */
+export function neverShared(path: string) {
+  const parts = path.split("/");
+  const name = original(parts[parts.length - 1]);
+  return (
+    parts.slice(0, -1).some((p) => p === ".git" || p === ".latex4all") ||
+    [".git", ".DS_Store", "Thumbs.db", "desktop.ini"].some(
+      (n) => name.toLowerCase() === n.toLowerCase(),
+    )
+  );
+}

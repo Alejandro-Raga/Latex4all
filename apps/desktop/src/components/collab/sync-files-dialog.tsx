@@ -8,7 +8,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { isCompiledOutput } from "@/lib/collab/store-workspace";
-import { foldersOf, isUnder, toggled } from "@/lib/collab/sync-choices";
+import {
+  foldersOf,
+  isUnder,
+  toggled,
+  neverShared,
+} from "@/lib/collab/sync-choices";
 import { cn } from "@/lib/utils";
 import { useDocumentStore } from "@/stores/document-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -64,7 +69,10 @@ export function FileChoices({
   notSynced: string[];
   onChange: (notSynced: string[]) => void;
 }) {
-  const list = useMemo(() => rows(paths), [paths]);
+  const list = useMemo(
+    () => rows(paths.filter((p) => !neverShared(p))),
+    [paths],
+  );
   return (
     <div className="max-h-[50vh] overflow-y-auto rounded-md border py-1">
       {list.map((row) => {

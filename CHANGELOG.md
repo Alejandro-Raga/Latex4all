@@ -102,6 +102,10 @@ tag.
 
 ### Fixed
 
+- Shared projects no longer pass around hidden Git files and system
+  clutter (.DS_Store, Thumbs.db) or conflicted copies of them, which
+  could stop a project compiling on Windows with "access denied" and
+  leave an older PDF on screen.
 - Making a new topic or idea from a right-click did nothing in Library &
   Vault.
 - Open in PDF pane did nothing in Library & Vault, where there is no
