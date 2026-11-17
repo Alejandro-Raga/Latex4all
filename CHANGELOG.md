@@ -23,6 +23,11 @@ tag.
 
 ### Added
 
+- Folders on All projects, to group projects by what they're for
+  (Thesis, Teaching…), each with its name, color and a star for
+  favourites. Right-click a project and choose Move to folder. Folders
+  show in the Recent order; the other orders list every project, with
+  its folder named on its card. Nothing moves on disk.
 - Planner: repeating tasks, every day, week, month or year. Set it in
   the task's details or type it ("every week", "cada mes"); checking one
   off brings it back, due next time.

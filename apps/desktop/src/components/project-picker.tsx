@@ -34,6 +34,7 @@ import {
 import { toast } from "sonner";
 import { leaveSharedProject } from "@/stores/collab-store";
 import {
+  FolderPlusIcon,
   FlagIcon,
   BugIcon,
   CheckIcon,
@@ -130,6 +131,15 @@ import {
   PRIORITY_LABEL,
 } from "@/components/planner/task-parts";
 import { useReaderFull } from "@/stores/reader-full-store";
+import { useProjectFolders } from "@/stores/project-folders-store";
+import {
+  FolderNameDialog,
+  type FolderPrompt,
+  FolderTag,
+  FolderTiles,
+  FolderTrail,
+  MoveToFolderMenu,
+} from "@/components/project-folders";
 import { HelpView } from "@/components/help-view";
 import { useBugReport } from "@/components/bug-report-dialog";
 
@@ -443,6 +453,10 @@ export function ProjectPicker() {
   const projectSort = useProjectStore((s) => s.projectSort);
   const setProjectSort = useProjectStore((s) => s.setProjectSort);
   const [typePrompt, setTypePrompt] = useState<string | null>(null);
+  const [folderPrompt, setFolderPrompt] = useState<FolderPrompt | null>(null);
+  const [openFolder, setOpenFolder] = useState<string | null>(null);
+  const folders = useProjectFolders((st) => st.folders);
+  const folderOf = useProjectFolders((st) => st.of);
   const [customType, setCustomType] = useState("");
 
   const favorites = useProjectStore((s) => s.favorites);
@@ -567,6 +581,38 @@ export function ProjectPicker() {
     [searchedProjects, activeType, projectTypes],
   );
 
+  // Folders show in the Recent order, not searching or filtering; the other
+  // orders list every project, each card saying its folder.
+  const showFolders =
+    projectSort === "recent" && !searchQuery.trim() && activeType === null;
+  const filedIn = (path: string) => {
+    const id = folderOf[path];
+    return id && folders.some((f) => f.id === id) ? id : null;
+  };
+  const folderCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const p of visibleProjects) {
+      const id = filedIn(p.path);
+      if (id) counts[id] = (counts[id] ?? 0) + 1;
+    }
+    return counts;
+    // biome-ignore lint/correctness/useExhaustiveDependencies: filedIn reads these
+  }, [visibleProjects, folderOf, folders]);
+  const listedProjects = useMemo(
+    () =>
+      showFolders
+        ? visibleProjects.filter((p) => filedIn(p.path) === openFolder)
+        : visibleProjects,
+    // biome-ignore lint/correctness/useExhaustiveDependencies: filedIn reads these
+    [showFolders, visibleProjects, openFolder, folderOf, folders],
+  );
+  // A folder deleted while open: back to the top.
+  useEffect(() => {
+    if (openFolder && !folders.some((f) => f.id === openFolder)) {
+      setOpenFolder(null);
+    }
+  }, [openFolder, folders]);
+
   /** A project whose folder moved outside the app: pointed at it again. */
   const handleLocateProject = async (project: RecentProject) => {
     const found = await open({
@@ -592,6 +638,7 @@ export function ProjectPicker() {
     onMove: () => void handleMoveProject(project),
     onDuplicate: () => void handleDuplicateProject(project),
     onLocate: () => void handleLocateProject(project),
+    onNewFolder: () => setFolderPrompt({ kind: "new", path: project.path }),
   });
 
   // Types the user has already made, offered alongside the built-in ones.
@@ -617,7 +664,7 @@ export function ProjectPicker() {
   const projectGroups = useMemo(
     () =>
       groupProjects({
-        projects: visibleProjects,
+        projects: listedProjects,
         sort: projectSort,
         favorites: new Set(favorites),
         types: new Map(Object.entries(projectTypes)),
@@ -626,7 +673,7 @@ export function ProjectPicker() {
         priorities,
       }),
     [
-      visibleProjects,
+      listedProjects,
       projectSort,
       favorites,
       projectTypes,
@@ -795,7 +842,16 @@ export function ProjectPicker() {
             <header className="flex h-[calc(48px+var(--titlebar-height))] shrink-0 flex-nowrap items-center gap-3 border-border/70 border-b bg-background px-5 pt-[var(--titlebar-height)]">
               <div className="mr-auto flex min-w-0 items-center">
                 <h1 className="truncate font-semibold text-lg leading-none">
-                  {activeSection === "settings" ? "Settings" : "All projects"}
+                  {activeSection === "settings" ? (
+                    "Settings"
+                  ) : openFolder && showFolders ? (
+                    <FolderTrail
+                      id={openFolder}
+                      onBack={() => setOpenFolder(null)}
+                    />
+                  ) : (
+                    "All projects"
+                  )}
                 </h1>
               </div>
 
@@ -837,6 +893,12 @@ export function ProjectPicker() {
                       >
                         <FolderOpenIcon className="size-4" />
                         Import a folder…
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => setFolderPrompt({ kind: "new" })}
+                      >
+                        <FolderPlusIcon className="size-4" />
+                        New folder…
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -981,6 +1043,13 @@ export function ProjectPicker() {
                         </div>
                       </div>
 
+                      {showFolders && !openFolder && (
+                        <FolderTiles
+                          counts={folderCounts}
+                          onOpen={setOpenFolder}
+                          onPrompt={setFolderPrompt}
+                        />
+                      )}
                       {projectView === "list" && <ProjectListHeader />}
                       {projectGroups.map((group) => (
                         <section
@@ -1026,6 +1095,7 @@ export function ProjectPicker() {
                                   key={project.path}
                                   project={project}
                                   priority={priorities.get(project.path) ?? 0}
+                                  showFolder={!showFolders}
                                   isFavorite={favorites.includes(project.path)}
                                   type={projectTypes[project.path] ?? null}
                                   typeOptions={typeOptions}
@@ -1129,6 +1199,11 @@ export function ProjectPicker() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <FolderNameDialog
+        prompt={folderPrompt}
+        onClose={() => setFolderPrompt(null)}
+      />
 
       <RemoveProjectDialog
         project={removeProjectTarget}
@@ -1681,6 +1756,8 @@ interface ProjectActions {
   onMove: () => void;
   onDuplicate: () => void;
   onLocate: () => void;
+  /** A new folder, the project put in it. */
+  onNewFolder: () => void;
 }
 
 /** The right-click menu, the same on a card and on a row. */
@@ -1751,6 +1828,7 @@ function ProjectMenu({
         Duplicate
       </ContextMenuItem>
       <ContextMenuItem onSelect={actions.onMove}>Move to…</ContextMenuItem>
+      <MoveToFolderMenu path={project.path} onNew={actions.onNewFolder} />
       <ContextMenuSeparator />
       <ContextMenuItem onSelect={actions.onRemove}>Remove…</ContextMenuItem>
     </ContextMenuContent>
@@ -1847,8 +1925,11 @@ function ProjectPreviewCard({
   typeOptions,
   actions,
   priority = 0,
+  showFolder = false,
 }: {
   priority?: number;
+  /** Folders aren't shown (another order): the card says its folder. */
+  showFolder?: boolean;
   project: RecentProject;
   isFavorite: boolean;
   type: string | null;
@@ -2006,6 +2087,7 @@ function ProjectPreviewCard({
                   <span className="truncate">{type}</span>
                 </>
               )}
+              {showFolder && <FolderTag path={project.path} />}
             </div>
           </div>
         </div>
