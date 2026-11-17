@@ -364,7 +364,7 @@ function dropOnPaper(list: PlanList, target: ReadingItem) {
   };
 }
 
-function ReadingRow({
+export function ReadingRow({
   list,
   item,
   rank,

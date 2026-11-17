@@ -367,6 +367,15 @@ export function PlannerView() {
         deadline,
         priority: plan ? projectPriority(plan) : 0,
       };
+      // Papers to read by a date count with the tasks.
+      const toRead = plan
+        ? readingItems(plan)
+            .filter((r) => r.status !== "read" && r.task.due)
+            .map((r) => r.task.due as string)
+        : [];
+      smart.tomorrow += toRead.filter((d) => daysUntil(d) === 1).length;
+      smart.week += toRead.filter((d) => daysUntil(d) <= 6).length;
+      smart.today += toRead.filter((d) => daysUntil(d) <= 0).length;
       smart.today += due;
       smart.matrix += open.filter((t) => quadrantOf(t.task) === "do").length;
       smart.tomorrow += dated.filter((d) => daysUntil(d) === 1).length;

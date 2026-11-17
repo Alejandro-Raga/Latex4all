@@ -369,7 +369,7 @@ export function PaperReader({
         ? [
             {
               id: "note",
-              label: "Add note",
+              label: "Add comment",
               icon: <MessageSquarePlusIcon className="size-4" />,
             },
             {
@@ -666,7 +666,9 @@ export function PaperReader({
               className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-muted"
             >
               <MessageSquarePlusIcon className="size-3.5" />
-              {highlightMenu.annotation.comment ? "Edit note" : "Add note"}
+              {highlightMenu.annotation.comment
+                ? "Edit comment"
+                : "Add comment"}
             </button>
             <button
               type="button"
@@ -759,7 +761,7 @@ export function PaperReader({
           }}
         >
           <NoteInput
-            placeholder="Your note, saved in Zotero…"
+            placeholder="Your comment, saved in Zotero…"
             initial={editingNote.annotation.comment ?? ""}
             autoFocus
             submitLabel="Save"
@@ -781,7 +783,7 @@ export function PaperReader({
           onKeyDown={(e) => e.key === "Escape" && setNoteFor(null)}
         >
           <NoteInput
-            placeholder="Your note, saved in Zotero…"
+            placeholder="Your comment, saved in Zotero…"
             autoFocus
             submitLabel="Save"
             onSubmit={(text) => {

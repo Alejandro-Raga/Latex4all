@@ -710,12 +710,9 @@ test("a note pinned to a task, kept as a link under it", async ({
   await page.getByRole("main").getByText("Reply to reviewers").click();
   const detail = page.getByRole("complementary").last();
   await detail.getByRole("button", { name: "Pin a note" }).click();
-  await page.getByRole("menuitem", { name: /^Ideas/ }).focus();
-  await page.keyboard.press("ArrowRight");
-  await expect(
-    page.getByRole("menuitem", { name: /Absorptive capacity/ }),
-  ).toBeFocused();
-  await page.keyboard.press("Enter");
+  // With the mouse, as a person would: the submenu opens on hover.
+  await page.getByRole("menuitem", { name: /^Ideas/ }).hover();
+  await page.getByRole("menuitem", { name: /Absorptive capacity/ }).click();
   await expect
     .poll(() => disk(page, PLAN))
     .toContain("- [ ] Reply to reviewers\n    📌 [[Absorptive capacity]]\n");
@@ -767,5 +764,30 @@ test("a repeating task comes back, due next time, once checked off", async ({
     .toMatch(
       /- \[ \] Back up the data 🔁 every week 📅 (\S+)\n- \[x\] Back up the data 🔁 every week 📅 \S+ ✅/,
     );
+  expect(errors).toEqual([]);
+});
+
+test("papers to read by a day show in Today", async ({ page, errors }) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByRole("radio", { name: "Reading" }).click();
+  await main.getByLabel("Add a paper").fill("The economics of science");
+  await main.getByLabel("Add a paper").press("Enter");
+  const row = main.getByRole("button", { name: /The economics of science/ });
+  await row.hover();
+  await row.getByRole("button", { name: "Read by" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Today" }).click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/The economics of science #reading\/to-read 📅/);
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /Today/ })
+    .first()
+    .click();
+  await expect(main.getByText("To read")).toBeVisible();
+  await expect(main.getByText("The economics of science")).toBeVisible();
   expect(errors).toEqual([]);
 });

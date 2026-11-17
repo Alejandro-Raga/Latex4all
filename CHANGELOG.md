@@ -152,6 +152,12 @@ tag.
 
 ### Fixed
 
+- "Add to note" and other menus with submenus opened them out of sight,
+  so a highlight or passage couldn't be filed in a note. They open
+  beside the menu again.
+- Papers with a "Read by" date show in Today, Tomorrow and Next 7 days.
+- In the reader, a highlight's own note is now called a comment ("Add
+  comment"), apart from "Add to note", which files it in your vault.
 - Menus and popups are more opaque, so text behind them doesn't show
   through.
 - Shared projects in a Seafile, Dropbox or similar folder make far fewer

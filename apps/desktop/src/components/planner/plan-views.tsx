@@ -1224,6 +1224,7 @@ function Board({ list, plan, selected, onSelect }: ViewProps) {
 }
 
 export { ReadingView } from "./reading-views";
+import { ReadingRow } from "./reading-views";
 
 /* ─────────────────────────── Smart lists ─────────────────────────── */
 
@@ -1392,6 +1393,24 @@ export function SmartView({
     const days = daysUntil(t.task.due ?? "");
     return days < 0 ? "Overdue" : dayTitle(t.task.due ?? "");
   };
+  // Papers to finish reading by a day in range.
+  const papers = dated
+    ? plans
+        .flatMap(({ list, plan }) =>
+          readingItems(plan)
+            .filter((r) => r.status !== "read" && r.task.due)
+            .map((item) => ({ list, item })),
+        )
+        .filter(({ item }) => {
+          const days = daysUntil(item.task.due as string);
+          if (filter === "today") return days <= 0;
+          if (filter === "tomorrow") return days === 1;
+          return days <= 6;
+        })
+        .sort((a, b) =>
+          (a.item.task.due ?? "").localeCompare(b.item.task.due ?? ""),
+        )
+    : [];
   const sorted = [...shown].sort((a, b) =>
     filter === "completed"
       ? (b.task.doneOn ?? "").localeCompare(a.task.doneOn ?? "")
@@ -1459,7 +1478,19 @@ export function SmartView({
           ))}
         </Group>
       )}
-      {shown.length === 0 && deadlines.length === 0 && (
+      {papers.length > 0 && (
+        <Group title="To read" count={papers.length} color="var(--chart-3)">
+          {papers.map(({ list, item }) => (
+            <ReadingRow
+              key={`${list.key}-${item.ref.section}-${item.ref.item}`}
+              list={list}
+              item={item}
+              context={contextOf(list)}
+            />
+          ))}
+        </Group>
+      )}
+      {shown.length === 0 && deadlines.length === 0 && papers.length === 0 && (
         <Empty
           icon={
             filter === "completed" ? (
