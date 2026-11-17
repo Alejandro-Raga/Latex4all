@@ -28,8 +28,9 @@ tag.
 - Planner: repeats of your own: every few days, weeks, months or years,
   on chosen days of the week, ending on a day or after some weeks. Typed
   too: "every 2 weeks", "every week on mon and thu", "weekdays".
-- Library: ⌘F (Ctrl+F) switches the reader to the full window and back,
-  and the change now eases in instead of jumping.
+- Library: ⌘F (Ctrl+F) switches the reader to the full window and back.
+  The paper zooms with the room it gets and stays on its page, and the
+  two layouts fade into each other.
 - Folders on All projects, to group projects by what they're for
   (Thesis, Teaching…), each with its name, color and a star for
   favourites. Right-click a project and choose Move to folder. Folders

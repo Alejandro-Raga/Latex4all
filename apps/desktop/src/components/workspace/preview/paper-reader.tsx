@@ -5,9 +5,11 @@ import {
   useMemo,
   useRef,
   useState,
+  useLayoutEffect,
 } from "react";
 import { noteBookmark, notePage, noteReading } from "@/lib/plan/reading-sync";
 import { useBookmarkStore } from "@/stores/bookmark-store";
+import { useReaderFull } from "@/stores/reader-full-store";
 import { addPassageToNote } from "@/lib/vault/add-passage";
 import { useDockStore } from "@/stores/dock-store";
 import { filedToast, NotePicker } from "./group-picker";
@@ -241,6 +243,34 @@ export function PaperReader({
     if (visible) fitIfNew();
   }, [visible, fitIfNew]);
 
+  // In the Library, going full window and back: the paper zooms with the
+  // room it gets (as wide on the page as before), not just more margin,
+  // and stays on its page. The width before is the last one seen.
+  const readerFull = useReaderFull((st) => st.on);
+  const lastWidth = useRef<number | null>(null);
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const seen = new ResizeObserver(() => {
+      lastWidth.current = el.clientWidth;
+    });
+    seen.observe(el);
+    return () => seen.disconnect();
+  }, []);
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
+  const pageRef = useRef<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (!inline) return;
+    const width = wrapperRef.current?.clientWidth;
+    const before = lastWidth.current;
+    lastWidth.current = width ?? before;
+    if (!width || !before || Math.abs(before - width) < 8) return;
+    changeScale((scaleRef.current * (width - 40)) / Math.max(1, before - 40));
+    const page = pageRef.current;
+    if (page) requestAnimationFrame(() => scrollToPageRef.current?.(page));
+  }, [readerFull]);
+
   // Opened: being read, on the reading lists it's on, and the last page
   // read kept there (once the page has stayed put a moment).
   const itemKey = paper.zotero?.itemKey;
@@ -251,6 +281,7 @@ export function PaperReader({
   }, [visible, itemKey, paper.label]);
   const [pageCount, setPageCount] = useState<number | undefined>();
   const [readingPage, setReadingPage] = useState<number | undefined>();
+  pageRef.current = readingPage;
   const placeKey = itemKey ?? paper.id;
   const bookmark = useBookmarkStore((s) => s.places[placeKey]?.bookmark);
   useEffect(() => {

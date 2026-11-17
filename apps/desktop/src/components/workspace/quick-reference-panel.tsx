@@ -725,11 +725,7 @@ export function QuickReferencePanel({
         minSize={15}
         className="min-h-0 min-w-0"
       >
-        <div
-          className="flex h-full flex-col"
-          // Grows into the full window (and back) rather than jumping.
-          style={{ viewTransitionName: "library-reader" }}
-        >
+        <div className="flex h-full flex-col">
           <div className="flex shrink-0 items-center gap-1.5 border-border border-b px-2 py-1">
             <span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">
               {selectedFile.label}
