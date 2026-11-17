@@ -34,7 +34,7 @@ Hover a card for **Open PDF**, **Show in Finder** and **Duplicate**. Right-click
 
 ### Inside a project
 
-Your files are on the left, the editor in the middle and the PDF on the right. The icons on the far right open the side panels: **Zotero library**, **Vault**, **Notes** and **Plan**.
+Your files are on the left, the editor in the middle and the PDF on the right. The icons on the far right open the side panels: **Library**, **Vault**, **Notes** and **Plan**.
 
 Under the project's name, a small strip shows when the project is due, its next task and the paper you're reading for it. Click it to open the Plan.
 
@@ -83,7 +83,7 @@ Latex4All saves snapshots of the project as you work. Click the clock above the 
 
 ### Connect Zotero
 
-Open **Settings → Zotero** and sign in, or paste an API key from zotero.org. Give the key write access if you want your highlights, notes and tags to reach Zotero. Your library then appears in the **Zotero library** panel. A copy is kept on your computer, so it opens straight away and works offline.
+Open **Settings → Zotero** and sign in, or paste an API key from zotero.org. Give the key write access if you want your highlights, notes and tags to reach Zotero. Your library then appears in the **Library** panel. A copy is kept on your computer, so it opens straight away and works offline.
 
 [Open Settings → Zotero](app:settings/zotero)
 
@@ -126,7 +126,8 @@ Click a paper that has a PDF to read it. Inside a project it opens in a tab next
 - Click a link in the PDF, such as a citation, and press ⌘[ to come back.
 - Click the bookmark button at the top of the reader to mark the page where you stopped. The paper opens there next time, and its progress on your reading list follows the bookmark. Without a bookmark, it opens on the last page you had open.
 - On the **Library & Vault** page, click **Read in full window**, or press ⌘F, to hide the list, the vault and the sidebar. Press ⌘F or Esc to bring them back.
-- **Recently opened**, at the top of the Zotero library, lists the last papers you read. Click one to open it again.
+- **Recently opened**, at the top of the Library, lists the last papers you read. Click one to open it again.
+- A PDF in one of your projects opens in the same reader. To highlight it and file passages in notes, click **Add to Zotero** at the top: it becomes a paper in your Zotero library, with everything a Zotero paper has.
 - To read offline, turn on **Keep PDFs for offline reading** in **Settings → Zotero**.
 
 ## Your vault
@@ -134,7 +135,7 @@ Click a paper that has a PDF to read it. Inside a project it opens in a tab next
 The vault is a folder of notes in Markdown, the same format Obsidian uses. It can be a folder on your computer or on a WebDAV server. Connect it in **Settings → Vault**. You don't need Obsidian installed; if you do use it, it opens the same vault.
 
 - Notes are grouped by type, such as papers, ideas and topics. Papers are also sorted by their Zotero collections.
-- To add a paper, right-click it in the Zotero library and choose **Add to vault**. Its note holds the paper's details and your highlights.
+- To add a paper, right-click it in the Library and choose **Add to vault**. Its note holds the paper's details and your highlights.
 - In a paper's note, each highlight shows the passage, its color and page, and your comment. Right-click one to add it to another note or open it in the PDF.
 - Click **+** above the list for a new topic, idea or plain note.
 - Right-click a note to change its type, connect it to another note, add a task about it, or delete it.
@@ -238,7 +239,7 @@ Open **Reading** in the Planner's sidebar to keep up your reading.
 - **Up next** is everything still to read, from every list. Drag papers to put them in the order you'll read them.
 - Drag a paper to another group to change its status: **On hold** for one you've set aside, **To re-read** for one to go back to, **Finished lately** once read.
 - **Finished lately** shows what you've read in the last two weeks.
-- Add a paper by its title, DOI or a link, or with **Add from Zotero**. Papers added here are general reading; a project's papers go in its own **Reading** tab. You can also right-click a paper in the Zotero library or the vault and choose **Add to reading list**.
+- Add a paper by its title, DOI or a link, or with **Add from Zotero**. Papers added here are general reading; a project's papers go in its own **Reading** tab. You can also right-click a paper in the Library or the vault and choose **Add to reading list**.
 - The circle next to a paper shows how far you are. Click it to change the status. Hover a paper and click **Read by** to give it a date.
 
 To set yourself a weekly goal, open **Settings → Planner** and turn on **Weekly reading goal**. Reading then shows how many papers you've finished this week, the pages you've read, and how many days in a row you've read.
@@ -305,7 +306,7 @@ On Windows and Linux, use Ctrl where it says ⌘.
 | ⌘⇧A | Add a task |
 | ⌘1, 2, 3, 4 | Projects, Library & Vault, Planner, back to the project |
 | ⌘F | Read in full window (Library & Vault) |
-| ⌘⌥1, 2, 3, 4 | Zotero library, Vault, Notes, Plan panels |
+| ⌘⌥1, 2, 3, 4 | Library, Vault, Notes, Plan panels |
 | ⌘⇧[ / ⌘⇧] | Previous / next PDF tab |
 | ⌘[ | Back after following a link in a PDF |
 | ⌘T / ⌘W | New / close chat |

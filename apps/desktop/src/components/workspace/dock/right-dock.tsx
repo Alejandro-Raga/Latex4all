@@ -37,7 +37,7 @@ const HEADER_PX = 40;
 const MIN_BODY_PX = 90;
 
 const DOCK_INFO: Record<DockPanel, { label: string; icon: LucideIcon }> = {
-  reference: { label: "Zotero library", icon: LibraryIcon },
+  reference: { label: "Library", icon: LibraryIcon },
   vault: { label: "Vault", icon: NotebookTextIcon },
   plan: { label: "Plan", icon: ListTodoIcon },
   notes: { label: "Notes", icon: MessageSquareIcon },

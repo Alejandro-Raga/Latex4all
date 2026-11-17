@@ -9,11 +9,12 @@ import {
   useContext,
 } from "react";
 import { ResizeHandle } from "@/components/ui/resize-handle";
-import { readFile } from "@tauri-apps/plugin-fs";
+import { readFile, stat } from "@tauri-apps/plugin-fs";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import { setReaderFull, useReaderFull } from "@/stores/reader-full-store";
 import { useBookmarkStore } from "@/stores/bookmark-store";
+import { addPdfToZotero } from "@/lib/zotero-file-upload";
 import { inProject } from "@/stores/nav-store";
 import { LibraryPage } from "./vault-standalone";
 
@@ -802,7 +803,7 @@ export function QuickReferencePanel({
           <LibraryIcon className="size-3.5 text-muted-foreground" />
         )}
         <span className="min-w-0 flex-1 truncate font-medium text-sm">
-          {refProjectName ?? "Zotero library"}
+          {refProjectName ?? "Library"}
         </span>
         <DockWideButton />
         <Button
@@ -811,7 +812,7 @@ export function QuickReferencePanel({
           className="size-6"
           onClick={onClose}
           title="Close"
-          aria-label="Close the Zotero library"
+          aria-label="Close the Library"
         >
           <XIcon className="size-3.5" />
         </Button>
@@ -1419,6 +1420,44 @@ function ProjectRow({
  * or the chat, so Claude can use it while editing. Shared by Zotero items and
  * by PDFs sitting in another project's folder.
  */
+/**
+ * A project's PDF into your Zotero library, to read it as a paper there
+ * (highlights, comments, passages in notes). Opens it as that paper.
+ */
+async function addProjectPdfToZotero(
+  path: string,
+  name: string,
+  open?: (itemKey: string, title: string) => void,
+) {
+  const { apiKey, userID } = useZoteroStore.getState();
+  if (!apiKey || !userID) {
+    toast.error("Connect Zotero in Settings first.");
+    return;
+  }
+  const title = name.replace(/\.pdf$/i, "");
+  const id = toast.loading(`Adding “${title}” to Zotero…`);
+  try {
+    const [bytes, info] = await Promise.all([
+      readFile(path),
+      stat(path).catch(() => null),
+    ]);
+    const { itemKey } = await addPdfToZotero(apiKey, userID, {
+      bytes,
+      filename: name,
+      title,
+      mtime: info?.mtime?.getTime(),
+    });
+    await useZoteroLibrary.getState().sync(apiKey, userID);
+    toast.success(`“${title}” is in your Zotero library`, { id });
+    open?.(itemKey, title);
+  } catch (err) {
+    toast.error(
+      `Couldn't add it: ${err instanceof Error ? err.message : String(err)}`,
+      { id },
+    );
+  }
+}
+
 function ReferencePdfActions({ source }: { source: ReferencePdfSource }) {
   // Both go into the open project: none, nothing to offer.
   const projectOpen = useDocumentStore((s) => Boolean(s.projectRoot));
@@ -2020,6 +2059,21 @@ function TreeView({
                   fileName: child.name,
                 }}
               />
+              <ContextMenuItem
+                onClick={() =>
+                  void addProjectPdfToZotero(
+                    child.absolutePath as string,
+                    child.name,
+                    (itemKey, title) =>
+                      useLibraryPreview
+                        .getState()
+                        .ask({ itemKey, label: title }),
+                  )
+                }
+              >
+                <LibraryIcon className="size-3.5" />
+                Add to Zotero
+              </ContextMenuItem>
               {/* As for a Zotero paper: on a reading list, or a task. */}
               <AddToReadingMenu
                 paper={{
@@ -2062,6 +2116,7 @@ function FilePreview({
   preview: Preview | null;
   reader?: ReaderControls;
 }) {
+  const zoteroConnected = useZoteroStore((s) => s.isAuthenticated);
   if (!selectedFile) {
     return (
       <div className="flex h-full items-center justify-center p-4 text-center text-muted-foreground text-xs">
@@ -2164,6 +2219,28 @@ function FilePreview({
       actions={
         reader ? (
           <>
+            {selectedFile.source === "fs" && zoteroConnected && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mr-1 h-6 shrink-0 gap-1 px-2 text-xs"
+                title="Add it to your Zotero library to highlight it, comment on it and file passages in your notes"
+                onClick={() =>
+                  void addProjectPdfToZotero(
+                    selectedFile.absolutePath,
+                    selectedFile.label.split(/[\\/]/).pop() ??
+                      selectedFile.label,
+                    (itemKey, title) =>
+                      useLibraryPreview
+                        .getState()
+                        .ask({ itemKey, label: title }),
+                  )
+                }
+              >
+                <LibraryIcon className="size-3" />
+                Add to Zotero
+              </Button>
+            )}
             {!reader.full && (
               <Button
                 variant="ghost"

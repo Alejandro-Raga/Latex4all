@@ -170,7 +170,7 @@ export function LibraryView() {
           on={layout.reference}
           onClick={() => toggle("reference")}
           icon={LibraryIcon}
-          label="Zotero library"
+          label="Library"
         />
         <PaneToggle
           on={layout.vault}

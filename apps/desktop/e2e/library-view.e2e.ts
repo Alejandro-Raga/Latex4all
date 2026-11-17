@@ -10,7 +10,7 @@ test("library and vault side by side without a project", async ({ page }) => {
   await page.goto("/e2e/harness.html?scenario=library");
   const bar = (name: string) =>
     page.locator("button[aria-pressed]").filter({ hasText: name });
-  await expect(bar("Zotero library")).toHaveAttribute("aria-pressed", "true");
+  await expect(bar("Library")).toHaveAttribute("aria-pressed", "true");
   await expect(bar("Vault")).toHaveAttribute("aria-pressed", "true");
   if (process.env.SHOTS) {
     await page.screenshot({ path: `${process.env.SHOTS}/library-view.png` });
@@ -20,8 +20,8 @@ test("library and vault side by side without a project", async ({ page }) => {
   await expect(bar("Vault")).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("button", { name: "Swap sides" })).toHaveCount(0);
   // The last open side stays open.
-  await bar("Zotero library").click();
-  await expect(bar("Zotero library")).toHaveAttribute("aria-pressed", "true");
+  await bar("Library").click();
+  await expect(bar("Library")).toHaveAttribute("aria-pressed", "true");
   await bar("Vault").click();
   await expect(bar("Vault")).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Swap sides" }).click();

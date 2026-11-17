@@ -18,7 +18,7 @@ import { PdfPreview } from "./pdf-preview";
 import { PanelBoundary } from "@/components/panel-boundary";
 
 const WIDE_TAB: Record<DockPanel, { label: string; icon: LucideIcon }> = {
-  reference: { label: "Zotero library", icon: LibraryIcon },
+  reference: { label: "Library", icon: LibraryIcon },
   vault: { label: "Vault", icon: NotebookTextIcon },
   plan: { label: "Plan", icon: ListTodoIcon },
   notes: { label: "Notes", icon: MessageSquareIcon },

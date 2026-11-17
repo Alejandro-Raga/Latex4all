@@ -45,7 +45,7 @@ export const useCommandPalette = create<{
 }>((set) => ({ open: false, setOpen: (open) => set({ open }) }));
 
 const PANELS: { panel: DockPanel; label: string; key: string }[] = [
-  { panel: "reference", label: "Zotero library", key: "1" },
+  { panel: "reference", label: "Library", key: "1" },
   { panel: "vault", label: "Vault", key: "2" },
   { panel: "notes", label: "Notes", key: "3" },
   { panel: "plan", label: "Plan", key: "4" },

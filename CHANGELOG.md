@@ -23,6 +23,9 @@ tag.
 
 ### Added
 
+- Add to Zotero for the PDFs in your projects (in the reader and their
+  right-click menu): the PDF becomes a paper in your Zotero library, with
+  highlights, comments and passages in notes like any other.
 - Go anywhere from anywhere: ⌘1 projects, ⌘2 Library & Vault, ⌘3
   Planner, ⌘4 back to the open project (Ctrl on Windows); also in ⌘K.
 - Reading: drag papers between Now reading, On hold, Up next, To re-read
@@ -188,6 +191,8 @@ tag.
 
 ### Changed
 
+- The Zotero library panel is now just the Library: it holds your
+  projects' PDFs too.
 - The Planner's sidebar is grouped: Today, Tomorrow, Next 7 days and
   Reading on top, then Lists, then Views, then Projects.
 - The Inbox, your own lists and general reading are kept in the app's
