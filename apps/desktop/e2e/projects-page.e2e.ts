@@ -92,6 +92,8 @@ test("folders: made, filled from a project's menu, opened, and named on cards in
   await page.mouse.move(root.x + root.width / 2, root.y + root.height / 2, {
     steps: 8,
   });
+  // Only once the title shows it'll take the project (a slow machine lags).
+  await expect(back).toHaveClass(/ring-primary/);
   await page.mouse.up();
   await expect(page.getByText("Reading notes", { exact: true })).toHaveCount(0);
   await page.waitForTimeout(100);
@@ -134,4 +136,41 @@ test("the menu on the left: icons only, widened with names, moves between parts"
   await expect(
     page.getByRole("heading", { name: "All projects" }),
   ).toBeVisible();
+});
+
+test("the Library: a project opens in place on its PDFs, other files left out", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 900 });
+  await page.goto("/e2e/harness.html?scenario=projects");
+  await page
+    .getByRole("navigation", { name: "Latex4All" })
+    .getByRole("button", { name: "Library & Vault", exact: true })
+    .click();
+  const project = page.getByRole("button", {
+    name: "Paper on corporate science",
+    exact: true,
+  });
+  await project.first().click();
+  await expect(project.first()).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: /^Draft v3/ })).toBeVisible();
+  // One in a folder says which.
+  await expect(
+    page.getByRole("button", { name: /^Figure 1\s*figures/ }),
+  ).toBeVisible();
+  for (const other of ["main.tex", "Comments.docx", "plot.py"]) {
+    await expect(page.getByText(other)).toHaveCount(0);
+  }
+  await expect(
+    page.getByRole("button", { name: "Show all files" }),
+  ).toBeVisible();
+  // A project with none says so.
+  await page
+    .getByRole("button", { name: "Grant proposal", exact: true })
+    .first()
+    .click();
+  await expect(page.getByText("No PDFs")).toBeVisible();
+  // Folded again.
+  await project.first().click();
+  await expect(page.getByRole("button", { name: /^Draft v3/ })).toHaveCount(0);
 });

@@ -21,6 +21,10 @@ tag.
 
 ### Fixed
 
+- The theme button is back, at the bottom of the left menu.
+- The left menu has its own shade, apart from the file list beside it.
+- Library: a project opens in place on its PDFs, ready to read. Code,
+  Word and other files stay out of the way (Show all files lists them).
 - Reading: click a paper's circle to pick its status (Reading, On hold,
   To re-read…). Papers you're reading now have the right-click menu too.
 - Reading: authors and year show in full under the title, and the circle

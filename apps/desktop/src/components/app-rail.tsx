@@ -10,12 +10,14 @@ import {
   LibraryIcon,
   ListTodoIcon,
   type LucideIcon,
+  PaletteIcon,
   PanelLeftIcon,
   PenLineIcon,
   SettingsIcon,
 } from "lucide-react";
 import { useState } from "react";
 import { useBugReport } from "@/components/bug-report-dialog";
+import { ThemeMenu } from "@/components/theme-picker";
 import { cn } from "@/lib/utils";
 import { useDocumentStore } from "@/stores/document-store";
 import {
@@ -49,6 +51,15 @@ function useWide(): [boolean, (wide: boolean) => void] {
   ];
 }
 
+const railItem = (active: boolean, wide: boolean) =>
+  cn(
+    "flex h-9 items-center gap-2.5 rounded-lg text-sm transition-colors",
+    wide ? "w-full px-2.5" : "w-9 justify-center",
+    active
+      ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+      : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+  );
+
 function RailButton({
   icon: Icon,
   label,
@@ -71,13 +82,7 @@ function RailButton({
       aria-current={active ? "page" : undefined}
       aria-label={label}
       title={hint ? `${label} (${hint})` : label}
-      className={cn(
-        "flex h-9 items-center gap-2.5 rounded-lg text-sm transition-colors",
-        wide ? "w-full px-2.5" : "w-9 justify-center",
-        active
-          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-          : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
-      )}
+      className={railItem(active, wide)}
     >
       <Icon className="size-4 shrink-0" />
       {wide && <span className="truncate">{label}</span>}
@@ -104,7 +109,7 @@ export function AppRail() {
     <nav
       aria-label="Latex4All"
       className={cn(
-        "flex shrink-0 flex-col border-sidebar-border border-r bg-sidebar pt-[var(--titlebar-height)] transition-[width] duration-200 ease-out",
+        "app-rail flex shrink-0 flex-col border-r pt-[var(--titlebar-height)] transition-[width] duration-200 ease-out",
         wide ? "w-48 px-2" : "w-12 items-center px-1.5",
       )}
     >
@@ -169,6 +174,17 @@ export function AppRail() {
         />
       </div>
       <div className="mt-auto flex flex-col gap-1 pb-2">
+        <ThemeMenu onEditCustom={() => go("settings")}>
+          <button
+            type="button"
+            aria-label="Color theme"
+            title="Color theme"
+            className={railItem(false, wide)}
+          >
+            <PaletteIcon className="size-4 shrink-0" />
+            {wide && <span className="truncate">Theme</span>}
+          </button>
+        </ThemeMenu>
         <RailButton
           icon={SettingsIcon}
           label="Settings"

@@ -135,7 +135,7 @@ Click a paper that has a PDF to read it. Inside a project it opens in a tab next
 - Click the bookmark button at the top of the reader to mark the page where you stopped. The paper opens there next time, and its progress on your reading list follows the bookmark. Without a bookmark, it opens on the last page you had open.
 - On the **Library & Vault** page, click **Read in full window**, or press ⌘F, to hide the list, the vault and the sidebar. Press ⌘F or Esc to bring them back.
 - **Recently opened**, at the top of the Library, lists the last papers you read. Click one to open it again.
-- A PDF in one of your projects, such as a draft you're revising, opens in the same reader. You can highlight it and add comments as on a Zotero paper; they're kept on this computer. To file its passages in notes too, right-click it and choose **Add to Zotero**.
+- A PDF in one of your projects, such as a draft you're revising, opens in the same reader. In the Library, click a project under **Projects** to list its PDFs, then click one to read it. To see the project's other files, click **Show all files**. You can highlight it and add comments as on a Zotero paper; they're kept on this computer. To file its passages in notes too, right-click it and choose **Add to Zotero**.
 - To read offline, turn on **Keep PDFs for offline reading** in **Settings → Zotero**.
 
 ## Your vault

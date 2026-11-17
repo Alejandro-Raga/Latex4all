@@ -13,14 +13,19 @@ async function drag(
   /** Where on the target, from its top (0) to its bottom (1). */
   at = 0.5,
 ) {
+  await from.scrollIntoViewIfNeeded();
   const a = await from.boundingBox();
-  const b = await to.boundingBox();
-  if (!a || !b) throw new Error("nothing to drag");
+  if (!a) throw new Error("nothing to drag");
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
   await page.mouse.down();
   await page.mouse.move(a.x + a.width / 2 + 8, a.y + a.height / 2 + 8, {
     steps: 4,
   });
+  // Where the target is once the drag has begun (groups open to drop in,
+  // and a slow machine may still be laying the page out).
+  await page.waitForTimeout(50);
+  const b = await to.boundingBox();
+  if (!b) throw new Error("nowhere to drop");
   await page.mouse.move(b.x + b.width / 2, b.y + b.height * at, { steps: 12 });
   await page.mouse.up();
   // Clicks right after a drop are held back a moment, as by hand.

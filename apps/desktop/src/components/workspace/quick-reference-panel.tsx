@@ -1379,7 +1379,152 @@ function ReferenceProjects({
   );
 }
 
-/** A project in the list: opens on click; star or remove on right-click. */
+/** What can be done with a project's PDF: the same as with a Zotero paper. */
+function ProjectPdfMenu({ path, name }: { path: string; name: string }) {
+  const title = name.replace(/\.pdf$/i, "");
+  return (
+    <ContextMenuContent className="w-56">
+      <ContextMenuItem
+        onClick={() =>
+          useLibraryPreview.getState().askFile({ path, label: title })
+        }
+      >
+        <BookOpenIcon className="size-3.5" />
+        Read
+      </ContextMenuItem>
+      <ReferencePdfActions
+        source={{ kind: "file", absolutePath: path, fileName: name }}
+      />
+      <ContextMenuItem
+        onClick={() =>
+          void addProjectPdfToZotero(path, name, (itemKey, t) =>
+            useLibraryPreview.getState().ask({ itemKey, label: t }),
+          )
+        }
+      >
+        <LibraryIcon className="size-3.5" />
+        Add to Zotero
+      </ContextMenuItem>
+      {/* As for a Zotero paper: on a reading list, or a task. */}
+      <AddToReadingMenu paper={{ title, url: `file://${encodeURI(path)}` }} />
+      <ContextMenuItem
+        onClick={() =>
+          useQuickTask.getState().show({ text: `Read “${title}”` })
+        }
+      >
+        <ListPlusIcon className="size-3.5" />
+        Add a task
+      </ContextMenuItem>
+    </ContextMenuContent>
+  );
+}
+
+/** A project's PDFs, found once per project while the app is open. */
+const pdfCache = new Map<
+  string,
+  { path: string; name: string; folder: string }[]
+>();
+
+/** Opened in place: the project's PDFs, the rest of its files left out. */
+function ProjectPdfs({
+  root,
+  onShowAll,
+}: {
+  root: string;
+  onShowAll: () => void;
+}) {
+  const [pdfs, setPdfs] = useState(() => pdfCache.get(root) ?? null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (pdfCache.has(root)) return;
+    let live = true;
+    scanProjectFolder(root)
+      .then(({ files }) => {
+        const found = files
+          .filter((f) => f.type === "pdf")
+          .map((f) => {
+            const parts = f.relativePath.split("/");
+            const name = parts.pop() as string;
+            return { path: f.absolutePath, name, folder: parts.join("/") };
+          })
+          .sort(
+            (a, b) =>
+              a.folder.localeCompare(b.folder) || a.name.localeCompare(b.name),
+          );
+        pdfCache.set(root, found);
+        if (live) setPdfs(found);
+      })
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, [root]);
+  const showAll = (
+    <button
+      type="button"
+      onClick={onShowAll}
+      className="w-full rounded-md py-1 pr-2 pl-8 text-left text-muted-foreground text-xs hover:bg-muted hover:text-foreground"
+    >
+      Show all files
+    </button>
+  );
+  if (failed) {
+    return (
+      <p className="py-1 pl-8 text-muted-foreground text-xs">
+        Couldn't read this project's files.
+      </p>
+    );
+  }
+  if (!pdfs) {
+    return (
+      <p className="flex items-center gap-1.5 py-1 pl-8 text-muted-foreground text-xs">
+        <Loader2Icon className="size-3 animate-spin" />
+        Looking for PDFs…
+      </p>
+    );
+  }
+  return (
+    <div className="pb-1">
+      {pdfs.length === 0 && (
+        <p className="py-1 pl-8 text-muted-foreground text-xs">No PDFs</p>
+      )}
+      {pdfs.map((pdf) => (
+        <ContextMenu key={pdf.path}>
+          <ContextMenuTrigger asChild>
+            <button
+              type="button"
+              onClick={() =>
+                useLibraryPreview.getState().askFile({
+                  path: pdf.path,
+                  label: pdf.name.replace(/\.pdf$/i, ""),
+                })
+              }
+              title={pdf.folder ? `${pdf.folder}/${pdf.name}` : pdf.name}
+              className="flex w-full items-center gap-2 rounded-md py-1 pr-2 pl-8 text-left text-xs transition-colors hover:bg-muted"
+            >
+              <FileTextIcon className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">
+                {pdf.name.replace(/\.pdf$/i, "")}
+              </span>
+              {pdf.folder && (
+                <span className="max-w-[40%] shrink-0 truncate text-[11px] text-muted-foreground">
+                  {pdf.folder}
+                </span>
+              )}
+            </button>
+          </ContextMenuTrigger>
+          <ProjectPdfMenu path={pdf.path} name={pdf.name} />
+        </ContextMenu>
+      ))}
+      {showAll}
+    </div>
+  );
+}
+
+/**
+ * A project in the list: a click shows its PDFs under it, to read; all its
+ * files on request. Star or remove on right-click.
+ */
 function ProjectRow({
   project,
   onOpen,
@@ -1390,38 +1535,62 @@ function ProjectRow({
   const starred = useProjectStore((s) =>
     s.favorites.some((f) => normalizePath(f) === normalizePath(project.path)),
   );
+  const [open, setOpen] = useState(false);
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <button
-          type="button"
-          onClick={() => onOpen(project.path)}
-          title={project.path}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-muted"
-        >
-          <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate">{project.name}</span>
-        </button>
-      </ContextMenuTrigger>
-      <ContextMenuContent className="w-48">
-        <ContextMenuItem
-          onClick={() =>
-            useProjectStore.getState().toggleFavorite(project.path)
-          }
-        >
-          <StarIcon className="size-3.5" />
-          {starred ? "Unstar" : "Star"}
-        </ContextMenuItem>
-        <ContextMenuItem
-          onClick={() =>
-            useProjectStore.getState().removeRecentProject(project.path)
-          }
-        >
-          <XIcon className="size-3.5" />
-          Remove from the list
-        </ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+    <div>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            title={project.path}
+            className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-muted"
+          >
+            <ChevronRightIcon
+              className={cn(
+                "size-3 shrink-0 text-muted-foreground transition-transform",
+                open && "rotate-90",
+              )}
+            />
+            {open ? (
+              <FolderOpenIcon className="size-3.5 shrink-0 text-muted-foreground" />
+            ) : (
+              <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
+            )}
+            <span className="min-w-0 flex-1 truncate">{project.name}</span>
+          </button>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-48">
+          <ContextMenuItem onClick={() => onOpen(project.path)}>
+            <FolderOpenIcon className="size-3.5" />
+            Show all files
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() =>
+              useProjectStore.getState().toggleFavorite(project.path)
+            }
+          >
+            <StarIcon className="size-3.5" />
+            {starred ? "Unstar" : "Star"}
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() =>
+              useProjectStore.getState().removeRecentProject(project.path)
+            }
+          >
+            <XIcon className="size-3.5" />
+            Remove from the list
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+      {open && (
+        <ProjectPdfs
+          root={project.path}
+          onShowAll={() => onOpen(project.path)}
+        />
+      )}
+    </div>
   );
 }
 
@@ -2061,47 +2230,7 @@ function TreeView({
         return (
           <ContextMenu key={child.relativePath}>
             <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
-            <ContextMenuContent className="w-56">
-              <ReferencePdfActions
-                source={{
-                  kind: "file",
-                  absolutePath: child.absolutePath,
-                  fileName: child.name,
-                }}
-              />
-              <ContextMenuItem
-                onClick={() =>
-                  void addProjectPdfToZotero(
-                    child.absolutePath as string,
-                    child.name,
-                    (itemKey, title) =>
-                      useLibraryPreview
-                        .getState()
-                        .ask({ itemKey, label: title }),
-                  )
-                }
-              >
-                <LibraryIcon className="size-3.5" />
-                Add to Zotero
-              </ContextMenuItem>
-              {/* As for a Zotero paper: on a reading list, or a task. */}
-              <AddToReadingMenu
-                paper={{
-                  title: child.name.replace(/\.pdf$/i, ""),
-                  url: `file://${encodeURI(child.absolutePath)}`,
-                }}
-              />
-              <ContextMenuItem
-                onClick={() =>
-                  useQuickTask.getState().show({
-                    text: `Read “${child.name.replace(/\.pdf$/i, "")}”`,
-                  })
-                }
-              >
-                <ListPlusIcon className="size-3.5" />
-                Add a task
-              </ContextMenuItem>
-            </ContextMenuContent>
+            <ProjectPdfMenu path={child.absolutePath} name={child.name} />
           </ContextMenu>
         );
       })}

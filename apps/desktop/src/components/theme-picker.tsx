@@ -1,4 +1,14 @@
+import { CheckIcon, MonitorIcon, PipetteIcon } from "lucide-react";
 import { useTheme } from "next-themes";
+import type { ReactNode } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   APP_THEMES,
   type AppTheme,
@@ -67,6 +77,64 @@ const COLOR_FIELDS: { key: keyof ThemeColors; label: string }[] = [
   { key: "fg", label: "Text" },
   { key: "accent", label: "Accent" },
 ];
+
+/** The color themes, picked straight from a button (the app's menu). */
+export function ThemeMenu({
+  children,
+  onEditCustom,
+}: {
+  /** The button that opens it. */
+  children: ReactNode;
+  onEditCustom: () => void;
+}) {
+  const { theme = "system", setTheme } = useTheme();
+  const custom = useSettingsStore((s) => s.customTheme);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="right"
+        align="end"
+        className="max-h-[70vh] w-48 overflow-y-auto"
+      >
+        <DropdownMenuItem onSelect={() => setTheme("system")}>
+          <MonitorIcon className="size-4" />
+          <span className="flex-1">System</span>
+          {theme === "system" && <CheckIcon className="size-3.5" />}
+        </DropdownMenuItem>
+        {GROUPS.map((group) => (
+          <div key={group}>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="py-1 text-muted-foreground text-xs">
+              {group}
+            </DropdownMenuLabel>
+            {APP_THEMES.filter((t) => t.group === group).map((t) => (
+              <DropdownMenuItem key={t.id} onSelect={() => setTheme(t.id)}>
+                <Swatch
+                  colors={t.colors}
+                  accents={swatchAccents(t)}
+                  className="h-4 w-6"
+                />
+                <span className="flex-1">{t.label}</span>
+                {theme === t.id && <CheckIcon className="size-3.5" />}
+              </DropdownMenuItem>
+            ))}
+          </div>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => setTheme(CUSTOM_THEME)}>
+          <Swatch colors={custom} className="h-4 w-6" />
+          <span className="flex-1">Custom</span>
+          {theme === CUSTOM_THEME && <CheckIcon className="size-3.5" />}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onEditCustom}>
+          <PipetteIcon className="size-4" />
+          Edit custom colors…
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 /** The custom theme's four colors, applied as they're picked. */
 function CustomThemeEditor() {
