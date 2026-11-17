@@ -34,6 +34,7 @@ import {
 import { parseQuickAdd, type QuickTask } from "@/lib/plan/quick-add";
 import { cn } from "@/lib/utils";
 import { DatePicker } from "./date-picker";
+import { RepeatButton } from "./repeat-button";
 import { DropMarker } from "./planner-dnd";
 
 /** A priority's color: the checkbox's ring, the flag, a card's edge. */
@@ -469,29 +470,17 @@ export function TaskDetails({
         />
         <span className="mx-1 h-4 w-px bg-border" />
         <DueButton due={task.due} onChange={(due) => actions.change({ due })} />
-        <select
-          value={task.repeat ?? ""}
-          onChange={(e) => {
-            const repeat = (e.target.value || undefined) as Repeat | undefined;
+        <RepeatButton
+          repeat={task.repeat}
+          due={task.due}
+          onChange={(repeat) =>
             actions.change(
               repeat && !task.due
                 ? { repeat, due: dayFromToday(0) }
                 : { repeat },
-            );
-          }}
-          aria-label="Repeat"
-          title="Repeat"
-          className={cn(
-            "h-7 rounded-md bg-transparent px-1 text-xs hover:bg-muted",
-            !task.repeat && "text-muted-foreground",
-          )}
-        >
-          <option value="">No repeat</option>
-          <option value="every day">Every day</option>
-          <option value="every week">Every week</option>
-          <option value="every month">Every month</option>
-          <option value="every year">Every year</option>
-        </select>
+            )
+          }
+        />
         <span className="flex-1" />
         <PriorityButtons
           priority={task.priority}

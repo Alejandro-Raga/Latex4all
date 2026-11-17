@@ -791,3 +791,44 @@ test("papers to read by a day show in Today", async ({ page, errors }) => {
   await expect(main.getByText("The economics of science")).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test("a repeat of one's own: some days a week, for some weeks", async ({
+  page,
+  errors,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 800 });
+  await open(page, "scenario=planner&notes=1");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  await page.getByRole("main").getByText("Reply to reviewers").click();
+  const detail = page.getByRole("complementary").last();
+  await detail.getByRole("button", { name: "Repeat" }).click();
+  const pop = page.getByRole("dialog");
+  await pop.getByRole("button", { name: "Custom…" }).click();
+  await pop.getByRole("button", { name: "Monday" }).click();
+  await pop.getByRole("button", { name: "Wednesday" }).click();
+  await pop.getByRole("radio", { name: "After" }).click();
+  await pop.getByLabel("Weeks").fill("4");
+  if (process.env.SHOTS) {
+    await page.screenshot({ path: `${process.env.SHOTS}/repeat-custom.png` });
+  }
+  await pop.getByRole("button", { name: "Save" }).click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(
+      /- \[ \] Reply to reviewers 🔁 every week on Monday, Wednesday until \d{4}-\d{2}-\d{2} 📅 \d{4}-\d{2}-\d{2}\n/,
+    );
+  await expect(detail.getByRole("button", { name: "Repeat" })).toContainText(
+    "Every week on Mon, Wed",
+  );
+  // The pin picker's submenus open beside it, with the mouse.
+  await detail.getByRole("button", { name: "Pin a note" }).click();
+  await page.getByRole("menuitem", { name: /^Ideas/ }).hover();
+  await expect(
+    page.getByRole("menuitem", { name: /Absorptive capacity/ }),
+  ).toBeVisible();
+  if (process.env.SHOTS) {
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `${process.env.SHOTS}/pin-menu.png` });
+  }
+  expect(errors).toEqual([]);
+});

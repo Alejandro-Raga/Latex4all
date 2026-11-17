@@ -16,6 +16,8 @@
  * file is kept as it is, in its place.
  */
 
+import { nextOccurrence, parseRule, type Rule, ruleText } from "./repeat";
+
 export const PLAN_FILE = "Plan.md";
 
 /** None, low, medium, high, highest: 🔽 🔼 ⏫ 🔺. */
@@ -84,9 +86,12 @@ const TASK = /^- \[([ xX])\] (.*)$/;
 const SUBTASK = /^\s+- \[([ xX])\] (.*)$/;
 const DATE = "(\\d{4}-\\d{2}-\\d{2})";
 const DUE = new RegExp(`\\s*📅\\s*${DATE}`);
-const REPEAT = /\s*🔁\s*every (day|week|month|year)\b/;
+/** 🔁 and its rule, up to the next mark (a date, a priority) or a tag. */
+const REPEAT =
+  /\s*🔁\s*(every\b[^📅✅⏫🔺🔼🔽#]*?)(?=\s*(?:[📅✅⏫🔺🔼🔽#]|$))/u;
 
-export type Repeat = "every day" | "every week" | "every month" | "every year";
+/** A repeat rule as written: "every week on Monday, Friday" (see repeat.ts). */
+export type Repeat = string;
 const DONE = new RegExp(`\\s*✅\\s*${DATE}`);
 const PRIORITY = /\s*([🔺⏫🔼🔽])️?/u;
 
@@ -102,14 +107,23 @@ function parseTaskText(done: boolean, text: string): Task {
   const due = take(DUE);
   const doneOn = take(DONE);
   const mark = take(PRIORITY);
-  const every = take(REPEAT);
+  const ruleMatch = REPEAT.exec(rest);
+  const every =
+    ruleMatch && parseRule(ruleMatch[1])
+      ? ruleText(parseRule(ruleMatch[1]) as Rule)
+      : undefined;
+  if (every && ruleMatch) {
+    rest =
+      rest.slice(0, ruleMatch.index) +
+      rest.slice(ruleMatch.index + ruleMatch[0].length);
+  }
   return {
     done,
     title: rest.trim(),
     due,
     doneOn,
     priority: mark ? MARK_PRIORITY[mark] : 0,
-    ...(every ? { repeat: `every ${every}` as Repeat } : {}),
+    ...(every ? { repeat: every } : {}),
     subtasks: [],
     notes: [],
   };
@@ -366,21 +380,10 @@ export function updateTask(
 }
 
 /** Checks a task off (dated today), or back on. */
-/** The date a repeating task comes back on, after `from`. */
-export function nextDate(from: string, repeat: Repeat): string {
-  const [y, m, d] = from.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  if (repeat === "every day") date.setDate(d + 1);
-  if (repeat === "every week") date.setDate(d + 7);
-  if (repeat === "every month") {
-    // The same day next month, or its last if it hasn't one (31 → 28).
-    const last = new Date(y, m + 1, 0).getDate();
-    date.setDate(1);
-    date.setMonth(m);
-    date.setDate(Math.min(d, last));
-  }
-  if (repeat === "every year") date.setFullYear(y + 1);
-  return today(date);
+/** The date a repeating task comes back on after `from`; null once it ends. */
+export function nextDate(from: string, repeat: Repeat): string | null {
+  const rule = parseRule(repeat);
+  return rule ? nextOccurrence(from, rule) : null;
 }
 
 /**
@@ -395,11 +398,14 @@ export function toggleTask(plan: Plan, ref: TaskRef, now = new Date()): Plan {
     doneOn: task.done ? undefined : today(now),
   });
   if (task.done || !task.repeat || ref.path?.length) return checked;
+  const due = nextDate(task.due ?? today(now), task.repeat);
+  // Past its end: done for good.
+  if (!due) return checked;
   const again: Task = {
     ...detached(task),
     done: false,
     doneOn: undefined,
-    due: nextDate(task.due ?? today(now), task.repeat),
+    due,
     subtasks: task.subtasks.map((s) => ({
       ...detached(s),
       done: false,

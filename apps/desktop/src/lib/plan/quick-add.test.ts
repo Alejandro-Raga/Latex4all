@@ -74,3 +74,19 @@ describe("repeats", () => {
     );
   });
 });
+
+describe("repeat rules typed", () => {
+  const now = new Date("2026-11-17T10:00:00");
+  it("take intervals, days of the week and weekdays", () => {
+    expect(parseQuickAdd("Seminar every 2 weeks", now).repeat).toBe(
+      "every 2 weeks",
+    );
+    expect(parseQuickAdd("Gym every week on mon and thu", now)).toMatchObject({
+      title: "Gym",
+      repeat: "every week on Monday, Thursday",
+    });
+    expect(parseQuickAdd("Check email weekdays", now).repeat).toBe(
+      "every week on Monday, Tuesday, Wednesday, Thursday, Friday",
+    );
+  });
+});

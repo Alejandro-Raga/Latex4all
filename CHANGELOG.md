@@ -23,6 +23,9 @@ tag.
 
 ### Added
 
+- Planner: repeats of your own: every few days, weeks, months or years,
+  on chosen days of the week, ending on a day or after some weeks. Typed
+  too: "every 2 weeks", "every week on mon and thu", "weekdays".
 - Library: ⌘F (Ctrl+F) switches the reader to the full window and back,
   and the change now eases in instead of jumping.
 - Folders on All projects, to group projects by what they're for
@@ -154,6 +157,7 @@ tag.
 
 ### Fixed
 
+- A task's Date and Repeat buttons line up and look alike.
 - "Add to note" and other menus with submenus opened them out of sight,
   so a highlight or passage couldn't be filed in a note. They open
   beside the menu again.

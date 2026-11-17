@@ -173,7 +173,7 @@ Type it in the box at the top of a list, the way you would say it: "Draft the in
 
 - Dates: today, tomorrow, friday, next week, in 3 days, 20 nov. Spanish works too: mañana, el viernes.
 - Priority: add **!high**, **!medium** or **!low**.
-- Repeats: add "every week" (or every day, month, year; "cada semana" also works). When you check off a repeating task, it comes back with its next date.
+- Repeats: add "every week", "every 2 weeks", "every week on mon and thu" or "weekdays" ("cada semana" also works). For anything else, open the task, click **Repeat** and choose **Custom…**: how often, on which days, and when it ends. When you check off a repeating task, it comes back with its next date.
 - Tags: words like **#writing** group tasks.
 
 To add a task from anywhere in the app, press ⌘⇧A.

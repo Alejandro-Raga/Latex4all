@@ -11,6 +11,7 @@
  * Priority: !high !medium !low !urgent, or !!! !! !.
  */
 import { type Priority, type Repeat, today } from "./plan-file";
+import { parseRule, ruleText } from "./repeat";
 
 export interface QuickTask {
   title: string;
@@ -190,7 +191,30 @@ export function parseQuickAdd(text: string, now = new Date()): QuickTask {
   });
 
   let repeat: Repeat | undefined;
+  // "every 2 weeks", "every week on mon, fri": a rule of its own.
+  const ruled =
+    /\s(every\s+(?:\d+\s+)?(?:day|week|month|year)s?(?:\s+on\s+(?:(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*(?:\s*,\s*|\s+and\s+|\s+)?)+)?)(?=\s)/i.exec(
+      rest,
+    );
+  const rule = ruled ? parseRule(ruled[1].replace(/\s+and\s+/gi, ", ")) : null;
+  if (ruled && rule && (rule.every > 1 || rule.days)) {
+    repeat = ruleText(rule);
+    rest = rest.replace(ruled[0], " ");
+  }
+  if (
+    !repeat &&
+    /\s(?:weekdays|every weekday|entre semana|días laborables)(?=\s)/i.test(
+      rest,
+    )
+  ) {
+    repeat = "every week on Monday, Tuesday, Wednesday, Thursday, Friday";
+    rest = rest.replace(
+      /\s(?:weekdays|every weekday|entre semana|días laborables)(?=\s)/i,
+      " ",
+    );
+  }
   for (const [re, r] of REPEATS) {
+    if (repeat) break;
     if (re.test(rest)) {
       repeat = r;
       rest = rest.replace(re, " ");
