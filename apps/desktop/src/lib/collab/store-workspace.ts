@@ -31,6 +31,7 @@ export function documentStoreWorkspace(
   link: string,
 ): Workspace {
   const cache = new WeakMap<ProjectFile, LocalFile>();
+  let lastSeen: LocalFile[] = [];
   const absolute = (path: string) => join(projectRoot, ...path.split("/"));
   const ensureParent = async (path: string) => {
     const parent = parentOf(path);
@@ -46,6 +47,11 @@ export function documentStoreWorkspace(
     },
 
     files() {
+      // Another project's files (mid-switch): never this one's. What was
+      // last seen of this project stands, so nothing looks changed or gone.
+      if (useDocumentStore.getState().projectRoot !== projectRoot) {
+        return lastSeen;
+      }
       const files = useDocumentStore.getState().files;
       const texStems = new Set(
         files
@@ -74,12 +80,20 @@ export function documentStoreWorkspace(
         }
         result.push(local);
       }
+      lastSeen = result;
       return result;
     },
 
     subscribe(listener) {
       return useDocumentStore.subscribe((state, prev) => {
-        if (state.files !== prev.files) listener();
+        // Only this project's own changes: not another project's files
+        // arriving as the app switches to it.
+        if (
+          state.files !== prev.files &&
+          state.projectRoot === projectRoot &&
+          prev.projectRoot === projectRoot
+        )
+          listener();
       });
     },
 
