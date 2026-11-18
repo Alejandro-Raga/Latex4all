@@ -1,4 +1,4 @@
-import { type ReactNode, useState, useRef } from "react";
+import { Children, type ReactNode, useEffect, useRef, useState } from "react";
 import {
   Grid2x2Icon,
   Grid2x2XIcon,
@@ -976,11 +976,40 @@ export function BoardFrame({
   children: ReactNode;
   add?: ReactNode;
 }) {
+  // Side by side when there's room, in stacks: each section goes in the
+  // next stack in turn, so a short one leaves no gap under it (as rows
+  // would, each as tall as its tallest).
+  const ref = useRef<HTMLDivElement>(null);
+  const [stacks, setStacks] = useState(1);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => {
+      const width = el.clientWidth;
+      // Below 768px: one under another. Above: as many 288px boards as fit
+      // (40px padding, 12px apart).
+      setStacks(
+        width < 768 ? 1 : Math.max(1, Math.floor((width - 40 + 12) / 300)),
+      );
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const items = [...Children.toArray(children), ...(add ? [add] : [])];
+  const columns: ReactNode[][] = Array.from({ length: stacks }, () => []);
+  items.forEach((item, i) => columns[i % stacks].push(item));
   return (
-    <div className="@container h-full">
-      <div className="flex h-full @3xl:flex-row flex-col @3xl:flex-wrap @3xl:content-start @3xl:items-start gap-3 overflow-y-auto @3xl:p-5 p-3">
-        {children}
-        {add}
+    <div ref={ref} className="@container h-full">
+      <div className="flex h-full @3xl:flex-row flex-col @3xl:items-start gap-3 overflow-y-auto @3xl:p-5 p-3">
+        {stacks === 1
+          ? items
+          : columns.map((column, i) => (
+              <div key={i} className="flex w-72 shrink-0 flex-col gap-3">
+                {column}
+              </div>
+            ))}
       </div>
     </div>
   );
@@ -1227,7 +1256,8 @@ function BoardColumn({
       id={`col:${list.key}:${index}`}
       accepts="tasks"
       title={
-        <span className="flex min-w-0 items-center gap-1">
+        // The date goes under the title when both don't fit on one line.
+        <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
           <HeadingTitle
             title={sectionName(title)}
             editing={editing}

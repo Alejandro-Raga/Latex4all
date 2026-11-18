@@ -46,6 +46,8 @@ tag.
   days (was two).
 - Eisenhower matrix: leave a task out, with its subtasks (right-click,
   or the grid button in its panel).
+- Boards stack their sections without gaps under short ones, and a
+  section's date moves under its name instead of squeezing it.
 - One menu on the left in every part of the app: Home, Writing, Planner,
   Library & Vault, then Settings, Help and Report a bug. It shows icons
   only until you widen it. Writing reopens your last project when none
