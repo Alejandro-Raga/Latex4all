@@ -226,3 +226,34 @@ test("the app opens in the part you were in", async ({ page }) => {
       .getByRole("button", { name: "Planner", exact: true }),
   ).toHaveAttribute("aria-current", "page");
 });
+
+test("the Library is as you left it after another part of the app", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1300, height: 900 });
+  await page.goto("/e2e/harness.html?scenario=projects");
+  const menu = page.getByRole("navigation", { name: "Latex4All" });
+  await menu
+    .getByRole("button", { name: "Library & Vault", exact: true })
+    .click();
+  // A project unfolded on its PDFs.
+  await page
+    .getByRole("button", { name: "Paper on corporate science", exact: true })
+    .first()
+    .click();
+  await expect(page.getByRole("button", { name: /^Draft v3/ })).toBeVisible();
+  // To the Planner and back.
+  await menu.getByRole("button", { name: "Planner", exact: true }).click();
+  await menu
+    .getByRole("button", { name: "Library & Vault", exact: true })
+    .click();
+  await expect(page.getByRole("button", { name: /^Draft v3/ })).toBeVisible();
+  // Its files looked through: there again too.
+  await page.getByRole("button", { name: "Show all files" }).click();
+  await expect(page.getByText("Draft v3.pdf")).toBeVisible();
+  await menu.getByRole("button", { name: "Planner", exact: true }).click();
+  await menu
+    .getByRole("button", { name: "Library & Vault", exact: true })
+    .click();
+  await expect(page.getByText("Draft v3.pdf")).toBeVisible();
+});

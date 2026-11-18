@@ -93,3 +93,82 @@ export function atRisk(
   if (progress.done === progress.total) return false;
   return days(due) <= 7 && progress.done / progress.total < 0.8;
 }
+
+/** Icons a milestone can have, by name. */
+export const MILESTONE_ICONS = [
+  "diamond",
+  "flag",
+  "star",
+  "send",
+  "presentation",
+  "plane",
+  "book",
+  "graduation",
+  "circle",
+] as const;
+export type MilestoneIcon = (typeof MILESTONE_ICONS)[number];
+
+/** Its colors: the theme's own, so they suit every theme. */
+export const MILESTONE_COLORS = [
+  "accent",
+  "orange",
+  "blue",
+  "green",
+  "purple",
+  "red",
+  "grey",
+] as const;
+export type MilestoneColor = (typeof MILESTONE_COLORS)[number];
+
+const ICON = /\s*\[icon::\s*([^\]]+?)\s*\]/i;
+const COLOR = /\s*\[color::\s*([^\]]+?)\s*\]/i;
+
+/** A milestone's icon and color (`[icon:: send] [color:: blue]`), if set. */
+export function styleOf(task: Pick<Task, "title">): {
+  icon?: MilestoneIcon;
+  color?: MilestoneColor;
+} {
+  const icon = ICON.exec(task.title)?.[1] as MilestoneIcon | undefined;
+  const color = COLOR.exec(task.title)?.[1] as MilestoneColor | undefined;
+  return {
+    ...(icon && MILESTONE_ICONS.includes(icon) ? { icon } : {}),
+    ...(color && MILESTONE_COLORS.includes(color) ? { color } : {}),
+  };
+}
+
+/** The title with its icon and color set (none: the default). */
+export function withStyle(
+  title: string,
+  style: { icon?: MilestoneIcon | null; color?: MilestoneColor | null },
+): string {
+  let next = title;
+  if (style.icon !== undefined) {
+    next = next.replace(ICON, "").trim();
+    if (style.icon && style.icon !== "diamond")
+      next += ` [icon:: ${style.icon}]`;
+  }
+  if (style.color !== undefined) {
+    next = next.replace(COLOR, "").trim();
+    if (style.color) next += ` [color:: ${style.color}]`;
+  }
+  return next;
+}
+
+/**
+ * Bars in rows so none overlaps another: each in the first row free from
+ * its start (ordered by start). Returns each one's row.
+ */
+export function lanes(spans: { start: number; end: number }[]): number[] {
+  const ends: number[] = [];
+  const order = spans
+    .map((s, i) => ({ ...s, i }))
+    .sort((a, b) => a.start - b.start);
+  const out: number[] = new Array(spans.length).fill(0);
+  for (const s of order) {
+    let row = ends.findIndex((end) => end < s.start);
+    if (row < 0) row = ends.length;
+    ends[row] = s.end;
+    out[s.i] = row;
+  }
+  return out;
+}

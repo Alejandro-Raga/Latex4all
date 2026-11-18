@@ -21,6 +21,8 @@ tag.
 
 ### Fixed
 
+- The Library is as you left it after visiting another part of the app:
+  the paper open, the project's files, its unfolded projects and search.
 - Where you left off is kept in a file, so it survives quitting right
   after moving around (it could be lost before).
 - Phosphor and Amber CRT look like old monitors: everything in shades of
@@ -56,6 +58,11 @@ tag.
 
 ### Added
 
+- Timeline: periods in rows of their own where they overlap, each with its
+  name and dates (no icon at the end); milestones with an icon and color of
+  your choosing; names that never overlap; dated tasks named under the
+  line; zoom (−, Fit, +, or ⌘ and scroll) on a project's timeline and on
+  every project's.
 - The app opens where you left off: the part you were in (or your last
   project, if you were writing), the Library on the paper and project you
   had open, the vault on its note.

@@ -1,5 +1,5 @@
 import { pdfVersion } from "@/lib/pdf-notes";
-import { keepPlace, loadPlace } from "@/lib/place-memory";
+import { keepPlace, loadCurrent, placeNow } from "@/lib/place-memory";
 import {
   Fragment,
   useCallback,
@@ -478,7 +478,8 @@ export function QuickReferencePanel({
   useEffect(() => {
     if (!onLibraryPage) return;
     let live = true;
-    void loadPlace().then(({ library: saved }) => {
+    // Where it was a moment ago (another part of the app since), or last time.
+    void loadCurrent().then(({ library: saved, libraryQuery }) => {
       restored.current = true;
       if (!live || !saved) return;
       if (typeof saved.project === "string") {
@@ -492,6 +493,7 @@ export function QuickReferencePanel({
       if (Array.isArray(saved.collections)) {
         setExpandedZoteroCollections(new Set(saved.collections));
       }
+      if (libraryQuery) setZoteroQuery(libraryQuery);
     });
     return () => {
       live = false;
@@ -516,12 +518,19 @@ export function QuickReferencePanel({
             itemKey: selectedFile.itemKey,
           }
       : null;
+    keepPlace("libraryQuery", zoteroQuery);
     keepPlace("library", {
       file,
       project: refProjectPath,
       collections: [...expandedZoteroCollections],
     });
-  }, [onLibraryPage, selectedFile, refProjectPath, expandedZoteroCollections]);
+  }, [
+    onLibraryPage,
+    selectedFile,
+    refProjectPath,
+    expandedZoteroCollections,
+    zoteroQuery,
+  ]);
 
   // Asked for a project's folder (from its editor): that one, here.
   const navAsked = useNav((st) => st.asked);
@@ -1607,7 +1616,20 @@ function ProjectRow({
   const starred = useProjectStore((s) =>
     s.favorites.some((f) => normalizePath(f) === normalizePath(project.path)),
   );
-  const [open, setOpen] = useState(false);
+  // Unfolded as it was left.
+  const [open, setOpenState] = useState(() =>
+    (placeNow().libraryOpen ?? []).includes(project.path),
+  );
+  const setOpen = (next: boolean) => {
+    setOpenState(next);
+    const was = placeNow().libraryOpen ?? [];
+    keepPlace(
+      "libraryOpen",
+      next
+        ? [...was.filter((p) => p !== project.path), project.path]
+        : was.filter((p) => p !== project.path),
+    );
+  };
   return (
     <div>
       <ContextMenu>

@@ -1075,17 +1075,6 @@ test("the timeline: a phase following a section, dragged along, and every projec
   );
   await expect(main.getByText("[for::")).toHaveCount(0);
 
-  // A start date makes it a phase: a bar on the line.
-  await main.getByText("First draft", { exact: true }).last().hover();
-  await main.getByRole("button", { name: "Start date" }).click();
-  await page.getByRole("button", { name: "Today", exact: true }).click();
-  await expect
-    .poll(() => disk(page, PLAN))
-    .toMatch(/First draft .*🛫 \d{4}-\d{2}-\d{2}/);
-  await expect(
-    main.getByRole("slider", { name: "First draft: move the phase" }),
-  ).toBeVisible();
-
   // Dragged later along the line: its date moves.
   const before = /📅 (\d{4}-\d{2}-\d{2})/.exec(
     (await disk(page, PLAN)) ?? "",
@@ -1109,6 +1098,17 @@ test("the timeline: a phase following a section, dragged along, and every projec
         )?.[1],
     )
     .not.toBe(before);
+
+  // A start date makes it a period: a bar above the line.
+  await main.getByText("First draft", { exact: true }).last().hover();
+  await main.getByRole("button", { name: "Start date" }).click();
+  await page.getByRole("button", { name: "Today", exact: true }).click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/First draft .*🛫 \d{4}-\d{2}-\d{2}/);
+  await expect(
+    main.getByRole("slider", { name: "First draft: drag to move the period" }),
+  ).toBeVisible();
 
   // Every project, one line each; a row opens that project's timeline.
   await page
@@ -1143,4 +1143,64 @@ test("the matrix follows its rules from Settings", async ({ page }) => {
     box("Urgent, not important").getByText("Draft the discussion"),
   ).toBeVisible();
   await expect(page.getByText(/^Highest priority is important/)).toBeVisible();
+});
+
+test("the timeline: overlapping periods in rows, a milestone's icon, zoom", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByRole("radio", { name: "Timeline" }).click();
+  const add = main.getByLabel("Add a milestone");
+  for (const text of [
+    "Writing in 30 days",
+    "Fieldwork in 40 days",
+    "Submission in 60 days",
+  ]) {
+    await add.fill(text);
+    await add.press("Enter");
+  }
+  // Two periods that overlap: each its own row.
+  for (const name of ["Writing", "Fieldwork"]) {
+    const row = main.locator("div.group").filter({
+      has: page.getByRole("button", { name: `${name}, mark as reached` }),
+    });
+    await row.hover();
+    await row.getByRole("button", { name: "Start date" }).click();
+    await page.getByRole("button", { name: "Today", exact: true }).click();
+    await expect(
+      main.getByRole("slider", { name: `${name}: drag to move the period` }),
+    ).toBeVisible();
+  }
+  const a = await main
+    .getByRole("slider", { name: "Writing: drag to move the period" })
+    .boundingBox();
+  const b = await main
+    .getByRole("slider", { name: "Fieldwork: drag to move the period" })
+    .boundingBox();
+  expect(Math.abs((a?.y ?? 0) - (b?.y ?? 0))).toBeGreaterThan(10);
+  // A milestone's icon: the submission gets the paper plane.
+  const sub = main.locator("div.group").filter({
+    has: page.getByRole("button", { name: "Submission, mark as reached" }),
+  });
+  await sub.hover();
+  await sub.getByRole("button", { name: "Icon and color" }).click();
+  await page.getByRole("button", { name: "Submission", exact: true }).click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/Submission[^\n]*\[icon:: send\]/);
+  await expect(main.getByText("[icon::")).toHaveCount(0);
+  // Zoom: wider than the window, scrolled sideways; Fit brings it back.
+  const line = main.getByRole("slider", {
+    name: "Submission: drag to change its date",
+  });
+  const before = (await line.boundingBox())?.x ?? 0;
+  await main.getByRole("button", { name: "Zoom in" }).click();
+  await main.getByRole("button", { name: "Zoom in" }).click();
+  await expect
+    .poll(async () => (await line.boundingBox())?.x ?? 0)
+    .not.toBe(before);
+  await main.getByRole("button", { name: "Fit", exact: true }).click();
 });

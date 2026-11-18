@@ -1,22 +1,44 @@
 /**
- * A project's timeline: its milestones on the way to its deadline, on a line
- * that runs from today (or the first date) to the deadline, with today marked.
- * A milestone with a start date is a phase, drawn as a bar; one following a
- * section of the plan fills with how much of it is done, and turns red when
- * its date is close and much is left. Milestones, phases and the deadline can
- * be dragged along the line to change their dates; the plan's dated sections
- * and tasks show as small marks under it. Below: the milestones as a list.
+ * A project's timeline, from today (or its first date) to its deadline:
  *
- * ProjectsTimeline puts every project's line on one shared span of dates.
+ * - Periods (a milestone with a start date: "Revisions, Dec 5 – Jan 20") as
+ *   bars above the line, in rows of their own where they overlap, each with
+ *   its name and dates. One following a section of the plan fills as it's
+ *   done, and turns red when its end is close and much is left.
+ * - Milestones (one day each) on the line, each with its own icon and color;
+ *   the deadline's flag at the end. Their names in rows that never overlap.
+ * - The plan's dated tasks and sections as small marks under it, dated
+ *   where there's room.
+ *
+ * Anything on it can be dragged along to change its dates. It zooms (the
+ * buttons, or ⌘ and the scroll wheel) and scrolls sideways when zoomed in.
+ * Below: the milestones as a list. ProjectsTimeline puts every project on
+ * one shared span of dates, a row each, zoomed together.
  */
 import {
+  BookOpenIcon,
+  CircleIcon,
   DiamondIcon,
   FlagIcon,
+  GraduationCapIcon,
   ListChecksIcon,
+  type LucideIcon,
+  MinusIcon,
+  PlaneIcon,
   PlusIcon,
+  PresentationIcon,
+  SendIcon,
+  StarIcon,
   Trash2Icon,
 } from "lucide-react";
-import { type PointerEvent, useRef, useState } from "react";
+import {
+  type PointerEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+  type WheelEvent,
+} from "react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -34,17 +56,29 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { daysUntil } from "@/lib/plan/dates";
 import { shownTitle } from "@/lib/plan/matrix-opt";
 import {
   addMilestone,
   atRisk,
   isMilestonesSection,
+  lanes,
   linkedSection,
+  MILESTONE_COLORS,
+  MILESTONE_ICONS,
   type Milestone,
+  type MilestoneColor,
+  type MilestoneIcon,
   milestones,
   sectionProgress,
+  styleOf,
   withLink,
+  withStyle,
 } from "@/lib/plan/milestones";
 import {
   allTasks,
@@ -82,12 +116,48 @@ const short = (iso: string) =>
 const addDays = (iso: string, days: number) =>
   today(new Date(time(iso) + days * MS_DAY));
 
+const ICONS: Record<MilestoneIcon, LucideIcon> = {
+  diamond: DiamondIcon,
+  flag: FlagIcon,
+  star: StarIcon,
+  send: SendIcon,
+  presentation: PresentationIcon,
+  plane: PlaneIcon,
+  book: BookOpenIcon,
+  graduation: GraduationCapIcon,
+  circle: CircleIcon,
+};
+const ICON_LABEL: Record<MilestoneIcon, string> = {
+  diamond: "Milestone",
+  flag: "Flag",
+  star: "Star",
+  send: "Submission",
+  presentation: "Talk",
+  plane: "Trip",
+  book: "Reading",
+  graduation: "Defense",
+  circle: "Dot",
+};
+const COLOR: Record<MilestoneColor, string> = {
+  accent: "var(--primary)",
+  orange: "var(--chart-4)",
+  blue: "var(--chart-1)",
+  green: "var(--chart-2)",
+  purple: "var(--chart-5)",
+  red: "var(--destructive)",
+  grey: "var(--muted-foreground)",
+};
+const DEFAULT_COLOR = "var(--chart-4)";
+const colorOf = (m: Milestone) =>
+  COLOR[styleOf(m.task).color ?? "orange"] ?? DEFAULT_COLOR;
+const iconOf = (m: Milestone) => ICONS[styleOf(m.task).icon ?? "diamond"];
+
 interface Span {
   start: string;
   end: string;
 }
 
-/** Every date on a plan's line: today, its milestones, phases and deadline. */
+/** Every date on a plan's line: its milestones, periods and deadline. */
 function datesOf(plan: Plan): string[] {
   const due = projectDue(plan);
   return [
@@ -98,12 +168,19 @@ function datesOf(plan: Plan): string[] {
   ];
 }
 
-/** From the earliest to the latest, a month's room at least. */
+/** From the earliest to the latest (and today), a month's room at least,
+ *  and a week's margin either side so nothing sits on the edge. */
 function spanOf(dates: string[]): Span {
   const all = [today(), ...dates];
-  const start = all.reduce((a, b) => (a < b ? a : b));
+  let start = all.reduce((a, b) => (a < b ? a : b));
   let end = all.reduce((a, b) => (a > b ? a : b));
   if (time(end) - time(start) < 30 * MS_DAY) end = addDays(start, 30);
+  const margin = Math.max(
+    3,
+    Math.round((time(end) - time(start)) / MS_DAY / 40),
+  );
+  start = addDays(start, -margin);
+  end = addDays(end, margin);
   return { start, end };
 }
 
@@ -113,43 +190,154 @@ function progressOf(plan: Plan, m: Milestone) {
   return name ? sectionProgress(plan, name) : null;
 }
 
+/** The first day of each month in the span (with each January's year). */
+function monthsIn(span: Span): string[] {
+  const out: string[] = [];
+  for (
+    let d = new Date(`${span.start.slice(0, 7)}-01T00:00`);
+    today(d) <= span.end;
+    d = new Date(d.getFullYear(), d.getMonth() + 1, 1)
+  ) {
+    if (today(d) >= span.start) out.push(today(d));
+  }
+  return out;
+}
+
+/** About how wide a label is, in pixels (11px text). */
+const textWidth = (text: string, px = 6.2) => text.length * px + 10;
+
+/**
+ * Labels in rows so none overlaps the next: each in the first row where
+ * it fits, up to `rows`; the rest left out (their name shows on hover).
+ */
+function placeLabels<T extends { x: number; w: number }>(
+  items: T[],
+  rows: number,
+): (T & { row: number })[] {
+  const ends: number[] = [];
+  const out: (T & { row: number })[] = [];
+  for (const item of [...items].sort((a, b) => a.x - b.x)) {
+    const from = item.x - item.w / 2;
+    let row = ends.findIndex((end) => end + 6 < from);
+    if (row < 0 && ends.length < rows) row = ends.length;
+    if (row < 0) continue;
+    ends[row] = item.x + item.w / 2;
+    out.push({ ...item, row });
+  }
+  return out;
+}
+
 interface Drag {
   key: string;
-  /** What moves: its date, or a phase's start and end together. */
   what: "due" | "start" | "both";
   x0: number;
-  /** Days moved so far. */
   days: number;
 }
 
-/** The line: phases, milestones and the deadline placed by date. */
+/** Zoom: 1 fits the span to the width; more spreads it, scrolled sideways. */
+function useZoom() {
+  const [zoom, setZoom] = useState(1);
+  const clamp = (z: number) => Math.min(16, Math.max(1, z));
+  return {
+    zoom,
+    zoomIn: () => setZoom((z) => clamp(z * 1.5)),
+    zoomOut: () => setZoom((z) => clamp(z / 1.5)),
+    fit: () => setZoom(1),
+    onWheel: (e: WheelEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      e.preventDefault();
+      setZoom((z) => clamp(z * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+    },
+  };
+}
+
+function ZoomButtons({ z }: { z: ReturnType<typeof useZoom> }) {
+  const button =
+    "flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40";
+  return (
+    <div className="flex items-center gap-0.5">
+      <button
+        type="button"
+        onClick={z.zoomOut}
+        disabled={z.zoom <= 1}
+        className={button}
+        title="Zoom out (⌘ and scroll)"
+        aria-label="Zoom out"
+      >
+        <MinusIcon className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={z.fit}
+        disabled={z.zoom === 1}
+        className="h-6 rounded-md px-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+        title="Fit the whole span"
+      >
+        Fit
+      </button>
+      <button
+        type="button"
+        onClick={z.zoomIn}
+        disabled={z.zoom >= 16}
+        className={button}
+        title="Zoom in (⌘ and scroll)"
+        aria-label="Zoom in"
+      >
+        <PlusIcon className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+/** The width a scroller gives its content, kept up to date. */
+function useWidth() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(800);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => setWidth(el.clientWidth || 800);
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return { ref, width };
+}
+
+/** Room for the projects' names beside every project's line. */
+const NAMES = 160;
+const BAR = 18;
+const BAR_GAP = 4;
+
+/** The line: periods above, milestones on it, marks under it. */
 function Track({
   list,
   plan,
   span,
+  width,
   compact = false,
 }: {
   list: PlanList;
   plan: Plan;
   span: Span;
-  /** One row among many (every project's timeline): no labels, no marks. */
+  /** Its width in pixels (the scroller's, times the zoom). */
+  width: number;
+  /** One row among many (every project's timeline): slimmer, fewer words. */
   compact?: boolean;
 }) {
   const items = milestones(plan);
   const due = projectDue(plan);
-  const ref = useRef<HTMLDivElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const length = time(span.end) - time(span.start);
-  const at = (iso: string) => ((time(iso) - time(span.start)) / length) * 100;
-  const clampPct = (pct: number) => Math.min(98, Math.max(2, pct));
-  const leftPct = (iso: string) => `${clampPct(at(iso))}%`;
+  const xOf = (iso: string) =>
+    ((time(iso) - time(span.start)) / length) * width;
   const now = today();
-  const shift = (key: string, what: Drag["what"], iso: string) =>
+  const shifted = (key: string, what: "due" | "start", iso: string) =>
     drag && drag.key === key && (drag.what === what || drag.what === "both")
       ? addDays(iso, drag.days)
       : iso;
 
-  // Dragging: the pointer's distance along the line, in days.
   const begin =
     (key: string, what: Drag["what"]) => (e: PointerEvent<HTMLElement>) => {
       if (e.button !== 0) return;
@@ -159,8 +347,7 @@ function Track({
       setDrag({ key, what, x0: e.clientX, days: 0 });
     };
   const move = (e: PointerEvent<HTMLElement>) => {
-    if (!drag || !ref.current) return;
-    const width = ref.current.getBoundingClientRect().width || 1;
+    if (!drag) return;
     const days = Math.round(
       ((e.clientX - drag.x0) / width) * (length / MS_DAY),
     );
@@ -171,47 +358,73 @@ function Track({
     setDrag(null);
     if (d && d.days !== 0) commit(d.days);
   };
+  const save = (m: Milestone, change: { due?: string; start?: string }) =>
+    void editPlan(list, (p) => updateTask(p, m.ref, change));
+  const keyOf = (m: Milestone) => `m${m.ref.section}-${m.ref.item}`;
 
-  const markers = [
+  // Periods: in rows of their own where they overlap.
+  const periods = items.filter((m) => m.task.start && m.task.due);
+  const rowOf = lanes(
+    periods.map((m) => ({
+      start: time(m.task.start as string),
+      end: time(m.task.due as string),
+    })),
+  );
+  const periodRows = periods.length ? Math.max(...rowOf) + 1 : 0;
+  const barH = compact ? 8 : BAR;
+  const barsH = periodRows * (barH + BAR_GAP);
+  const top = compact ? 4 : 18; // room for the months / Today
+  const lineY = top + barsH + (compact ? 8 : 14);
+
+  // Milestones (one day each) and the deadline, on the line.
+  const points = [
     ...items
-      .filter((m) => m.task.due)
-      .map((m) => ({
-        key: `m${m.ref.section}-${m.ref.item}`,
-        kind: "milestone" as const,
-        m,
-        title: shownTitle(m.task.title),
-        date: shift(
-          `m${m.ref.section}-${m.ref.item}`,
-          "due",
-          m.task.due as string,
-        ),
-        done: m.task.done,
-        risk: atRisk(progressOf(plan, m), m.task.due, daysUntil),
-      })),
+      .filter((m) => m.task.due && !m.task.start)
+      .map((m) => {
+        const date = shifted(keyOf(m), "due", m.task.due as string);
+        const title = shownTitle(m.task.title);
+        return {
+          key: keyOf(m),
+          m,
+          title,
+          date,
+          x: xOf(date),
+          w: textWidth(`${title} · ${short(date)}`),
+        };
+      }),
     ...(due
       ? [
           {
             key: "deadline",
-            kind: "deadline" as const,
             m: null,
             title: "Deadline",
-            date: shift("deadline", "due", due),
-            done: false,
-            risk: false,
+            date: shifted("deadline", "due", due),
+            x: xOf(shifted("deadline", "due", due)),
+            w: textWidth(`Deadline · ${short(due)}`),
           },
         ]
       : []),
-  ]
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map((mk) => ({ ...mk, row: 0 }));
-  // One close to the one before puts its label on the other side.
-  markers.forEach((mk, i) => {
-    const prev = markers[i - 1];
-    if (prev && at(mk.date) - at(prev.date) < 14) mk.row = prev.row ? 0 : 1;
+  ];
+  const labelRows = compact ? 0 : 3;
+  // Inside the line's width, so none is cut off at either end.
+  const inside = <T extends { x: number; w: number }>(item: T) => ({
+    ...item,
+    lx: Math.min(Math.max(item.x, item.w / 2), width - item.w / 2),
   });
+  const placed = placeLabels(
+    points.map((p) => {
+      const at = inside(p);
+      return { ...at, x: at.lx, at: p.x };
+    }),
+    labelRows,
+  );
+  const usedRows = placed.length
+    ? Math.max(...placed.map((p) => p.row)) + 1
+    : 0;
+  const labelsY = lineY + 14;
+  const labelsH = usedRows * 16;
 
-  const phases = items.filter((m) => m.task.start && m.task.due);
-  // Marks under the line: dated sections, and open tasks with a date.
+  // Marks: dated tasks and sections, named where there's room.
   const marks = compact
     ? []
     : [
@@ -222,7 +435,7 @@ function Track({
             ? [
                 {
                   date: d,
-                  title: `${sectionName(s.title as string)}`,
+                  title: sectionName(s.title as string),
                   section: true,
                 },
               ]
@@ -238,42 +451,68 @@ function Track({
             title: shownTitle(t.task.title),
             section: false,
           })),
-      ].filter((mk) => mk.date >= span.start && mk.date <= span.end);
-
-  const save = (m: Milestone, change: { due?: string; start?: string }) =>
-    void editPlan(list, (p) => updateTask(p, m.ref, change));
+      ]
+        .filter((mk) => mk.date >= span.start && mk.date <= span.end)
+        .map((mk) => ({
+          ...mk,
+          x: xOf(mk.date),
+          w: textWidth(`${mk.title} · ${short(mk.date)}`, 5.6),
+        }));
+  const marksY = labelsY + labelsH + (marks.length ? 6 : 0);
+  const markLabels = placeLabels(
+    marks.map((mk) => ({ ...mk, x: inside(mk).lx })),
+    2,
+  );
+  const marksH = marks.length
+    ? 10 +
+      (markLabels.length
+        ? (Math.max(...markLabels.map((m) => m.row)) + 1) * 14
+        : 0)
+    : 0;
+  const height = compact ? lineY + 10 : marksY + marksH + 6;
 
   return (
-    <div
-      ref={ref}
-      className={cn(
-        "relative mx-2 select-none",
-        compact ? "h-10" : "mt-6 mb-10 h-20",
-      )}
-    >
-      {/* The line, done up to today. */}
-      <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-muted" />
+    <div className="relative select-none" style={{ width, height }}>
+      {/* Months, faint, behind it all. */}
+      {!compact &&
+        monthsIn(span).map((m) => (
+          <div
+            key={m}
+            className="pointer-events-none absolute top-0 bottom-0 border-border/50 border-l"
+            style={{ left: xOf(m) }}
+          />
+        ))}
+      {/* Today. */}
       <div
-        className="absolute top-1/2 left-0 h-1 -translate-y-1/2 rounded-full bg-primary/40"
-        style={{ width: `${Math.max(0, Math.min(100, at(now)))}%` }}
-      />
-      {/* Phases: bars from start to end, filled as their section is done. */}
-      {phases.map((m) => {
-        const key = `m${m.ref.section}-${m.ref.item}`;
-        const from = shift(key, "start", m.task.start as string);
-        const to = shift(key, "due", m.task.due as string);
-        const left = clampPct(at(from));
-        const width = Math.max(1, clampPct(at(to)) - left);
+        className="pointer-events-none absolute top-0 bottom-0 w-px bg-primary"
+        style={{ left: xOf(now) }}
+      >
+        {!compact && (
+          <span className="absolute top-0 left-1 whitespace-nowrap rounded bg-primary px-1 text-[10px] text-primary-foreground">
+            Today
+          </span>
+        )}
+      </div>
+      {/* Periods. */}
+      {periods.map((m, i) => {
+        const key = keyOf(m);
+        const from = shifted(key, "start", m.task.start as string);
+        const to = shifted(key, "due", m.task.due as string);
+        const left = xOf(from);
+        const w = Math.max(6, xOf(to) - left);
         const progress = progressOf(plan, m);
         const risk = atRisk(progress, m.task.due, daysUntil);
         const share = progress?.total ? progress.done / progress.total : 0;
+        const color = risk ? "var(--destructive)" : colorOf(m);
+        const title = shownTitle(m.task.title);
+        const label = `${title} · ${short(from)} – ${short(to)}${progress ? ` · ${progress.done} of ${progress.total}` : ""}`;
         return (
           <div
             key={`bar-${key}`}
             role="slider"
-            aria-label={`${shownTitle(m.task.title)}: move the phase`}
+            aria-label={`${title}: drag to move the period`}
             aria-valuetext={`${short(from)} to ${short(to)}`}
-            aria-valuenow={at(from)}
+            aria-valuenow={left}
             tabIndex={-1}
             onPointerDown={begin(key, "both")}
             onPointerMove={move}
@@ -283,24 +522,35 @@ function Track({
                 due: addDays(m.task.due as string, days),
               }),
             )}
-            title={`${shownTitle(m.task.title)} · ${short(from)} – ${short(to)}${progress ? ` · ${progress.done} of ${progress.total} done` : ""}`}
-            className="absolute top-1/2 h-2.5 -translate-y-1/2 cursor-grab overflow-hidden rounded-full active:cursor-grabbing"
+            title={label}
+            className="absolute cursor-grab overflow-hidden rounded-md active:cursor-grabbing"
             style={{
-              left: `${left}%`,
-              width: `${width}%`,
-              backgroundColor: risk
-                ? "color-mix(in oklab, var(--destructive) 30%, transparent)"
-                : "color-mix(in oklab, var(--chart-4) 30%, transparent)",
+              left,
+              width: w,
+              top: top + rowOf[i] * (barH + BAR_GAP),
+              height: barH,
+              backgroundColor: `color-mix(in oklab, ${color} 22%, transparent)`,
+              boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${color} 45%, transparent)`,
             }}
           >
             <div
-              className="h-full"
+              className="absolute inset-y-0 left-0"
               style={{
                 width: `${share * 100}%`,
-                backgroundColor: risk ? "var(--destructive)" : "var(--chart-4)",
+                backgroundColor: `color-mix(in oklab, ${color} 45%, transparent)`,
               }}
             />
-            {/* The start's edge: drag to move the start alone. */}
+            {!compact && (
+              <span className="relative block truncate px-1.5 text-[11px] leading-[18px]">
+                <span className="font-medium">{title}</span>
+                <span className="text-muted-foreground">
+                  {" "}
+                  {short(from)} – {short(to)}
+                  {progress ? ` · ${progress.done}/${progress.total}` : ""}
+                </span>
+              </span>
+            )}
+            {/* Its ends: drag one to move only that date. */}
             <span
               onPointerDown={begin(key, "start")}
               onPointerMove={move}
@@ -309,97 +559,140 @@ function Track({
               )}
               className="absolute inset-y-0 left-0 w-2 cursor-ew-resize"
             />
+            <span
+              onPointerDown={begin(key, "due")}
+              onPointerMove={move}
+              onPointerUp={end((days) =>
+                save(m, { due: addDays(m.task.due as string, days) }),
+              )}
+              className="absolute inset-y-0 right-0 w-2 cursor-ew-resize"
+            />
           </div>
         );
       })}
-      {/* Today. */}
+      {/* The line. */}
       <div
-        className="pointer-events-none absolute top-1 bottom-1 w-px bg-primary"
-        style={{ left: leftPct(now) }}
-      >
-        {!compact && (
-          <span className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-primary px-1 text-[10px] text-primary-foreground">
-            Today
-          </span>
-        )}
-      </div>
+        className="absolute inset-x-0 h-0.5 -translate-y-1/2 rounded-full bg-muted-foreground/25"
+        style={{ top: lineY }}
+      />
+      {/* Milestones and the deadline. */}
+      {points.map((p) => {
+        const Icon = p.m ? iconOf(p.m) : FlagIcon;
+        const color = p.m ? colorOf(p.m) : "var(--destructive)";
+        const done = p.m?.task.done;
+        return (
+          <div
+            key={p.key}
+            role="slider"
+            aria-label={`${p.title}: drag to change its date`}
+            aria-valuetext={short(p.date)}
+            aria-valuenow={p.x}
+            tabIndex={-1}
+            className={cn(
+              "absolute -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none rounded-full bg-background p-0.5 active:cursor-grabbing",
+              drag?.key === p.key && "z-10",
+            )}
+            style={{ left: p.x, top: lineY }}
+            title={`${p.title} · ${short(p.date)} (drag to move)`}
+            onPointerDown={begin(p.key, "due")}
+            onPointerMove={move}
+            onPointerUp={end((days) => {
+              if (!p.m) {
+                const d = projectDue(plan);
+                if (d)
+                  void editPlan(list, (pl) =>
+                    setProjectDue(pl, addDays(d, days)),
+                  );
+              } else {
+                save(p.m, { due: addDays(p.m.task.due as string, days) });
+              }
+            })}
+          >
+            <Icon
+              className={compact ? "size-3.5" : "size-4"}
+              style={{ color }}
+              fill={done || !p.m ? color : "transparent"}
+            />
+          </div>
+        );
+      })}
+      {/* Their names, in rows that don't overlap. */}
+      {placed.map((p) => {
+        const done = p.m?.task.done;
+        return (
+          <div
+            key={`label-${p.key}`}
+            className={cn(
+              "pointer-events-none absolute -translate-x-1/2 truncate whitespace-nowrap text-center text-[11px]",
+              !p.m && "font-medium text-destructive",
+              done && "text-muted-foreground line-through",
+            )}
+            style={{ left: p.x, top: labelsY + p.row * 16, maxWidth: p.w }}
+          >
+            {p.title}
+            <span className="font-normal text-muted-foreground">
+              {" "}
+              · {short(p.date)}
+            </span>
+          </div>
+        );
+      })}
+      {/* Dated tasks and sections. */}
       {marks.map((mk, i) => (
         <span
-          key={i}
+          // Marks have nothing steadier to go by than their place.
+          key={`${mk.date}-${i}`}
           title={`${mk.title} · ${short(mk.date)}`}
           className={cn(
-            "absolute top-1/2 mt-2.5 -translate-x-1/2",
+            "absolute -translate-x-1/2",
             mk.section
               ? "size-1.5 rounded-[2px] bg-muted-foreground/70"
-              : "h-1.5 w-px bg-muted-foreground/60",
+              : "h-2 w-px bg-muted-foreground/60",
           )}
-          style={{ left: leftPct(mk.date) }}
+          style={{ left: mk.x, top: marksY }}
         />
       ))}
-      {markers.map((mk) => (
-        <div
-          key={mk.key}
-          role="slider"
-          aria-label={`${mk.title}: drag to change its date`}
-          aria-valuetext={short(mk.date)}
-          aria-valuenow={at(mk.date)}
-          tabIndex={-1}
-          className={cn(
-            "absolute top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-grab touch-none active:cursor-grabbing",
-            drag?.key === mk.key && "z-10",
-          )}
-          style={{ left: leftPct(mk.date) }}
-          title={`${mk.title} · ${short(mk.date)} (drag to move)`}
-          onPointerDown={begin(mk.key, "due")}
-          onPointerMove={move}
-          onPointerUp={end((days) => {
-            if (mk.kind === "deadline") {
-              const d = projectDue(plan);
-              if (d)
-                void editPlan(list, (p) => setProjectDue(p, addDays(d, days)));
-            } else if (mk.m) {
-              save(mk.m, { due: addDays(mk.m.task.due as string, days) });
-            }
-          })}
+      {markLabels.map((mk, i) => (
+        <span
+          key={`ml-${mk.date}-${i}`}
+          className="pointer-events-none absolute -translate-x-1/2 truncate whitespace-nowrap text-[10px] text-muted-foreground"
+          style={{ left: mk.x, top: marksY + 10 + mk.row * 14, maxWidth: mk.w }}
         >
-          {mk.kind === "deadline" ? (
-            <FlagIcon
-              className="size-4 text-destructive"
-              fill="var(--destructive)"
-            />
-          ) : (
-            <DiamondIcon
-              className="size-4"
-              style={{
-                color: mk.risk ? "var(--destructive)" : "var(--chart-4)",
-              }}
-              fill={
-                mk.done
-                  ? mk.risk
-                    ? "var(--destructive)"
-                    : "var(--chart-4)"
-                  : "var(--background)"
-              }
-            />
-          )}
-          {(!compact || drag?.key === mk.key) && (
-            <span
-              className={cn(
-                "pointer-events-none absolute left-1/2 max-w-32 -translate-x-1/2 truncate whitespace-nowrap text-center text-[11px]",
-                mk.row === 0 || compact ? "top-5" : "bottom-5",
-                mk.kind === "deadline" && "font-medium text-destructive",
-                mk.risk && "text-destructive",
-                mk.done && "text-muted-foreground line-through",
-              )}
-            >
-              {!compact && mk.title}
-              <span className="block font-normal text-[10px] text-muted-foreground">
-                {short(mk.date)}
-              </span>
-            </span>
-          )}
-        </div>
+          {mk.title} · {short(mk.date)}
+        </span>
       ))}
+    </div>
+  );
+}
+
+/** Months along the top, over the same span and width as the tracks. */
+function MonthAxis({ span, width }: { span: Span; width: number }) {
+  const length = time(span.end) - time(span.start);
+  const months = monthsIn(span);
+  // At a narrow width, every other (or third) month only.
+  const step = Math.max(
+    1,
+    Math.ceil(40 / (width / Math.max(1, months.length) || 1)),
+  );
+  return (
+    <div
+      className="relative h-5 text-[10px] text-muted-foreground"
+      style={{ width }}
+    >
+      {months.map((m, i) =>
+        i % step === 0 ? (
+          <span
+            key={m}
+            className="absolute whitespace-nowrap pl-1"
+            style={{ left: ((time(m) - time(span.start)) / length) * width }}
+          >
+            {new Date(`${m}T00:00`).toLocaleDateString(undefined, {
+              month: "short",
+            })}
+            {(m.endsWith("-01-01") || i === 0) && ` ${m.slice(0, 4)}`}
+          </span>
+        ) : null,
+      )}
     </div>
   );
 }
@@ -473,6 +766,94 @@ function SectionPicker({
   );
 }
 
+/** A milestone's icon and color, picked from a small grid. */
+function StylePicker({ list, m }: { list: PlanList; m: Milestone }) {
+  const style = styleOf(m.task);
+  const Icon = iconOf(m);
+  const color = colorOf(m);
+  const set = (change: {
+    icon?: MilestoneIcon | null;
+    color?: MilestoneColor | null;
+  }) =>
+    void editPlan(list, (p) =>
+      updateTask(p, m.ref, { title: withStyle(m.task.title, change) }),
+    );
+  const period = !!m.task.start;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title="Icon and color"
+          aria-label="Icon and color"
+          className="flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-muted"
+        >
+          {period ? (
+            <span
+              className="h-2.5 w-4 rounded-sm"
+              style={{
+                backgroundColor: `color-mix(in oklab, ${color} 45%, transparent)`,
+              }}
+            />
+          ) : (
+            <Icon
+              className="size-[18px]"
+              style={{ color }}
+              fill={m.task.done ? color : "transparent"}
+            />
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-56 space-y-2 p-2">
+        {!period && (
+          <div className="grid grid-cols-5 gap-1">
+            {MILESTONE_ICONS.map((name) => {
+              const I = ICONS[name];
+              const on = (style.icon ?? "diamond") === name;
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => set({ icon: name })}
+                  title={ICON_LABEL[name]}
+                  aria-label={ICON_LABEL[name]}
+                  aria-pressed={on}
+                  className={cn(
+                    "flex size-8 items-center justify-center rounded-md hover:bg-muted",
+                    on && "bg-muted ring-1 ring-ring",
+                  )}
+                >
+                  <I className="size-4" style={{ color }} />
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-1.5">
+          {MILESTONE_COLORS.map((name) => {
+            const on = (style.color ?? "orange") === name;
+            return (
+              <button
+                key={name}
+                type="button"
+                onClick={() => set({ color: name === "orange" ? null : name })}
+                title={name[0].toUpperCase() + name.slice(1)}
+                aria-label={`Color ${name}`}
+                aria-pressed={on}
+                className={cn(
+                  "size-5 rounded-full ring-offset-1 ring-offset-popover hover:ring-2 hover:ring-ring",
+                  on && "ring-2 ring-ring",
+                )}
+                style={{ backgroundColor: COLOR[name] }}
+              />
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function MilestoneRow({
   list,
   plan,
@@ -491,26 +872,19 @@ function MilestoneRow({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div className="group flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/70">
+          <StylePicker list={list} m={m} />
           <button
             type="button"
             onClick={() => void editPlan(list, (p) => toggleTask(p, ref))}
-            aria-label={m.task.done ? "Mark as not reached" : "Mark as reached"}
-            className="shrink-0 transition-transform hover:scale-110"
-          >
-            <DiamondIcon
-              className="size-[18px]"
-              style={{ color: "var(--chart-4)" }}
-              fill={m.task.done ? "var(--chart-4)" : "none"}
-            />
-          </button>
-          <span
             className={cn(
-              "min-w-0 flex-1 truncate text-sm",
+              "min-w-0 flex-1 truncate text-left text-sm",
               m.task.done && "text-muted-foreground line-through",
             )}
+            title={m.task.done ? "Mark as not reached" : "Mark as reached"}
+            aria-label={`${shownTitle(m.task.title)}, ${m.task.done ? "mark as not reached" : "mark as reached"}`}
           >
             {shownTitle(m.task.title)}
-          </span>
+          </button>
           {m.task.due && !m.task.done && daysUntil(m.task.due) > 0 && (
             <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
               in {daysUntil(m.task.due)} days
@@ -548,6 +922,11 @@ function MilestoneRow({
         </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-52">
+        <ContextMenuItem
+          onClick={() => void editPlan(list, (p) => toggleTask(p, ref))}
+        >
+          {m.task.done ? "Mark as not reached" : "Mark as reached"}
+        </ContextMenuItem>
         <ContextMenuSub>
           <ContextMenuSubTrigger>
             <ListChecksIcon className="size-3.5" />
@@ -596,9 +975,29 @@ function MilestoneRow({
   );
 }
 
+/** A sideways scroller for the line, zoomed with ⌘ and the wheel. */
+function Zoomable({
+  z,
+  reserve = 0,
+  children,
+}: {
+  z: ReturnType<typeof useZoom>;
+  /** Pixels kept for something beside the line (the projects' names). */
+  reserve?: number;
+  children: (width: number) => ReactNode;
+}) {
+  const { ref, width } = useWidth();
+  return (
+    <div ref={ref} onWheel={z.onWheel} className="overflow-x-auto pb-2">
+      {children(Math.max(200, Math.round((width - reserve) * z.zoom)))}
+    </div>
+  );
+}
+
 export function TimelineView({ list }: { list: PlanList }) {
   const text = usePlanText(list.key);
   const [draft, setDraft] = useState("");
+  const z = useZoom();
   if (text === undefined) {
     return <p className="p-4 text-muted-foreground text-sm">Loading…</p>;
   }
@@ -606,6 +1005,7 @@ export function TimelineView({ list }: { list: PlanList }) {
   const items = milestones(plan);
   const due = projectDue(plan);
   const next = items.find((m) => !m.task.done && m.task.due);
+  const span = spanOf(datesOf(plan));
   return (
     <div className="px-8 py-5">
       <form
@@ -635,7 +1035,17 @@ export function TimelineView({ list }: { list: PlanList }) {
         />
       ) : (
         <>
-          <Track list={list} plan={plan} span={spanOf(datesOf(plan))} />
+          <div className="mt-4 flex items-center justify-end">
+            <ZoomButtons z={z} />
+          </div>
+          <Zoomable z={z}>
+            {(width) => (
+              <>
+                <MonthAxis span={span} width={width} />
+                <Track list={list} plan={plan} span={span} width={width} />
+              </>
+            )}
+          </Zoomable>
           {(next || due) && (
             <p className="flex flex-wrap items-center gap-x-1 px-2 pb-2 text-muted-foreground text-xs">
               {next && (
@@ -665,8 +1075,10 @@ export function TimelineView({ list }: { list: PlanList }) {
               />
             ))}
             {due && (
-              <div className="flex items-center gap-2.5 rounded-lg px-2 py-1.5">
-                <FlagIcon className="size-[18px] text-destructive" />
+              <div className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+                <span className="flex size-7 items-center justify-center">
+                  <FlagIcon className="size-[18px] text-destructive" />
+                </span>
                 <span className="min-w-0 flex-1 font-medium text-sm">
                   Deadline
                 </span>
@@ -686,7 +1098,7 @@ export function TimelineView({ list }: { list: PlanList }) {
   );
 }
 
-/** Every project's line on one span of dates, a row each. */
+/** Every project's line on one span of dates, a row each, zoomed together. */
 export function ProjectsTimeline({
   lists,
   onOpen,
@@ -696,6 +1108,7 @@ export function ProjectsTimeline({
 }) {
   const projects = lists.filter((l) => isProjectKey(l.key));
   const texts = usePlanTexts(projects.map((l) => l.key));
+  const z = useZoom();
   const rows = projects.flatMap((list) => {
     const text = texts[list.key];
     if (!text) return [];
@@ -713,51 +1126,48 @@ export function ProjectsTimeline({
     );
   }
   const span = spanOf(rows.flatMap((r) => r.dates));
-  // The months along the top.
-  const months: string[] = [];
-  for (
-    let d = new Date(`${span.start.slice(0, 7)}-01T00:00`);
-    today(d) <= span.end;
-    d = new Date(d.getFullYear(), d.getMonth() + 1, 1)
-  ) {
-    if (today(d) >= span.start) months.push(today(d));
-  }
-  const at = (iso: string) =>
-    ((time(iso) - time(span.start)) / (time(span.end) - time(span.start))) *
-    100;
   return (
     <div className="px-6 py-5">
-      <div className="grid grid-cols-[10rem_1fr] items-center gap-x-3">
-        <span />
-        <div className="relative mx-2 h-5 text-[10px] text-muted-foreground">
-          {months.map((m) => (
-            <span
-              key={m}
-              className="absolute -translate-x-1/2 whitespace-nowrap"
-              style={{ left: `${Math.min(97, Math.max(3, at(m)))}%` }}
-            >
-              {new Date(`${m}T00:00`).toLocaleDateString(undefined, {
-                month: "short",
-              })}
-              {/* The year where it starts, and on the first month shown. */}
-              {(m.endsWith("-01-01") || m === months[0]) && ` ${m.slice(0, 4)}`}
-            </span>
-          ))}
-        </div>
-        {rows.map(({ list, plan }) => (
-          <div key={list.key} className="contents">
-            <button
-              type="button"
-              onClick={() => onOpen(list)}
-              title={`Open ${list.name}'s timeline`}
-              className="truncate rounded-md px-2 py-1 text-left text-sm hover:bg-muted"
-            >
-              {list.name}
-            </button>
-            <Track list={list} plan={plan} span={span} compact />
-          </div>
-        ))}
+      <div className="mb-2 flex justify-end">
+        <ZoomButtons z={z} />
       </div>
+      <Zoomable z={z} reserve={NAMES}>
+        {(width) => (
+          <div style={{ width: width + NAMES }}>
+            <div className="flex">
+              <div
+                className="sticky left-0 z-20 shrink-0 bg-background"
+                style={{ width: NAMES }}
+              />
+              <MonthAxis span={span} width={width} />
+            </div>
+            {rows.map(({ list, plan }) => (
+              <div
+                key={list.key}
+                className="flex min-h-10 items-center border-border/40 border-b"
+              >
+                {/* Its name, kept in place as the lines scroll. */}
+                <button
+                  type="button"
+                  onClick={() => onOpen(list)}
+                  title={`Open ${list.name}'s timeline`}
+                  className="sticky left-0 z-20 shrink-0 self-stretch truncate bg-background px-2 text-left text-sm hover:bg-muted"
+                  style={{ width: NAMES }}
+                >
+                  {list.name}
+                </button>
+                <Track
+                  list={list}
+                  plan={plan}
+                  span={span}
+                  width={width}
+                  compact
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </Zoomable>
     </div>
   );
 }

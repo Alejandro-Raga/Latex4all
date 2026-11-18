@@ -46,3 +46,25 @@ describe("a milestone following a section", () => {
     expect(atRisk(null, "x", days(1))).toBe(false);
   });
 });
+
+describe("a milestone's look, and periods in rows", async () => {
+  const { styleOf, withStyle, lanes } = await import("./milestones");
+  const { shownTitle } = await import("./matrix-opt");
+  it("keeps its icon and color on its line, hidden from its title", () => {
+    const t = withStyle("Submission", { icon: "send", color: "blue" });
+    expect(t).toBe("Submission [icon:: send] [color:: blue]");
+    expect(styleOf({ title: t })).toEqual({ icon: "send", color: "blue" });
+    expect(shownTitle(t)).toBe("Submission");
+    expect(withStyle(t, { icon: "diamond", color: null })).toBe("Submission");
+  });
+  it("puts overlapping periods in rows of their own", () => {
+    expect(
+      lanes([
+        { start: 0, end: 10 },
+        { start: 5, end: 15 },
+        { start: 11, end: 20 },
+        { start: 6, end: 8 },
+      ]),
+    ).toEqual([0, 1, 0, 2]);
+  });
+});

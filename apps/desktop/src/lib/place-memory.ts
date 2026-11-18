@@ -17,6 +17,9 @@ export interface Place {
   };
   /** The vault note open. */
   note?: string | null;
+  /** The Library's projects unfolded, and what's typed in its search. */
+  libraryOpen?: string[];
+  libraryQuery?: string;
 }
 
 let place: Place = {};
@@ -45,6 +48,14 @@ export function loadPlace(): Promise<Place> {
     });
   return loading;
 }
+
+/** Where you are now, this session included (after it's been read). */
+export function loadCurrent(): Promise<Place> {
+  return loadPlace().then(() => place);
+}
+
+/** Where you are now, as far as known yet (before reading: this session's). */
+export const placeNow = (): Place => place;
 
 /** Keeps one part of where you are, written a moment later. */
 export function keepPlace<K extends keyof Place>(key: K, value: Place[K]) {

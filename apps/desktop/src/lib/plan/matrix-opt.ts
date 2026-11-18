@@ -21,8 +21,9 @@ export const withMatrix = (title: string, out: boolean) =>
     ? `${withoutMatrixField(title)} [matrix:: no]`
     : withoutMatrixField(title);
 
-/** Fields kept on a task's line but not shown: `[matrix:: no]`, `[for:: …]`. */
-const HIDDEN = /\s*\[(?:matrix|for)::[^\]]*\]/gi;
+/** Fields kept on a task's line but not shown: `[matrix:: no]`, `[for:: …]`,
+ * a milestone's `[icon:: …]` and `[color:: …]`. */
+const HIDDEN = /\s*\[(?:matrix|for|icon|color)::[^\]]*\]/gi;
 
 /** The title as shown anywhere: without the hidden fields. */
 export const shownTitle = (title: string) => title.replace(HIDDEN, "").trim();
