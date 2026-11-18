@@ -96,19 +96,15 @@ Settings → Sync (the full text lives there):
 
 > **Sync storage**
 >
-> Shared projects sync directly between computers. When your collaborators
-> aren't online at the same time, changes wait in storage that's always on.
-> Choose where.
->
-> - **Cloud folder** (recommended): a folder on Dropbox, OneDrive, iCloud,
->   Google Drive or similar, shared with your collaborators. Your projects
->   stay in your own account.
-> - **Latex4All server**: free, with a storage limit per project.
-> - **This computer**: only if it's always on.
-> - **Your own server**: run the Latex4All server on a computer that's
->   always on. *Download*
->
-> Everything is encrypted before it leaves your computer.
+> Latex4All uses a peer-to-peer service to sync, but to guarantee
+> asynchronous functionality it needs a secure, always-on storage service. By
+> default, this service is offered free of charge, with storage limits per
+> project, but you can choose a cloud folder on any service you already use.
+> Share that folder with your collaborators so their copies can sync through
+> it too. Alternatively, you can set up Latex4All as its own server on your
+> personal computer (*Use this computer as a server*), as long as it's always
+> on, or install this service on your own dedicated server (*Download the
+> Latex4All server*). Everything is encrypted before it leaves your computer.
 
 If the Latex4All server ever goes away, groups keep syncing directly and
 through their folders; nothing they have is lost.
