@@ -1,72 +1,83 @@
-use iroh::{endpoint::presets::Minimal, Endpoint};
-use l4a_sync::log::{Log, RELAY};
-use l4a_sync::session::{answer, dial, Project};
-use l4a_sync::ALPN;
+use iroh::{endpoint::presets::Minimal, SecretKey};
+use l4a_sync::Node;
+use std::time::Duration;
 
-async fn pair() -> anyhow::Result<(Endpoint, Endpoint)> {
-    let a = Endpoint::builder(Minimal).alpns(vec![ALPN.to_vec()]).bind().await?;
-    let b = Endpoint::builder(Minimal).alpns(vec![ALPN.to_vec()]).bind().await?;
-    Ok((a, b))
+async fn node() -> anyhow::Result<Node> {
+    Node::start(SecretKey::generate(), Minimal).await
+}
+
+/// Waits (up to two seconds) for something to become true.
+async fn eventually(mut check: impl FnMut() -> bool) -> bool {
+    for _ in 0..200 {
+        if check() {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    check()
 }
 
 #[tokio::test]
-async fn two_copies_end_up_with_the_same_log() -> anyhow::Result<()> {
-    let (a, b) = pair().await?;
-    let (ida, idb) = (a.id().to_string(), b.id().to_string());
+async fn copies_catch_up_then_stay_in_sync_live() -> anyhow::Result<()> {
+    let dirs = (tempfile::tempdir()?, tempfile::tempdir()?);
+    let (a, b) = (node().await?, node().await?);
+    let pa = a.open("paper", b"secret", dirs.0.path())?;
+    let pb = b.open("paper", b"secret", dirs.1.path())?;
+    a.write("paper", b"written before they met".to_vec())?;
+    b.write("paper", b"and here too".to_vec())?;
 
-    let mut log_a = Log::new();
-    log_a.append(RELAY, b"from the old relay".to_vec());
-    log_a.append(&ida, b"alice's change".to_vec());
-    let mut log_b = Log::new();
-    log_b.append(RELAY, b"from the old relay".to_vec());
-    log_b.append(&idb, b"bob's change".to_vec());
-    log_b.append(&idb, b"bob's second".to_vec());
+    b.join("paper", a.addr()).await?;
+    assert!(eventually(|| pa.len() == 2 && pb.len() == 2).await, "caught up both ways");
 
-    let addr = a.addr();
-    let (ida2, idb2) = (ida.clone(), idb.clone());
-    let server = tokio::spawn(async move {
-        let conn = a.accept().await.expect("incoming").await?;
-        let got = answer(&conn, &ida2, &idb2, |id| {
-            (id == "paper").then_some(Project { id: "paper", token: b"secret", log: &mut log_a })
-        })
-        .await?;
-        conn.closed().await;
-        anyhow::Ok((got, log_a))
-    });
-    let conn = b.connect(addr, ALPN).await?;
-    let got_b = dial(&conn, &idb, &ida, Project { id: "paper", token: b"secret", log: &mut log_b }).await?;
-    conn.close(0u32.into(), b"done");
-    let (got_a, log_a) = server.await??;
+    // Live: a change on either side reaches the other.
+    a.write("paper", b"a live change".to_vec())?;
+    b.write("paper", b"a reply".to_vec())?;
+    assert!(eventually(|| pa.len() == 4 && pb.len() == 4).await, "live both ways");
+    assert_eq!(pa.vector(), pb.vector());
+    Ok(())
+}
 
-    assert_eq!(got_a, 2, "alice got bob's two changes");
-    assert_eq!(got_b, 1, "bob got alice's one; the relay's isn't sent twice");
-    assert_eq!(log_a.vector(), log_b.vector());
-    assert_eq!(log_a.len(), 4);
+#[tokio::test]
+async fn changes_pass_through_a_copy_in_the_middle() -> anyhow::Result<()> {
+    let dirs = (tempfile::tempdir()?, tempfile::tempdir()?, tempfile::tempdir()?);
+    let (a, hub, c) = (node().await?, node().await?, node().await?);
+    let pa = a.open("paper", b"secret", dirs.0.path())?;
+    let ph = hub.open("paper", b"secret", dirs.1.path())?;
+    let pc = c.open("paper", b"secret", dirs.2.path())?;
+    // A and C never connect to each other, only to the hub.
+    a.join("paper", hub.addr()).await?;
+    c.join("paper", hub.addr()).await?;
+    a.write("paper", b"from A".to_vec())?;
+    c.write("paper", b"from C".to_vec())?;
+    assert!(eventually(|| pa.len() == 2 && ph.len() == 2 && pc.len() == 2).await);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_log_is_kept_across_restarts() -> anyhow::Result<()> {
+    let dir = tempfile::tempdir()?;
+    {
+        let a = node().await?;
+        a.open("paper", b"secret", dir.path())?;
+        a.write("paper", b"one".to_vec())?;
+        a.write("paper", b"two".to_vec())?;
+        a.close().await;
+    }
+    let again = node().await?;
+    let p = again.open("paper", b"secret", dir.path())?;
+    assert_eq!(p.len(), 2);
     Ok(())
 }
 
 #[tokio::test]
 async fn a_copy_without_the_key_gets_nothing() -> anyhow::Result<()> {
-    let (a, b) = pair().await?;
-    let (ida, idb) = (a.id().to_string(), b.id().to_string());
-    let mut log_a = Log::new();
-    log_a.append(&ida, b"private".to_vec());
-    let addr = a.addr();
-    let (ida2, idb2) = (ida.clone(), idb.clone());
-    let server = tokio::spawn(async move {
-        let conn = a.accept().await.expect("incoming").await?;
-        let r = answer(&conn, &ida2, &idb2, |_| {
-            Some(Project { id: "paper", token: b"secret", log: &mut log_a })
-        })
-        .await;
-        anyhow::Ok(r.is_err())
-    });
-    let conn = b.connect(addr, ALPN).await?;
-    let mut log_b = Log::new();
-    let r = dial(&conn, &idb, &ida, Project { id: "paper", token: b"wrong", log: &mut log_b }).await;
-    assert!(r.is_err(), "refused");
-    assert!(log_b.is_empty(), "nothing received");
-    conn.close(0u32.into(), b"done");
-    let _ = server.await;
+    let dirs = (tempfile::tempdir()?, tempfile::tempdir()?);
+    let (a, b) = (node().await?, node().await?);
+    a.open("paper", b"secret", dirs.0.path())?;
+    a.write("paper", b"private".to_vec())?;
+    let pb = b.open("paper", b"wrong", dirs.1.path())?;
+    b.join("paper", a.addr()).await?;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(pb.is_empty(), "nothing received");
     Ok(())
 }

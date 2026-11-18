@@ -1,18 +1,22 @@
-//! One sync between two copies of the same project: each proves it holds
-//! the project's key, then each sends what the other lacks.
+//! A live sync between two copies of the same project, on one
+//! bidirectional stream of `[u32 length][JSON]` frames:
 //!
-//! On one bidirectional stream, frames of `[u32 length][JSON]`:
 //!   dialer → `Hello { project, challenge }`
 //!   listener → `Welcome { challenge, answer, vector }`
-//!   dialer → `Proof { answer, vector }` then `Entries`
-//!   listener → `Entries`
-//! Entries' data are carried as base64 in JSON for now.
+//!   dialer → `Proof { answer, vector }`
+//!   then both, for as long as the connection lasts: `Entries` (first what
+//!   the other lacks, then each new change as it's made or received).
+//!
+//! Each copy proves it holds the project's key before anything is sent.
 
-use crate::log::{Entry, Log, Vector};
+use crate::log::{Entry, Vector};
 use crate::proof;
+use crate::Project;
 use anyhow::{bail, Context};
-use iroh::endpoint::{RecvStream, SendStream};
+use iroh::endpoint::{Connection, RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::broadcast::error::RecvError;
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
@@ -58,64 +62,37 @@ fn wire(entries: Vec<Entry>) -> Vec<WireEntry> {
         .collect()
 }
 
-fn take(log: &mut Log, entries: Vec<WireEntry>) -> usize {
-    let mut added = 0;
-    for e in entries {
-        if log.add(Entry { author: e.author, n: e.n, data: e.data }) {
-            added += 1;
-        }
-    }
-    added
-}
-
-/// The project as a session sees it.
-pub struct Project<'a> {
-    pub id: &'a str,
-    /// Derived from the project's key; proves membership.
-    pub token: &'a [u8],
-    pub log: &'a mut Log,
-}
-
-/// Syncs as the copy that called. Returns how many entries it received.
-pub async fn dial(
-    conn: &iroh::endpoint::Connection,
-    me: &str,
-    them: &str,
-    project: Project<'_>,
-) -> anyhow::Result<usize> {
+/// Opens a sync of `project` with the copy at the other end of `conn`.
+pub async fn dial(conn: Connection, me: String, project: Arc<Project>) -> anyhow::Result<()> {
+    let them = conn.remote_id().to_string();
     let (mut tx, mut rx) = conn.open_bi().await?;
     let mine = proof::challenge();
-    send(&mut tx, &Frame::Hello { project: project.id.into(), challenge: mine.to_vec() }).await?;
+    send(&mut tx, &Frame::Hello { project: project.id.clone(), challenge: mine.to_vec() }).await?;
     let Frame::Welcome { challenge, answer, vector } = recv(&mut rx).await? else {
         bail!("unexpected reply");
     };
-    if !proof::check(project.token, &mine, them, me, &answer) {
+    if !proof::check(&project.token, &mine, &them, &me, &answer) {
         bail!("the other copy doesn't hold this project's key");
     }
     send(
         &mut tx,
         &Frame::Proof {
-            answer: proof::answer(project.token, &challenge, me, them),
-            vector: project.log.vector(),
+            answer: proof::answer(&project.token, &challenge, &me, &them),
+            vector: project.vector(),
         },
     )
     .await?;
-    send(&mut tx, &Frame::Entries { entries: wire(project.log.missing_for(&vector)) }).await?;
-    tx.finish()?;
-    let Frame::Entries { entries } = recv(&mut rx).await? else {
-        bail!("unexpected reply");
-    };
-    Ok(take(project.log, entries))
+    live(tx, rx, them, vector, project).await
 }
 
-/// Syncs as the copy that was called, for the project the caller names
-/// (`find` gives it, if this copy has it). Returns how many entries it got.
-pub async fn answer<'a>(
-    conn: &iroh::endpoint::Connection,
-    me: &str,
-    them: &str,
-    find: impl FnOnce(&str) -> Option<Project<'a>>,
-) -> anyhow::Result<usize> {
+/// Answers a sync opened by the copy at the other end of `conn`, for the
+/// project it names (`find` gives it, if this copy has it).
+pub async fn answer(
+    conn: Connection,
+    me: String,
+    find: impl FnOnce(&str) -> Option<Arc<Project>>,
+) -> anyhow::Result<()> {
+    let them = conn.remote_id().to_string();
     let (mut tx, mut rx) = conn.accept_bi().await?;
     let Frame::Hello { project: id, challenge } = recv(&mut rx).await? else {
         bail!("unexpected opening");
@@ -128,22 +105,83 @@ pub async fn answer<'a>(
         &mut tx,
         &Frame::Welcome {
             challenge: mine.to_vec(),
-            answer: proof::answer(project.token, &challenge, me, them),
-            vector: project.log.vector(),
+            answer: proof::answer(&project.token, &challenge, &me, &them),
+            vector: project.vector(),
         },
     )
     .await?;
     let Frame::Proof { answer, vector } = recv(&mut rx).await? else {
         bail!("unexpected reply");
     };
-    if !proof::check(project.token, &mine, them, me, &answer) {
+    if !proof::check(&project.token, &mine, &them, &me, &answer) {
         bail!("the other copy doesn't hold this project's key");
     }
-    let Frame::Entries { entries } = recv(&mut rx).await? else {
-        bail!("unexpected reply");
+    live(tx, rx, them, vector, project).await
+}
+
+/// Both ways at once until the connection ends: what they lack first, then
+/// every new change; what they send is kept and passed on to other copies.
+async fn live(
+    mut tx: SendStream,
+    mut rx: RecvStream,
+    them: String,
+    their_vector: Vector,
+    project: Arc<Project>,
+) -> anyhow::Result<()> {
+    // Listening before catching them up, so nothing made meanwhile is missed.
+    let mut changes = project.changes.subscribe();
+    let catch_up = project.missing_for(&their_vector);
+    let mut sent = their_vector;
+    note_sent(&mut sent, &catch_up);
+    send(&mut tx, &Frame::Entries { entries: wire(catch_up) }).await?;
+
+    let writer_project = project.clone();
+    let writer_them = them.clone();
+    let writer = tokio::spawn(async move {
+        loop {
+            match changes.recv().await {
+                Ok((entry, from)) => {
+                    // Not back to the copy it came from.
+                    if from.as_deref() == Some(writer_them.as_str()) {
+                        continue;
+                    }
+                    if sent.get(&entry.author).copied().unwrap_or(0) >= entry.n {
+                        continue;
+                    }
+                    note_sent(&mut sent, std::slice::from_ref(&entry));
+                    send(&mut tx, &Frame::Entries { entries: wire(vec![entry]) }).await?;
+                }
+                // Fell behind: whatever they may lack, from the log itself.
+                Err(RecvError::Lagged(_)) => {
+                    let missing = writer_project.missing_for(&sent);
+                    note_sent(&mut sent, &missing);
+                    send(&mut tx, &Frame::Entries { entries: wire(missing) }).await?;
+                }
+                Err(RecvError::Closed) => return anyhow::Ok(()),
+            }
+        }
+    });
+
+    let reading = async {
+        loop {
+            let Frame::Entries { entries } = recv(&mut rx).await? else {
+                bail!("unexpected frame");
+            };
+            for e in entries {
+                project.receive(Entry { author: e.author, n: e.n, data: e.data }, &them)?;
+            }
+        }
     };
-    let got = take(project.log, entries);
-    send(&mut tx, &Frame::Entries { entries: wire(project.log.missing_for(&vector)) }).await?;
-    tx.finish()?;
-    Ok(got)
+    let result: anyhow::Result<()> = reading.await;
+    writer.abort();
+    result
+}
+
+fn note_sent(sent: &mut Vector, entries: &[Entry]) {
+    for e in entries {
+        let n = sent.entry(e.author.clone()).or_insert(0);
+        if e.n > *n {
+            *n = e.n;
+        }
+    }
 }
