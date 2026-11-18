@@ -76,6 +76,9 @@ tag.
 
 ### Added
 
+- Timeline: the scale changes as you zoom, from years and months to weeks
+  and single days (weekends shaded, today marked), with the larger unit
+  above. Zooming keeps your place; Today scrolls to today.
 - Timeline: periods in rows of their own where they overlap, each with its
   name and dates (no icon at the end); milestones with an icon and color of
   your choosing; names that never overlap; dated tasks named under the

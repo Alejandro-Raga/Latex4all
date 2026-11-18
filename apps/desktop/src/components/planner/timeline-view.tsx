@@ -35,6 +35,7 @@ import {
   type PointerEvent,
   type ReactNode,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type WheelEvent,
@@ -101,6 +102,7 @@ import {
   usePlanTexts,
 } from "@/lib/plan/plan-store";
 import { parseQuickAdd } from "@/lib/plan/quick-add";
+import { PX_PER_DAY_FOR_DAYS, scaleFor } from "@/lib/plan/time-scale";
 import { cn } from "@/lib/utils";
 import { editPlan, removeFromPlan } from "./plan-actions";
 import { Empty } from "./plan-views";
@@ -184,23 +186,15 @@ function spanOf(dates: string[]): Span {
   return { start, end };
 }
 
+/** Where today falls along a span, 0 to 1. */
+const todayAt = (span: Span) =>
+  (time(today()) - time(span.start)) /
+  Math.max(1, time(span.end) - time(span.start));
+
 /** A milestone's progress, when it follows a section. */
 function progressOf(plan: Plan, m: Milestone) {
   const name = linkedSection(m.task);
   return name ? sectionProgress(plan, name) : null;
-}
-
-/** The first day of each month in the span (with each January's year). */
-function monthsIn(span: Span): string[] {
-  const out: string[] = [];
-  for (
-    let d = new Date(`${span.start.slice(0, 7)}-01T00:00`);
-    today(d) <= span.end;
-    d = new Date(d.getFullYear(), d.getMonth() + 1, 1)
-  ) {
-    if (today(d) >= span.start) out.push(today(d));
-  }
-  return out;
 }
 
 /** About how wide a label is, in pixels (11px text). */
@@ -236,26 +230,53 @@ interface Drag {
 
 /** Zoom: 1 fits the span to the width; more spreads it, scrolled sideways. */
 function useZoom() {
-  const [zoom, setZoom] = useState(1);
-  const clamp = (z: number) => Math.min(16, Math.max(1, z));
+  const [zoom, setZoomState] = useState(1);
+  // As far as days can be shown (set once the width is known).
+  const max = useRef(16);
+  // The scroller's way to put a date in the middle (set by Zoomable).
+  const centre = useRef<((fraction: number) => void) | null>(null);
+  const clamp = (z: number) => Math.min(max.current, Math.max(1, z));
+  const setZoom = (next: (z: number) => number) =>
+    setZoomState((z) => clamp(next(z)));
   return {
     zoom,
-    zoomIn: () => setZoom((z) => clamp(z * 1.5)),
-    zoomOut: () => setZoom((z) => clamp(z / 1.5)),
-    fit: () => setZoom(1),
+    max,
+    centre,
+    zoomIn: () => setZoom((z) => z * 1.6),
+    zoomOut: () => setZoom((z) => z / 1.6),
+    fit: () => setZoom(() => 1),
     onWheel: (e: WheelEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
       e.preventDefault();
-      setZoom((z) => clamp(z * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+      setZoom((z) => z * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
     },
   };
 }
 
-function ZoomButtons({ z }: { z: ReturnType<typeof useZoom> }) {
+function ZoomButtons({
+  z,
+  todayAt,
+}: {
+  z: ReturnType<typeof useZoom>;
+  /** Where today is along the span (0 to 1), to scroll to it. */
+  todayAt?: number;
+}) {
   const button =
     "flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40";
   return (
     <div className="flex items-center gap-0.5">
+      {todayAt !== undefined && (
+        <button
+          type="button"
+          onClick={() => z.centre.current?.(todayAt)}
+          disabled={z.zoom === 1}
+          className="mr-1 h-6 rounded-md px-1.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+          title="Scroll to today"
+          aria-label="Go to today"
+        >
+          Today
+        </button>
+      )}
       <button
         type="button"
         onClick={z.zoomOut}
@@ -278,9 +299,9 @@ function ZoomButtons({ z }: { z: ReturnType<typeof useZoom> }) {
       <button
         type="button"
         onClick={z.zoomIn}
-        disabled={z.zoom >= 16}
+        disabled={z.zoom >= z.max.current}
         className={button}
-        title="Zoom in (⌘ and scroll)"
+        title="Zoom in, down to days (⌘ and scroll)"
         aria-label="Zoom in"
       >
         <PlusIcon className="size-3.5" />
@@ -333,6 +354,7 @@ function Track({
   const xOf = (iso: string) =>
     ((time(iso) - time(span.start)) / length) * width;
   const now = today();
+  const grid = scaleFor(span.start, span.end, width);
   const shifted = (key: string, what: "due" | "start", iso: string) =>
     drag && drag.key === key && (drag.what === what || drag.what === "both")
       ? addDays(iso, drag.days)
@@ -473,13 +495,28 @@ function Track({
 
   return (
     <div className="relative select-none" style={{ width, height }}>
-      {/* Months, faint, behind it all. */}
+      {/* The scale's lines, faint, behind it all; weekends shaded when
+          zoomed in to days. */}
       {!compact &&
-        monthsIn(span).map((m) => (
+        grid.minor.map((t) => (
           <div
-            key={m}
-            className="pointer-events-none absolute top-0 bottom-0 border-border/50 border-l"
-            style={{ left: xOf(m) }}
+            key={t.date}
+            className={cn(
+              "pointer-events-none absolute top-0 bottom-0 border-border/40 border-l",
+              t.weekend && "bg-muted/50",
+            )}
+            style={{
+              left: xOf(t.date),
+              width: t.weekend ? width / (length / MS_DAY) : undefined,
+            }}
+          />
+        ))}
+      {!compact &&
+        grid.major.map((t) => (
+          <div
+            key={`major-${t.date}`}
+            className="pointer-events-none absolute top-0 bottom-0 border-border/70 border-l"
+            style={{ left: xOf(t.date) }}
           />
         ))}
       {/* Today. */}
@@ -665,34 +702,53 @@ function Track({
   );
 }
 
-/** Months along the top, over the same span and width as the tracks. */
-function MonthAxis({ span, width }: { span: Span; width: number }) {
+/** The dates along the top: the larger unit above, the smaller below. */
+function TimeAxis({ span, width }: { span: Span; width: number }) {
   const length = time(span.end) - time(span.start);
-  const months = monthsIn(span);
-  // At a narrow width, every other (or third) month only.
-  const step = Math.max(
-    1,
-    Math.ceil(40 / (width / Math.max(1, months.length) || 1)),
-  );
+  const scale = scaleFor(span.start, span.end, width);
+  const xOf = (iso: string) =>
+    Math.max(0, ((time(iso) - time(span.start)) / length) * width);
+  const dayWidth = width / (length / MS_DAY);
   return (
-    <div
-      className="relative h-5 text-[10px] text-muted-foreground"
-      style={{ width }}
-    >
-      {months.map((m, i) =>
-        i % step === 0 ? (
-          <span
-            key={m}
-            className="absolute whitespace-nowrap pl-1"
-            style={{ left: ((time(m) - time(span.start)) / length) * width }}
-          >
-            {new Date(`${m}T00:00`).toLocaleDateString(undefined, {
-              month: "short",
-            })}
-            {(m.endsWith("-01-01") || i === 0) && ` ${m.slice(0, 4)}`}
-          </span>
-        ) : null,
+    <div className="select-none text-[10px]" style={{ width }}>
+      {scale.major.length > 0 && (
+        <div className="relative h-5 border-border/60 border-b">
+          {scale.major.map((t) => (
+            <span
+              key={`M${t.date}`}
+              className="absolute top-0 bottom-0 flex items-center whitespace-nowrap border-border/60 border-l pl-1.5 font-medium text-foreground/80"
+              style={{ left: xOf(t.date) }}
+            >
+              {t.label}
+            </span>
+          ))}
+        </div>
       )}
+      <div className="relative h-5 text-muted-foreground">
+        {scale.minor.map((t) =>
+          scale.unit === "day" ? (
+            <span
+              key={`m${t.date}`}
+              className={cn(
+                "absolute top-0 bottom-0 flex items-center justify-center tabular-nums",
+                t.weekend && "text-muted-foreground/50",
+                t.date === today() && "font-semibold text-primary",
+              )}
+              style={{ left: xOf(t.date), width: dayWidth }}
+            >
+              {t.label}
+            </span>
+          ) : (
+            <span
+              key={`m${t.date}`}
+              className="absolute top-0 bottom-0 flex items-center whitespace-nowrap pl-1"
+              style={{ left: xOf(t.date) }}
+            >
+              {t.label}
+            </span>
+          ),
+        )}
+      </div>
     </div>
   );
 }
@@ -984,18 +1040,52 @@ function MilestoneRow({
 /** A sideways scroller for the line, zoomed with ⌘ and the wheel. */
 function Zoomable({
   z,
+  span,
   reserve = 0,
   children,
 }: {
   z: ReturnType<typeof useZoom>;
+  span: Span;
   /** Pixels kept for something beside the line (the projects' names). */
   reserve?: number;
   children: (width: number) => ReactNode;
 }) {
   const { ref, width } = useWidth();
+  const base = Math.max(200, width - reserve);
+  const inner = Math.max(200, Math.round(base * z.zoom));
+  const days = Math.max(1, (time(span.end) - time(span.start)) / MS_DAY);
+  // Zoomed in until every day has room for its number, no further.
+  z.max.current = Math.max(1, (PX_PER_DAY_FOR_DAYS * 1.4 * days) / base);
+  // What's in the middle stays there as it zooms.
+  const middle = useRef(0.5);
+  const onScroll = () => {
+    const el = ref.current;
+    if (!el) return;
+    middle.current =
+      (el.scrollLeft + el.clientWidth / 2 - reserve) / Math.max(1, inner);
+  };
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.scrollLeft = middle.current * inner + reserve - el.clientWidth / 2;
+  }, [inner, reserve, ref]);
+  z.centre.current = (fraction) => {
+    const el = ref.current;
+    if (!el) return;
+    middle.current = fraction;
+    el.scrollTo({
+      left: fraction * inner + reserve - el.clientWidth / 2,
+      behavior: "smooth",
+    });
+  };
   return (
-    <div ref={ref} onWheel={z.onWheel} className="overflow-x-auto pb-2">
-      {children(Math.max(200, Math.round((width - reserve) * z.zoom)))}
+    <div
+      ref={ref}
+      onWheel={z.onWheel}
+      onScroll={onScroll}
+      className="overflow-x-auto pb-2"
+    >
+      {children(inner)}
     </div>
   );
 }
@@ -1042,12 +1132,12 @@ export function TimelineView({ list }: { list: PlanList }) {
       ) : (
         <>
           <div className="mt-4 flex items-center justify-end">
-            <ZoomButtons z={z} />
+            <ZoomButtons z={z} todayAt={todayAt(span)} />
           </div>
-          <Zoomable z={z}>
+          <Zoomable z={z} span={span}>
             {(width) => (
               <>
-                <MonthAxis span={span} width={width} />
+                <TimeAxis span={span} width={width} />
                 <Track list={list} plan={plan} span={span} width={width} />
               </>
             )}
@@ -1135,9 +1225,9 @@ export function ProjectsTimeline({
   return (
     <div className="px-6 py-5">
       <div className="mb-2 flex justify-end">
-        <ZoomButtons z={z} />
+        <ZoomButtons z={z} todayAt={todayAt(span)} />
       </div>
-      <Zoomable z={z} reserve={NAMES}>
+      <Zoomable z={z} span={span} reserve={NAMES}>
         {(width) => (
           <div style={{ width: width + NAMES }}>
             <div className="flex">
@@ -1145,7 +1235,7 @@ export function ProjectsTimeline({
                 className="sticky left-0 z-20 shrink-0 bg-background"
                 style={{ width: NAMES }}
               />
-              <MonthAxis span={span} width={width} />
+              <TimeAxis span={span} width={width} />
             </div>
             {rows.map(({ list, plan }) => (
               <div
