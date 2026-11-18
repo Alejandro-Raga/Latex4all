@@ -232,9 +232,16 @@ function stripesRule(t: AppTheme): string {
   const bands = t.stripes
     .map((c, i) => `${c} ${(i * 100) / n}% ${((i + 1) * 100) / n}%`)
     .join(", ");
+  // The Gradient background leaves a retro theme flat, as old machines
+  // were: its colored bands across the top carry the color. (A wash from
+  // its syntax colors turned Beige blue; from its bands, still muddy.)
+  // And its frame is its own surface a shade deeper, not tinted with its
+  // accent (Beige's blue made its frame blue, not beige).
+  const { surface, fg } = t.colors;
+  const wash = `html.${t.id} { --frame-wash: none; --t-frame: color-mix(in oklab, ${surface} ${t.dark ? 88 : 93}%, ${t.dark ? "#000" : fg}); }`;
   // The bar across the top of the window, in the theme's bands (over the
   // gradient background's wash, which paints every frame-colored bar).
-  return `html.${t.id} .app-titlebar { background-image: linear-gradient(90deg, ${bands}) !important; background-attachment: scroll !important; }`;
+  return `${wash} html.${t.id} .app-titlebar { background-image: linear-gradient(90deg, ${bands}) !important; background-attachment: scroll !important; }`;
 }
 
 /**

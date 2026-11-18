@@ -21,6 +21,9 @@ tag.
 
 ### Fixed
 
+- Retro themes keep their look with the Gradient background: flat panels
+  in their own colors (Beige no longer turns blue), the colored bands on
+  top.
 - Library: a project's PDFs are read again each time you open it, so a
   PDF just exported shows, and a re-exported one opens as it is now.
 - The theme button is back, at the bottom of the left menu.
