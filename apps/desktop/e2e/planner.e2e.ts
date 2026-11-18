@@ -27,6 +27,11 @@ async function drag(
   const b = await to.boundingBox();
   if (!b) throw new Error("nowhere to drop");
   await page.mouse.move(b.x + b.width / 2, b.y + b.height * at, { steps: 12 });
+  // A moment over the target, as by hand: a slow machine registers it.
+  await page.mouse.move(b.x + b.width / 2 + 1, b.y + b.height * at, {
+    steps: 2,
+  });
+  await page.waitForTimeout(120);
   await page.mouse.up();
   // Clicks right after a drop are held back a moment, as by hand.
   await page.waitForTimeout(100);
