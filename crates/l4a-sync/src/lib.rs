@@ -18,6 +18,7 @@
 
 pub mod blobs;
 pub mod folder;
+pub mod hub;
 pub mod log;
 pub mod members;
 pub mod proof;
@@ -620,7 +621,11 @@ pub struct Node {
     live: Arc<Mutex<HashSet<(String, String)>>>,
     /// How often to try members not connected yet.
     retry: Duration,
+    /// What answers connections for setting up a hub, if this is one.
+    admin: Admin,
 }
+
+type Admin = Arc<Mutex<Option<Arc<dyn Fn(iroh::endpoint::Connection) + Send + Sync>>>>;
 
 impl Node {
     /// Starts this copy with its identity, and answers other copies.
@@ -639,7 +644,7 @@ impl Node {
         let key = secret.clone();
         let mut builder = Endpoint::builder(preset)
             .secret_key(secret)
-            .alpns(vec![ALPN.to_vec()]);
+            .alpns(vec![ALPN.to_vec(), hub::ALPN.to_vec()]);
         if let Some(lookup) = lookup {
             builder = builder.address_lookup(lookup);
         }
@@ -648,12 +653,22 @@ impl Node {
         let projects: Arc<Mutex<HashMap<String, Arc<Project>>>> = Default::default();
         let live: Arc<Mutex<HashSet<(String, String)>>> = Default::default();
         let accepting = endpoint.clone();
+        let admin: Admin = Default::default();
+        let admin2 = admin.clone();
         let (found, me2, live2) = (projects.clone(), me.clone(), live.clone());
         tokio::spawn(async move {
             while let Some(incoming) = accepting.accept().await {
                 let (found, me, live) = (found.clone(), me2.clone(), live2.clone());
+                let admin = admin2.clone();
                 tokio::spawn(async move {
                     let Ok(conn) = incoming.await else { return };
+                    if conn.alpn() == hub::ALPN {
+                        let handler = admin.lock().unwrap().clone();
+                        if let Some(handler) = handler {
+                            handler(conn);
+                        }
+                        return;
+                    }
                     let them = conn.remote_id().to_string();
                     let mut joined: Option<(String, String)> = None;
                     let _ = session::answer(conn, me, |id| {
@@ -671,7 +686,7 @@ impl Node {
                 });
             }
         });
-        Ok(Self { endpoint, key, me, projects, live, retry })
+        Ok(Self { endpoint, key, me, projects, live, retry, admin })
     }
 
     /// This copy's id: its public key.
@@ -797,6 +812,15 @@ impl Node {
             }
         });
         Ok(())
+    }
+
+    /// Answers hub set-up connections (see [`hub`]).
+    pub(crate) fn on_admin(&self, handler: Arc<dyn Fn(iroh::endpoint::Connection) + Send + Sync>) {
+        *self.admin.lock().unwrap() = Some(handler);
+    }
+
+    pub(crate) fn endpoint(&self) -> &Endpoint {
+        &self.endpoint
     }
 
     /// Whether this copy is syncing a project with a member right now.

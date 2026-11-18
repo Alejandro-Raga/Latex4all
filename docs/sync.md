@@ -165,6 +165,20 @@ Settings → Sync (the full text lives there):
 If the Latex4All server ever goes away, groups keep syncing directly and
 through their folders; nothing they have is lost.
 
+### Setting up a hub
+
+`l4a-hub` (in `crates/l4a-sync`) runs without a window. With Docker:
+
+    docker build -t l4a-hub crates/l4a-sync
+    docker run -d --restart unless-stopped -v l4a-hub:/data l4a-hub
+    docker logs <container>
+
+It prints a hub code: its id and a secret. Pasted in the app (Settings →
+Sync → Your own server), the app proves it knows the secret once and becomes
+an owner of the hub; it then gives the hub each shared project's id, token
+and creator. The hub syncs them like a member, keeps every file, and gets
+new tokens when members are removed. No ports, domain or certificates.
+
 ### How the folder works
 
 Each copy writes only in its own subfolder (`<folder>/<its id>/`): batches

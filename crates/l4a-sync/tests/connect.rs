@@ -372,3 +372,39 @@ async fn a_shared_folder_carries_changes_between_copies_never_online_together() 
     assert_eq!(pc.len(), 2);
     Ok(())
 }
+
+#[tokio::test]
+async fn an_app_sets_up_a_hub_with_its_code_and_it_keeps_the_project() -> anyhow::Result<()> {
+    use iroh::address_lookup::memory::MemoryLookup;
+    use l4a_sync::hub::Hub;
+    let book = MemoryLookup::new();
+    let start = |k: iroh::SecretKey| Node::start_with(k, Minimal, Some(book.clone()), Duration::from_millis(100));
+    let data = tempfile::tempdir()?;
+    let hub_key = iroh::SecretKey::generate();
+    let hub = Hub::start(start(hub_key.clone()).await?, data.path())?;
+    let (a, c) = (start(iroh::SecretKey::generate()).await?, start(iroh::SecretKey::generate()).await?);
+    for n in [&*hub.node, &a, &c] {
+        book.add_endpoint_info(n.addr());
+    }
+    let dirs = (tempfile::tempdir()?, tempfile::tempdir()?);
+    let pa = a.open("paper", b"secret", dirs.0.path())?;
+    a.write("paper", b"kept by the hub".to_vec())?;
+    // A wrong code is refused; the right one works.
+    let code = hub.code();
+    let wrong = format!("{}.{}", hub.node.id(), "00".repeat(32));
+    assert!(a.add_to_hub(&wrong, "paper", b"secret", Some(a.id())).await.is_err());
+    a.add_to_hub(&code, "paper", b"secret", Some(a.id())).await?;
+    assert_eq!(hub.projects(), vec!["paper".to_string()]);
+    assert!(eventually(|| pa.waiting_for(hub.node.id()) == 0 && pa.members().contains_key(hub.node.id())).await);
+    a.close().await;
+    // The hub, restarted, still has it; C gets it from the hub alone.
+    hub.node.close().await;
+    drop(hub);
+    let hub = Hub::start(start(hub_key).await?, data.path())?;
+    book.add_endpoint_info(hub.node.addr());
+    assert_eq!(hub.projects(), vec!["paper".to_string()]);
+    let pc = c.open("paper", b"secret", dirs.1.path())?;
+    c.join("paper", hub.node.addr()).await?;
+    assert!(eventually(|| pc.len() == 1).await);
+    Ok(())
+}
