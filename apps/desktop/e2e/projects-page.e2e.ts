@@ -175,4 +175,12 @@ test("the Library: a project opens in place on its PDFs, other files left out", 
   // Folded again.
   await project.first().click();
   await expect(page.getByRole("button", { name: /^Draft v3/ })).toHaveCount(0);
+  // A PDF exported since: there on opening it again.
+  await page.evaluate(() => {
+    (window as any).__laterFiles = ["Final export.pdf"];
+  });
+  await project.first().click();
+  await expect(
+    page.getByRole("button", { name: /^Final export/ }),
+  ).toBeVisible();
 });

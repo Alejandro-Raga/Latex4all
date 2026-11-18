@@ -65,7 +65,9 @@
               const file = (name) => ({ name, isFile: true, isDirectory: false, isSymlink: false });
               const dir = (name) => ({ name, isFile: false, isDirectory: true, isSymlink: false });
               if (path.endsWith("Paper on corporate science")) {
-                return [file("main.tex"), file("Draft v3.pdf"), file("Comments.docx"), dir("figures")];
+                // Files a test adds later, as an export would.
+                const later = (window.__laterFiles ?? []).map(file);
+                return [file("main.tex"), file("Draft v3.pdf"), file("Comments.docx"), dir("figures"), ...later];
               }
               if (path.endsWith("Paper on corporate science/figures")) {
                 return [file("Figure 1.pdf"), file("plot.py")];

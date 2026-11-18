@@ -21,6 +21,8 @@ tag.
 
 ### Fixed
 
+- Library: a project's PDFs are read again each time you open it, so a
+  PDF just exported shows, and a re-exported one opens as it is now.
 - The theme button is back, at the bottom of the left menu.
 - The left menu has its own shade, apart from the file list beside it.
 - Highlights on a project's PDF stay on their text when you rebuild it.

@@ -1,3 +1,4 @@
+import { pdfVersion } from "@/lib/pdf-notes";
 import {
   Fragment,
   useCallback,
@@ -247,6 +248,19 @@ type Preview =
   | { kind: "unsupported" }
   | { kind: "error"; message: string };
 
+/** The same file read twice: a PDF's bytes, or the text, alike. */
+function samePreview(a: Preview, b: Preview): boolean {
+  if (a.kind === "pdf" && b.kind === "pdf") {
+    return (
+      a.data.length === b.data.length &&
+      pdfVersion(a.data) === pdfVersion(b.data)
+    );
+  }
+  if (a.kind === "text" && b.kind === "text") return a.content === b.content;
+  if (a.kind === "image" && b.kind === "image") return a.dataUrl === b.dataUrl;
+  return a.kind === b.kind && a.kind !== "loading" && a.kind !== "error";
+}
+
 type SelectedFile =
   | {
       source: "fs";
@@ -380,21 +394,21 @@ export function QuickReferencePanel({
     setSelectedFile(null);
     setPreview(null);
 
+    // The last read shown at once; read again for what's changed since.
     const cached = treeCache.current.get(path);
     if (cached) {
       setTree(cached);
       setExpanded(new Set());
-      return;
+    } else {
+      setTreeLoading(true);
     }
-
-    setTreeLoading(true);
     setTreeError(null);
     try {
       const { files, folders } = await scanProjectFolder(path);
       const built = buildTree(files, folders);
       treeCache.current.set(path, built);
       setTree(built);
-      setExpanded(new Set());
+      if (!cached) setExpanded(new Set());
     } catch (err) {
       log.warn("Failed to scan reference project", {
         path,
@@ -549,16 +563,15 @@ export function QuickReferencePanel({
     }
     // Zotero content (PDFs, and especially annotations) changes outside this
     // app — never serve a stale snapshot from earlier in the session.
-    if (selectedFile.source === "fs") {
-      const cached = previewCache.current.get(selectedFile.id);
-      if (cached) {
-        setPreview(cached);
-        return;
-      }
-    }
+    // A file of a project: the last read shown at once, read again anyway
+    // (a draft re-exported since shows as it is now).
+    const cached =
+      selectedFile.source === "fs"
+        ? previewCache.current.get(selectedFile.id)
+        : undefined;
 
     let cancelled = false;
-    setPreview({ kind: "loading" });
+    setPreview(cached ?? { kind: "loading" });
 
     const load = async (): Promise<Preview> => {
       if (selectedFile.source === "zotero") {
@@ -643,6 +656,8 @@ export function QuickReferencePanel({
       .then((result) => {
         if (cancelled) return;
         if (selectedFile.source === "fs") {
+          // Unchanged on disk: what's shown stays (no reload, no lost place).
+          if (cached && samePreview(cached, result)) return;
           previewCache.current.set(selectedFile.id, result);
         }
         setPreview(result);
@@ -1438,8 +1453,9 @@ function ProjectPdfs({
 }) {
   const [pdfs, setPdfs] = useState(() => pdfCache.get(root) ?? null);
   const [failed, setFailed] = useState(false);
+  // Read again each time it's opened (a PDF just exported shows), the last
+  // list shown meanwhile.
   useEffect(() => {
-    if (pdfCache.has(root)) return;
     let live = true;
     scanProjectFolder(root)
       .then(({ files }) => {
