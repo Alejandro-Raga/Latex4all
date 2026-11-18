@@ -9,10 +9,10 @@
 //!
 //! Each copy proves it holds the project's key before anything is sent.
 
-use crate::log::{Entry, Vector};
+use crate::log::{Entry, Snapshot, Vector};
 use crate::members::Members;
 use crate::proof;
-use crate::Project;
+use crate::{Change, Project};
 use anyhow::{bail, Context};
 use iroh::endpoint::{Connection, RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
@@ -23,9 +23,10 @@ use tokio::sync::broadcast::error::RecvError;
 #[serde(tag = "type", rename_all = "kebab-case")]
 enum Frame {
     Hello { project: String, challenge: Vec<u8> },
-    Welcome { challenge: Vec<u8>, answer: Vec<u8>, vector: Vector, peers: Vec<String>, members: Members },
-    Proof { answer: Vec<u8>, vector: Vector, peers: Vec<String>, members: Members },
+    Welcome { challenge: Vec<u8>, answer: Vec<u8>, vector: Vector, peers: Vec<String>, members: Members, snapshot: Option<Vector> },
+    Proof { answer: Vec<u8>, vector: Vector, peers: Vec<String>, members: Members, snapshot: Option<Vector> },
     Entries { entries: Vec<WireEntry> },
+    Snapshot { author: String, covers: Vector, data: Vec<u8>, sig: Vec<u8> },
     /// What the sender has now: an acknowledgement of entries received.
     Have { vector: Vector },
 }
@@ -72,7 +73,7 @@ pub async fn dial(conn: Connection, me: String, project: Arc<Project>) -> anyhow
     let (mut tx, mut rx) = conn.open_bi().await?;
     let mine = proof::challenge();
     send(&mut tx, &Frame::Hello { project: project.id.clone(), challenge: mine.to_vec() }).await?;
-    let Frame::Welcome { challenge, answer, vector, peers, members } = recv(&mut rx).await? else {
+    let Frame::Welcome { challenge, answer, vector, peers, members, snapshot } = recv(&mut rx).await? else {
         bail!("unexpected reply");
     };
     if !proof::check(&project.token, &mine, &them, &me, &answer) {
@@ -85,13 +86,14 @@ pub async fn dial(conn: Connection, me: String, project: Arc<Project>) -> anyhow
             vector: project.vector(),
             peers: project.known_peers(),
             members: project.account(),
+            snapshot: project.snapshot_covers(),
         },
     )
     .await?;
     // A member, proven: it, and the members it knows, are worth reaching.
     project.learn(std::iter::once(them.clone()).chain(peers), &me);
     project.heard(&them, &vector, Some(&members));
-    live(tx, rx, them, vector, project).await
+    live(tx, rx, them, vector, snapshot, project).await
 }
 
 /// Answers a sync opened by the copy at the other end of `conn`, for the
@@ -118,10 +120,11 @@ pub async fn answer(
             vector: project.vector(),
             peers: project.known_peers(),
             members: project.account(),
+            snapshot: project.snapshot_covers(),
         },
     )
     .await?;
-    let Frame::Proof { answer, vector, peers, members } = recv(&mut rx).await? else {
+    let Frame::Proof { answer, vector, peers, members, snapshot } = recv(&mut rx).await? else {
         bail!("unexpected reply");
     };
     if !proof::check(&project.token, &mine, &them, &me, &answer) {
@@ -129,7 +132,11 @@ pub async fn answer(
     }
     project.learn(std::iter::once(them.clone()).chain(peers), &me);
     project.heard(&them, &vector, Some(&members));
-    live(tx, rx, them, vector, project).await
+    live(tx, rx, them, vector, snapshot, project).await
+}
+
+fn snapshot_frame(s: Snapshot) -> Frame {
+    Frame::Snapshot { author: s.author, covers: s.covers, data: s.data, sig: s.sig }
 }
 
 /// Both ways at once until the connection ends: what they lack first, then
@@ -139,12 +146,20 @@ async fn live(
     mut rx: RecvStream,
     them: String,
     their_vector: Vector,
+    their_snapshot: Option<Vector>,
     project: Arc<Project>,
 ) -> anyhow::Result<()> {
     // Listening before catching them up, so nothing made meanwhile is missed.
     let mut changes = project.changes.subscribe();
-    let catch_up = project.missing_for(&their_vector);
+    let (snap, catch_up) = project.missing_for(&their_vector, their_snapshot.as_ref());
     let mut sent = their_vector;
+    if let Some(s) = snap {
+        for (a, &n) in &s.covers {
+            let e = sent.entry(a.clone()).or_insert(0);
+            *e = (*e).max(n);
+        }
+        send(&mut tx, &snapshot_frame(s)).await?;
+    }
     note_sent(&mut sent, &catch_up);
     send(&mut tx, &Frame::Entries { entries: wire(catch_up) }).await?;
 
@@ -165,7 +180,12 @@ async fn live(
                 }
             };
             match change {
-                Ok((entry, from)) => {
+                Ok((Change::Snapshot { snapshot, .. }, from)) => {
+                    if from.as_deref() != Some(writer_them.as_str()) {
+                        send(&mut tx, &snapshot_frame(snapshot)).await?;
+                    }
+                }
+                Ok((Change::Entry(entry), from)) => {
                     // Not back to the copy it came from.
                     if from.as_deref() == Some(writer_them.as_str()) {
                         continue;
@@ -178,7 +198,7 @@ async fn live(
                 }
                 // Fell behind: whatever they may lack, from the log itself.
                 Err(RecvError::Lagged(_)) => {
-                    let missing = writer_project.missing_for(&sent);
+                    let (_, missing) = writer_project.missing_for(&sent, None);
                     note_sent(&mut sent, &missing);
                     send(&mut tx, &Frame::Entries { entries: wire(missing) }).await?;
                 }
@@ -201,6 +221,10 @@ async fn live(
                     }
                 }
                 Frame::Have { vector } => project.heard(&them, &vector, None),
+                Frame::Snapshot { author, covers, data, sig } => {
+                    project.receive_snapshot(Snapshot { author, covers, data, sig }, &them)?;
+                    let _ = ack.send(project.vector());
+                }
                 _ => bail!("unexpected frame"),
             }
         }

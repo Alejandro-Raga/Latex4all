@@ -53,6 +53,22 @@ the highest number it has. Two copies that meet exchange vectors and send each
 other what the other lacks. Nothing needs a central order; changes merge as
 Yjs merges them today.
 
+### Snapshots
+
+So the log doesn't grow forever, the app now and then writes a snapshot: the
+whole document as of a version vector, encrypted and signed like an entry. A
+copy far behind (a newcomer, or a member back after months) gets the latest
+snapshot and the entries after it. Entries a snapshot covers are dropped
+only once every member heard from recently is known to have them; one gone
+longer gets the snapshot when it's back, as a newcomer would.
+
+### What each member has
+
+Every copy keeps an account of what each member has: from meeting them,
+from their acknowledgements as changes arrive, and from what other members
+pass on. So a copy knows whose changes haven't reached whom (the status
+line), and when old entries can go.
+
 ### Finding each other
 
 The share link carries the inviter's node id. A copy that joins connects to

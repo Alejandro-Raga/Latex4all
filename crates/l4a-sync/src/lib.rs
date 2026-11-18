@@ -22,7 +22,7 @@ pub mod store;
 use anyhow::Context;
 use iroh::endpoint::presets::Preset;
 use iroh::{Endpoint, EndpointAddr, SecretKey};
-use log::{Entry, Log, Vector};
+use log::{Entry, Log, Snapshot, Vector};
 use members::Members;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -34,6 +34,14 @@ use tokio::sync::broadcast;
 
 /// The protocol's name on the wire (iroh's ALPN).
 pub const ALPN: &[u8] = b"latex4all/sync/1";
+
+/// Something new in a project: an entry, or a snapshot (which, if
+/// `lacked`, has changes this copy didn't have: the app merges it in).
+#[derive(Clone, Debug)]
+pub enum Change {
+    Entry(Entry),
+    Snapshot { snapshot: Snapshot, lacked: bool },
+}
 
 /// A shared project on this copy: its log (on disk and in memory) and who
 /// hears of its changes.
@@ -48,7 +56,7 @@ pub struct Project {
     peers: Mutex<BTreeSet<String>>,
     peers_file: PathBuf,
     /// Each new entry, and which copy it came from (none: made here).
-    changes: broadcast::Sender<(Entry, Option<String>)>,
+    changes: broadcast::Sender<(Change, Option<String>)>,
     /// This copy's id, to tell its own entries.
     me: String,
     /// What each member has, as far as this copy knows; kept on disk.
@@ -99,8 +107,44 @@ impl Project {
         self.log.lock().unwrap().vector()
     }
 
-    pub fn missing_for(&self, theirs: &Vector) -> Vec<Entry> {
-        self.log.lock().unwrap().missing_for(theirs)
+    pub fn missing_for(&self, theirs: &Vector, their_snap: Option<&Vector>) -> (Option<Snapshot>, Vec<Entry>) {
+        self.log.lock().unwrap().missing_for(theirs, their_snap)
+    }
+
+    /// The latest snapshot: the document as of it, to build on.
+    pub fn snapshot(&self) -> Option<Snapshot> {
+        self.log.lock().unwrap().snapshot().cloned()
+    }
+
+    fn snapshot_covers(&self) -> Option<Vector> {
+        self.log.lock().unwrap().snapshot().map(|s| s.covers.clone())
+    }
+
+    /// Drops the entries the snapshot covers, if every member who has been
+    /// heard from in the last `active_within` seconds is known to have them
+    /// (one longer gone gets the snapshot instead, as a newcomer would).
+    /// Returns how many were dropped.
+    pub fn prune(&self, active_within: u64) -> anyhow::Result<usize> {
+        let Some(covers) = self.snapshot_covers() else { return Ok(0) };
+        let since = members::now().saturating_sub(active_within);
+        let everyone_has = self
+            .members
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|k| k.at >= since)
+            .all(|k| log::covers(&k.has, &covers));
+        if !everyone_has {
+            return Ok(0);
+        }
+        let mut log = self.log.lock().unwrap();
+        let mut smaller = log.clone();
+        let dropped = smaller.drop_covered();
+        if dropped > 0 {
+            self.store.rewrite(&smaller)?;
+            *log = smaller;
+        }
+        Ok(dropped)
     }
 
     pub fn len(&self) -> usize {
@@ -186,11 +230,11 @@ impl Project {
 
     /// Everything, in order by author: to rebuild the document from.
     pub fn entries(&self) -> Vec<Entry> {
-        self.log.lock().unwrap().missing_for(&Vector::new())
+        self.log.lock().unwrap().entries()
     }
 
     /// New changes as they arrive (made here or received).
-    pub fn subscribe(&self) -> broadcast::Receiver<(Entry, Option<String>)> {
+    pub fn subscribe(&self) -> broadcast::Receiver<(Change, Option<String>)> {
         self.changes.subscribe()
     }
 
@@ -230,7 +274,7 @@ impl Project {
         self.store.append(&entry)?;
         log.add(entry.clone());
         drop(log);
-        let _ = self.changes.send((entry, Some(from.to_string())));
+        let _ = self.changes.send((Change::Entry(entry), Some(from.to_string())));
         Ok(())
     }
 
@@ -244,8 +288,43 @@ impl Project {
         self.store.append(&entry)?;
         log.add(entry.clone());
         drop(log);
-        let _ = self.changes.send((entry.clone(), None));
+        let _ = self.changes.send((Change::Entry(entry.clone()), None));
         Ok(entry)
+    }
+
+    /// A snapshot from another copy: checked, taken in, kept if it's the
+    /// newest, and passed on.
+    fn receive_snapshot(&self, s: Snapshot, from: &str) -> anyhow::Result<()> {
+        if !sign::verify_snapshot(&self.id, &s) {
+            self.refused.fetch_add(1, Ordering::Relaxed);
+            return Ok(());
+        }
+        let mut log = self.log.lock().unwrap();
+        let (lacked, kept) = log.take_snapshot(s.clone());
+        if kept {
+            self.store.put_snapshot(&s)?;
+        }
+        drop(log);
+        if lacked || kept {
+            let _ = self
+                .changes
+                .send((Change::Snapshot { snapshot: s, lacked }, Some(from.to_string())));
+        }
+        Ok(())
+    }
+
+    /// A snapshot made here, of the document as of everything this copy
+    /// has (`data`, encrypted by the app): kept, then sent to every copy.
+    fn write_snapshot(&self, key: &SecretKey, data: Vec<u8>) -> anyhow::Result<Snapshot> {
+        let mut log = self.log.lock().unwrap();
+        let s = sign::snapshot(key, &self.id, log.vector(), data);
+        self.store.put_snapshot(&s)?;
+        log.take_snapshot(s.clone());
+        drop(log);
+        let _ = self
+            .changes
+            .send((Change::Snapshot { snapshot: s.clone(), lacked: false }, None));
+        Ok(s)
     }
 }
 
@@ -365,6 +444,15 @@ impl Node {
     pub fn write(&self, id: &str, data: Vec<u8>) -> anyhow::Result<Entry> {
         let project = self.projects.lock().unwrap().get(id).cloned().context("project not open")?;
         project.write(&self.key, data)
+    }
+
+    /// A snapshot of a project: `data` is the whole document as of
+    /// everything this copy has, encrypted by the app. The app should make
+    /// one now and then (and whenever a received one `lacked`), so
+    /// newcomers needn't read the whole history.
+    pub fn snapshot(&self, id: &str, data: Vec<u8>) -> anyhow::Result<Snapshot> {
+        let project = self.projects.lock().unwrap().get(id).cloned().context("project not open")?;
+        project.write_snapshot(&self.key, data)
     }
 
     /// Joins the copy at `peer` for a project: catches up both ways, then

@@ -145,3 +145,49 @@ async fn each_copy_knows_what_members_it_never_meets_have() -> anyhow::Result<()
     assert!(std::fs::read_to_string(dirs.0.path().join("members.json"))?.contains(c.id()));
     Ok(())
 }
+
+#[tokio::test]
+async fn old_history_goes_once_everyone_has_it_and_newcomers_start_from_a_snapshot() -> anyhow::Result<()> {
+    let dirs = (tempfile::tempdir()?, tempfile::tempdir()?, tempfile::tempdir()?);
+    let (a_key, hub_key) = (iroh::SecretKey::generate(), iroh::SecretKey::generate());
+    let a = Node::start(a_key.clone(), Minimal).await?;
+    let hub = Node::start(hub_key.clone(), Minimal).await?;
+    let pa = a.open("paper", b"secret", dirs.0.path())?;
+    let ph = hub.open("paper", b"secret", dirs.1.path())?;
+    for i in 0..3u8 {
+        a.write("paper", vec![i])?;
+    }
+    a.join("paper", hub.addr()).await?;
+    assert!(eventually(|| ph.len() == 3 && pa.waiting_for(hub.id()) == 0).await);
+    // The hub goes offline, with 3; A goes on, and makes a snapshot of 5.
+    hub.close().await;
+    drop(ph);
+    for i in 3..5u8 {
+        a.write("paper", vec![i])?;
+    }
+    a.snapshot("paper", b"the whole document".to_vec())?;
+    a.write("paper", b"after it".to_vec())?;
+    assert_eq!(pa.prune(3600)?, 0, "the hub, known to lack two of them: all kept");
+    // The hub back: it catches up, and then the five can go.
+    let hub = Node::start(hub_key, Minimal).await?;
+    let ph = hub.open("paper", b"secret", dirs.1.path())?;
+    a.join("paper", hub.addr()).await?;
+    assert!(eventually(|| ph.vector() == pa.vector() && pa.waiting_for(hub.id()) == 0).await);
+    assert!(ph.snapshot().is_some());
+    assert_eq!(pa.prune(3600)?, 5);
+    assert_eq!(pa.len(), 1);
+    // A newcomer, joining A: the snapshot and the one entry after it.
+    let c = node().await?;
+    let pc = c.open("paper", b"secret", dirs.2.path())?;
+    c.join("paper", a.addr()).await?;
+    assert!(eventually(|| pc.vector() == pa.vector()).await);
+    assert_eq!(pc.len(), 1);
+    assert_eq!(pc.snapshot().map(|s| s.data), Some(b"the whole document".to_vec()));
+    // And A, restarted, has just what it kept.
+    a.close().await;
+    let a = Node::start(a_key, Minimal).await?;
+    let pa2 = a.open("paper", b"secret", dirs.0.path())?;
+    assert_eq!((pa2.len(), pa2.vector()), (1, pc.vector()));
+    assert_eq!(a.write("paper", b"next".to_vec())?.n, 7);
+    Ok(())
+}
