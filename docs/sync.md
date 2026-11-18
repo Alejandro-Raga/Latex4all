@@ -86,10 +86,15 @@ holds its encrypted changes and passes them on, as the relay does today:
 - **This computer**, if it's always on (the hub switch).
 - **Your own server**, running `l4a-hub` (Docker).
 
-A folder only delivers between members who can all open it, so it's chosen
-per project, and the share link says which service it's on. Members without
-access keep syncing through the Latex4All server; a member with both passes
-changes between them.
+The folder is chosen once, for the whole app. Inside it, the app makes a
+subfolder per shared project by itself (named after the project, with a
+small marker file holding the project id). To let co-authors sync through
+it, the user shares that project's subfolder with them in their cloud
+service; the share popover has a button that shows it in Finder/Explorer.
+On a co-author's computer, the app finds the shared subfolder wherever their
+service put it (by the marker file) and uses it; if it can't, it asks once.
+Members without access keep syncing through the Latex4All server; a member
+with both passes changes between them.
 
 Asked on install, once again on the update that brings this, and in
 Settings → Sync (the full text lives there):
