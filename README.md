@@ -46,8 +46,7 @@
 </p>
 
 <p align="center"><sub>
-  The features below marked <b>new</b> are still in development: they're only in the test builds,<br/>
-  which carry every change as it lands and can have bugs. They'll come to a release once they're stable.<br/>
+  Test builds carry every change as it lands, and are rougher than a release.<br/>
   Linux and Intel macOS are no longer published — build from source if you need either.
 </sub></p>
 
@@ -55,13 +54,10 @@
 
 ## What it is
 
-A desktop application for academic writing. You write LaTeX with the compiled
-PDF beside it, with AI help in the editor, your Zotero library and your
-Obsidian notes at hand, and a planner for your projects' tasks, deadlines and
-reading. Projects can be shared with co-authors and edited together.
-
-LaTeX compiles inside the app, so there is no TeX installation to maintain, and
-every save is kept in a local history you can browse and roll back.
+A native application for writing LaTeX, with Claude available in the editor and
+a PDF preview beside the source. LaTeX compiles inside the app, so there is no
+TeX installation to maintain, and every save is kept in a local history you can
+browse and roll back.
 
 It also carries a Python environment and a large library of scientific skills
 for Claude, both from upstream. [Claude Prism](https://github.com/delibae/claude-prism)
@@ -69,110 +65,82 @@ documents that side of it in full.
 
 ## What this fork adds
 
-### Projects (new)
+### In the current release
+
+**Zotero.** Browse your library without leaving the editor, search it by title
+or author, insert citations, and add a single reference to a `.bib` file from
+its context menu.
+
+**Dictionary, thesaurus and spell checking.** Right-click a word for its
+definition, synonyms and antonyms. Grammar checking runs locally rather than
+through a service. English and Spanish.
+
+**LaTeX autocompletion,** and a reference panel for the commands nobody
+remembers.
+
+**Windows.** The spelling, thesaurus and grammar services were ported, and CI
+builds Windows installers alongside macOS.
+
+**Updates in the app.** Two channels: releases, and a test channel that
+publishes every change as it lands. You can move between them in either
+direction, including back down from a test build to the current release, and
+each update shows what changed.
+
+### In development (test builds)
+
+These are only in the test builds for now, and still have rough edges.
+
+**Projects.** The projects page has folders, and sorts by when you last opened
+a project, its type or its priority.
 
 <img src="./assets/screenshots/projects.webp" alt="The projects page with folders" width="800" />
 
-Your projects as cards or a list, sorted by when you opened them, their type or
-their priority. Group them in folders (Thesis, Teaching…) by dragging them in or
-from their right-click menu. Favourites stay at the top.
+**Navigation.** A menu on the left reaches the editor, the Planner, the Library
+and Settings from anywhere, and the open project stays as you left it.
 
-### Writing (new layout)
+**Reading.** Papers from Zotero open in a reader where you can highlight and
+comment. The PDFs in your projects open there too, and their highlights stay
+on the right text when you recompile.
 
-A menu on the left is there in every part of the app: Home, Writing, Planner,
-Library & Vault, then Settings, Help and Report a bug. You can go anywhere and
-come back to your project as you left it. The app also reopens where you left
-off. Read the compiled PDF in the full window when you want to.
+<img src="./assets/screenshots/reader.webp" alt="Reading a paper with highlights and a comment" width="800" />
 
-### Library and reading (new)
-
-<img src="./assets/screenshots/reader.webp" alt="Reading a paper: highlights and a comment" width="800" />
-
-- **Zotero.** Browse your library, search it by title or author, insert
-  citations, and add a single reference to a `.bib` file from its context menu.
-- **A reader for papers.** Highlight in color and comment as you read; the
-  comment box opens as soon as you highlight. Highlights on Zotero papers are
-  saved in Zotero.
-- **Your projects' PDFs** (drafts, exported papers) are in the Library too, and
-  can be highlighted and commented the same way. When you rebuild a draft, the
-  highlights follow their text.
-- **Full-window reading,** with the paper zoomed to fit.
-
-### Planner (new)
+**Planner.** Each project has a task list, kept as `Plan.md` in its folder in
+the format Obsidian Tasks uses. It can be shown as a list, a board, a calendar,
+an Eisenhower matrix or a timeline of milestones up to the deadline.
 
 <img src="./assets/screenshots/timeline.webp" alt="A project's timeline" width="800" />
-
-Each project's plan is a `Plan.md` file in its folder, written the way Obsidian
-Tasks writes tasks, so Obsidian reads it too.
-
-- **Task lists and boards,** with subtasks, priorities, due dates, repeating
-  tasks and sections. Lists of your own (Teaching, Admin…) and an Inbox.
-- **Today, Tomorrow, Next 7 days and a calendar** across every project.
-- **An Eisenhower matrix** that sorts tasks by priority and date. You choose
-  what counts as urgent and important, and can leave far-off goals out.
-- **Timelines:** milestones with their own icons and colors, periods that fill
-  as their tasks get done (and turn red when they fall behind), dragged along
-  the line to reschedule. One timeline with every project, to see deadlines
-  that clash.
 
 <p>
   <img src="./assets/screenshots/board.webp" alt="A project's tasks as a board" width="49%" />
   <img src="./assets/screenshots/matrix.webp" alt="The Eisenhower matrix" width="49%" />
 </p>
 
-### Reading lists (new)
+**Reading lists.** A list of papers to read for each project, and one in
+general, with what you're reading now, what's next and how far you got.
 
 <img src="./assets/screenshots/reading-list.webp" alt="The reading list" width="800" />
 
-Papers to read, for each project and in general: now reading, on hold, up next,
-to re-read and finished. Each shows its authors, year and how far you've read,
-and resumes where you stopped. An optional weekly reading goal.
-
-### Notes, with Obsidian (new)
+**Notes.** An Obsidian vault can be opened next to the editor. Papers get a
+note with their highlights, and passages can be added to topic and idea notes
+with a link back to their source.
 
 <p>
-  <img src="./assets/screenshots/notes.webp" alt="An idea note with its links and a quoted passage" width="32%" />
+  <img src="./assets/screenshots/notes.webp" alt="An idea note" width="32%" />
   <img src="./assets/screenshots/notes-map.webp" alt="The map of notes" width="66%" />
 </p>
 
-Your Obsidian vault (a folder, or a WebDAV server) inside the app. Papers get
-notes of their own with your highlights. Topics and ideas collect passages
-word for word from papers, from your PDFs and from your own writing, each with
-a link back to where it came from. Connect notes however you like and see them
-on a map.
+**Shared projects.** A project can be shared with co-authors and edited at the
+same time.
 
-### Shared projects
-
-Share a project with co-authors through an encrypted relay. Everyone edits the
-same files at once, with comments and suggestions.
-
-### Writing aids
-
-- **Dictionary, thesaurus and spell checking.** Right-click a word for its
-  definition, synonyms and antonyms. Grammar checking runs locally rather than
-  through a service. English and Spanish.
-- **LaTeX autocompletion,** and a reference panel for the commands nobody
-  remembers.
-
-### Look
-
-Themes in light, dark, colorful and retro styles (and one of your own), a
-gradient background, and an interface size of your choosing.
+**Themes,** including a few retro ones, and a setting for the interface size.
 
 <img src="./assets/screenshots/retro-theme.webp" alt="The Spectrum theme" width="800" />
-
-### Windows and updates
-
-The spelling, thesaurus and grammar services were ported, and CI builds Windows
-installers alongside macOS. Updates come inside the app, from two channels:
-releases, and a test channel that publishes every change as it lands. You can
-move between them in either direction, and each update shows what changed.
 
 ## Data and privacy
 
 Your documents are stored and compiled on your own machine. Nothing is uploaded
-for storage. Shared projects travel between co-authors through a relay, encrypted
-on your computer before they leave it; the relay can't read them.
+for storage. Shared projects are encrypted before they're sent to the relay
+that passes changes between co-authors.
 
 The AI features are not local. When Claude reads or edits a file, that content
 is sent to Anthropic's API, as with any hosted model. See
