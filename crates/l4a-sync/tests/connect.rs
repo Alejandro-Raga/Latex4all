@@ -118,3 +118,30 @@ async fn a_newcomer_learns_every_member_from_one() -> anyhow::Result<()> {
     assert!(std::fs::read_to_string(dirs.2.path().join("peers.json"))?.contains(b.id()));
     Ok(())
 }
+
+#[tokio::test]
+async fn each_copy_knows_what_members_it_never_meets_have() -> anyhow::Result<()> {
+    let dirs = (tempfile::tempdir()?, tempfile::tempdir()?, tempfile::tempdir()?);
+    let a_key = iroh::SecretKey::generate();
+    let (a, hub, c) = (Node::start(a_key.clone(), Minimal).await?, node().await?, node().await?);
+    let pa = a.open("paper", b"secret", dirs.0.path())?;
+    hub.open("paper", b"secret", dirs.1.path())?;
+    let pc = c.open("paper", b"secret", dirs.2.path())?;
+    // A writes, and the hub acknowledges it.
+    a.join("paper", hub.addr()).await?;
+    a.write("paper", b"for everyone".to_vec())?;
+    assert!(eventually(|| pa.members().contains_key(hub.id()) && pa.waiting_for(hub.id()) == 0).await);
+    a.close().await;
+    // C, which never meets A, gets it from the hub and acknowledges it.
+    c.join("paper", hub.addr()).await?;
+    assert!(eventually(|| pc.len() == 1).await);
+    // A, back later, hears from the hub that C has its change.
+    let a = Node::start(a_key, Minimal).await?;
+    let pa = a.open("paper", b"secret", dirs.0.path())?;
+    assert_eq!(pa.waiting_for(c.id()), 1, "before: not known to have it");
+    a.join("paper", hub.addr()).await?;
+    assert!(eventually(|| pa.members().contains_key(c.id()) && pa.waiting_for(c.id()) == 0).await);
+    // And kept for next time.
+    assert!(std::fs::read_to_string(dirs.0.path().join("members.json"))?.contains(c.id()));
+    Ok(())
+}

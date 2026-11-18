@@ -10,6 +10,7 @@
 //! Each copy proves it holds the project's key before anything is sent.
 
 use crate::log::{Entry, Vector};
+use crate::members::Members;
 use crate::proof;
 use crate::Project;
 use anyhow::{bail, Context};
@@ -22,9 +23,11 @@ use tokio::sync::broadcast::error::RecvError;
 #[serde(tag = "type", rename_all = "kebab-case")]
 enum Frame {
     Hello { project: String, challenge: Vec<u8> },
-    Welcome { challenge: Vec<u8>, answer: Vec<u8>, vector: Vector, peers: Vec<String> },
-    Proof { answer: Vec<u8>, vector: Vector, peers: Vec<String> },
+    Welcome { challenge: Vec<u8>, answer: Vec<u8>, vector: Vector, peers: Vec<String>, members: Members },
+    Proof { answer: Vec<u8>, vector: Vector, peers: Vec<String>, members: Members },
     Entries { entries: Vec<WireEntry> },
+    /// What the sender has now: an acknowledgement of entries received.
+    Have { vector: Vector },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -69,7 +72,7 @@ pub async fn dial(conn: Connection, me: String, project: Arc<Project>) -> anyhow
     let (mut tx, mut rx) = conn.open_bi().await?;
     let mine = proof::challenge();
     send(&mut tx, &Frame::Hello { project: project.id.clone(), challenge: mine.to_vec() }).await?;
-    let Frame::Welcome { challenge, answer, vector, peers } = recv(&mut rx).await? else {
+    let Frame::Welcome { challenge, answer, vector, peers, members } = recv(&mut rx).await? else {
         bail!("unexpected reply");
     };
     if !proof::check(&project.token, &mine, &them, &me, &answer) {
@@ -81,11 +84,13 @@ pub async fn dial(conn: Connection, me: String, project: Arc<Project>) -> anyhow
             answer: proof::answer(&project.token, &challenge, &me, &them),
             vector: project.vector(),
             peers: project.known_peers(),
+            members: project.account(),
         },
     )
     .await?;
     // A member, proven: it, and the members it knows, are worth reaching.
     project.learn(std::iter::once(them.clone()).chain(peers), &me);
+    project.heard(&them, &vector, Some(&members));
     live(tx, rx, them, vector, project).await
 }
 
@@ -112,16 +117,18 @@ pub async fn answer(
             answer: proof::answer(&project.token, &challenge, &me, &them),
             vector: project.vector(),
             peers: project.known_peers(),
+            members: project.account(),
         },
     )
     .await?;
-    let Frame::Proof { answer, vector, peers } = recv(&mut rx).await? else {
+    let Frame::Proof { answer, vector, peers, members } = recv(&mut rx).await? else {
         bail!("unexpected reply");
     };
     if !proof::check(&project.token, &mine, &them, &me, &answer) {
         bail!("the other copy doesn't hold this project's key");
     }
     project.learn(std::iter::once(them.clone()).chain(peers), &me);
+    project.heard(&them, &vector, Some(&members));
     live(tx, rx, them, vector, project).await
 }
 
@@ -143,9 +150,21 @@ async fn live(
 
     let writer_project = project.clone();
     let writer_them = them.clone();
+    // What we have after taking in their entries, to acknowledge them.
+    let (ack, mut acks) = tokio::sync::mpsc::unbounded_channel::<Vector>();
     let writer = tokio::spawn(async move {
         loop {
-            match changes.recv().await {
+            let change = tokio::select! {
+                change = changes.recv() => change,
+                Some(mut vector) = acks.recv() => {
+                    while let Ok(newer) = acks.try_recv() {
+                        vector = newer;
+                    }
+                    send(&mut tx, &Frame::Have { vector }).await?;
+                    continue;
+                }
+            };
+            match change {
                 Ok((entry, from)) => {
                     // Not back to the copy it came from.
                     if from.as_deref() == Some(writer_them.as_str()) {
@@ -170,12 +189,19 @@ async fn live(
 
     let reading = async {
         loop {
-            let Frame::Entries { entries } = recv(&mut rx).await? else {
-                bail!("unexpected frame");
-            };
-            for e in entries {
-                let entry = Entry { author: e.author, n: e.n, data: e.data, sig: e.sig };
-                project.receive(entry, &them)?;
+            match recv(&mut rx).await? {
+                Frame::Entries { entries } => {
+                    let any = !entries.is_empty();
+                    for e in entries {
+                        let entry = Entry { author: e.author, n: e.n, data: e.data, sig: e.sig };
+                        project.receive(entry, &them)?;
+                    }
+                    if any {
+                        let _ = ack.send(project.vector());
+                    }
+                }
+                Frame::Have { vector } => project.heard(&them, &vector, None),
+                _ => bail!("unexpected frame"),
             }
         }
     };

@@ -5,6 +5,7 @@
 //!   its author and a number; what a copy has, as a version vector.
 //! - [`store`]: that log on disk.
 //! - [`sign`]: each entry signed by its author, checked by everyone.
+//! - [`members`]: what each member has, as far as a copy knows.
 //! - [`proof`]: two copies show each other they hold the project's key
 //!   without sending it.
 //! - [`session`]: a live sync between two copies over an iroh connection.
@@ -12,6 +13,7 @@
 //!   it's joined, and those who join it.
 
 pub mod log;
+pub mod members;
 pub mod proof;
 pub mod session;
 pub mod sign;
@@ -21,6 +23,7 @@ use anyhow::Context;
 use iroh::endpoint::presets::Preset;
 use iroh::{Endpoint, EndpointAddr, SecretKey};
 use log::{Entry, Log, Vector};
+use members::Members;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -48,6 +51,10 @@ pub struct Project {
     changes: broadcast::Sender<(Entry, Option<String>)>,
     /// This copy's id, to tell its own entries.
     me: String,
+    /// What each member has, as far as this copy knows; kept on disk.
+    members: Mutex<Members>,
+    members_file: PathBuf,
+    members_saved: AtomicU64,
     /// Entries refused for a bad signature.
     refused: AtomicU64,
     /// Another computer writes with this copy's identity (its app data was
@@ -65,8 +72,16 @@ impl Project {
             .ok()
             .and_then(|b| serde_json::from_slice(&b).ok())
             .unwrap_or_default();
+        let members_file = dir.join("members.json");
+        let members: Members = std::fs::read(&members_file)
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default();
         let (changes, _) = broadcast::channel(1024);
         Ok(Project {
+            members: Mutex::new(members),
+            members_file,
+            members_saved: AtomicU64::new(0),
             id: id.to_string(),
             token: token.to_vec(),
             log: Mutex::new(log),
@@ -96,9 +111,55 @@ impl Project {
         self.len() == 0
     }
 
+    /// What each other member has, as far as this copy knows.
+    pub fn members(&self) -> Members {
+        self.members.lock().unwrap().clone()
+    }
+
+    /// How many of this copy's entries `member` is known to lack: changes
+    /// that haven't reached them yet.
+    pub fn waiting_for(&self, member: &str) -> u64 {
+        let theirs = self.members.lock().unwrap().get(member).map(|k| k.has.clone()).unwrap_or_default();
+        members::lacking(&self.vector(), &theirs)
+    }
+
+    /// This copy's account of everyone, itself included, to pass on.
+    fn account(&self) -> Members {
+        let mut all = self.members();
+        all.insert(self.me.clone(), members::Known { has: self.vector(), at: members::now() });
+        all
+    }
+
+    /// What a member has (they said so, or another copy did).
+    fn heard(&self, member: &str, has: &Vector, others: Option<&Members>) {
+        let mut m = self.members.lock().unwrap();
+        let mut changed = false;
+        if member != self.me {
+            changed |= members::note(&mut m, member, has, members::now());
+        }
+        if let Some(others) = others {
+            changed |= members::merge(&mut m, others, &self.me);
+        }
+        // Saved when something's new, at most every 30 seconds while it
+        // only moves forward (acknowledgements come with every change).
+        let now = members::now();
+        let last = self.members_saved.load(Ordering::Relaxed);
+        if changed && (others.is_some() || now >= last + 30) {
+            if let Ok(json) = serde_json::to_vec(&*m) {
+                let _ = std::fs::write(&self.members_file, json);
+                self.members_saved.store(now, Ordering::Relaxed);
+            }
+        }
+        drop(m);
+        if let Some(others) = others {
+            self.learn(others.keys().cloned(), &self.me.clone());
+        }
+    }
+
     /// The members this copy knows of: those who wrote, and those met.
     pub fn known_peers(&self) -> Vec<String> {
         let mut all = self.peers.lock().unwrap().clone();
+        all.extend(self.members.lock().unwrap().keys().cloned());
         for author in self.vector().keys() {
             if *author != self.me {
                 all.insert(author.clone());
