@@ -197,6 +197,19 @@ function progressOf(plan: Plan, m: Milestone) {
   return name ? sectionProgress(plan, name) : null;
 }
 
+/**
+ * A task's title as words only: a paper on a reading list is written
+ * `[Title](zotero://…) #reading/to-read [page:: 3/20]`, which shows as its
+ * title.
+ */
+function plainTitle(title: string): string {
+  return shownTitle(title)
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\s*\[[\w-]+::[^\]]*\]/g, "")
+    .replace(/(^|\s)#[\p{L}\p{N}_/-]+/gu, "")
+    .trim();
+}
+
 /** About how wide a label is, in pixels (11px text). */
 const textWidth = (text: string, px = 6.2) => text.length * px + 10;
 
@@ -470,7 +483,7 @@ function Track({
           )
           .map((t) => ({
             date: t.task.due as string,
-            title: shownTitle(t.task.title),
+            title: plainTitle(t.task.title),
             section: false,
           })),
       ]
@@ -483,7 +496,7 @@ function Track({
   const marksY = labelsY + labelsH + (marks.length ? 6 : 0);
   const markLabels = placeLabels(
     marks.map((mk) => ({ ...mk, x: inside(mk).lx })),
-    2,
+    3,
   );
   const marksH = marks.length
     ? 10 +

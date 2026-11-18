@@ -21,6 +21,8 @@ tag.
 
 ### Fixed
 
+- Timeline: papers to read show their titles under the line (not their
+  link and tags), and more of the dates there are named.
 - Your work is safer:
   - Edits made in the last seconds are saved when you open another
     project, close one, close the window or quit.
