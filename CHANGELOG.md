@@ -21,6 +21,9 @@ tag.
 
 ### Fixed
 
+- Shared projects: switching to another project while a shared one was
+  open could send the new project's files (its Plan.md) to the shared one,
+  replacing them there and on collaborators' computers.
 - The Library is as you left it after visiting another part of the app:
   the paper open, the project's files, its unfolded projects and search.
 - Where you left off is kept in a file, so it survives quitting right
