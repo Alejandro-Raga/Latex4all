@@ -46,6 +46,7 @@ import {
 import {
   INBOX,
   backToPlanner,
+  READING,
   READING_LIST,
   isProjectKey,
   useOwnLists,
@@ -841,7 +842,9 @@ export function PlannerView() {
                             "Reading",
                           ],
                         ] as [Tab, ReactNode, string][])),
-                    ...(!isProjectKey(current.key)
+                    // Every list has its timeline (chores have dates too);
+                    // general reading is papers, not tasks.
+                    ...(current.key === READING
                       ? []
                       : ([
                           [
@@ -915,7 +918,7 @@ export function PlannerView() {
                   <p className="p-6 text-muted-foreground text-sm">
                     That list isn't here any more.
                   </p>
-                ) : tab === "timeline" && isProjectKey(current.key) ? (
+                ) : tab === "timeline" && current.key !== READING ? (
                   <TimelineView key={current.key} list={current} />
                 ) : tab === "reading" ? (
                   <ReadingView key={current.key} list={current} mode={mode} />

@@ -82,13 +82,11 @@ import {
   withStyle,
 } from "@/lib/plan/milestones";
 import {
-  allTasks,
   deleteTask,
   newPlanText,
   type Plan,
   parsePlan,
   projectDue,
-  sectionDue,
   sectionName,
   setProjectDue,
   today,
@@ -96,12 +94,13 @@ import {
   updateTask,
 } from "@/lib/plan/plan-file";
 import {
-  isProjectKey,
   type PlanList,
+  READING,
   usePlanText,
   usePlanTexts,
 } from "@/lib/plan/plan-store";
 import { parseQuickAdd } from "@/lib/plan/quick-add";
+import { gather, type Lane, lanesOf } from "@/lib/plan/task-lanes";
 import { PX_PER_DAY_FOR_DAYS, scaleFor } from "@/lib/plan/time-scale";
 import { cn } from "@/lib/utils";
 import { editPlan, removeFromPlan } from "./plan-actions";
@@ -459,52 +458,17 @@ function Track({
   const labelsY = lineY + 14;
   const labelsH = usedRows * 16;
 
-  // Marks: dated tasks and sections, named where there's room.
-  const marks = compact
+  // Tasks: a lane per section under the line.
+  const taskLanes = compact
     ? []
-    : [
-        ...plan.sections.flatMap((s) => {
-          const d =
-            s.title && !isMilestonesSection(s.title) && sectionDue(s.title);
-          return d
-            ? [
-                {
-                  date: d,
-                  title: sectionName(s.title as string),
-                  section: true,
-                },
-              ]
-            : [];
-        }),
-        ...allTasks(plan)
-          .filter(
-            (t) =>
-              !t.task.done && t.task.due && !isMilestonesSection(t.section),
-          )
-          .map((t) => ({
-            date: t.task.due as string,
-            title: plainTitle(t.task.title),
-            section: false,
-          })),
-      ]
-        .filter((mk) => mk.date >= span.start && mk.date <= span.end)
-        .map((mk) => ({
-          ...mk,
-          x: xOf(mk.date),
-          w: textWidth(`${mk.title} · ${short(mk.date)}`, 5.6),
-        }));
-  const marksY = labelsY + labelsH + (marks.length ? 6 : 0);
-  const markLabels = placeLabels(
-    marks.map((mk) => ({ ...mk, x: inside(mk).lx })),
-    3,
-  );
-  const marksH = marks.length
-    ? 10 +
-      (markLabels.length
-        ? (Math.max(...markLabels.map((m) => m.row)) + 1) * 14
-        : 0)
-    : 0;
-  const height = compact ? lineY + 10 : marksY + marksH + 6;
+    : lanesOf(plan, plainTitle).filter(
+        (l) =>
+          (l.due && l.due >= span.start && l.due <= span.end) ||
+          l.tasks.some((t) => t.date >= span.start && t.date <= span.end),
+      );
+  const marksY = labelsY + labelsH + (taskLanes.length ? 10 : 0);
+  const marksH = taskLanes.length * LANE;
+  const height = compact ? lineY + 10 : marksY + marksH + 8;
 
   return (
     <div className="relative select-none" style={{ width, height }}>
@@ -687,30 +651,148 @@ function Track({
           </div>
         );
       })}
-      {/* Dated tasks and sections. */}
-      {marks.map((mk, i) => (
+      {/* The plan's dated tasks, a lane per section. */}
+      {taskLanes.length > 0 && (
+        <div className="absolute inset-x-0" style={{ top: marksY }}>
+          {taskLanes.map((lane) => (
+            <TaskLane
+              key={lane.name}
+              lane={lane}
+              span={span}
+              xOf={xOf}
+              width={width}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A lane: its section's name on a line of its own, its tasks below. */
+const LANE = 32;
+const LANE_NAME = 13;
+/** Where its tasks sit: the middle of the space below the name. */
+const LANE_ROW = LANE_NAME + 2 + (LANE - LANE_NAME - 2) / 2;
+
+/**
+ * One section's dated tasks: a dot each, named where there's room; those
+ * too close to tell apart as one count, listed on a click. The section's
+ * name stays at the left as the line scrolls.
+ */
+function TaskLane({
+  lane,
+  span,
+  xOf,
+  width,
+}: {
+  lane: Lane;
+  span: Span;
+  xOf: (iso: string) => number;
+  width: number;
+}) {
+  const shown = lane.tasks
+    .filter((t) => t.date >= span.start && t.date <= span.end)
+    .map((t) => ({ ...t, x: xOf(t.date) }));
+  const groups = gather(shown);
+  return (
+    <div
+      className="relative border-border/30 border-t"
+      style={{ height: LANE, width }}
+    >
+      <span
+        className="pointer-events-none sticky left-0 inline-block max-w-60 truncate pl-1 font-medium text-[10px] text-muted-foreground/80"
+        style={{ lineHeight: `${LANE_NAME}px`, marginTop: 2 }}
+      >
+        {lane.name}
+      </span>
+      {lane.due && lane.due >= span.start && lane.due <= span.end && (
         <span
-          // Marks have nothing steadier to go by than their place.
-          key={`${mk.date}-${i}`}
-          title={`${mk.title} · ${short(mk.date)}`}
-          className={cn(
-            "absolute -translate-x-1/2",
-            mk.section
-              ? "size-1.5 rounded-[2px] bg-muted-foreground/70"
-              : "h-2 w-px bg-muted-foreground/60",
-          )}
-          style={{ left: mk.x, top: marksY }}
+          title={`${lane.name} · ${short(lane.due)}`}
+          className="absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-[2px] bg-muted-foreground/70"
+          style={{ left: xOf(lane.due), top: LANE_ROW }}
         />
-      ))}
-      {markLabels.map((mk, i) => (
-        <span
-          key={`ml-${mk.date}-${i}`}
-          className="pointer-events-none absolute -translate-x-1/2 truncate whitespace-nowrap text-[10px] text-muted-foreground"
-          style={{ left: mk.x, top: marksY + 10 + mk.row * 14, maxWidth: mk.w }}
-        >
-          {mk.title} · {short(mk.date)}
-        </span>
-      ))}
+      )}
+      {groups.map((g, i) => {
+        const next = groups[i + 1]?.x ?? width;
+        if (g.items.length === 1) {
+          const t = g.items[0];
+          // Its name to the right, in the room before the next one.
+          const room = Math.min(next - t.x - 14, width - t.x - 10, 220);
+          return (
+            <div
+              key={`${t.date}-${t.title}`}
+              className="absolute flex -translate-y-1/2 items-center gap-1.5"
+              style={{ left: t.x - 3, top: LANE_ROW }}
+              title={`${t.title} · ${short(t.date)}`}
+            >
+              <span
+                className={cn(
+                  "size-1.5 shrink-0 rounded-full",
+                  t.overdue ? "bg-destructive" : "bg-muted-foreground",
+                )}
+              />
+              {room > 48 && (
+                <span
+                  className={cn(
+                    "truncate text-[10px]",
+                    t.overdue ? "text-destructive" : "text-muted-foreground",
+                  )}
+                  style={{ maxWidth: room }}
+                >
+                  {t.title}
+                </span>
+              )}
+            </div>
+          );
+        }
+        const late = g.items.some((t) => t.overdue);
+        return (
+          <Popover key={`g-${g.x}`}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "absolute h-4 min-w-4 -translate-x-1/2 -translate-y-1/2 rounded-full px-1 font-medium text-[10px] tabular-nums leading-4",
+                  late
+                    ? "bg-destructive/15 text-destructive"
+                    : "bg-muted text-foreground/80 hover:bg-accent",
+                )}
+                style={{ left: g.x, top: LANE_ROW }}
+                title={`${g.items.length} tasks`}
+                aria-label={`${g.items.length} tasks in ${lane.name}`}
+              >
+                {g.items.length}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="center" className="w-64 p-1.5">
+              <p className="px-1.5 pb-1 text-muted-foreground text-xs">
+                {lane.name}
+              </p>
+              <ul className="max-h-64 overflow-y-auto">
+                {g.items.map((t) => (
+                  <li
+                    key={`${t.date}-${t.title}`}
+                    className="flex items-baseline gap-2 rounded-md px-1.5 py-1 text-xs"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                    <span
+                      className={cn(
+                        "shrink-0 tabular-nums",
+                        t.overdue
+                          ? "text-destructive"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {short(t.date)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </PopoverContent>
+          </Popover>
+        );
+      })}
     </div>
   );
 }
@@ -1096,7 +1178,14 @@ function Zoomable({
       ref={ref}
       onWheel={z.onWheel}
       onScroll={onScroll}
-      className="overflow-x-auto pb-2"
+      // Fitted, it all fits: no scrolling, and no scrollbar (Windows shows
+      // a thick one for a label a pixel past the edge). Zoomed: a thin one.
+      className={cn(
+        "pb-2",
+        z.zoom === 1
+          ? "overflow-x-hidden"
+          : "overflow-x-auto [scrollbar-width:thin]",
+      )}
     >
       {children(inner)}
     </div>
@@ -1215,7 +1304,8 @@ export function ProjectsTimeline({
   lists: PlanList[];
   onOpen: (list: PlanList) => void;
 }) {
-  const projects = lists.filter((l) => isProjectKey(l.key));
+  // Projects, the Inbox and lists of one's own: everything with dates.
+  const projects = lists.filter((l) => l.key !== READING);
   const texts = usePlanTexts(projects.map((l) => l.key));
   const z = useZoom();
   const rows = projects.flatMap((list) => {

@@ -550,8 +550,9 @@ test("a list of one's own, with its tasks and its reading", async ({
   await expect
     .poll(() => disk(page, "/appdata/planner/Teaching.md"))
     .toContain("The economics of science #reading/to-read");
-  // No deadline or timeline: those are a project's.
-  await expect(main.getByRole("radio", { name: "Timeline" })).toHaveCount(0);
+  // No deadline: that's a project's.
+  // A timeline, as for a project: chores have dates too.
+  await expect(main.getByRole("radio", { name: "Timeline" })).toHaveCount(1);
   if (process.env.SHOTS) {
     await page.screenshot({ path: `${process.env.SHOTS}/own-list.png` });
   }
@@ -1221,4 +1222,17 @@ test("a deleted task comes back with Undo", async ({ page }) => {
   await expect
     .poll(() => disk(page, PLAN))
     .toContain("- [ ] Reply to reviewers");
+});
+
+test("the Inbox and lists of one's own have a timeline too", async ({
+  page,
+}) => {
+  await open(page, "scenario=planner");
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /^Inbox/ })
+    .click();
+  const main = page.getByRole("main");
+  await main.getByRole("radio", { name: "Timeline" }).click();
+  await expect(main.getByLabel("Add a milestone")).toBeVisible();
 });

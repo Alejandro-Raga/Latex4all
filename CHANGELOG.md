@@ -21,6 +21,10 @@ tag.
 
 ### Fixed
 
+- Timeline: tasks in a lane per section under the line; tasks too close
+  together become a count you can click to list (red when some are late).
+  The Inbox and your own lists have a timeline too. No scrollbar on Windows
+  when the timeline isn't zoomed in.
 - Timeline: papers to read show their titles under the line (not their
   link and tags), and more of the dates there are named.
 - Your work is safer:
