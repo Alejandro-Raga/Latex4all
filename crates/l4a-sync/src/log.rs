@@ -1,15 +1,13 @@
 //! A shared project's changes: entries named by their author (a copy's node
-//! id, or `relay` for what came from the old relay, numbered by its own
-//! sequence) and a number the author counts up from 1. Every copy keeps the
-//! whole log; what it has is its [`Vector`].
+//! id) and a number the author counts up from 1, each signed by its author
+//! (see [`crate::sign`]). Every copy keeps the whole log; what it has is its
+//! [`Vector`]. (The old relay's log comes in as the entries of the server
+//! that took its place, signed by it.)
 
 use std::collections::BTreeMap;
 
-/// Who wrote an entry: a copy's node id (hex), or `relay`.
+/// Who wrote an entry: a copy's node id.
 pub type Author = String;
-
-/// The relay's log, imported: the same numbers for everyone.
-pub const RELAY: &str = "relay";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
@@ -18,6 +16,8 @@ pub struct Entry {
     pub n: u64,
     /// The change, encrypted by the app. The log never reads it.
     pub data: Vec<u8>,
+    /// The author's signature of it (64 bytes).
+    pub sig: Vec<u8>,
 }
 
 /// For each author, the highest number a copy has (it has all below too).
@@ -63,9 +63,16 @@ impl Log {
             author: author.to_string(),
             n,
             data,
+            sig: Vec::new(),
         };
         self.add(entry.clone());
         entry
+    }
+
+    /// The entry `author` numbered `n`, if this copy has it.
+    pub fn get(&self, author: &str, n: u64) -> Option<&Entry> {
+        let i = usize::try_from(n.checked_sub(1)?).ok()?;
+        self.entries.get(author)?.get(i)
     }
 
     /// What a copy with `theirs` lacks, in order.
@@ -96,13 +103,13 @@ mod tests {
         let mut a = Log::new();
         a.append("alice", b"1".to_vec());
         a.append("alice", b"2".to_vec());
-        a.append(RELAY, b"r1".to_vec());
+        a.append("hub", b"r1".to_vec());
         let mut b = Log::new();
         b.append("alice", b"1".to_vec());
         let missing = a.missing_for(&b.vector());
         assert_eq!(
             missing.iter().map(|e| (e.author.as_str(), e.n)).collect::<Vec<_>>(),
-            vec![("alice", 2), (RELAY, 1)]
+            vec![("alice", 2), ("hub", 1)]
         );
         for e in missing {
             assert!(b.add(e));
@@ -121,7 +128,7 @@ mod tests {
     #[test]
     fn an_entry_after_a_gap_waits() {
         let mut a = Log::new();
-        assert!(!a.add(Entry { author: "bob".into(), n: 2, data: vec![] }));
+        assert!(!a.add(Entry { author: "bob".into(), n: 2, data: vec![], sig: vec![] }));
         assert!(a.is_empty());
     }
 }

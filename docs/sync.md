@@ -44,7 +44,11 @@ A project is a log of encrypted changes, the same changes (Yjs updates,
 encrypted by the app) the relay stores today. Every copy keeps the whole log.
 
 Each entry is identified by its author (a copy's node id) and a number that
-author counts up. A copy's knowledge is a *version vector*: for each author,
+author counts up, and signed with the author's key. Every copy checks the
+signature of everything it receives, so no member, hub or shared folder can
+write as someone else or change an entry unseen. If a copy receives an entry
+under its own id that it didn't write, its app data was copied to another
+computer: it stops writing under that id and takes a new one. A copy's knowledge is a *version vector*: for each author,
 the highest number it has. Two copies that meet exchange vectors and send each
 other what the other lacks. Nothing needs a central order; changes merge as
 Yjs merges them today.
@@ -118,9 +122,10 @@ through their folders; nothing they have is lost.
 
 1. While the relay exists, the app keeps syncing with it as well. Changes go
    both ways, so members who haven't updated keep working.
-2. The relay's log is imported as the entries of one author, `relay`,
-   numbered by the relay's own sequence. Every member imports the same
-   numbers, so the same entry is never counted twice, and nothing is lost.
+2. The relay server itself becomes a hub, and imports its own log as its
+   entries, in the relay's order and signed with its key. Members get them
+   from it like any other entries, so the history is the same for everyone
+   and nothing is lost.
 3. New changes are written by each copy under its own id and sent to peers
    and to the relay.
 4. When every member of a project is on peer-to-peer sync and a hub (or the

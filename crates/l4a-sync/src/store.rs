@@ -1,5 +1,5 @@
 //! A project's log on disk: one append-only file per author in the
-//! project's folder, each entry `[u64 n][u32 length][data]`. Written as
+//! project's folder, each entry `[u64 n][u32 length][64-byte signature][data]`. Written as
 //! entries arrive and flushed to disk each time; on reading, an entry cut
 //! short by a crash is dropped (and the file trimmed back to the last whole
 //! one), so a log is never left unreadable.
@@ -9,6 +9,9 @@ use anyhow::Context;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+
+/// n, length, signature.
+const HEAD: usize = 8 + 4 + 64;
 
 pub struct Store {
     dir: PathBuf,
@@ -44,17 +47,17 @@ impl Store {
             File::open(&path)?.read_to_end(&mut bytes)?;
             let mut at = 0usize;
             let mut whole = 0usize;
-            while at + 12 <= bytes.len() {
+            while at + HEAD <= bytes.len() {
                 let n = u64::from_be_bytes(bytes[at..at + 8].try_into().unwrap());
                 let len = u32::from_be_bytes(bytes[at + 8..at + 12].try_into().unwrap()) as usize;
-                if at + 12 + len > bytes.len() {
+                if at + HEAD + len > bytes.len() {
                     break;
                 }
-                let data = bytes[at + 12..at + 12 + len].to_vec();
-                // The author's real id is kept in each entry's file by name;
-                // ids are already safe as names, so the stem is the id.
-                log.add(Entry { author: author_file.to_string(), n, data });
-                at += 12 + len;
+                let sig = bytes[at + 12..at + HEAD].to_vec();
+                let data = bytes[at + HEAD..at + HEAD + len].to_vec();
+                // Ids are already safe as names, so the stem is the id.
+                log.add(Entry { author: author_file.to_string(), n, data, sig });
+                at += HEAD + len;
                 whole = at;
             }
             if whole < bytes.len() {
@@ -69,9 +72,11 @@ impl Store {
     pub fn append(&self, entry: &Entry) -> anyhow::Result<()> {
         let path = self.dir.join(file_name(&entry.author));
         let mut file = OpenOptions::new().create(true).append(true).open(&path)?;
-        let mut frame = Vec::with_capacity(12 + entry.data.len());
+        anyhow::ensure!(entry.sig.len() == 64, "an entry without its signature");
+        let mut frame = Vec::with_capacity(HEAD + entry.data.len());
         frame.extend_from_slice(&entry.n.to_be_bytes());
         frame.extend_from_slice(&(entry.data.len() as u32).to_be_bytes());
+        frame.extend_from_slice(&entry.sig);
         frame.extend_from_slice(&entry.data);
         file.write_all(&frame)?;
         file.sync_data()?;
@@ -89,13 +94,15 @@ mod tests {
         let store = Store::open(dir.path())?;
         let mut log = Log::new();
         for data in [b"one".to_vec(), b"two".to_vec()] {
-            let e = log.append("alice", data);
+            let mut e = log.append("alice", data);
+            e.sig = vec![7; 64];
             store.append(&e)?;
         }
         // A crash halfway through a third.
         let mut f = OpenOptions::new().append(true).open(dir.path().join("alice.log"))?;
         f.write_all(&3u64.to_be_bytes())?;
         f.write_all(&100u32.to_be_bytes())?;
+        f.write_all(&[7; 64])?;
         f.write_all(b"partial")?;
         drop(f);
 
@@ -104,7 +111,8 @@ mod tests {
         // And it's whole again: the next entry follows on.
         let store = Store::open(dir.path())?;
         let mut log = again;
-        let e = log.append("alice", b"three".to_vec());
+        let mut e = log.append("alice", b"three".to_vec());
+        e.sig = vec![7; 64];
         store.append(&e)?;
         assert_eq!(Store::open(dir.path())?.load()?.len(), 3);
         Ok(())

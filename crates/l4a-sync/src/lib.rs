@@ -4,6 +4,7 @@
 //! - [`log`]: a shared project as a log of encrypted changes, each named by
 //!   its author and a number; what a copy has, as a version vector.
 //! - [`store`]: that log on disk.
+//! - [`sign`]: each entry signed by its author, checked by everyone.
 //! - [`proof`]: two copies show each other they hold the project's key
 //!   without sending it.
 //! - [`session`]: a live sync between two copies over an iroh connection.
@@ -13,6 +14,7 @@
 pub mod log;
 pub mod proof;
 pub mod session;
+pub mod sign;
 pub mod store;
 
 use anyhow::Context;
@@ -22,6 +24,7 @@ use log::{Entry, Log, Vector};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use store::Store;
 use tokio::sync::broadcast;
@@ -43,9 +46,40 @@ pub struct Project {
     peers_file: PathBuf,
     /// Each new entry, and which copy it came from (none: made here).
     changes: broadcast::Sender<(Entry, Option<String>)>,
+    /// This copy's id, to tell its own entries.
+    me: String,
+    /// Entries refused for a bad signature.
+    refused: AtomicU64,
+    /// Another computer writes with this copy's identity (its app data was
+    /// copied over): this copy must stop writing and take a new one.
+    clashed: AtomicBool,
 }
 
 impl Project {
+    /// A project kept in `dir`, as seen by copy `me`.
+    fn open(id: &str, token: &[u8], dir: &Path, me: &str) -> anyhow::Result<Self> {
+        let store = Store::open(dir)?;
+        let log = store.load()?;
+        let peers_file = dir.join("peers.json");
+        let peers: BTreeSet<String> = std::fs::read(&peers_file)
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default();
+        let (changes, _) = broadcast::channel(1024);
+        Ok(Project {
+            id: id.to_string(),
+            token: token.to_vec(),
+            log: Mutex::new(log),
+            store,
+            peers: Mutex::new(peers),
+            peers_file,
+            changes,
+            me: me.to_string(),
+            refused: AtomicU64::new(0),
+            clashed: AtomicBool::new(false),
+        })
+    }
+
     pub fn vector(&self) -> Vector {
         self.log.lock().unwrap().vector()
     }
@@ -66,7 +100,7 @@ impl Project {
     pub fn known_peers(&self) -> Vec<String> {
         let mut all = self.peers.lock().unwrap().clone();
         for author in self.vector().keys() {
-            if author != log::RELAY {
+            if *author != self.me {
                 all.insert(author.clone());
             }
         }
@@ -78,7 +112,7 @@ impl Project {
         let mut peers = self.peers.lock().unwrap();
         let before = peers.len();
         for id in ids {
-            if id != me && id != log::RELAY && !id.is_empty() {
+            if id != me && !id.is_empty() {
                 peers.insert(id);
             }
         }
@@ -99,10 +133,35 @@ impl Project {
         self.changes.subscribe()
     }
 
-    /// An entry from another copy: kept (on disk first) and passed on, if
-    /// it's new here.
+    /// Entries refused so far for not being signed by their author.
+    pub fn refused(&self) -> u64 {
+        self.refused.load(Ordering::Relaxed)
+    }
+
+    /// Whether another computer writes as this one (its app data copied
+    /// over). Then this copy writes nothing more under its id; the app makes
+    /// it a new identity and opens the project again.
+    pub fn clashed(&self) -> bool {
+        self.clashed.load(Ordering::Relaxed)
+    }
+
+    /// An entry from another copy: checked, kept (on disk first) and passed
+    /// on, if it's new here.
     fn receive(&self, entry: Entry, from: &str) -> anyhow::Result<()> {
+        if !sign::verify(&self.id, &entry) {
+            self.refused.fetch_add(1, Ordering::Relaxed);
+            return Ok(());
+        }
         let mut log = self.log.lock().unwrap();
+        if entry.author == self.me {
+            // Our own entries coming back are fine; one we didn't write, or
+            // one we wrote differently, means another computer has our key.
+            let same = log.get(&entry.author, entry.n).is_some_and(|e| e.data == entry.data);
+            if !same {
+                self.clashed.store(true, Ordering::Relaxed);
+            }
+            return Ok(());
+        }
         let next = log.vector().get(&entry.author).copied().unwrap_or(0) + 1;
         if entry.n != next {
             return Ok(());
@@ -114,11 +173,13 @@ impl Project {
         Ok(())
     }
 
-    /// A change made here, by `me`: on disk, then to every connected copy.
-    fn write(&self, me: &str, data: Vec<u8>) -> anyhow::Result<Entry> {
+    /// A change made here, signed with this copy's key: on disk, then to
+    /// every connected copy.
+    fn write(&self, key: &SecretKey, data: Vec<u8>) -> anyhow::Result<Entry> {
+        anyhow::ensure!(!self.clashed(), "another computer is using this copy's identity");
         let mut log = self.log.lock().unwrap();
-        let n = log.vector().get(me).copied().unwrap_or(0) + 1;
-        let entry = Entry { author: me.to_string(), n, data };
+        let n = log.vector().get(&self.me).copied().unwrap_or(0) + 1;
+        let entry = sign::entry(key, &self.id, n, data);
         self.store.append(&entry)?;
         log.add(entry.clone());
         drop(log);
@@ -130,6 +191,7 @@ impl Project {
 /// A copy of the app on the network.
 pub struct Node {
     endpoint: Endpoint,
+    key: SecretKey,
     me: String,
     projects: Arc<Mutex<HashMap<String, Arc<Project>>>>,
     /// Live syncs, by project and member, so each is reached once.
@@ -152,6 +214,7 @@ impl Node {
         lookup: Option<iroh::address_lookup::memory::MemoryLookup>,
         retry: Duration,
     ) -> anyhow::Result<Self> {
+        let key = secret.clone();
         let mut builder = Endpoint::builder(preset)
             .secret_key(secret)
             .alpns(vec![ALPN.to_vec()]);
@@ -186,7 +249,7 @@ impl Node {
                 });
             }
         });
-        Ok(Self { endpoint, me, projects, live, retry })
+        Ok(Self { endpoint, key, me, projects, live, retry })
     }
 
     /// This copy's id: its public key.
@@ -201,24 +264,7 @@ impl Node {
 
     /// Opens a shared project kept in `dir`, with what's already there.
     pub fn open(&self, id: &str, token: &[u8], dir: impl AsRef<Path>) -> anyhow::Result<Arc<Project>> {
-        let dir = dir.as_ref();
-        let store = Store::open(dir)?;
-        let log = store.load()?;
-        let peers_file = dir.join("peers.json");
-        let peers: BTreeSet<String> = std::fs::read(&peers_file)
-            .ok()
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .unwrap_or_default();
-        let (changes, _) = broadcast::channel(1024);
-        let project = Arc::new(Project {
-            id: id.to_string(),
-            token: token.to_vec(),
-            log: Mutex::new(log),
-            store,
-            peers: Mutex::new(peers),
-            peers_file,
-            changes,
-        });
+        let project = Arc::new(Project::open(id, token, dir.as_ref(), &self.me)?);
         self.projects.lock().unwrap().insert(id.to_string(), project.clone());
         self.keep_connected(project.clone());
         Ok(project)
@@ -257,7 +303,7 @@ impl Node {
     /// connected to it.
     pub fn write(&self, id: &str, data: Vec<u8>) -> anyhow::Result<Entry> {
         let project = self.projects.lock().unwrap().get(id).cloned().context("project not open")?;
-        project.write(&self.me, data)
+        project.write(&self.key, data)
     }
 
     /// Joins the copy at `peer` for a project: catches up both ways, then
@@ -314,4 +360,46 @@ fn spawn_sync(
         }
         live.lock().unwrap().remove(&key);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn project(dir: &Path, key: &SecretKey) -> Project {
+        Project::open("paper", b"t", dir, &key.public().to_string()).unwrap()
+    }
+
+    #[test]
+    fn forged_or_altered_entries_are_refused() {
+        let (alice, mallory) = (SecretKey::generate(), SecretKey::generate());
+        let dir = tempfile::tempdir().unwrap();
+        let p = project(dir.path(), &SecretKey::generate());
+        let real = sign::entry(&alice, "paper", 1, b"hi".to_vec());
+        // Mallory writing as Alice; Alice's entry with its data changed.
+        let forged = Entry { author: alice.public().to_string(), ..sign::entry(&mallory, "paper", 1, b"x".to_vec()) };
+        let altered = Entry { data: b"HI".to_vec(), ..real.clone() };
+        for e in [forged, altered] {
+            p.receive(e, "someone").unwrap();
+        }
+        assert_eq!((p.len(), p.refused()), (0, 2));
+        p.receive(real, "someone").unwrap();
+        assert_eq!(p.len(), 1);
+    }
+
+    #[test]
+    fn notices_another_computer_with_its_identity() {
+        let key = SecretKey::generate();
+        let (d1, d2) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let (here, copied) = (project(d1.path(), &key), project(d2.path(), &key));
+        let mine = here.write(&key, b"mine".to_vec()).unwrap();
+        // Its own entry coming back through another member: fine.
+        here.receive(mine, "hub").unwrap();
+        assert!(!here.clashed());
+        // The same number, written differently on the other computer.
+        let theirs = copied.write(&key, b"theirs".to_vec()).unwrap();
+        here.receive(theirs, "hub").unwrap();
+        assert!(here.clashed());
+        assert!(here.write(&key, b"more".to_vec()).is_err(), "writes nothing more as that id");
+    }
 }

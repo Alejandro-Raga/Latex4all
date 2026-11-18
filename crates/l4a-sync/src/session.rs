@@ -32,6 +32,7 @@ struct WireEntry {
     author: String,
     n: u64,
     data: Vec<u8>,
+    sig: Vec<u8>,
 }
 
 const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -58,7 +59,7 @@ async fn recv(stream: &mut RecvStream) -> anyhow::Result<Frame> {
 fn wire(entries: Vec<Entry>) -> Vec<WireEntry> {
     entries
         .into_iter()
-        .map(|e| WireEntry { author: e.author, n: e.n, data: e.data })
+        .map(|e| WireEntry { author: e.author, n: e.n, data: e.data, sig: e.sig })
         .collect()
 }
 
@@ -173,7 +174,8 @@ async fn live(
                 bail!("unexpected frame");
             };
             for e in entries {
-                project.receive(Entry { author: e.author, n: e.n, data: e.data }, &them)?;
+                let entry = Entry { author: e.author, n: e.n, data: e.data, sig: e.sig };
+                project.receive(entry, &them)?;
             }
         }
     };
