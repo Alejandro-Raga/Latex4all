@@ -325,3 +325,50 @@ async fn a_member_the_creator_missed_is_left_out_not_removed_and_included_again(
     assert!(eventually(|| pb.len() == 1).await);
     Ok(())
 }
+
+#[tokio::test]
+async fn a_shared_folder_carries_changes_between_copies_never_online_together() -> anyhow::Result<()> {
+    let cloud = tempfile::tempdir()?;
+    let shared = cloud.path().join("Dropbox/Thesis sync");
+    let dirs = (tempfile::tempdir()?, tempfile::tempdir()?);
+    let (ka, kb) = (iroh::SecretKey::generate(), iroh::SecretKey::generate());
+    // A, alone: writes, a file too, and syncs through the folder.
+    let a = Node::start(ka.clone(), Minimal).await?;
+    let pa = a.open("paper", b"secret", dirs.0.path())?;
+    a.write("paper", b"from A".to_vec())?;
+    let figure = pa.put_blob(b"a figure")?;
+    l4a_sync::folder::sync(&pa, &shared, &dirs.0.path().join("folder.json"))?;
+    a.close().await;
+    // B, later, finds the folder by its marker and gets everything.
+    let found = l4a_sync::folder::find(&[cloud.path().to_path_buf()], "paper").unwrap();
+    assert_eq!(found, shared);
+    let b = Node::start(kb, Minimal).await?;
+    let pb = b.open("paper", b"secret", dirs.1.path())?;
+    pb.want_blob(&figure);
+    l4a_sync::folder::sync(&pb, &found, &dirs.1.path().join("folder.json"))?;
+    assert_eq!(pb.len(), 1);
+    assert_eq!(pb.blob(&figure), Some(b"a figure".to_vec()));
+    // A forged segment (another's entry, data changed) is refused.
+    b.write("paper", b"from B".to_vec())?;
+    l4a_sync::folder::sync(&pb, &found, &dirs.1.path().join("folder.json"))?;
+    // A back: gets B's change, and learns B has A's.
+    let a = Node::start(ka, Minimal).await?;
+    let pa = a.open("paper", b"secret", dirs.0.path())?;
+    l4a_sync::folder::sync(&pa, &shared, &dirs.0.path().join("folder.json"))?;
+    assert_eq!(pa.len(), 2);
+    assert_eq!(pa.waiting_for(b.id()), 0);
+    // Someone tidies the folder: A's files go; A writes them again.
+    std::fs::remove_dir_all(shared.join(a.id()))?;
+    l4a_sync::folder::sync(&pa, &shared, &dirs.0.path().join("folder.json"))?;
+    let fresh = tempfile::tempdir()?;
+    let c = node().await?;
+    let pc = c.open("paper", b"secret", fresh.path())?;
+    l4a_sync::folder::sync(&pc, &shared, &fresh.path().join("folder.json"))?;
+    assert_eq!(pc.len(), 2);
+    // Half a file (still downloading) waits, and is read once whole.
+    let seg = shared.join(b.id()).join("0000000009.seg");
+    std::fs::write(&seg, [0, 0, 0, 9, 1, 2])?;
+    l4a_sync::folder::sync(&pc, &shared, &fresh.path().join("folder.json"))?;
+    assert_eq!(pc.len(), 2);
+    Ok(())
+}

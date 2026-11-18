@@ -5,6 +5,7 @@
 //!   its author and a number; what a copy has, as a version vector.
 //! - [`store`]: that log on disk.
 //! - [`blobs`]: large files, apart from the log, fetched as needed.
+//! - [`folder`]: a shared cloud folder as a project's always-on store.
 //! - [`sign`]: each entry signed by its author, checked by everyone.
 //! - [`members`]: what each member has, as far as a copy knows.
 //! - [`proof`]: two copies show each other they hold the project's key
@@ -16,6 +17,7 @@
 //!   it's joined, and those who join it.
 
 pub mod blobs;
+pub mod folder;
 pub mod log;
 pub mod members;
 pub mod proof;
@@ -429,7 +431,7 @@ impl Project {
     }
 
     /// What a member has (they said so, or another copy did).
-    fn heard(&self, member: &str, has: &Vector, others: Option<&Members>) {
+    pub(crate) fn heard(&self, member: &str, has: &Vector, others: Option<&Members>) {
         let mut m = self.members.lock().unwrap();
         let mut changed = false;
         if member != self.me {
@@ -530,7 +532,7 @@ impl Project {
 
     /// An entry from another copy: checked, kept (on disk first) and passed
     /// on, if it's new here.
-    fn receive(&self, entry: Entry, from: &str) -> anyhow::Result<()> {
+    pub(crate) fn receive(&self, entry: Entry, from: &str) -> anyhow::Result<()> {
         if !sign::verify(&self.id, &entry)
             || self.membership.lock().unwrap().refuses(&entry.author, entry.n)
         {
@@ -574,7 +576,7 @@ impl Project {
 
     /// A snapshot from another copy: checked, taken in, kept if it's the
     /// newest, and passed on.
-    fn receive_snapshot(&self, s: Snapshot, from: &str) -> anyhow::Result<()> {
+    pub(crate) fn receive_snapshot(&self, s: Snapshot, from: &str) -> anyhow::Result<()> {
         if !sign::verify_snapshot(&self.id, &s) {
             self.refused.fetch_add(1, Ordering::Relaxed);
             return Ok(());
@@ -764,6 +766,35 @@ impl Node {
         tokio::spawn(async move {
             let _ = session::dial(conn, me, project).await;
             live.lock().unwrap().remove(&key);
+        });
+        Ok(())
+    }
+
+    /// Syncs a project through a shared cloud folder as well, every
+    /// `every` and after each change made here, while the project is open.
+    /// `state` is a file of this copy's (not in the folder).
+    pub fn use_folder(&self, id: &str, folder: PathBuf, state: PathBuf, every: Duration) -> anyhow::Result<()> {
+        let project = self.projects.lock().unwrap().get(id).cloned().context("project not open")?;
+        let projects = self.projects.clone();
+        let mut changes = project.subscribe();
+        tokio::spawn(async move {
+            loop {
+                let open = projects.lock().unwrap().get(&project.id).is_some_and(|p| Arc::ptr_eq(p, &project));
+                if !open || project.removed() {
+                    return;
+                }
+                let (p, f, s) = (project.clone(), folder.clone(), state.clone());
+                let _ = tokio::task::spawn_blocking(move || folder::sync(&p, &f, &s)).await;
+                // Until it's time, or something's made here.
+                let _ = tokio::time::timeout(every, async {
+                    while let Ok((_, from)) = changes.recv().await {
+                        if from.is_none() {
+                            break;
+                        }
+                    }
+                })
+                .await;
+            }
         });
         Ok(())
     }

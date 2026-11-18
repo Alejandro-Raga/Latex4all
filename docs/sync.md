@@ -165,6 +165,31 @@ Settings → Sync (the full text lives there):
 If the Latex4All server ever goes away, groups keep syncing directly and
 through their folders; nothing they have is lost.
 
+### How the folder works
+
+Each copy writes only in its own subfolder (`<folder>/<its id>/`): batches
+of entries the folder lacks, its snapshot, and what it has. Files go in
+`blobs/`, named by hash. So the cloud service never sees two computers edit
+one file. Every file is written beside its place and moved in; nothing is
+taken as read until it reads whole (cloud services deliver late, out of
+order, or as placeholders), and everything is checked like anything from a
+member. A copy whose files were deleted writes them again. The app finds a
+co-author's copy of the folder by its marker file, `latex4all-project.json`.
+
+### Rules for the app (when it's wired in)
+
+- While any member of a group uses the Latex4All server, every copy also
+  syncs with it, so a group split between a folder and the server never
+  drifts apart.
+- The relay server, as a hub, skips old-protocol uploads that new copies
+  also sent as signed entries (same content), so nothing is stored twice
+  during the move.
+- The storage prompt shows at the first share or first shared project (and
+  once on the update for people who already share), not on install; until
+  it's answered, the Latex4All server is used.
+- Bug reports include the sync state: routes working, what each member has,
+  last errors.
+
 ## Moving over from the relay
 
 1. While the relay exists, the app keeps syncing with it as well. Changes go
