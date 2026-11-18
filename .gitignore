@@ -104,3 +104,6 @@ external-libs/
 # Playwright
 apps/desktop/test-results/
 apps/desktop/playwright-report/
+
+# The sync crate builds on its own.
+crates/*/target/
