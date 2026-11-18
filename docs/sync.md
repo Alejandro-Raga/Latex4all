@@ -77,6 +77,29 @@ from their acknowledgements as changes arrive, and from what other members
 pass on. So a copy knows whose changes haven't reached whom (the status
 line), and when old entries can go.
 
+### Removing a member
+
+Only the project's creator (who shared it first, or whoever they handed the
+role to) can remove someone. The creator's copy writes a signed record that
+starts a new epoch with a new key. The key and a new membership token are
+sealed for each member who stays, with that member's own node key, so only
+they can open it; a hub gets the token alone, never the key. The removed
+member can no longer prove membership, is told it was removed, and its
+entries written after the record are refused everywhere.
+
+Members get the record from anyone who has it, as soon as they connect (a
+hub has it at once). Until then, a member who hasn't got it still syncs with
+others at the old epoch, the removed one included: removal takes effect for
+each member when they next connect to someone who has it.
+
+If the creator's copy didn't yet know of a member, that member is *left
+out*, not removed: its app and the creator's are told, and the creator
+writes a new record including it (the same key). A member left out keeps
+the records that missed it and catches up when one includes it.
+
+Nothing about a project (its members, what each has) is sent until both
+copies have proven they're members.
+
 ### Finding each other
 
 The share link carries the inviter's node id. A copy that joins connects to

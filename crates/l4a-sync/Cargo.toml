@@ -15,6 +15,9 @@ postcard = { version = "1", features = ["use-std"] }
 hmac = "0.12"
 sha2 = "0.10"
 rand = "0.8"
+curve25519-dalek = "5"
+chacha20poly1305 = "0.10"
+hkdf = "0.12"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

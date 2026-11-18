@@ -9,6 +9,8 @@
 //! - [`members`]: what each member has, as far as a copy knows.
 //! - [`proof`]: two copies show each other they hold the project's key
 //!   without sending it.
+//! - [`rekey`] and [`seal`]: removing a member, with a new key sealed for
+//!   each member who stays.
 //! - [`session`]: a live sync between two copies over an iroh connection.
 //! - [`Node`]: a copy of the app on the network: its projects, the members
 //!   it's joined, and those who join it.
@@ -17,6 +19,8 @@ pub mod blobs;
 pub mod log;
 pub mod members;
 pub mod proof;
+pub mod rekey;
+pub mod seal;
 pub mod session;
 pub mod sign;
 pub mod store;
@@ -26,7 +30,7 @@ use iroh::endpoint::presets::Preset;
 use iroh::{Endpoint, EndpointAddr, SecretKey};
 use log::{Entry, Log, Snapshot, Vector};
 use members::Members;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -45,6 +49,28 @@ pub enum Change {
     Snapshot { snapshot: Snapshot, lacked: bool },
     /// A file (by name) is here now.
     Blob(String),
+    /// The creator removed members (or handed the role on): a new epoch,
+    /// with its key for this copy (none for a hub). The app encrypts with
+    /// it from now on, and keeps the old ones to read what came before.
+    Rekey { epoch: u64, key: Option<Vec<u8>>, removed: Vec<String> },
+    /// This copy was removed from the project: it no longer syncs.
+    Removed,
+    /// A member (this copy, or another) was left out of a new epoch without
+    /// being removed: the creator's copy didn't know of it yet. The creator
+    /// should rekey again, with the same token and key, to include it.
+    LeftOut(String),
+}
+
+/// What the creator does to remove members, or hand the role on.
+pub struct Rekeying {
+    pub remove: Vec<String>,
+    /// The member who becomes creator; none keeps it.
+    pub creator: Option<String>,
+    /// The new epoch's membership token and project key (made by the app).
+    pub token: Vec<u8>,
+    pub key: Vec<u8>,
+    /// Members who get the token but not the key: hubs.
+    pub token_only: Vec<String>,
 }
 
 /// Between a project's syncs: files someone has, and files wanted.
@@ -59,8 +85,15 @@ pub(crate) enum BlobNews {
 /// hears of its changes.
 pub struct Project {
     pub id: String,
-    /// Derived from the project's key; proves membership.
-    pub token: Vec<u8>,
+    /// Its tokens (one per epoch), creator and records; kept on disk.
+    membership: Mutex<rekey::Membership>,
+    membership_file: PathBuf,
+    /// This copy's key: to sign, and to open what's sealed for it.
+    key: SecretKey,
+    /// New records, to bring connected members up to date.
+    pub(crate) rekeys: broadcast::Sender<rekey::Rekey>,
+    /// A member newly heard of: passed on to every connected copy.
+    pub(crate) roster: broadcast::Sender<()>,
     log: Mutex<Log>,
     store: Store,
     /// The other members this copy knows of (their node ids), kept on disk
@@ -90,7 +123,17 @@ pub struct Project {
 
 impl Project {
     /// A project kept in `dir`, as seen by copy `me`.
-    fn open(id: &str, token: &[u8], dir: &Path, me: &str) -> anyhow::Result<Self> {
+    fn open(id: &str, token: &[u8], dir: &Path, key: &SecretKey) -> anyhow::Result<Self> {
+        let me = key.public().to_string();
+        let membership_file = dir.join("membership.json");
+        let mut membership: rekey::Membership = std::fs::read(&membership_file)
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_default();
+        if membership.tokens.is_empty() {
+            membership.tokens.push(token.to_vec());
+        }
+        let (rekeys, _) = broadcast::channel(16);
         let store = Store::open(dir)?;
         let log = store.load()?;
         let peers_file = dir.join("peers.json");
@@ -114,13 +157,17 @@ impl Project {
             members_file,
             members_saved: AtomicU64::new(0),
             id: id.to_string(),
-            token: token.to_vec(),
+            membership: Mutex::new(membership),
+            membership_file,
+            key: key.clone(),
+            rekeys,
+            roster: broadcast::channel(16).0,
             log: Mutex::new(log),
             store,
             peers: Mutex::new(peers),
             peers_file,
             changes,
-            me: me.to_string(),
+            me,
             refused: AtomicU64::new(0),
             clashed: AtomicBool::new(false),
         })
@@ -184,6 +231,143 @@ impl Project {
     /// The latest snapshot: the document as of it, to build on.
     pub fn snapshot(&self) -> Option<Snapshot> {
         self.log.lock().unwrap().snapshot().cloned()
+    }
+
+    /// The project's epoch: 0, then one more each time a member is removed.
+    pub fn epoch(&self) -> u64 {
+        self.membership.lock().unwrap().epoch()
+    }
+
+    pub(crate) fn token(&self, epoch: u64) -> Option<Vec<u8>> {
+        self.membership.lock().unwrap().token(epoch).map(<[u8]>::to_vec)
+    }
+
+    /// Who can remove members: the member who shared the project first, or
+    /// whoever they handed the role to.
+    pub fn creator(&self) -> Option<String> {
+        self.membership.lock().unwrap().creator.clone()
+    }
+
+    /// The creator, as the share link says (only taken while none is
+    /// known: after that, records say who it is).
+    pub fn set_creator(&self, creator: &str) -> anyhow::Result<()> {
+        let mut m = self.membership.lock().unwrap();
+        if m.creator.is_none() {
+            m.creator = Some(creator.to_string());
+            self.save_membership(&m)?;
+        }
+        Ok(())
+    }
+
+    /// Whether this copy was removed from the project.
+    pub fn removed(&self) -> bool {
+        self.membership.lock().unwrap().removed
+    }
+
+    /// Records after `epoch`, to bring a member up to date.
+    pub(crate) fn rekeys_after(&self, epoch: u64) -> Vec<rekey::Rekey> {
+        let m = self.membership.lock().unwrap();
+        m.rekeys.iter().filter(|r| r.epoch > epoch).cloned().collect()
+    }
+
+    fn save_membership(&self, m: &rekey::Membership) -> anyhow::Result<()> {
+        let tmp = self.membership_file.with_extension("json.new");
+        std::fs::write(&tmp, serde_json::to_vec(m)?)?;
+        std::fs::rename(&tmp, &self.membership_file)?;
+        Ok(())
+    }
+
+    /// The creator removes members (or hands the role on): a new epoch,
+    /// its secret sealed for every member who stays.
+    fn rekey(&self, plan: Rekeying) -> anyhow::Result<rekey::Rekey> {
+        anyhow::ensure!(
+            self.creator().as_deref() == Some(self.me.as_str()),
+            "only the project's creator can remove members"
+        );
+        // Gathered before taking the lock: these take it themselves.
+        let (known, vector) = (self.known_peers(), self.vector());
+        let creator = plan.creator.unwrap_or_else(|| self.me.clone());
+        let mut stay: BTreeSet<String> = known.into_iter().collect();
+        stay.insert(creator.clone());
+        stay.remove(&self.me);
+        for gone in &plan.remove {
+            stay.remove(gone);
+        }
+        let mut sealed = BTreeMap::new();
+        for member in stay {
+            let key = (!plan.token_only.contains(&member)).then(|| plan.key.clone());
+            let secret = postcard::to_stdvec(&rekey::Secret { token: plan.token.clone(), key })?;
+            sealed.insert(member.clone(), seal::seal(&member, &secret)?);
+        }
+        let mut m = self.membership.lock().unwrap();
+        let record = rekey::sign(
+            &self.key,
+            &self.id,
+            rekey::Rekey {
+                epoch: m.epoch() + 1,
+                author: String::new(),
+                creator: creator.clone(),
+                removed: plan.remove,
+                vector,
+                sealed,
+                sig: Vec::new(),
+            },
+        )?;
+        m.tokens.push(plan.token);
+        m.creator = Some(creator);
+        m.rekeys.push(record.clone());
+        self.save_membership(&m)?;
+        drop(m);
+        let _ = self.rekeys.send(record.clone());
+        Ok(record)
+    }
+
+    /// A record from another copy: checked against the chain, and opened if
+    /// it's sealed for this copy. Returns whether it moved this copy on.
+    pub(crate) fn receive_rekey(&self, r: rekey::Rekey) -> anyhow::Result<bool> {
+        let mut m = self.membership.lock().unwrap();
+        let (epoch, creator) = m.chain_end();
+        let creator = creator.unwrap_or_default().to_string();
+        if !rekey::verify(&self.id, &r, epoch, &creator) {
+            return Ok(false);
+        }
+        let opened = r
+            .sealed
+            .get(&self.me)
+            .and_then(|s| seal::open(&self.key, s))
+            .and_then(|b| postcard::from_bytes::<rekey::Secret>(&b).ok());
+        let Some(secret) = opened else {
+            if r.removed.contains(&self.me) {
+                m.removed = true;
+                self.save_membership(&m)?;
+                drop(m);
+                let _ = self.changes.send((Change::Removed, None));
+            } else {
+                // Not removed, only missed: kept, waiting for the creator
+                // to include it in a later one.
+                m.pending.push(r);
+                self.save_membership(&m)?;
+                drop(m);
+                self.left_out(&self.me.clone());
+            }
+            return Ok(false);
+        };
+        // Records that missed it first: their epochs pass with no token
+        // (it can't prove membership as of them, and needn't).
+        for skipped in std::mem::take(&mut m.pending) {
+            m.tokens.push(Vec::new());
+            m.creator = Some(skipped.creator.clone());
+            m.rekeys.push(skipped);
+        }
+        m.tokens.push(secret.token);
+        m.creator = Some(r.creator.clone());
+        m.rekeys.push(r.clone());
+        self.save_membership(&m)?;
+        drop(m);
+        let change = Change::Rekey { epoch: r.epoch, key: secret.key, removed: r.removed.clone() };
+        let _ = self.changes.send((change, None));
+        let _ = self.rekeys.send(r);
+        Ok(true)
     }
 
     fn snapshot_covers(&self) -> Option<Vector> {
@@ -274,6 +458,10 @@ impl Project {
     pub fn known_peers(&self) -> Vec<String> {
         let mut all = self.peers.lock().unwrap().clone();
         all.extend(self.members.lock().unwrap().keys().cloned());
+        // Not those removed.
+        let m = self.membership.lock().unwrap();
+        all.retain(|p| !m.was_removed(p));
+        drop(m);
         for author in self.vector().keys() {
             if *author != self.me {
                 all.insert(author.clone());
@@ -286,16 +474,36 @@ impl Project {
     fn learn(&self, ids: impl IntoIterator<Item = String>, me: &str) {
         let mut peers = self.peers.lock().unwrap();
         let before = peers.len();
+        let mut new = Vec::new();
         for id in ids {
-            if id != me && !id.is_empty() {
-                peers.insert(id);
+            if id != me && !id.is_empty() && peers.insert(id.clone()) {
+                new.push(id);
+            }
+        }
+        // A member the latest record missed (not removed): the creator
+        // should include it.
+        for id in &new {
+            let m = self.membership.lock().unwrap();
+            let missed = !m.rekeys.is_empty() && !m.stays(id) && !m.was_removed(id);
+            drop(m);
+            if missed {
+                self.left_out(id);
             }
         }
         if peers.len() != before {
             if let Ok(json) = serde_json::to_vec(&*peers) {
                 let _ = std::fs::write(&self.peers_file, json);
             }
+            let _ = self.roster.send(());
         }
+    }
+
+    pub(crate) fn me(&self) -> &str {
+        &self.me
+    }
+
+    pub(crate) fn left_out(&self, member: &str) {
+        let _ = self.changes.send((Change::LeftOut(member.to_string()), None));
     }
 
     /// Everything, in order by author: to rebuild the document from.
@@ -323,7 +531,9 @@ impl Project {
     /// An entry from another copy: checked, kept (on disk first) and passed
     /// on, if it's new here.
     fn receive(&self, entry: Entry, from: &str) -> anyhow::Result<()> {
-        if !sign::verify(&self.id, &entry) {
+        if !sign::verify(&self.id, &entry)
+            || self.membership.lock().unwrap().refuses(&entry.author, entry.n)
+        {
             self.refused.fetch_add(1, Ordering::Relaxed);
             return Ok(());
         }
@@ -474,7 +684,7 @@ impl Node {
 
     /// Opens a shared project kept in `dir`, with what's already there.
     pub fn open(&self, id: &str, token: &[u8], dir: impl AsRef<Path>) -> anyhow::Result<Arc<Project>> {
-        let project = Arc::new(Project::open(id, token, dir.as_ref(), &self.me)?);
+        let project = Arc::new(Project::open(id, token, dir.as_ref(), &self.key)?);
         self.projects.lock().unwrap().insert(id.to_string(), project.clone());
         self.keep_connected(project.clone());
         Ok(project)
@@ -498,7 +708,7 @@ impl Node {
                     .unwrap()
                     .get(&project.id)
                     .is_some_and(|p| Arc::ptr_eq(p, &project));
-                if !open {
+                if !open || project.removed() {
                     return;
                 }
                 for peer in project.known_peers() {
@@ -523,6 +733,15 @@ impl Node {
     pub fn snapshot(&self, id: &str, data: Vec<u8>) -> anyhow::Result<Snapshot> {
         let project = self.projects.lock().unwrap().get(id).cloned().context("project not open")?;
         project.write_snapshot(&self.key, data)
+    }
+
+    /// The creator removes members from a project, or hands the role on:
+    /// connected members are brought up to date at once, others when they
+    /// next connect to anyone who has the record.
+    pub fn rekey(&self, id: &str, plan: Rekeying) -> anyhow::Result<()> {
+        let project = self.projects.lock().unwrap().get(id).cloned().context("project not open")?;
+        project.rekey(plan)?;
+        Ok(())
     }
 
     /// Joins the copy at `peer` for a project: catches up both ways, then
@@ -586,7 +805,7 @@ mod tests {
     use super::*;
 
     fn project(dir: &Path, key: &SecretKey) -> Project {
-        Project::open("paper", b"t", dir, &key.public().to_string()).unwrap()
+        Project::open("paper", b"t", dir, key).unwrap()
     }
 
     #[test]

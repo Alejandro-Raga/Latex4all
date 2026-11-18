@@ -218,3 +218,110 @@ async fn a_hub_keeps_every_file_and_hands_it_on_later() -> anyhow::Result<()> {
     assert!(matches!(news.try_recv(), Ok((l4a_sync::Change::Blob(n), _)) if n == name));
     Ok(())
 }
+
+#[tokio::test]
+async fn the_creator_removes_a_member_who_then_gets_nothing() -> anyhow::Result<()> {
+    use iroh::address_lookup::memory::MemoryLookup;
+    use l4a_sync::{Change, Rekeying};
+    let book = MemoryLookup::new();
+    let start = || Node::start_with(iroh::SecretKey::generate(), Minimal, Some(book.clone()), Duration::from_millis(100));
+    let (a, b, m, hub) = (start().await?, start().await?, start().await?, start().await?);
+    let dirs: Vec<_> = (0..4).map(|_| tempfile::tempdir().unwrap()).collect();
+    let mut projects = Vec::new();
+    for (node, dir) in [&a, &b, &m, &hub].into_iter().zip(&dirs) {
+        book.add_endpoint_info(node.addr());
+        let p = node.open("paper", b"secret", dir.path())?;
+        p.set_creator(a.id())?;
+        projects.push(p);
+    }
+    let (pa, pb, pm, ph) = (&projects[0], &projects[1], &projects[2], &projects[3]);
+    for node in [&a, &b, &m] {
+        node.join("paper", hub.addr()).await?;
+    }
+    a.write("paper", b"before".to_vec())?;
+    assert!(eventually(|| projects.iter().all(|p| p.len() == 1)).await);
+
+    // Only the creator can remove anyone.
+    let plan = |token: &[u8]| Rekeying {
+        remove: vec![m.id().to_string()],
+        creator: None,
+        token: token.to_vec(),
+        key: b"new key".to_vec(),
+        token_only: vec![hub.id().to_string()],
+    };
+    assert!(b.rekey("paper", plan(b"b's token")).is_err());
+    let mut b_news = pb.subscribe();
+    let mut hub_news = ph.subscribe();
+    let mut m_news = pm.subscribe();
+    a.rekey("paper", plan(b"new token"))?;
+    let ok = eventually(|| pb.epoch() == 1 && ph.epoch() == 1 && pm.removed()).await;
+    assert!(ok, "a {} b {} hub {} m {} removed {}", pa.epoch(), pb.epoch(), ph.epoch(), pm.epoch(), pm.removed());
+    let rekey_of = |news: &mut tokio::sync::broadcast::Receiver<(Change, Option<String>)>| loop {
+        match news.try_recv() {
+            Ok((Change::Rekey { key, .. }, _)) => break Some(key),
+            Ok(_) => continue,
+            Err(_) => break None,
+        }
+    };
+    assert_eq!(rekey_of(&mut b_news), Some(Some(b"new key".to_vec())), "B gets the new key");
+    assert_eq!(rekey_of(&mut hub_news), Some(None), "the hub gets no key");
+    assert!(std::iter::from_fn(|| m_news.try_recv().ok()).any(|(c, _)| matches!(c, Change::Removed)));
+    assert_eq!(pm.epoch(), 0);
+
+    // The others go on syncing as of the new epoch; M's changes reach no one.
+    let _ = m.write("paper", b"from M, after".to_vec());
+    b.write("paper", b"from B, after".to_vec())?;
+    assert!(eventually(|| pa.len() == 2 && ph.len() == 2).await);
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    assert_eq!((pa.len(), pb.len(), ph.len()), (2, 2, 2));
+    assert!(!pm.entries().iter().any(|e| e.data == b"from B, after"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_member_the_creator_missed_is_left_out_not_removed_and_included_again() -> anyhow::Result<()> {
+    use iroh::address_lookup::memory::MemoryLookup;
+    use l4a_sync::{Change, Rekeying};
+    let book = MemoryLookup::new();
+    let start = || Node::start_with(iroh::SecretKey::generate(), Minimal, Some(book.clone()), Duration::from_millis(100));
+    let (a, b, hub) = (start().await?, start().await?, start().await?);
+    let dirs: Vec<_> = (0..3).map(|_| tempfile::tempdir().unwrap()).collect();
+    for n in [&a, &b, &hub] {
+        book.add_endpoint_info(n.addr());
+    }
+    let pa = a.open("paper", b"secret", dirs[0].path())?;
+    let ph = hub.open("paper", b"secret", dirs[2].path())?;
+    pa.set_creator(a.id())?;
+    ph.set_creator(a.id())?;
+    a.join("paper", hub.addr()).await?;
+    assert!(eventually(|| pa.known_peers().contains(&hub.id().to_string())).await);
+    // A rekeys knowing only the hub; B, with the old link, comes after.
+    let plan = || Rekeying {
+        remove: vec![],
+        creator: None,
+        token: b"token 1".to_vec(),
+        key: b"key 1".to_vec(),
+        token_only: vec![hub.id().to_string()],
+    };
+    a.rekey("paper", plan())?;
+    assert!(eventually(|| ph.epoch() == 1).await);
+    let mut a_news = pa.subscribe();
+    let pb = b.open("paper", b"secret", dirs[1].path())?;
+    pb.set_creator(a.id())?;
+    let mut b_news = pb.subscribe();
+    b.join("paper", hub.addr()).await?;
+    let left_out = |news: &mut tokio::sync::broadcast::Receiver<(Change, Option<String>)>, who: &str| {
+        std::iter::from_fn(|| news.try_recv().ok()).any(|(c, _)| matches!(c, Change::LeftOut(ref m) if m == who))
+    };
+    assert!(eventually(|| pa.known_peers().contains(&b.id().to_string())).await);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(!pb.removed(), "missed, not removed");
+    assert!(left_out(&mut b_news, b.id()));
+    assert!(left_out(&mut a_news, b.id()), "the creator hears of it");
+    // The creator includes B: the same token and key, a new record.
+    a.rekey("paper", plan())?;
+    assert!(eventually(|| pb.epoch() == 2).await);
+    a.write("paper", b"for B too".to_vec())?;
+    assert!(eventually(|| pb.len() == 1).await);
+    Ok(())
+}

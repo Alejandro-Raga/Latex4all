@@ -2,16 +2,20 @@
 //! bidirectional stream of `[u32 length][frame]` frames (postcard, a compact
 //! binary encoding):
 //!
-//!   dialer → `Hello { project, challenge }`
-//!   listener → `Welcome { challenge, answer, vector }`
-//!   dialer → `Proof { answer, vector }`
-//!   then both, for as long as the connection lasts: `Entries` (first what
-//!   the other lacks, then each new change as it's made or received).
+//!   dialer → `Hello { project, challenge, epoch }`
+//!   listener → `Welcome { challenge, answer, epoch }`
+//!   dialer → `Proof { answer }`
+//!   then, if one's epoch is behind, `Rekeys` to it, and they reconnect;
+//!   otherwise both `Ready { vector, members, … }`, and for as long as the
+//!   connection lasts `Entries` (first what the other lacks, then each new
+//!   change), acknowledgements, snapshots and files.
 //!
-//! Each copy proves it holds the project's key before anything is sent.
+//! Each copy proves it holds the project's key before anything about the
+//! project is sent.
 
 use crate::log::{Entry, Snapshot, Vector};
 use crate::members::Members;
+use crate::rekey::Rekey;
 use crate::proof;
 use crate::{BlobNews, Change, Project};
 use std::collections::HashMap;
@@ -23,9 +27,15 @@ use tokio::sync::broadcast::error::RecvError;
 
 #[derive(Serialize, Deserialize)]
 enum Frame {
-    Hello { project: String, challenge: Vec<u8> },
-    Welcome { challenge: Vec<u8>, answer: Vec<u8>, vector: Vector, peers: Vec<String>, members: Members, snapshot: Option<Vector> },
-    Proof { answer: Vec<u8>, vector: Vector, peers: Vec<String>, members: Members, snapshot: Option<Vector> },
+    Hello { project: String, challenge: Vec<u8>, epoch: u64 },
+    Welcome { challenge: Vec<u8>, answer: Vec<u8>, epoch: u64 },
+    Proof { answer: Vec<u8> },
+    /// Once both are proven, if they're at the same epoch.
+    Ready { vector: Vector, peers: Vec<String>, members: Members, snapshot: Option<Vector> },
+    /// Records the other lacks: a member removed, a new key.
+    Rekeys { records: Vec<Rekey> },
+    /// Members the sender knows of, sent whenever it hears of a new one.
+    Members { peers: Vec<String>, members: Members },
     Entries { entries: Vec<WireEntry> },
     Snapshot { author: String, covers: Vector, data: Vec<u8>, sig: Vec<u8> },
     /// What the sender has now: an acknowledgement of entries received.
@@ -88,28 +98,18 @@ pub async fn dial(conn: Connection, me: String, project: Arc<Project>) -> anyhow
     let them = conn.remote_id().to_string();
     let (mut tx, mut rx) = conn.open_bi().await?;
     let mine = proof::challenge();
-    send(&mut tx, &Frame::Hello { project: project.id.clone(), challenge: mine.to_vec() }).await?;
-    let Frame::Welcome { challenge, answer, vector, peers, members, snapshot } = recv(&mut rx).await? else {
+    let my_epoch = project.epoch();
+    send(&mut tx, &Frame::Hello { project: project.id.clone(), challenge: mine.to_vec(), epoch: my_epoch }).await?;
+    let Frame::Welcome { challenge, answer, epoch: their_epoch } = recv(&mut rx).await? else {
         bail!("unexpected reply");
     };
-    if !proof::check(&project.token, &mine, &them, &me, &answer) {
+    // Both prove membership as of the earlier of their epochs.
+    let token = project.token(my_epoch.min(their_epoch)).context("no token for that epoch")?;
+    if !proof::check(&token, &mine, &them, &me, &answer) {
         bail!("the other copy doesn't hold this project's key");
     }
-    send(
-        &mut tx,
-        &Frame::Proof {
-            answer: proof::answer(&project.token, &challenge, &me, &them),
-            vector: project.vector(),
-            peers: project.known_peers(),
-            members: project.account(),
-            snapshot: project.snapshot_covers(),
-        },
-    )
-    .await?;
-    // A member, proven: it, and the members it knows, are worth reaching.
-    project.learn(std::iter::once(them.clone()).chain(peers), &me);
-    project.heard(&them, &vector, Some(&members));
-    live(tx, rx, them, vector, snapshot, project).await
+    send(&mut tx, &Frame::Proof { answer: proof::answer(&token, &challenge, &me, &them) }).await?;
+    proven(tx, rx, me, them, my_epoch, their_epoch, project).await
 }
 
 /// Answers a sync opened by the copy at the other end of `conn`, for the
@@ -121,18 +121,68 @@ pub async fn answer(
 ) -> anyhow::Result<()> {
     let them = conn.remote_id().to_string();
     let (mut tx, mut rx) = conn.accept_bi().await?;
-    let Frame::Hello { project: id, challenge } = recv(&mut rx).await? else {
+    let Frame::Hello { project: id, challenge, epoch: their_epoch } = recv(&mut rx).await? else {
         bail!("unexpected opening");
     };
     let Some(project) = find(&id) else {
         bail!("not a project here");
     };
+    let my_epoch = project.epoch();
+    let token = project.token(my_epoch.min(their_epoch)).context("no token for that epoch")?;
     let mine = proof::challenge();
     send(
         &mut tx,
         &Frame::Welcome {
             challenge: mine.to_vec(),
-            answer: proof::answer(&project.token, &challenge, &me, &them),
+            answer: proof::answer(&token, &challenge, &me, &them),
+            epoch: my_epoch,
+        },
+    )
+    .await?;
+    let Frame::Proof { answer } = recv(&mut rx).await? else {
+        bail!("unexpected reply");
+    };
+    if !proof::check(&token, &mine, &them, &me, &answer) {
+        bail!("the other copy doesn't hold this project's key");
+    }
+    proven(tx, rx, me, them, my_epoch, their_epoch, project).await
+}
+
+/// After both have proven membership. Only now is anything about the
+/// project sent. If one is a member removal behind, it gets the records (if
+/// it stays a member) and reconnects; otherwise they sync.
+async fn proven(
+    mut tx: SendStream,
+    mut rx: RecvStream,
+    me: String,
+    them: String,
+    my_epoch: u64,
+    their_epoch: u64,
+    project: Arc<Project>,
+) -> anyhow::Result<()> {
+    if my_epoch > their_epoch {
+        // Heard of, so the creator hears of it too (and of it being left out).
+        project.learn([them.clone()], &me);
+        // A member removed gets the records too, so it knows: nothing in
+        // them is sealed for it.
+        send(&mut tx, &Frame::Rekeys { records: project.rekeys_after(their_epoch) }).await?;
+        tx.finish()?;
+        // Until they've taken it in and hung up.
+        let _ = recv(&mut rx).await;
+        return Ok(());
+    }
+    if my_epoch < their_epoch {
+        let Frame::Rekeys { records } = recv(&mut rx).await? else {
+            bail!("unexpected frame");
+        };
+        for r in records {
+            project.receive_rekey(r)?;
+        }
+        return Ok(());
+    }
+    send(
+        &mut tx,
+        &Frame::Ready {
             vector: project.vector(),
             peers: project.known_peers(),
             members: project.account(),
@@ -140,12 +190,10 @@ pub async fn answer(
         },
     )
     .await?;
-    let Frame::Proof { answer, vector, peers, members, snapshot } = recv(&mut rx).await? else {
-        bail!("unexpected reply");
+    let Frame::Ready { vector, peers, members, snapshot } = recv(&mut rx).await? else {
+        bail!("unexpected frame");
     };
-    if !proof::check(&project.token, &mine, &them, &me, &answer) {
-        bail!("the other copy doesn't hold this project's key");
-    }
+    // A member, proven: it, and the members it knows, are worth reaching.
     project.learn(std::iter::once(them.clone()).chain(peers), &me);
     project.heard(&them, &vector, Some(&members));
     live(tx, rx, them, vector, snapshot, project).await
@@ -181,6 +229,8 @@ async fn live(
 
     // Files: what we have, and what we're after.
     let mut news = project.blob_news.subscribe();
+    let mut rekeys = project.rekeys.subscribe();
+    let mut roster = project.roster.subscribe();
     send(&mut tx, &Frame::Blobs { names: project.blobs.names() }).await?;
     let wanted: Vec<String> = project.wanted.lock().unwrap().iter().cloned().collect();
     if !wanted.is_empty() {
@@ -215,6 +265,18 @@ async fn live(
                     }
                     continue;
                 }
+                Ok(record) = rekeys.recv() => {
+                    // A new epoch: they get the record if they stay, and the
+                    // sync ends; they reconnect as of it.
+                    send(&mut tx, &Frame::Rekeys { records: vec![record] }).await?;
+                    tx.finish()?;
+                    return anyhow::Ok(());
+                }
+                Ok(()) = roster.recv() => {
+                    let p = &writer_project;
+                    send(&mut tx, &Frame::Members { peers: p.known_peers(), members: p.account() }).await?;
+                    continue;
+                }
                 n = news.recv() => {
                     match n {
                         Ok(BlobNews::Have(name, from)) if from.as_deref() != Some(writer_them.as_str()) => {
@@ -229,7 +291,7 @@ async fn live(
                 }
             };
             match change {
-                Ok((Change::Blob(_), _)) => {}
+                Ok((Change::Blob(_) | Change::Rekey { .. } | Change::Removed | Change::LeftOut(_), _)) => {}
                 Ok((Change::Snapshot { snapshot, .. }, from)) => {
                     if from.as_deref() != Some(writer_them.as_str()) {
                         send(&mut tx, &snapshot_frame(snapshot)).await?;
@@ -298,6 +360,16 @@ async fn live(
                     }
                 }
                 Frame::Have { vector } => project.heard(&them, &vector, None),
+                Frame::Members { peers, members } => {
+                    project.learn(peers, &project.me().to_string());
+                    project.heard(&them, &Vector::new(), Some(&members));
+                }
+                Frame::Rekeys { records } => {
+                    for r in records {
+                        project.receive_rekey(r)?;
+                    }
+                    return Ok(());
+                }
                 Frame::Snapshot { author, covers, data, sig } => {
                     project.receive_snapshot(Snapshot { author, covers, data, sig }, &them)?;
                     let _ = out.send(Out::Ack(project.vector()));
@@ -306,7 +378,12 @@ async fn live(
             }
         }
     };
-    let result: anyhow::Result<()> = reading.await;
+    // Until either side ends: the connection closes, or a new epoch.
+    let mut writer = writer;
+    let result: anyhow::Result<()> = tokio::select! {
+        r = reading => r,
+        w = &mut writer => w.unwrap_or(Ok(())),
+    };
     writer.abort();
     result
 }
