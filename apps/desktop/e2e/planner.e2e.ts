@@ -1017,3 +1017,32 @@ test("reading home: any paper's status picked from its circle or its right-click
     main.getByRole("heading", { name: /^To re-read/ }),
   ).toBeVisible();
 });
+
+test("the matrix: a task left out, with its subtasks, and back in", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await open(page, "scenario=planner");
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /^Eisenhower matrix/ })
+    .click();
+  const main = page.getByRole("main");
+  await main.getByText("Draft the discussion").click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Leave out of the matrix" }).click();
+  await expect(main.getByText("Draft the discussion")).toHaveCount(0);
+  await expect(main.getByText("Compare with Cohen")).toHaveCount(0);
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/Draft the discussion[^\n]*\[matrix:: no\]/);
+  // Still in its list, its title as it was.
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  await expect(
+    main.getByText("Draft the discussion", { exact: true }),
+  ).toBeVisible();
+  await expect(main.getByText("[matrix:: no]")).toHaveCount(0);
+  // Back in, from its panel.
+  await main.getByText("Draft the discussion", { exact: true }).click();
+  await page.getByRole("button", { name: "Show in the matrix" }).click();
+  await expect.poll(() => disk(page, PLAN)).not.toContain("[matrix:: no]");
+});

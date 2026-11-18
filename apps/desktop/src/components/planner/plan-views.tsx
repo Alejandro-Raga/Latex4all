@@ -1,5 +1,7 @@
 import { type ReactNode, useState, useRef } from "react";
 import {
+  Grid2x2Icon,
+  Grid2x2XIcon,
   PinIcon,
   CopyIcon,
   RepeatIcon,
@@ -20,6 +22,7 @@ import {
   PlusIcon,
   Trash2Icon,
 } from "lucide-react";
+import { outOfMatrix, withMatrix } from "@/lib/plan/matrix-opt";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -368,6 +371,22 @@ function TaskMenu({
           </ContextMenuSub>
         )}
         <DuplicateMenu list={list} plan={plan} task={task} />
+        <ContextMenuItem
+          onClick={() =>
+            edit((p) =>
+              updateTask(p, taskRef, {
+                title: withMatrix(task.title, !outOfMatrix(task)),
+              }),
+            )
+          }
+        >
+          {outOfMatrix(task) ? (
+            <Grid2x2Icon className="size-3.5" />
+          ) : (
+            <Grid2x2XIcon className="size-3.5" />
+          )}
+          {outOfMatrix(task) ? "Show in the matrix" : "Leave out of the matrix"}
+        </ContextMenuItem>
         <ContextMenuItem onClick={() => void makeProject(list, taskRef)}>
           <FolderPlusIcon className="size-3.5" />
           Make it a project

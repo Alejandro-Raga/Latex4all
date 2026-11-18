@@ -82,6 +82,7 @@ import {
 import { CalendarView } from "./calendar-view";
 import { MatrixView, quadrantOf } from "./matrix-view";
 import { OverviewView } from "./overview-view";
+import { outOfMatrix } from "@/lib/plan/matrix-opt";
 import { ProjectPriorityMenu } from "./project-priority-menu";
 import { useMoveInboxReading } from "./reading-move";
 import { TimelineView } from "./timeline-view";
@@ -424,7 +425,9 @@ export function PlannerView() {
       smart.week += toRead.filter((d) => daysUntil(d) <= 6).length;
       smart.today += toRead.filter((d) => daysUntil(d) <= 0).length;
       smart.today += due;
-      smart.matrix += open.filter((t) => quadrantOf(t.task) === "do").length;
+      smart.matrix += open.filter(
+        (t) => !outOfMatrix(t.task) && quadrantOf(t.task) === "do",
+      ).length;
       smart.tomorrow += dated.filter((d) => daysUntil(d) === 1).length;
       smart.week += dated.filter((d) => daysUntil(d) <= 6).length;
       smart.all += open.length;

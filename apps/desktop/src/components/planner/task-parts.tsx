@@ -1,6 +1,8 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   CheckCircle2Icon,
+  Grid2x2Icon,
+  Grid2x2XIcon,
   RepeatIcon,
   PinIcon,
   ChevronLeftIcon,
@@ -12,6 +14,11 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react";
+import {
+  outOfMatrix,
+  withMatrix,
+  withoutMatrixField,
+} from "@/lib/plan/matrix-opt";
 import { openInVault } from "@/components/workspace/highlight-quote";
 import { NoteMenuAt } from "@/components/workspace/topic-menu";
 import { findNote } from "@/lib/vault/vault-index";
@@ -108,7 +115,8 @@ export function Check({
 }
 
 /** A title with [[links]] that open the note and [text](url) as its text. */
-export function TitleText({ title }: { title: string }) {
+export function TitleText({ title: raw }: { title: string }) {
+  const title = withoutMatrixField(raw);
   const parts: ReactNode[] = [];
   const re =
     /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|\[([^\]]*)\]\([^)]*\)|(?:^|(?<=\s))#([\p{L}\p{N}_/-]+)/gu;
@@ -473,15 +481,19 @@ export function TaskDetails({
   /** The task this one is under, to go back up. */
   parent?: { title: string; open: () => void };
 }) {
-  const [title, setTitle] = useState(task.title);
+  // Shown without the matrix marker; kept on it when saved.
+  const shownTitle = withoutMatrixField(task.title);
+  const leftOut = outOfMatrix(task);
+  const [title, setTitle] = useState(shownTitle);
   const [notes, setNotes] = useState(notesText(task));
   const [newSub, setNewSub] = useState("");
-  useEffect(() => setTitle(task.title), [task.title]);
+  useEffect(() => setTitle(shownTitle), [shownTitle]);
   useEffect(() => setNotes(notesText(task)), [task.notes.join("\n")]);
   const saveTitle = () => {
     const next = title.replace(/\s+/g, " ").trim();
-    if (next && next !== task.title) actions.change({ title: next });
-    else setTitle(task.title);
+    if (next && next !== shownTitle)
+      actions.change({ title: withMatrix(next, leftOut) });
+    else setTitle(shownTitle);
   };
   const saveNotes = () => {
     if (notes.trim() !== notesText(task)) {
@@ -509,6 +521,29 @@ export function TaskDetails({
             )
           }
         />
+        <button
+          type="button"
+          onClick={() =>
+            actions.change({ title: withMatrix(task.title, !leftOut) })
+          }
+          aria-pressed={!leftOut}
+          title={leftOut ? "Show in the matrix" : "Leave out of the matrix"}
+          aria-label={
+            leftOut ? "Show in the matrix" : "Leave out of the matrix"
+          }
+          className={cn(
+            "flex size-7 items-center justify-center rounded-md hover:bg-muted",
+            leftOut
+              ? "text-muted-foreground/60 hover:text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {leftOut ? (
+            <Grid2x2XIcon className="size-4" />
+          ) : (
+            <Grid2x2Icon className="size-4" />
+          )}
+        </button>
         <span className="flex-1" />
         <PriorityButtons
           priority={task.priority}
@@ -546,7 +581,7 @@ export function TaskDetails({
               e.preventDefault();
               e.currentTarget.blur();
             }
-            if (e.key === "Escape") setTitle(task.title);
+            if (e.key === "Escape") setTitle(shownTitle);
           }}
           aria-label="Task"
           className={cn(

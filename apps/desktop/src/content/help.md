@@ -232,7 +232,7 @@ Switch between **List** and **Board** at the top. On the board, each section is 
 
 - **Today**, **Tomorrow** and **Next 7 days** show what is due in every list.
 - **Calendar** shows dated tasks, milestones, sections and deadlines by month or week. Drag something to another day to change its date. Click a day to see everything on it and add a task. **Export to calendar** saves your dates as a file that Apple Calendar, Google Calendar or Outlook can open.
-- **Eisenhower matrix** puts open tasks in four boxes: urgent and important, important but not urgent, urgent but not important, and neither. A task is important if its priority is high or highest, and urgent if it's due in less than five days or overdue. Drag a task to another box to change its priority or date.
+- **Eisenhower matrix** puts open tasks in four boxes: urgent and important, important but not urgent, urgent but not important, and neither. A task is important if its priority is high or highest, and urgent if it's due in less than five days or overdue. Drag a task to another box to change its priority or date. To keep a task and its subtasks out of the matrix, such as a far-off goal, right-click it and choose **Leave out of the matrix**, or click the grid button in its panel.
 - **Overview** shows each list and project as a card with its sections and what comes next. Click a card's name to open that list.
 - **All tasks** lists everything open, and **Completed** what you've finished.
 

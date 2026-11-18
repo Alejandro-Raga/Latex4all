@@ -4,6 +4,7 @@
  * Dropping a task in a box makes it so: its priority and date change.
  */
 import { daysUntil, dayFromToday } from "@/lib/plan/dates";
+import { outOfMatrix, withoutMatrixField } from "@/lib/plan/matrix-opt";
 import {
   childRef,
   parsePlan,
@@ -80,12 +81,20 @@ export function MatrixView({
     const subs: { task: Task; ref: TaskRef; parent: string }[] = [];
     const walk = (task: Task, ref: TaskRef) =>
       task.subtasks.forEach((sub, i) => {
+        // Left out of the matrix: and what's under it.
+        if (outOfMatrix(sub)) return;
         const at = childRef(ref, i);
         if (!sub.done && own(sub))
-          subs.push({ task: sub, ref: at, parent: task.title });
+          subs.push({
+            task: sub,
+            ref: at,
+            parent: withoutMatrixField(task.title),
+          });
         walk(sub, at);
       });
-    const top = workTasks(plan).filter((t) => !t.task.done);
+    const top = workTasks(plan).filter(
+      (t) => !t.task.done && !outOfMatrix(t.task),
+    );
     for (const t of top) walk(t.task, t.ref);
     return [
       ...top.map((t) => ({

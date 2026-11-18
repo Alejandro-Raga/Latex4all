@@ -3,6 +3,7 @@
  * that runs from today (or the first milestone) to the deadline, with today
  * marked; and the milestones as a list, to add, check off and change.
  */
+import { withoutMatrixField } from "@/lib/plan/matrix-opt";
 import { useState } from "react";
 import { DiamondIcon, FlagIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import {
@@ -165,7 +166,7 @@ function MilestoneRow({ list, m }: { list: PlanList; m: Milestone }) {
               m.task.done && "text-muted-foreground line-through",
             )}
           >
-            {m.task.title}
+            {withoutMatrixField(m.task.title)}
           </span>
           {m.task.due && !m.task.done && daysUntil(m.task.due) >= 0 && (
             <span className="text-[11px] text-muted-foreground tabular-nums">
@@ -240,7 +241,9 @@ export function TimelineView({ list }: { list: PlanList }) {
               {next && (
                 <>
                   Next:{" "}
-                  <span className="text-foreground">{next.task.title}</span>{" "}
+                  <span className="text-foreground">
+                    {withoutMatrixField(next.task.title)}
+                  </span>{" "}
                   <DueBadge due={next.task.due as string} />
                 </>
               )}
