@@ -129,8 +129,9 @@ For Latex4All to use the Zotero app, open Zotero's **Settings → Advanced** and
 
 Click a paper that has a PDF to read it. Inside a project it opens in a tab next to your document; on the **Library & Vault** page it opens below or beside the list.
 
-- To highlight, select text and pick a color. Highlights are saved in Zotero.
-- Right-click a highlight to change its color, add a comment, delete it, or add it to a note. The menu also lists the notes it is already in.
+- To highlight, select text and pick a color. A box opens for a comment: type it and press Enter, or keep reading to skip it. Highlights are saved in Zotero.
+- To comment first, select text and choose **Comment**, then pick the color in the box.
+- Click or right-click a highlight to change its color, add a comment, delete it, or add it to a note. The menu also lists the notes it is already in.
 - Click a link in the PDF, such as a citation, and press ⌘[ to come back.
 - Click the bookmark button at the top of the reader to mark the page where you stopped. The paper opens there next time, and its progress on your reading list follows the bookmark. Without a bookmark, it opens on the last page you had open.
 - On the **Library & Vault** page, click **Read in full window**, or press ⌘F, to hide the list, the vault and the sidebar. Press ⌘F or Esc to bring them back.

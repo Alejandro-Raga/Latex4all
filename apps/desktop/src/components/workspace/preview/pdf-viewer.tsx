@@ -1000,8 +1000,21 @@ export function PdfViewer({
       e.stopPropagation();
       handler(hit, { left: e.clientX, top: e.clientY });
     };
+    // A plain click on a highlight opens it too, unless it ended a selection
+    // (a drag across text) or followed a link.
+    const onClick = (e: MouseEvent) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+      const picked = window.getSelection();
+      if (picked && !picked.isCollapsed && picked.toString().trim()) return;
+      if ((e.target as Element | null)?.closest?.("a, button")) return;
+      onMenu(e);
+    };
     container.addEventListener("contextmenu", onMenu, true);
-    return () => container.removeEventListener("contextmenu", onMenu, true);
+    container.addEventListener("click", onClick);
+    return () => {
+      container.removeEventListener("contextmenu", onMenu, true);
+      container.removeEventListener("click", onClick);
+    };
   }, [annotations, pageSizes]);
 
   // Expose focusing an annotation via ref: its top a third down the view,

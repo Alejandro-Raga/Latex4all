@@ -98,6 +98,33 @@ if (scenario === "dock") {
   root.render(<Dock />);
 }
 
+if (scenario === "reader") {
+  // The Library's reader on a project's draft (highlights kept here).
+  fetch("/examples/letter-formal/main.pdf")
+    .then((r) => r.arrayBuffer())
+    .then(async (buf) => {
+      const { PaperReader } = await import(
+        "@/components/workspace/preview/paper-reader"
+      );
+      root.render(
+        <ThemeProvider attribute="class" defaultTheme="light">
+          <div style={{ height: "100vh", ...chrome }}>
+            <PaperReader
+              paper={{
+                id: "/drafts/Draft.pdf",
+                label: "Draft",
+                data: new Uint8Array(buf),
+                filePath: "/drafts/Draft.pdf",
+              }}
+              visible
+              inline
+            />
+          </div>
+        </ThemeProvider>,
+      );
+    });
+}
+
 if (scenario === "pdf") {
   fetch(
     params.get("src") ??

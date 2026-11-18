@@ -52,6 +52,7 @@ import {
   type ToolbarAction,
 } from "@/components/workspace/editor/selection-toolbar";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Popover,
   PopoverContent,
@@ -261,6 +262,103 @@ async function fileHighlight(
       `Highlighted in Zotero, but not added to the note: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+}
+
+/**
+ * A comment written straight after highlighting (or with "Add comment"):
+ * the text, and the color, in one small box. Enter saves; Esc or a click
+ * elsewhere closes it, keeping what's been typed.
+ */
+function QuickComment({
+  at,
+  color: initialColor,
+  placeholder,
+  onSave,
+  onClose,
+}: {
+  at: { left: number; top: number };
+  color: AnnotationColor;
+  placeholder: string;
+  onSave: (text: string, color: AnnotationColor) => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [color, setColor] = useState(initialColor);
+  const box = useRef<HTMLDivElement>(null);
+  const latest = useRef({ text, color });
+  latest.current = { text, color };
+  const done = useRef(false);
+  const finish = useCallback(
+    (save: boolean) => {
+      if (done.current) return;
+      done.current = true;
+      if (save) onSave(latest.current.text.trim(), latest.current.color);
+      onClose();
+    },
+    [onSave, onClose],
+  );
+  useEffect(() => {
+    const away = (e: PointerEvent) => {
+      if (box.current?.contains(e.target as Node)) return;
+      // Typed something, or changed the color: kept. Otherwise just gone.
+      finish(
+        !!latest.current.text.trim() || latest.current.color !== initialColor,
+      );
+    };
+    document.addEventListener("pointerdown", away, true);
+    return () => document.removeEventListener("pointerdown", away, true);
+  }, [finish, initialColor]);
+  return (
+    <div
+      ref={box}
+      className="fixed z-50 w-72 rounded-lg border border-border bg-background p-2 shadow-xl"
+      style={{
+        left: Math.min(at.left, window.innerWidth - 300),
+        top: Math.min(at.top + 8, window.innerHeight - 150),
+      }}
+    >
+      <textarea
+        // biome-ignore lint/a11y/noAutofocus: it's opened to be typed in
+        autoFocus
+        value={text}
+        rows={2}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            finish(true);
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            finish(false);
+          }
+        }}
+        placeholder={placeholder}
+        aria-label="Comment"
+        className="w-full resize-none bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground"
+      />
+      <div className="flex items-center gap-1.5 px-1 pt-1">
+        {(Object.keys(SWATCHES) as AnnotationColor[]).map((c) => (
+          <button
+            key={c}
+            type="button"
+            title={c}
+            aria-label={`Highlight ${c}`}
+            aria-pressed={c === color}
+            onClick={() => setColor(c)}
+            className={cn(
+              "size-4 rounded-full ring-offset-1 ring-offset-background hover:ring-2 hover:ring-ring",
+              c === color && "ring-2 ring-ring",
+            )}
+            style={{ backgroundColor: SWATCHES[c] }}
+          />
+        ))}
+        <span className="flex-1" />
+        <span className="text-[10px] text-muted-foreground">Enter to save</span>
+      </div>
+    </div>
+  );
 }
 
 /** Zoom per paper for this session, so coming back to one keeps its size. */
@@ -525,6 +623,12 @@ export function PaperReader({
   const canHighlight = Boolean((paper.zotero && zoteroConnected) || local);
   const [selection, setSelection] = useState<PdfTextSelection | null>(null);
   const [noteFor, setNoteFor] = useState<PdfTextSelection | null>(null);
+  // Just highlighted: a comment on it, if you like, without another click.
+  const [justMade, setJustMade] = useState<{
+    annotation: PdfAnnotationRect;
+    color: AnnotationColor;
+    at: { left: number; top: number };
+  } | null>(null);
   const [filing, setFiling] = useState<PdfTextSelection | null>(null);
   // A highlight right-clicked: its menu, then the idea or topic picker.
   const [highlightMenu, setHighlightMenu] = useState<{
@@ -555,19 +659,14 @@ export function PaperReader({
         ? [
             {
               id: "note",
-              label: "Add comment",
+              label: "Comment",
               icon: <MessageSquarePlusIcon className="size-4" />,
             },
-            // Passages in notes link to Zotero's highlight: Zotero papers.
-            ...(local
-              ? []
-              : [
-                  {
-                    id: "file",
-                    label: "Add to note…",
-                    icon: <NotebookPenIcon className="size-4" />,
-                  },
-                ]),
+            {
+              id: "file",
+              label: "Add to note…",
+              icon: <NotebookPenIcon className="size-4" />,
+            },
           ]
         : []),
     ],
@@ -873,15 +972,31 @@ export function PaperReader({
           onHighlight={
             canHighlight
               ? (color) => {
-                  saveHighlight(
+                  const at = selection.position;
+                  const made = selection;
+                  dismiss();
+                  void saveHighlight(
                     paper,
-                    selection,
+                    made,
                     color,
                     undefined,
-                    false,
+                    true,
                     onAdded,
-                  );
-                  dismiss();
+                  ).then((key) => {
+                    if (!key) return;
+                    setJustMade({
+                      annotation: {
+                        key,
+                        pageIndex: made.pageNumber - 1,
+                        rects: [],
+                        color: ZOTERO_COLOR[color],
+                        type: "highlight",
+                        text: made.text,
+                      },
+                      color,
+                      at,
+                    });
+                  });
                 }
               : undefined
           }
@@ -1047,33 +1162,33 @@ export function PaperReader({
         </div>
       )}
       {noteFor && (
-        <div
-          className="fixed z-50 w-72 rounded-lg border border-border bg-background p-2.5 shadow-xl"
-          style={{
-            left: Math.min(noteFor.position.left, window.innerWidth - 300),
-            top: Math.min(noteFor.position.top + 8, window.innerHeight - 180),
+        <QuickComment
+          at={noteFor.position}
+          color="yellow"
+          placeholder={
+            local ? "Your comment…" : "Your comment, saved in Zotero…"
+          }
+          onSave={(text, color) => {
+            if (!text) return;
+            void saveHighlight(paper, noteFor, color, text, false, onAdded);
+            window.getSelection()?.removeAllRanges();
           }}
-          onKeyDown={(e) => e.key === "Escape" && setNoteFor(null)}
-        >
-          <NoteInput
-            placeholder="Your comment, saved in Zotero…"
-            autoFocus
-            submitLabel="Save"
-            onSubmit={(text) => {
-              saveHighlight(
-                paper,
-                noteFor,
-                "yellow",
-                text.trim(),
-                false,
-                onAdded,
-              );
-              setNoteFor(null);
-              window.getSelection()?.removeAllRanges();
-            }}
-            onCancel={() => setNoteFor(null)}
-          />
-        </div>
+          onClose={() => setNoteFor(null)}
+        />
+      )}
+      {justMade && (
+        <QuickComment
+          key={justMade.annotation.key}
+          at={justMade.at}
+          color={justMade.color}
+          placeholder="Add a comment (optional)"
+          onSave={(text, color) => {
+            const a = justMade.annotation;
+            if (color !== justMade.color) void recolor(a, color);
+            if (text) void renote(a, text);
+          }}
+          onClose={() => setJustMade(null)}
+        />
       )}
       <PdfViewer
         onTextSelect={setSelection}

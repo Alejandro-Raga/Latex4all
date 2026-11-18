@@ -47,6 +47,10 @@ tag.
 
 ### Added
 
+- Reading: after highlighting, a comment box opens right there (Enter to
+  save, or just keep reading); Comment lets you pick the color as you
+  write; a click on a highlight opens it. Add to note works on project
+  PDFs from the selection too.
 - Timeline: phases with a start and end date, drawn as bars; milestones
   that follow a section's progress ("8 of 12") and turn red when close and
   behind; drag milestones, phases and the deadline along the line; dated
