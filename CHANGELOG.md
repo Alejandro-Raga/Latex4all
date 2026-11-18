@@ -21,6 +21,10 @@ tag.
 
 ### Fixed
 
+- Phosphor and Amber CRT look like old monitors: everything in shades of
+  their one color, the text glowing faintly, a tinted top bar with its own
+  ribbon, the side rail apart from the file list.
+- The ribbon on Retro themes' top bar is bigger.
 - Clicking the project that's already open, on the projects page, goes
   back to writing in it.
 - Choosing a project type: "Something else…" is now "New type…".

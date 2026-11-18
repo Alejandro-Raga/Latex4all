@@ -44,6 +44,10 @@ export interface AppTheme {
   palette: ThemePalette;
   /** Colored bands along the top of the window, like a badge on a case. */
   stripes?: string[];
+  /** The top bar's own color, where the default (a deep shade) won't do. */
+  bar?: string;
+  /** Text that glows faintly, as on a CRT. */
+  glow?: boolean;
   /** Styled in globals.css rather than blended from `colors`. */
   handTuned?: boolean;
   group: "Classic" | "Colorful" | "Retro";
@@ -126,10 +130,14 @@ const DEFS: Def[] = [
   ["synthwave", "Synthwave", "Retro", ["#262335", "#1e1a2b", "#f5e9ff", "#ff7edb", "#171520"],
     ["#36f9f6", "#fede5d", "#36f9f6", "#ff8b39", "#72f1b8", "#f97e72", "#848bbd", "#ff7edb"],
     { stripes: ["#fede5d", "#ff8b39", "#ff7edb", "#36f9f6"] }],
-  ["phosphor", "Phosphor", "Retro", ["#07130a", "#0b1c0f", "#9dffa3", "#39ff14", "#030a05"],
-    ["#c8ff5a", "#39ff14", "#c8ff5a", "#6fe8d8", "#e9ff8a", "#ffd166", "#3f7a47", "#d6ffd9"]],
-  ["amber", "Amber CRT", "Retro", ["#140d02", "#1e1406", "#ffb000", "#ffcc4d", "#0c0701"],
-    ["#ff6a3d", "#ffd873", "#ff8c42", "#ffe8b0", "#ff6a3d", "#fff27a", "#8a5d14", "#ffe066"]],
+  // Monochrome monitors: every color a shade of the one phosphor, brighter
+  // for what matters and dimmer for what doesn't, the text glowing faintly.
+  ["phosphor", "Phosphor", "Retro", ["#06120a", "#0a1b0f", "#8cf59a", "#39ff14", "#030a05"],
+    ["#b6ff9c", "#39ff14", "#6fdc7a", "#c4ffbf", "#9dff6a", "#d8ffd2", "#3d7a46", "#5dff4a"],
+    { stripes: ["#5dff4a", "#2fbf2a", "#1c7a1f"], bar: "#0f2a14", glow: true }],
+  ["amber", "Amber CRT", "Retro", ["#120b02", "#1c1306", "#ffbf3d", "#ffb000", "#0b0601"],
+    ["#ffd77a", "#ffb000", "#e69a1a", "#ffe2a3", "#ffc94d", "#fff0c9", "#8a5d14", "#ffc23a"],
+    { stripes: ["#ffcc4d", "#e09400", "#9a6200"], bar: "#2a1a05", glow: true }],
 ];
 
 export const APP_THEMES: AppTheme[] = DEFS.map(
@@ -238,20 +246,26 @@ function stripesRule(t: AppTheme): string {
   // And its frame is its own surface a shade deeper, not tinted with its
   // accent (Beige's blue made its frame blue, not beige).
   const { surface, fg } = t.colors;
-  const wash = `html.${t.id} { --frame-wash: none; --t-frame: color-mix(in oklab, ${surface} ${t.dark ? 88 : 93}%, ${t.dark ? "#000" : fg}); }`;
+  const wash = `html.${t.id} { --frame-wash: none; --t-frame: color-mix(in oklab, ${surface} ${t.dark ? 78 : 93}%, ${t.dark ? "#000" : fg}); }`;
   // The bar across the top of the window: one solid color, a deep shade of
   // the theme's own (apart from the panels below it), with its bands at
   // the right end, slanted steeply (60°) as on old computers' cases (the
   // Spectrum's rainbow). Over the gradient background's wash, which paints every
   // frame-colored bar.
-  const base = t.dark
-    ? `color-mix(in oklab, ${t.colors.bg} 55%, #000)`
-    : `color-mix(in oklab, ${fg} 90%, ${surface})`;
+  const base =
+    t.bar ??
+    (t.dark
+      ? `color-mix(in oklab, ${t.colors.bg} 55%, #000)`
+      : `color-mix(in oklab, ${fg} 90%, ${surface})`);
   // Each band about as wide as the bar is tall, so the ribbon reads at a glance.
   const width = n * 22;
   const bar = `html.${t.id} .app-titlebar { position: relative; overflow: hidden; background-color: ${base} !important; background-image: none !important; }`;
   const ribbon = `html.${t.id} .app-titlebar::after { content: ""; position: absolute; top: 0; bottom: 0; right: 64px; width: ${width}px; transform: skewX(-30deg); background: linear-gradient(90deg, ${bands}); pointer-events: none; }`;
-  return `${wash} ${bar} ${ribbon}`;
+  // A CRT's glow: the text a little soft with its own light.
+  const glow = t.glow
+    ? `html.${t.id} body { text-shadow: 0 0 3px color-mix(in oklab, ${t.colors.accent} 35%, transparent); }`
+    : "";
+  return `${wash} ${bar} ${ribbon} ${glow}`;
 }
 
 /**
