@@ -12,6 +12,7 @@ import {
 } from "@/lib/vault/vault-settings-file";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { keepPlace, loadPlace } from "@/lib/place-memory";
 import {
   findObsidianVaults,
   LocalVaultSource,
@@ -582,6 +583,7 @@ export const useVaultStore = create<VaultState>()(
       open: (name) => {
         const { current, history } = get();
         if (name === current || !confirmLeaveVaultEdit()) return;
+        keepPlace("note", name);
         set({
           current: name,
           history: [...history, current ?? ""].slice(-50),
@@ -635,8 +637,6 @@ export const useVaultStore = create<VaultState>()(
         noteTypes: state.noteTypes,
         groupColors: state.groupColors,
         kindFolders: state.kindFolders,
-        // The note you were reading, there again next time.
-        current: state.current,
       }),
     },
   ),
@@ -678,3 +678,10 @@ export function chosenKindFolders(): Record<string, string> {
   const state = useVaultStore.getState();
   return state.kindFolders[vaultKey(state)] ?? EMPTY_COLORS;
 }
+
+// The note you were reading, there again on launch (unless one's open).
+void loadPlace().then(({ note }) => {
+  if (note && !useVaultStore.getState().current) {
+    useVaultStore.setState({ current: note });
+  }
+});

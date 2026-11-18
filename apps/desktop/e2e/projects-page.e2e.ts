@@ -200,8 +200,29 @@ test("the Library opens where you left it", async ({ page }) => {
     .click();
   await page.getByRole("button", { name: "Show all files" }).click();
   await expect(page.getByText("Draft v3.pdf")).toBeVisible();
+  // Kept a moment after it changes.
+  await expect
+    .poll(() => page.evaluate(() => sessionStorage.getItem("place.json")))
+    .toContain("Paper on corporate science");
   await page.reload();
   await toLibrary();
   // Still looking through that project's files.
   await expect(page.getByText("Draft v3.pdf")).toBeVisible();
+});
+
+test("the app opens in the part you were in", async ({ page }) => {
+  await page.addInitScript(() => {
+    sessionStorage.setItem("place.json", JSON.stringify({ last: "planner" }));
+  });
+  await page.setViewportSize({ width: 1300, height: 900 });
+  await page.goto("/e2e/harness.html?scenario=projects");
+  await page.evaluate(async () => {
+    const { followProjectNav } = await import("/src/stores/nav-store.ts");
+    followProjectNav();
+  });
+  await expect(
+    page
+      .getByRole("navigation", { name: "Latex4All" })
+      .getByRole("button", { name: "Planner", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
 });

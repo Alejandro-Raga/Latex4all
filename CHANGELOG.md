@@ -21,6 +21,8 @@ tag.
 
 ### Fixed
 
+- Where you left off is kept in a file, so it survives quitting right
+  after moving around (it could be lost before).
 - Phosphor and Amber CRT look like old monitors: everything in shades of
   their one color, the text glowing faintly, a tinted top bar with its own
   ribbon, the side rail apart from the file list.

@@ -1,4 +1,5 @@
 import { pdfVersion } from "@/lib/pdf-notes";
+import { keepPlace, loadPlace } from "@/lib/place-memory";
 import {
   Fragment,
   useCallback,
@@ -248,8 +249,6 @@ type Preview =
   | { kind: "unsupported" }
   | { kind: "error"; message: string };
 
-const LIBRARY_PLACE = "latex4all-library-place";
-
 /** The same file read twice: a PDF's bytes, or the text, alike. */
 function samePreview(a: Preview, b: Preview): boolean {
   if (a.kind === "pdf" && b.kind === "pdf") {
@@ -475,26 +474,32 @@ export function QuickReferencePanel({
   // The Library page as you left it: the paper or PDF open, the project
   // being looked through, the collections unfolded. Restored once, before
   // any paper asked of it (which then takes its place).
+  const restored = useRef(false);
   useEffect(() => {
     if (!onLibraryPage) return;
-    try {
-      const saved = JSON.parse(localStorage.getItem(LIBRARY_PLACE) ?? "null");
-      if (!saved) return;
+    let live = true;
+    void loadPlace().then(({ library: saved }) => {
+      restored.current = true;
+      if (!live || !saved) return;
       if (typeof saved.project === "string") {
         void openReferenceProject(saved.project);
       }
-      if (saved.file && typeof saved.file.id === "string") {
-        setSelectedFile(saved.file as SelectedFile);
+      const file = saved.file as SelectedFile | undefined;
+      // A paper asked for meanwhile (from the Planner, a link) stays.
+      if (file && typeof file.id === "string") {
+        setSelectedFile((now) => now ?? file);
       }
       if (Array.isArray(saved.collections)) {
-        setExpandedZoteroCollections(new Set(saved.collections as string[]));
+        setExpandedZoteroCollections(new Set(saved.collections));
       }
-    } catch {
-      // Opens as new.
-    }
+    });
+    return () => {
+      live = false;
+    };
   }, []);
   useEffect(() => {
-    if (!onLibraryPage) return;
+    // Not before what was kept is back, or it'd be kept as nothing.
+    if (!onLibraryPage || !restored.current) return;
     const file = selectedFile
       ? selectedFile.source === "fs"
         ? {
@@ -511,18 +516,11 @@ export function QuickReferencePanel({
             itemKey: selectedFile.itemKey,
           }
       : null;
-    try {
-      localStorage.setItem(
-        LIBRARY_PLACE,
-        JSON.stringify({
-          file,
-          project: refProjectPath,
-          collections: [...expandedZoteroCollections],
-        }),
-      );
-    } catch {
-      // For this session.
-    }
+    keepPlace("library", {
+      file,
+      project: refProjectPath,
+      collections: [...expandedZoteroCollections],
+    });
   }, [onLibraryPage, selectedFile, refProjectPath, expandedZoteroCollections]);
 
   // Asked for a project's folder (from its editor): that one, here.

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { keepPlace, loadPlace } from "@/lib/place-memory";
 import { useDocumentStore } from "@/stores/document-store";
 
 /** The start page's parts: projects, Library & Vault, the Planner… */
@@ -53,40 +54,32 @@ export const inProject = () =>
  * Started by the app once it's running, not on import: the stores import
  * each other, and the open project's may not be ready yet then.
  */
-const PLACE_KEY = "latex4all-last-place";
-
 /** Where you were: a part of the start page, or writing in a project. */
 function savePlace() {
   const { away, section } = useNav.getState();
   const writing = !!useDocumentStore.getState().projectRoot && !away;
-  try {
-    localStorage.setItem(PLACE_KEY, writing ? "writing" : section);
-  } catch {
-    // Not kept: the app opens at Home.
-  }
+  keepPlace("last", writing ? "writing" : section);
 }
 
 /** Back where you left off on launch: that part, or your last project. */
-function restorePlace() {
-  let place: string | null = null;
-  try {
-    place = localStorage.getItem(PLACE_KEY);
-  } catch {
-    return;
-  }
-  if (place === "writing") void toWriting();
+async function restorePlace() {
+  const { last } = await loadPlace();
+  // Moved somewhere already (a link, a shortcut): that wins.
+  if (useNav.getState().section !== "projects") return;
+  if (useDocumentStore.getState().projectRoot) return;
+  if (last === "writing") void toWriting();
   else if (
-    place === "planner" ||
-    place === "library" ||
-    place === "settings" ||
-    place === "help"
+    last === "planner" ||
+    last === "library" ||
+    last === "settings" ||
+    last === "help"
   ) {
-    useNav.setState({ section: place });
+    useNav.setState({ section: last });
   }
 }
 
 export function followProjectNav() {
-  restorePlace();
+  void restorePlace();
   const offDoc = useDocumentStore.subscribe((s, prev) => {
     if (s.projectRoot !== prev.projectRoot) {
       useNav.setState({ away: false });
