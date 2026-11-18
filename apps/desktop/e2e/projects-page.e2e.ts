@@ -184,3 +184,24 @@ test("the Library: a project opens in place on its PDFs, other files left out", 
     page.getByRole("button", { name: /^Final export/ }),
   ).toBeVisible();
 });
+
+test("the Library opens where you left it", async ({ page }) => {
+  await page.setViewportSize({ width: 1300, height: 900 });
+  await page.goto("/e2e/harness.html?scenario=projects");
+  const toLibrary = () =>
+    page
+      .getByRole("navigation", { name: "Latex4All" })
+      .getByRole("button", { name: "Library & Vault", exact: true })
+      .click();
+  await toLibrary();
+  await page
+    .getByRole("button", { name: "Paper on corporate science", exact: true })
+    .first()
+    .click();
+  await page.getByRole("button", { name: "Show all files" }).click();
+  await expect(page.getByText("Draft v3.pdf")).toBeVisible();
+  await page.reload();
+  await toLibrary();
+  // Still looking through that project's files.
+  await expect(page.getByText("Draft v3.pdf")).toBeVisible();
+});

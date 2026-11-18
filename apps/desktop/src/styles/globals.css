@@ -252,8 +252,9 @@
   }
   html {
     @apply h-full overflow-hidden overscroll-none scroll-smooth;
-    /* macOS overlay titlebar inset — traffic lights safe area */
-    --titlebar-height: 30px;
+    /* macOS: the bar across the top, the window's buttons centred in it
+       (placed 11px down in tauri.conf.json, 14px tall: 11px either side). */
+    --titlebar-height: 36px;
     --traffic-light-width: 70px;
     --workspace-topbar-height: 40px;
   }

@@ -47,6 +47,12 @@ tag.
 
 ### Added
 
+- The app opens where you left off: the part you were in (or your last
+  project, if you were writing), the Library on the paper and project you
+  had open, the vault on its note.
+- The app opens where you left off: the part you were in (or your last
+  project, if you were writing), the Library on the paper and project you
+  had open, the vault on its note.
 - Settings → Planner & reading: the daily summary, the reading goal and
   the Eisenhower matrix's rules (how soon is urgent, which priority is
   important) in one place.

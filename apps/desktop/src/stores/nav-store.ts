@@ -53,12 +53,51 @@ export const inProject = () =>
  * Started by the app once it's running, not on import: the stores import
  * each other, and the open project's may not be ready yet then.
  */
+const PLACE_KEY = "latex4all-last-place";
+
+/** Where you were: a part of the start page, or writing in a project. */
+function savePlace() {
+  const { away, section } = useNav.getState();
+  const writing = !!useDocumentStore.getState().projectRoot && !away;
+  try {
+    localStorage.setItem(PLACE_KEY, writing ? "writing" : section);
+  } catch {
+    // Not kept: the app opens at Home.
+  }
+}
+
+/** Back where you left off on launch: that part, or your last project. */
+function restorePlace() {
+  let place: string | null = null;
+  try {
+    place = localStorage.getItem(PLACE_KEY);
+  } catch {
+    return;
+  }
+  if (place === "writing") void toWriting();
+  else if (
+    place === "planner" ||
+    place === "library" ||
+    place === "settings" ||
+    place === "help"
+  ) {
+    useNav.setState({ section: place });
+  }
+}
+
 export function followProjectNav() {
-  return useDocumentStore.subscribe((s, prev) => {
+  restorePlace();
+  const offDoc = useDocumentStore.subscribe((s, prev) => {
     if (s.projectRoot !== prev.projectRoot) {
       useNav.setState({ away: false });
     }
+    savePlace();
   });
+  const offNav = useNav.subscribe(savePlace);
+  return () => {
+    offDoc();
+    offNav();
+  };
 }
 
 /** To a project: back to it if it's the one open, else opened. */

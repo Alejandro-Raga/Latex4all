@@ -248,6 +248,8 @@ type Preview =
   | { kind: "unsupported" }
   | { kind: "error"; message: string };
 
+const LIBRARY_PLACE = "latex4all-library-place";
+
 /** The same file read twice: a PDF's bytes, or the text, alike. */
 function samePreview(a: Preview, b: Preview): boolean {
   if (a.kind === "pdf" && b.kind === "pdf") {
@@ -469,6 +471,59 @@ export function QuickReferencePanel({
     },
     [],
   );
+
+  // The Library page as you left it: the paper or PDF open, the project
+  // being looked through, the collections unfolded. Restored once, before
+  // any paper asked of it (which then takes its place).
+  useEffect(() => {
+    if (!onLibraryPage) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(LIBRARY_PLACE) ?? "null");
+      if (!saved) return;
+      if (typeof saved.project === "string") {
+        void openReferenceProject(saved.project);
+      }
+      if (saved.file && typeof saved.file.id === "string") {
+        setSelectedFile(saved.file as SelectedFile);
+      }
+      if (Array.isArray(saved.collections)) {
+        setExpandedZoteroCollections(new Set(saved.collections as string[]));
+      }
+    } catch {
+      // Opens as new.
+    }
+  }, []);
+  useEffect(() => {
+    if (!onLibraryPage) return;
+    const file = selectedFile
+      ? selectedFile.source === "fs"
+        ? {
+            source: "fs",
+            id: selectedFile.id,
+            label: selectedFile.label,
+            absolutePath: selectedFile.absolutePath,
+            type: selectedFile.type,
+          }
+        : {
+            source: "zotero",
+            id: selectedFile.id,
+            label: selectedFile.label,
+            itemKey: selectedFile.itemKey,
+          }
+      : null;
+    try {
+      localStorage.setItem(
+        LIBRARY_PLACE,
+        JSON.stringify({
+          file,
+          project: refProjectPath,
+          collections: [...expandedZoteroCollections],
+        }),
+      );
+    } catch {
+      // For this session.
+    }
+  }, [onLibraryPage, selectedFile, refProjectPath, expandedZoteroCollections]);
 
   // Asked for a project's folder (from its editor): that one, here.
   const navAsked = useNav((st) => st.asked);

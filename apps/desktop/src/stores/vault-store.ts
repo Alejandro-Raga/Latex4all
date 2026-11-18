@@ -635,6 +635,8 @@ export const useVaultStore = create<VaultState>()(
         noteTypes: state.noteTypes,
         groupColors: state.groupColors,
         kindFolders: state.kindFolders,
+        // The note you were reading, there again next time.
+        current: state.current,
       }),
     },
   ),

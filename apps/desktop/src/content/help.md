@@ -47,6 +47,10 @@ The menu on the far left is there in every part of the app. Click the arrow at i
 - **Planner** and **Library & Vault** open with your project still open. From a project, the Planner opens on its list and the Library on its folder.
 - **Settings**, **Help** and **Report a bug** are at the bottom.
 
+The app opens where you left off: in the part you were in, or in your last project if you were writing. The Library and the vault reopen on the paper, project and note you had open.
+
+The app opens where you left off: in the part you were in, or in your last project if you were writing. The Library and the vault reopen on the paper, project and note you had open.
+
 You can also press ⌘1 for Home, ⌘2 for Library & Vault, ⌘3 for the Planner and ⌘4 for Writing. They're in ⌘K too.
 
 Other ways to move around:

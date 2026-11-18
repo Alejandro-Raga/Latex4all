@@ -239,9 +239,18 @@ function stripesRule(t: AppTheme): string {
   // accent (Beige's blue made its frame blue, not beige).
   const { surface, fg } = t.colors;
   const wash = `html.${t.id} { --frame-wash: none; --t-frame: color-mix(in oklab, ${surface} ${t.dark ? 88 : 93}%, ${t.dark ? "#000" : fg}); }`;
-  // The bar across the top of the window, in the theme's bands (over the
-  // gradient background's wash, which paints every frame-colored bar).
-  return `${wash} html.${t.id} .app-titlebar { background-image: linear-gradient(90deg, ${bands}) !important; background-attachment: scroll !important; }`;
+  // The bar across the top of the window: one solid color, a deep shade of
+  // the theme's own (apart from the panels below it), with its bands at
+  // the right end, slanted steeply (60°) as on old computers' cases (the
+  // Spectrum's rainbow). Over the gradient background's wash, which paints every
+  // frame-colored bar.
+  const base = t.dark
+    ? `color-mix(in oklab, ${t.colors.bg} 55%, #000)`
+    : `color-mix(in oklab, ${fg} 90%, ${surface})`;
+  const width = n * 13;
+  const bar = `html.${t.id} .app-titlebar { position: relative; overflow: hidden; background-color: ${base} !important; background-image: none !important; }`;
+  const ribbon = `html.${t.id} .app-titlebar::after { content: ""; position: absolute; top: 0; bottom: 0; right: 44px; width: ${width}px; transform: skewX(-30deg); background: linear-gradient(90deg, ${bands}); pointer-events: none; }`;
+  return `${wash} ${bar} ${ribbon}`;
 }
 
 /**
