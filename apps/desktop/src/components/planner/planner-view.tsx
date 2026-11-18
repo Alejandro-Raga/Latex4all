@@ -243,6 +243,19 @@ function ProjectGroupBlock({
   );
 }
 
+/** The matrix's rules in words, as set in Settings. */
+function matrixRule(from: number, days: number) {
+  const level = from === 2 ? "Medium" : from === 4 ? "Highest" : "High";
+  const up = from === 4 ? "" : " and up";
+  const when =
+    days === 0
+      ? "due today"
+      : days === 1
+        ? "due by tomorrow"
+        : `due within ${days} days`;
+  return `${level} priority${up} is important; ${when} is urgent`;
+}
+
 /** Each smart list's color, and its icon. */
 /** Each list its own color, from the theme. */
 const SMART: Record<SmartFilter, { color: string; icon: ReactNode }> = {
@@ -490,6 +503,8 @@ export function PlannerView() {
     setPicked(null);
   };
 
+  const matrixFrom = useSettingsStore((s) => s.matrixImportantFrom);
+  const matrixDays = useSettingsStore((s) => s.matrixUrgentDays);
   const header = (() => {
     if ("smart" in selected) {
       const { color, icon } = SMART[selected.smart];
@@ -508,7 +523,7 @@ export function PlannerView() {
             : selected.smart === "calendar"
               ? "Every project's dates in one place"
               : selected.smart === "matrix"
-                ? "High-priority tasks are important; tasks due in less than five days are urgent"
+                ? matrixRule(matrixFrom, matrixDays)
                 : selected.smart === "overview"
                   ? "Every list and project, section by section"
                   : selected.smart === "timeline"

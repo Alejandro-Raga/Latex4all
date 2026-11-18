@@ -92,6 +92,12 @@ interface SettingsState {
   /** Papers to read a week, tracked in Reading; 0 is off (the default). */
   readingGoal: number;
   setReadingGoal: (papers: number) => void;
+  /** The Eisenhower matrix: urgent when due within this many days. */
+  matrixUrgentDays: number;
+  setMatrixUrgentDays: (days: number) => void;
+  /** Important from this priority up (2 medium, 3 high, 4 highest). */
+  matrixImportantFrom: 2 | 3 | 4;
+  setMatrixImportantFrom: (priority: 2 | 3 | 4) => void;
   pdfThemeMain: PdfTheme;
   setPdfThemeMain: (theme: PdfTheme) => void;
   pdfThemeReference: PdfTheme;
@@ -195,6 +201,12 @@ export const useSettingsStore = create<SettingsState>()(
       readingGoal: 0,
       setReadingGoal: (papers) =>
         set({ readingGoal: Math.max(0, Math.min(50, Math.round(papers))) }),
+      matrixUrgentDays: 4,
+      setMatrixUrgentDays: (days) =>
+        set({ matrixUrgentDays: Math.max(0, Math.min(30, Math.round(days))) }),
+      matrixImportantFrom: 3,
+      setMatrixImportantFrom: (priority) =>
+        set({ matrixImportantFrom: priority }),
       pdfThemeMain: "light",
       setPdfThemeMain: (theme) => set({ pdfThemeMain: theme }),
       pdfThemeReference: "light",

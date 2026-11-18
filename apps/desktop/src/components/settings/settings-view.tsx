@@ -65,13 +65,30 @@ import { PanelBoundary } from "@/components/panel-boundary";
 export type { SettingsSection };
 
 /** A labelled setting: name and one line of context on the left, control on the right. */
+const Heading = ({ children }: { children: ReactNode }) => (
+  <div className="px-5 pt-5 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+    {children}
+  </div>
+);
+
+const IMPORTANT_FROM: { value: 2 | 3 | 4; label: string }[] = [
+  { value: 2, label: "Medium" },
+  { value: 3, label: "High" },
+  { value: 4, label: "Highest" },
+];
+
 function PlannerSettings() {
   const dailySummary = useSettingsStore((s) => s.dailySummary);
   const setDailySummary = useSettingsStore((s) => s.setDailySummary);
   const goal = useSettingsStore((s) => s.readingGoal);
   const setGoal = useSettingsStore((s) => s.setReadingGoal);
+  const urgentDays = useSettingsStore((s) => s.matrixUrgentDays);
+  const setUrgentDays = useSettingsStore((s) => s.setMatrixUrgentDays);
+  const importantFrom = useSettingsStore((s) => s.matrixImportantFrom);
+  const setImportantFrom = useSettingsStore((s) => s.setMatrixImportantFrom);
   return (
-    <div className="divide-y divide-border/60">
+    <div>
+      <Heading>Every day</Heading>
       <SettingRow
         label="Daily summary"
         detail="What's due, the first time you open the app each day"
@@ -82,29 +99,75 @@ function PlannerSettings() {
           label="Daily summary"
         />
       </SettingRow>
-      <SettingRow
-        label="Weekly reading goal"
-        detail="Papers to finish each week, with pages read and a streak in Reading"
-      >
-        <Toggle
-          checked={goal > 0}
-          onChange={(on) => setGoal(on ? 3 : 0)}
+      <Heading>Reading</Heading>
+      <div className="divide-y divide-border/60">
+        <SettingRow
           label="Weekly reading goal"
-        />
-      </SettingRow>
-      {goal > 0 && (
-        <SettingRow label="Papers a week">
-          <Input
-            type="number"
-            min={1}
-            max={50}
-            value={goal}
-            onChange={(e) => setGoal(Number(e.target.value) || 1)}
-            className="h-7 w-20 text-xs"
-            aria-label="Papers a week"
+          detail="Papers to finish each week, with pages read and a streak in Reading"
+        >
+          <Toggle
+            checked={goal > 0}
+            onChange={(on) => setGoal(on ? 3 : 0)}
+            label="Weekly reading goal"
           />
         </SettingRow>
-      )}
+        {goal > 0 && (
+          <SettingRow label="Papers a week">
+            <Input
+              type="number"
+              min={1}
+              max={50}
+              value={goal}
+              onChange={(e) => setGoal(Number(e.target.value) || 1)}
+              className="h-7 w-20 text-xs"
+              aria-label="Papers a week"
+            />
+          </SettingRow>
+        )}
+      </div>
+      <Heading>Eisenhower matrix</Heading>
+      <div className="divide-y divide-border/60">
+        <SettingRow
+          label="Urgent"
+          detail="Due within this many days, or overdue"
+        >
+          <Input
+            type="number"
+            min={0}
+            max={30}
+            value={urgentDays}
+            onChange={(e) => setUrgentDays(Number(e.target.value) || 0)}
+            className="h-7 w-16 text-xs"
+            aria-label="Urgent within days"
+          />
+          <span className="text-muted-foreground text-xs">days</span>
+        </SettingRow>
+        <SettingRow label="Important" detail="From this priority up">
+          <div
+            role="radiogroup"
+            aria-label="Important from"
+            className="flex rounded-md border border-border p-0.5"
+          >
+            {IMPORTANT_FROM.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                role="radio"
+                aria-checked={importantFrom === o.value}
+                onClick={() => setImportantFrom(o.value)}
+                className={cn(
+                  "rounded px-2 py-0.5 text-xs",
+                  importantFrom === o.value
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </SettingRow>
+      </div>
     </div>
   );
 }
@@ -641,8 +704,10 @@ export function SettingsView({
     },
     {
       id: "planner",
-      label: "Planner",
-      meta: readingGoal ? `${readingGoal} papers a week` : "Reading goal off",
+      label: "Planner & reading",
+      meta: readingGoal
+        ? `Matrix, ${readingGoal} papers a week`
+        : "Daily summary, reading, matrix",
       icon: ListTodoIcon,
       body: <PlannerSettings />,
       flush: true,

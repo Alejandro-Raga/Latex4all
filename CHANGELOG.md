@@ -47,6 +47,9 @@ tag.
 
 ### Added
 
+- Settings → Planner & reading: the daily summary, the reading goal and
+  the Eisenhower matrix's rules (how soon is urgent, which priority is
+  important) in one place.
 - Reading: after highlighting, a comment box opens right there (Enter to
   save, or just keep reading); Comment lets you pick the color as you
   write; a click on a highlight opens it. Add to note works on project

@@ -1120,3 +1120,27 @@ test("the timeline: a phase following a section, dragged along, and every projec
     main.getByText("First draft", { exact: true }).last(),
   ).toBeVisible();
 });
+
+test("the matrix follows its rules from Settings", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await open(page, "scenario=planner");
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /^Eisenhower matrix/ })
+    .click();
+  const main = page.getByRole("main");
+  const box = (name: string) =>
+    main.locator("div.group\\/heading").filter({ hasText: name });
+  await expect(
+    box("Urgent & important").getByText("Draft the discussion"),
+  ).toBeVisible();
+  // Only the highest priority important now: high-priority work isn't.
+  await page.evaluate(async () => {
+    const { useSettingsStore } = await import("/src/stores/settings-store.ts");
+    useSettingsStore.getState().setMatrixImportantFrom(4);
+  });
+  await expect(
+    box("Urgent, not important").getByText("Draft the discussion"),
+  ).toBeVisible();
+  await expect(page.getByText(/^Highest priority is important/)).toBeVisible();
+});

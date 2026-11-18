@@ -5,6 +5,7 @@
  */
 import { daysUntil, dayFromToday } from "@/lib/plan/dates";
 import { outOfMatrix, shownTitle } from "@/lib/plan/matrix-opt";
+import { useSettingsStore } from "@/stores/settings-store";
 import {
   childRef,
   parsePlan,
@@ -22,9 +23,12 @@ import type { DragTask } from "./planner-dnd";
 
 export type Quadrant = "do" | "schedule" | "squeeze" | "later";
 
-export const isImportant = (t: Task) => t.priority >= 3;
-/** Due in less than five days, or late. */
-export const isUrgent = (t: Task) => !!t.due && daysUntil(t.due) < 5;
+/** Important: from the priority chosen in Settings up (high, by default). */
+export const isImportant = (t: Task) =>
+  t.priority >= useSettingsStore.getState().matrixImportantFrom;
+/** Urgent: due within the days chosen in Settings (four), or late. */
+export const isUrgent = (t: Task) =>
+  !!t.due && daysUntil(t.due) <= useSettingsStore.getState().matrixUrgentDays;
 
 export function quadrantOf(t: Task): Quadrant {
   if (isImportant(t)) return isUrgent(t) ? "do" : "schedule";
@@ -43,9 +47,13 @@ export function moveToQuadrant(task: Task, box: Quadrant): Partial<Task> {
   const important = box === "do" || box === "schedule";
   const urgent = box === "do" || box === "squeeze";
   const patch: Partial<Task> = {};
-  if (important !== isImportant(task)) patch.priority = important ? 3 : 0;
+  const { matrixImportantFrom, matrixUrgentDays } = useSettingsStore.getState();
+  if (important !== isImportant(task))
+    patch.priority = important ? matrixImportantFrom : 0;
   if (urgent && !isUrgent(task)) patch.due = dayFromToday(0);
-  if (!urgent && isUrgent(task)) patch.due = dayFromToday(7);
+  // Out of urgent: a few days past where urgent ends.
+  if (!urgent && isUrgent(task))
+    patch.due = dayFromToday(Math.max(7, matrixUrgentDays + 3));
   return patch;
 }
 
@@ -69,6 +77,8 @@ export function MatrixView({
   selected?: Selected | null;
   onSelect?: (s: Selected) => void;
 }) {
+  // Shown again when the rules change in Settings.
+  useSettingsStore((s) => s.matrixUrgentDays + s.matrixImportantFrom * 100);
   const texts = usePlanTexts(lists.map((l) => l.key));
   const plans = new Map<string, Plan>();
   const tasks = lists.flatMap((list) => {

@@ -238,11 +238,11 @@ Switch between **List** and **Board** at the top. On the board, each section is 
 
 - **Today**, **Tomorrow** and **Next 7 days** show what is due in every list.
 - **Calendar** shows dated tasks, milestones, sections and deadlines by month or week. Drag something to another day to change its date. Click a day to see everything on it and add a task. **Export to calendar** saves your dates as a file that Apple Calendar, Google Calendar or Outlook can open.
-- **Eisenhower matrix** puts open tasks in four boxes: urgent and important, important but not urgent, urgent but not important, and neither. A task is important if its priority is high or highest, and urgent if it's due in less than five days or overdue. Drag a task to another box to change its priority or date. To keep a task and its subtasks out of the matrix, such as a far-off goal, right-click it and choose **Leave out of the matrix**, or click the grid button in its panel.
+- **Eisenhower matrix** puts open tasks in four boxes: urgent and important, important but not urgent, urgent but not important, and neither. By default a task is important if its priority is high or highest, and urgent if it's due within four days or overdue. Change both in **Settings → Planner & reading**. Drag a task to another box to change its priority or date. To keep a task and its subtasks out of the matrix, such as a far-off goal, right-click it and choose **Leave out of the matrix**, or click the grid button in its panel.
 - **Overview** shows each list and project as a card with its sections and what comes next. Click a card's name to open that list.
 - **All tasks** lists everything open, and **Completed** what you've finished.
 
-The first time you open Latex4All each day, a short note tells you what is due or overdue. You can turn it off in **Settings → Planner**.
+The first time you open Latex4All each day, a short note tells you what is due or overdue. You can turn it off in **Settings → Planner & reading**.
 
 ### Reading
 
@@ -256,7 +256,7 @@ Open **Reading** in the Planner's sidebar to keep up your reading.
 - Add a paper by its title, DOI or a link, or with **Add from Zotero**. Papers added here are general reading; a project's papers go in its own **Reading** tab. You can also right-click a paper in the Library or the vault and choose **Add to reading list**.
 - The circle next to a paper shows how far you are. Click it to change the status. Hover a paper and click **Read by** to give it a date.
 
-To set yourself a weekly goal, open **Settings → Planner** and turn on **Weekly reading goal**. Reading then shows how many papers you've finished this week, the pages you've read, and how many days in a row you've read.
+To set yourself a weekly goal, open **Settings → Planner & reading** and turn on **Weekly reading goal**. Reading then shows how many papers you've finished this week, the pages you've read, and how many days in a row you've read.
 
 While writing, the **Plan** panel (⌘⌥4) shows the project's tasks and reading list next to your text.
 
