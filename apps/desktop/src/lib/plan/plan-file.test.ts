@@ -378,3 +378,32 @@ describe("section pins", () => {
     );
   });
 });
+
+describe("a task's start date (🛫)", () => {
+  it("is read and written back, as Obsidian Tasks writes it", async () => {
+    const { parsePlan, serializePlan, updateTask } = await import(
+      "./plan-file"
+    );
+    const text =
+      "## Milestones\n\n- [ ] Write chapter 2 🛫 2027-01-10 📅 2027-03-01\n";
+    const plan = parsePlan(text);
+    const at = plan.sections.findIndex((x) => x.title === "Milestones");
+    const item = plan.sections[at].items.findIndex((x) => x.kind === "task");
+    const found = plan.sections[at].items[item];
+    const task = found.kind === "task" ? found.task : undefined;
+    expect(task).toMatchObject({
+      title: "Write chapter 2",
+      start: "2027-01-10",
+      due: "2027-03-01",
+    });
+    expect(serializePlan(plan)).toBe(text);
+    const moved = updateTask(
+      plan,
+      { section: at, item },
+      { start: "2027-01-17" },
+    );
+    expect(serializePlan(moved)).toContain(
+      "- [ ] Write chapter 2 🛫 2027-01-17 📅 2027-03-01",
+    );
+  });
+});

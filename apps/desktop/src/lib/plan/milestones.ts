@@ -14,6 +14,7 @@ import {
   addTask,
   allTasks,
   type Plan,
+  sectionName,
   type Task,
   type TaskRef,
 } from "./plan-file";
@@ -45,4 +46,50 @@ export function addMilestone(plan: Plan, title: string, due?: string): Plan {
     index = next.sections.length - 1;
   }
   return addTask(next, { title, due }, index);
+}
+
+const LINK = /\s*\[for::\s*([^\]]+?)\s*\]/i;
+
+/** The section a milestone follows the progress of (`[for:: Chapter 2]`). */
+export const linkedSection = (task: Pick<Task, "title">) =>
+  LINK.exec(task.title)?.[1];
+
+/** The title with the milestone following `section` (none: no link). */
+export function withLink(title: string, section: string | null): string {
+  const bare = title.replace(LINK, "").trim();
+  return section ? `${bare} [for:: ${section}]` : bare;
+}
+
+/** How much of a section is done: its tasks and subtasks, checked off. */
+export function sectionProgress(
+  plan: Plan,
+  name: string,
+): { done: number; total: number } | null {
+  const section = plan.sections.find(
+    (s) => s.title !== null && sectionName(s.title) === name,
+  );
+  if (!section) return null;
+  let done = 0;
+  let total = 0;
+  const count = (t: Task) => {
+    total++;
+    if (t.done) done++;
+    t.subtasks.forEach(count);
+  };
+  for (const item of section.items) if (item.kind === "task") count(item.task);
+  return { done, total };
+}
+
+/**
+ * Close and far from done: due within a week with less than four fifths
+ * finished (or past its date and not done).
+ */
+export function atRisk(
+  progress: { done: number; total: number } | null,
+  due: string | undefined,
+  days: (iso: string) => number,
+): boolean {
+  if (!progress || !due || progress.total === 0) return false;
+  if (progress.done === progress.total) return false;
+  return days(due) <= 7 && progress.done / progress.total < 0.8;
 }

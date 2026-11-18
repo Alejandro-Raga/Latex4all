@@ -16,8 +16,9 @@ import {
 } from "lucide-react";
 import {
   outOfMatrix,
+  shownTitle,
+  withHiddenFields,
   withMatrix,
-  withoutMatrixField,
 } from "@/lib/plan/matrix-opt";
 import { openInVault } from "@/components/workspace/highlight-quote";
 import { NoteMenuAt } from "@/components/workspace/topic-menu";
@@ -116,7 +117,7 @@ export function Check({
 
 /** A title with [[links]] that open the note and [text](url) as its text. */
 export function TitleText({ title: raw }: { title: string }) {
-  const title = withoutMatrixField(raw);
+  const title = shownTitle(raw);
   const parts: ReactNode[] = [];
   const re =
     /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|\[([^\]]*)\]\([^)]*\)|(?:^|(?<=\s))#([\p{L}\p{N}_/-]+)/gu;
@@ -168,13 +169,22 @@ export function Tags({ title }: { title: string }) {
   );
 }
 
-export function DueBadge({ due, icon }: { due: string; icon?: boolean }) {
+export function DueBadge({
+  due,
+  icon,
+  plain,
+}: {
+  due: string;
+  icon?: boolean;
+  /** Not a deadline (a start date): no warning colors. */
+  plain?: boolean;
+}) {
   const { label, tone } = dueLabel(due);
   return (
     <span
       className={cn(
         "inline-flex shrink-0 items-center gap-1 text-[11px] tabular-nums",
-        TONE_CLASS[tone],
+        plain ? "text-muted-foreground" : TONE_CLASS[tone],
       )}
     >
       {icon && <CalendarIcon className="size-3" />}
@@ -356,7 +366,10 @@ export function DueButton({
   open: openAsked,
   onOpenChange,
   quiet,
+  plain,
 }: {
+  /** Not a deadline (a start date): no warning colors. */
+  plain?: boolean;
   due?: string;
   onChange: (due?: string) => void;
   /** What it says when there's none ("Date", "Deadline"). */
@@ -399,7 +412,7 @@ export function DueButton({
               {label !== "Date" && (
                 <span className="text-muted-foreground">{label}</span>
               )}
-              <DueBadge due={due} icon />
+              <DueBadge due={due} icon plain={plain} />
             </>
           ) : (
             <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -482,18 +495,18 @@ export function TaskDetails({
   parent?: { title: string; open: () => void };
 }) {
   // Shown without the matrix marker; kept on it when saved.
-  const shownTitle = withoutMatrixField(task.title);
+  const visible = shownTitle(task.title);
   const leftOut = outOfMatrix(task);
-  const [title, setTitle] = useState(shownTitle);
+  const [title, setTitle] = useState(visible);
   const [notes, setNotes] = useState(notesText(task));
   const [newSub, setNewSub] = useState("");
-  useEffect(() => setTitle(shownTitle), [shownTitle]);
+  useEffect(() => setTitle(visible), [visible]);
   useEffect(() => setNotes(notesText(task)), [task.notes.join("\n")]);
   const saveTitle = () => {
     const next = title.replace(/\s+/g, " ").trim();
-    if (next && next !== shownTitle)
-      actions.change({ title: withMatrix(next, leftOut) });
-    else setTitle(shownTitle);
+    if (next && next !== visible)
+      actions.change({ title: withHiddenFields(next, task.title) });
+    else setTitle(visible);
   };
   const saveNotes = () => {
     if (notes.trim() !== notesText(task)) {
@@ -581,7 +594,7 @@ export function TaskDetails({
               e.preventDefault();
               e.currentTarget.blur();
             }
-            if (e.key === "Escape") setTitle(shownTitle);
+            if (e.key === "Escape") setTitle(visible);
           }}
           aria-label="Task"
           className={cn(

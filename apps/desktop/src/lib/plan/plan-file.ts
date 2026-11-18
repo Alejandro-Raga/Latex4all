@@ -42,6 +42,8 @@ export interface Task {
   title: string;
   /** YYYY-MM-DD. */
   due?: string;
+  /** When it starts (Obsidian Tasks' 🛫): a milestone with one is a phase. */
+  start?: string;
   /** When it was checked off, YYYY-MM-DD. */
   doneOn?: string;
   priority: Priority;
@@ -86,9 +88,10 @@ const TASK = /^- \[([ xX])\] (.*)$/;
 const SUBTASK = /^\s+- \[([ xX])\] (.*)$/;
 const DATE = "(\\d{4}-\\d{2}-\\d{2})";
 const DUE = new RegExp(`\\s*📅\\s*${DATE}`);
+const START = new RegExp(`\\s*🛫\\s*${DATE}`);
 /** 🔁 and its rule, up to the next mark (a date, a priority) or a tag. */
 const REPEAT =
-  /\s*🔁\s*(every\b[^📅✅⏫🔺🔼🔽#]*?)(?=\s*(?:[📅✅⏫🔺🔼🔽#]|$))/u;
+  /\s*🔁\s*(every\b[^📅🛫✅⏫🔺🔼🔽#]*?)(?=\s*(?:[📅🛫✅⏫🔺🔼🔽#]|$))/u;
 
 /** A repeat rule as written: "every week on Monday, Friday" (see repeat.ts). */
 export type Repeat = string;
@@ -105,6 +108,7 @@ function parseTaskText(done: boolean, text: string): Task {
     return m[1];
   };
   const due = take(DUE);
+  const start = take(START);
   const doneOn = take(DONE);
   const mark = take(PRIORITY);
   const ruleMatch = REPEAT.exec(rest);
@@ -121,6 +125,7 @@ function parseTaskText(done: boolean, text: string): Task {
     done,
     title: rest.trim(),
     due,
+    ...(start ? { start } : {}),
     doneOn,
     priority: mark ? MARK_PRIORITY[mark] : 0,
     ...(every ? { repeat: every } : {}),
@@ -201,6 +206,7 @@ function taskLine(task: Task, indent = ""): string {
   const parts = [`${indent}- [${task.done ? "x" : " "}] ${task.title}`];
   if (task.priority) parts.push(PRIORITY_MARK[task.priority]);
   if (task.repeat) parts.push(`🔁 ${task.repeat}`);
+  if (task.start) parts.push(`🛫 ${task.start}`);
   if (task.due) parts.push(`📅 ${task.due}`);
   if (task.done && task.doneOn) parts.push(`✅ ${task.doneOn}`);
   return parts.join(" ");
@@ -213,6 +219,7 @@ const canonical = (t: Task) =>
     t.title,
     t.priority,
     t.repeat ?? "",
+    t.start ?? "",
     t.due ?? "",
     t.done ? (t.doneOn ?? "") : "",
   ]);

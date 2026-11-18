@@ -224,6 +224,11 @@ Switch between **List** and **Board** at the top. On the board, each section is 
 
 - **Deadline** and **Priority**, at the top of a project, set its submission date and how important it is. Both show next to the project in the sidebar and on its card on the projects page.
 - **Timeline** shows the project's milestones, such as a first draft, on a line from today to the deadline. Add one like a task: "First draft dec 1". Click its diamond when you reach it.
+  - Give a milestone a **Start** date to make it a phase, such as "Write chapter 2" from January to March. It shows as a bar.
+  - Click the list button on a milestone to have it follow a section of the plan. It then shows how much is done, such as "8 of 12", and its bar fills as you finish tasks. It turns red when its date is a week away or less and less than four fifths is done.
+  - Drag a milestone, a phase or the deadline along the line to change its date. Drag a phase's left end to move only its start.
+  - Small marks under the line are the plan's dated tasks; small squares are dated sections. Point at one to see what it is.
+- **Timeline** under **Views** shows every project's milestones and deadline on one line, a row each. Click a project's name to open its own timeline.
 - Right-click a project in the sidebar and choose **Open project** to start writing, or **Priority** to set its priority or mark it completed.
 - To turn a task into a project, right-click it and choose **Make it a project**. Its subtasks become the project's tasks, and its date and priority become the project's deadline and priority.
 - The arrows next to **Projects** sort them by recent use, type, priority, due date, number of tasks or name.

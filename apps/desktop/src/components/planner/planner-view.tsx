@@ -1,5 +1,6 @@
 import { type ReactNode, useMemo, useState, useEffect } from "react";
 import {
+  ChartGanttIcon,
   LayoutDashboardIcon,
   FlagIcon,
   Grid2x2Icon,
@@ -82,6 +83,7 @@ import {
 import { CalendarView } from "./calendar-view";
 import { MatrixView, quadrantOf } from "./matrix-view";
 import { OverviewView } from "./overview-view";
+import { ProjectsTimeline } from "./timeline-view";
 import { outOfMatrix } from "@/lib/plan/matrix-opt";
 import { ProjectPriorityMenu } from "./project-priority-menu";
 import { useMoveInboxReading } from "./reading-move";
@@ -262,6 +264,10 @@ const SMART: Record<SmartFilter, { color: string; icon: ReactNode }> = {
     color: "var(--chart-2)",
     icon: <LayoutDashboardIcon className="size-4" />,
   },
+  timeline: {
+    color: "var(--chart-4)",
+    icon: <ChartGanttIcon className="size-4" />,
+  },
   reading: {
     color: "color-mix(in oklab, var(--chart-4) 50%, var(--chart-5))",
     icon: <BookOpenIcon className="size-4" />,
@@ -388,6 +394,7 @@ export function PlannerView() {
       calendar: 0,
       matrix: 0,
       overview: 0,
+      timeline: 0,
       reading: 0,
       all: 0,
       completed: 0,
@@ -475,7 +482,8 @@ export function PlannerView() {
     ("smart" in selected &&
       (selected.smart === "calendar" ||
         selected.smart === "matrix" ||
-        selected.smart === "overview")) ||
+        selected.smart === "overview" ||
+        selected.smart === "timeline")) ||
     (!!current && mode === "board" && tab !== "timeline");
   const choose = (s: Selection) => {
     select(s);
@@ -503,9 +511,11 @@ export function PlannerView() {
                 ? "High-priority tasks are important; tasks due in less than five days are urgent"
                 : selected.smart === "overview"
                   ? "Every list and project, section by section"
-                  : selected.smart === "completed"
-                    ? "What you've finished, most recent first"
-                    : `${count} ${selected.smart === "reading" ? "to read" : count === 1 ? "task" : "tasks"}`,
+                  : selected.smart === "timeline"
+                    ? "Every project's milestones and deadline, on one line"
+                    : selected.smart === "completed"
+                      ? "What you've finished, most recent first"
+                      : `${count} ${selected.smart === "reading" ? "to read" : count === 1 ? "task" : "tasks"}`,
       };
     }
     if (!current) return { title: "", color: "#64748b", icon: null, sub: "" };
@@ -592,6 +602,7 @@ export function PlannerView() {
                 "calendar",
                 "matrix",
                 "overview",
+                "timeline",
                 "all",
                 "completed",
               ] as SmartFilter[]
@@ -600,7 +611,10 @@ export function PlannerView() {
                 key={f}
                 filter={f}
                 count={
-                  f === "completed" || f === "overview" || f === "calendar"
+                  f === "completed" ||
+                  f === "overview" ||
+                  f === "calendar" ||
+                  f === "timeline"
                     ? undefined
                     : stats.smart[f]
                 }
@@ -855,6 +869,14 @@ export function PlannerView() {
               <div className={cn(fullBleed ? "h-full" : "mx-auto max-w-3xl")}>
                 {"smart" in selected && selected.smart === "calendar" ? (
                   <CalendarView lists={withReading} />
+                ) : "smart" in selected && selected.smart === "timeline" ? (
+                  <ProjectsTimeline
+                    lists={lists}
+                    onOpen={(l) => {
+                      choose({ plan: l.key });
+                      setTab("timeline");
+                    }}
+                  />
                 ) : "smart" in selected && selected.smart === "overview" ? (
                   <OverviewView
                     lists={lists}

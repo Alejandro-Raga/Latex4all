@@ -1046,3 +1046,77 @@ test("the matrix: a task left out, with its subtasks, and back in", async ({
   await page.getByRole("button", { name: "Show in the matrix" }).click();
   await expect.poll(() => disk(page, PLAN)).not.toContain("[matrix:: no]");
 });
+
+test("the timeline: a phase following a section, dragged along, and every project on one line", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByRole("radio", { name: "Timeline" }).click();
+  await main.getByLabel("Add a milestone").fill("First draft in 20 days");
+  await main.getByLabel("Add a milestone").press("Enter");
+  await expect(
+    main.getByText("First draft", { exact: true }).last(),
+  ).toBeVisible();
+
+  // Following "To do": its progress shows, its title stays clean.
+  await main.getByText("First draft", { exact: true }).last().hover();
+  await main
+    .getByRole("button", { name: "Follow a section's progress" })
+    .click();
+  await page.getByRole("menuitem", { name: "To do" }).click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/First draft 📅 \S+ \[for:: To do\]|First draft \[for:: To do\]/);
+  await expect(main.getByRole("button", { name: "Follows To do" })).toHaveText(
+    "0 of 3",
+  );
+  await expect(main.getByText("[for::")).toHaveCount(0);
+
+  // A start date makes it a phase: a bar on the line.
+  await main.getByText("First draft", { exact: true }).last().hover();
+  await main.getByRole("button", { name: "Start date" }).click();
+  await page.getByRole("button", { name: "Today", exact: true }).click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toMatch(/First draft .*🛫 \d{4}-\d{2}-\d{2}/);
+  await expect(
+    main.getByRole("slider", { name: "First draft: move the phase" }),
+  ).toBeVisible();
+
+  // Dragged later along the line: its date moves.
+  const before = /📅 (\d{4}-\d{2}-\d{2})/.exec(
+    (await disk(page, PLAN)) ?? "",
+  )?.[1];
+  const diamond = main.getByRole("slider", {
+    name: "First draft: drag to change its date",
+  });
+  const box = await diamond.boundingBox();
+  if (!box) throw new Error("no milestone on the line");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2, {
+    steps: 8,
+  });
+  await page.mouse.up();
+  await expect
+    .poll(
+      async () =>
+        /First draft[^\n]*📅 (\d{4}-\d{2}-\d{2})/.exec(
+          (await disk(page, PLAN)) ?? "",
+        )?.[1],
+    )
+    .not.toBe(before);
+
+  // Every project, one line each; a row opens that project's timeline.
+  await page
+    .getByRole("navigation", { name: "Lists" })
+    .getByRole("button", { name: /^Timeline/ })
+    .click();
+  await main.getByRole("button", { name: "Paper 2" }).click();
+  await expect(
+    main.getByText("First draft", { exact: true }).last(),
+  ).toBeVisible();
+});

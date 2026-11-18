@@ -20,3 +20,15 @@ export const withMatrix = (title: string, out: boolean) =>
   out
     ? `${withoutMatrixField(title)} [matrix:: no]`
     : withoutMatrixField(title);
+
+/** Fields kept on a task's line but not shown: `[matrix:: no]`, `[for:: …]`. */
+const HIDDEN = /\s*\[(?:matrix|for)::[^\]]*\]/gi;
+
+/** The title as shown anywhere: without the hidden fields. */
+export const shownTitle = (title: string) => title.replace(HIDDEN, "").trim();
+
+/** A title edited as shown, given back its hidden fields. */
+export function withHiddenFields(edited: string, original: string): string {
+  const kept = original.match(HIDDEN)?.map((f) => f.trim()) ?? [];
+  return [shownTitle(edited), ...kept].join(" ");
+}

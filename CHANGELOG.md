@@ -42,6 +42,12 @@ tag.
 
 ### Added
 
+- Timeline: phases with a start and end date, drawn as bars; milestones
+  that follow a section's progress ("8 of 12") and turn red when close and
+  behind; drag milestones, phases and the deadline along the line; dated
+  tasks and sections marked under it.
+- Planner → Views → Timeline: every project's milestones and deadline on one
+  line.
 - Settings → Appearance → Interface size: make the whole app bigger or
   smaller. It's kept between launches.
 - Eisenhower matrix: a task is urgent when it's due in less than five
