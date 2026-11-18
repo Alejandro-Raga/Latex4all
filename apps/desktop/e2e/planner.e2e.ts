@@ -1204,3 +1204,16 @@ test("the timeline: overlapping periods in rows, a milestone's icon, zoom", asyn
     .not.toBe(before);
   await main.getByRole("button", { name: "Fit", exact: true }).click();
 });
+
+test("a deleted task comes back with Undo", async ({ page }) => {
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByText("Reply to reviewers").click({ button: "right" });
+  await page.getByRole("menuitem", { name: /^Delete/ }).click();
+  await expect.poll(() => disk(page, PLAN)).not.toContain("Reply to reviewers");
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect
+    .poll(() => disk(page, PLAN))
+    .toContain("- [ ] Reply to reviewers");
+});

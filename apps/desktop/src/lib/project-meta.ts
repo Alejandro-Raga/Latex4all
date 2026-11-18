@@ -126,7 +126,12 @@ export async function updateProjectMeta(
   projectPath: string,
   patch: Record<string, unknown>,
 ): Promise<void> {
-  const meta = await readProjectMeta(projectPath);
+  // Read strictly: one that's there but unreadable is left alone, rather
+  // than rewritten with only this change (its other settings lost).
+  const path = metaPath(projectPath);
+  const meta: ProjectMeta = (await exists(path))
+    ? (JSON.parse(await readTextFile(path)) as ProjectMeta)
+    : {};
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) delete meta[key];
     else meta[key] = value;
@@ -212,14 +217,11 @@ async function guessProjectType(projectPath: string): Promise<string | null> {
 export async function readProjectId(projectPath: string): Promise<string> {
   const dir = `${projectPath}/${META_DIR}`;
   const path = metaPath(projectPath);
-  let meta: ProjectMeta = {};
-  try {
-    if (await exists(path)) {
-      meta = JSON.parse(await readTextFile(path)) as ProjectMeta;
-    }
-  } catch {
-    meta = {};
-  }
+  // Read strictly: one that's there but unreadable throws, rather than
+  // being rewritten with only a new id (its settings, and its id, lost).
+  const meta: ProjectMeta = (await exists(path))
+    ? (JSON.parse(await readTextFile(path)) as ProjectMeta)
+    : {};
   if (typeof meta.id === "string" && meta.id) return meta.id;
   meta.id = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
   if (!(await exists(dir))) await mkdir(dir, { recursive: true });
@@ -240,14 +242,11 @@ export async function writeProjectType(
   const dir = `${projectPath}/${META_DIR}`;
   const path = metaPath(projectPath);
 
-  let meta: ProjectMeta = {};
-  try {
-    if (await exists(path)) {
-      meta = JSON.parse(await readTextFile(path)) as ProjectMeta;
-    }
-  } catch {
-    // Unreadable or corrupt: start clean rather than refusing to set a type.
-  }
+  // Unreadable or corrupt: left as it is (it throws) rather than rewritten
+  // with only the type, which would lose its other settings.
+  const meta: ProjectMeta = (await exists(path))
+    ? (JSON.parse(await readTextFile(path)) as ProjectMeta)
+    : {};
 
   if (type === null) {
     delete meta.type;

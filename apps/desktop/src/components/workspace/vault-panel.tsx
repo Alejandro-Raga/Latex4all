@@ -1457,6 +1457,18 @@ function NoteView({
   );
 }
 
+/** Whether a note on disk (or the server) no longer reads `since`. */
+async function changedElsewhere(path: string, since: string) {
+  const source = useVaultStore.getState().source;
+  if (!source) return false;
+  try {
+    const { text } = await source.readNote(path);
+    return text !== since;
+  } catch {
+    return false;
+  }
+}
+
 function NoteEditor({
   note,
   initial,
@@ -1489,8 +1501,10 @@ function NoteEditor({
   latest.current = text;
   useEffect(
     () =>
-      onFlush(() => {
+      onFlush(async () => {
         if (latest.current === initial) return;
+        // Not over a version changed elsewhere meanwhile.
+        if (await changedElsewhere(note.path, initial)) return;
         return saveNote(note.path, latest.current, false).catch(() => {});
       }),
     [initial, note.path, saveNote],
@@ -1504,6 +1518,12 @@ function NoteEditor({
     }
     setSaving(true);
     try {
+      // Changed elsewhere (Obsidian, another computer) since editing began:
+      // asked about, not written over.
+      if (!force && (await changedElsewhere(note.path, initial))) {
+        setConflict(true);
+        return;
+      }
       await saveNote(note.path, text, force);
       onDone();
     } catch (err) {

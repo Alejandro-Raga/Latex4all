@@ -81,7 +81,7 @@ import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import { useDockStore } from "@/stores/dock-store";
 import { useBack } from "@/stores/back-store";
 import { inProject } from "@/stores/nav-store";
-import { editPlan, moveToPlan } from "./plan-actions";
+import { editPlan, moveToPlan, removeFromPlan } from "./plan-actions";
 import { BoardFrame, Card, Column, Empty, MoveToMenu } from "./plan-views";
 import {
   type DragTask,
@@ -377,7 +377,13 @@ export function ReadingMenu({
         <ContextMenuSeparator />
         <ContextMenuItem
           variant="destructive"
-          onClick={() => void editPlan(list, (p) => deleteTask(p, item.ref))}
+          onClick={() =>
+            void removeFromPlan(
+              list,
+              (p) => deleteTask(p, item.ref),
+              "Removed from the list",
+            )
+          }
         >
           <Trash2Icon className="size-3.5" />
           Remove from list

@@ -179,6 +179,10 @@ async function saveTo(key: PlanKey, root: string | null, text: string) {
   const set = usePlanStore.setState;
   if (root) {
     const open = openPlanFile(root);
+    if (open?.unreadable) {
+      // Couldn't be read when the project opened: not written over.
+      throw new Error("the plan couldn't be read. Reopen the project");
+    }
     if (open) {
       const doc = useDocumentStore.getState();
       doc.updateFileContent(open.id, text);

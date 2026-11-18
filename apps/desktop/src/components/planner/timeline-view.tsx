@@ -102,7 +102,7 @@ import {
 } from "@/lib/plan/plan-store";
 import { parseQuickAdd } from "@/lib/plan/quick-add";
 import { cn } from "@/lib/utils";
-import { editPlan } from "./plan-actions";
+import { editPlan, removeFromPlan } from "./plan-actions";
 import { Empty } from "./plan-views";
 import { DueBadge, DueButton } from "./task-parts";
 
@@ -965,7 +965,13 @@ function MilestoneRow({
         <ContextMenuSeparator />
         <ContextMenuItem
           variant="destructive"
-          onClick={() => void editPlan(list, (p) => deleteTask(p, ref))}
+          onClick={() =>
+            void removeFromPlan(
+              list,
+              (p) => deleteTask(p, ref),
+              "Milestone deleted",
+            )
+          }
         >
           <Trash2Icon className="size-3.5" />
           Delete milestone

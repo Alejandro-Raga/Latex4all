@@ -70,8 +70,10 @@ function copy(items: StoredAnnotation[]): StoredAnnotation[] {
 
 function parse(json: string | null): StoredAnnotation[] {
   if (!json) return [];
-  try {
-    const data = JSON.parse(json);
+  // Damaged (half synced, say): throws, so the project's notes aren't loaded
+  // and then saved as an empty list over it. Left for the sync to put right.
+  const data = JSON.parse(json);
+  {
     const list: unknown[] = Array.isArray(data?.annotations)
       ? data.annotations
       : [];
@@ -85,8 +87,6 @@ function parse(json: string | null): StoredAnnotation[] {
         Number.isInteger((a as StoredAnnotation).to) &&
         isAnnotationColor((a as StoredAnnotation).color),
     );
-  } catch {
-    return [];
   }
 }
 

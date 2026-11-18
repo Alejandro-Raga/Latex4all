@@ -66,21 +66,49 @@ export function editPlan(
   change: (plan: Plan) => Plan,
 ): Promise<void> {
   // After any change to this plan still under way: from what it left.
-  return inTurn([list.key], () => applyEdit(list, change));
+  return inTurn([list.key], async () => {
+    await applyEdit(list, change);
+  });
 }
 
+/** Applies a change; returns the plan's text from before it, when it changed. */
 async function applyEdit(
   list: Pick<PlanList, "key" | "name">,
   change: (plan: Plan) => Plan,
-): Promise<void> {
+): Promise<string | null | undefined> {
   try {
     const text = await textNow(list.key);
     const plan = parsePlan(text ?? newPlanText(list.name));
     const next = serializePlan(change(plan));
-    if (next !== text) await writePlan(list.key, next);
+    if (next === text) return undefined;
+    await writePlan(list.key, next);
+    return text;
   } catch (err) {
     toast.error(`Couldn't save: ${errorText(err)}`);
+    return undefined;
   }
+}
+
+/**
+ * Takes something out of a plan (a task, a section, a milestone), with Undo
+ * for a few seconds: it goes back as the plan was before.
+ */
+export async function removeFromPlan(
+  list: Pick<PlanList, "key" | "name">,
+  change: (plan: Plan) => Plan,
+  what = "Deleted",
+): Promise<void> {
+  const before = await inTurn([list.key], () => applyEdit(list, change));
+  if (before === undefined || before === null) return;
+  toast(what, {
+    action: {
+      label: "Undo",
+      onClick: () =>
+        void inTurn([list.key], () => writePlan(list.key, before)).catch(
+          (err) => toast.error(`Couldn't undo: ${errorText(err)}`),
+        ),
+    },
+  });
 }
 
 export type { DragTask } from "./planner-dnd";

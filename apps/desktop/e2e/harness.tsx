@@ -46,6 +46,7 @@ import { useAiUsage } from "@/lib/ai-usage";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
 import { DeckSurface } from "@/components/deck-surface";
 import { AppRail } from "@/components/app-rail";
+import { Toaster } from "@/components/ui/sonner";
 import { ProjectPicker } from "@/components/project-picker";
 import { useProjectStore } from "@/stores/project-store";
 
@@ -985,6 +986,7 @@ if (scenario === "planner") {
         <div className="h-full" style={chrome}>
           <PlannerView />
           <QuickTask />
+          <Toaster />
         </div>
       </ThemeProvider>,
     ),

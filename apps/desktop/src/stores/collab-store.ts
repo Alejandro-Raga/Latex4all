@@ -40,7 +40,11 @@ import {
   writeLink,
 } from "@/lib/tauri/collab";
 import { join, scanProjectFolder } from "@/lib/tauri/fs";
-import { setSharedSaving, useDocumentStore } from "@/stores/document-store";
+import {
+  onProjectRelocated,
+  setSharedSaving,
+  useDocumentStore,
+} from "@/stores/document-store";
 import { useHistoryStore } from "@/stores/history-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -162,6 +166,51 @@ let closeShared: () => Promise<void> = async () => {};
  * Called once the app has mounted: the document store and this one import
  * each other (through the editor), so neither may use the other at load.
  */
+const OWNERS = "latex4all-share-owners";
+
+/**
+ * Another folder that already syncs this shared project, if it's still
+ * there with the same link; none, and `root` becomes its folder, otherwise.
+ */
+async function shareOwner(
+  projectId: string,
+  root: string,
+): Promise<string | null> {
+  let owners: Record<string, string> = {};
+  try {
+    owners = JSON.parse(localStorage.getItem(OWNERS) ?? "{}");
+  } catch {
+    owners = {};
+  }
+  const owner = owners[projectId];
+  if (owner && owner !== root) {
+    const there = await readLink(owner).catch(() => null);
+    if (there?.projectId === projectId) return owner;
+  }
+  owners[projectId] = root;
+  try {
+    localStorage.setItem(OWNERS, JSON.stringify(owners));
+  } catch {
+    // Not kept: checked again next time.
+  }
+  return null;
+}
+
+/** A shared project's folder moved or renamed: its new place owns it. */
+export function moveShareOwner(oldRoot: string, newRoot: string) {
+  try {
+    const owners: Record<string, string> = JSON.parse(
+      localStorage.getItem(OWNERS) ?? "{}",
+    );
+    for (const id of Object.keys(owners)) {
+      if (owners[id] === oldRoot) owners[id] = newRoot;
+    }
+    localStorage.setItem(OWNERS, JSON.stringify(owners));
+  } catch {
+    // Checked again on opening.
+  }
+}
+
 export function followOpenProject() {
   const follow = (root: string | null) =>
     inSequence(async () => {
@@ -169,6 +218,16 @@ export function followOpenProject() {
       if (!root) return;
       const info = await readLink(root).catch(() => null);
       if (!info || useDocumentStore.getState().projectRoot !== root) return;
+      // A copy of a shared project's folder (made in Finder, or by a sync
+      // app) carries its link: two folders syncing to one shared project
+      // would overwrite each other. Only the first one syncs.
+      const owner = await shareOwner(info.projectId, root);
+      if (owner) {
+        reportError(
+          `This project has the same share link as “${owner.split(/[\\/]/).pop()}”, probably because one is a copy. It won't sync, so neither is overwritten. Stop sharing it here to use it on its own.`,
+        );
+        return;
+      }
       await openShared(root, info).catch((err) => {
         reportError(`Couldn't sync this project: ${String(err)}`);
         // Never leave the editor locked waiting for a sync that failed to
@@ -182,7 +241,10 @@ export function followOpenProject() {
   const unsubscribe = useDocumentStore.subscribe((state, prev) => {
     if (state.projectRoot !== prev.projectRoot) void follow(state.projectRoot);
   });
+  // Renamed or moved: still the same project, in its new place.
+  const offMoved = onProjectRelocated(moveShareOwner);
   return () => {
+    offMoved();
     unsubscribe();
     void inSequence(closeShared);
   };

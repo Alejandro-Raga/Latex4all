@@ -30,6 +30,12 @@ tag.
   - Highlights, lists and where you left off are written whole, so a
     crash can't leave them cut short.
   - A note half edited in the vault is saved when you quit.
+  - Deleting a task, section or milestone can be undone from the notice
+    that follows.
+  - A copy of a shared project's folder (made outside the app) doesn't
+    sync, so it can't overwrite the original.
+  - A project's settings, comments or vault note that changed elsewhere,
+    or can't be read, aren't written over.
 - Shared projects: switching to another project while a shared one was
   open could send the new project's files (its Plan.md) to the shared one,
   replacing them there and on collaborators' computers.

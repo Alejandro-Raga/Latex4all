@@ -90,6 +90,7 @@ import {
   editPlan,
   moveToPlan,
   makeProject,
+  removeFromPlan,
 } from "./plan-actions";
 import {
   type DragTask,
@@ -147,7 +148,8 @@ export function actionsFor(
     toggle: () => edit((p) => toggleTask(p, ref)),
     toggleSub: (i) => edit((p) => toggleSubtask(p, ref, i)),
     change: (patch) => edit((p) => updateTask(p, ref, patch)),
-    remove: () => edit((p) => deleteTask(p, ref)),
+    remove: () =>
+      removeFromPlan(list, (p) => deleteTask(p, ref), "Task deleted"),
     sections: workSections(plan),
     section: ref.section,
     move: (section) => edit((p) => moveTask(p, ref, section)),
@@ -394,7 +396,13 @@ function TaskMenu({
         <ContextMenuSeparator />
         <ContextMenuItem
           variant="destructive"
-          onClick={() => edit((p) => deleteTask(p, taskRef))}
+          onClick={() =>
+            void removeFromPlan(
+              list,
+              (p) => deleteTask(p, taskRef),
+              "Task deleted",
+            )
+          }
         >
           <Trash2Icon className="size-3.5" />
           Delete
@@ -485,7 +493,13 @@ function SubtaskRow({
           <ContextMenuSeparator />
           <ContextMenuItem
             variant="destructive"
-            onClick={() => edit((p) => deleteTask(p, own))}
+            onClick={() =>
+              void removeFromPlan(
+                list,
+                (p) => deleteTask(p, own),
+                "Task deleted",
+              )
+            }
           >
             <Trash2Icon className="size-3.5" />
             Delete
@@ -751,7 +765,13 @@ function Heading({
         )}
         <HeadingMenu
           onRename={() => setEditing(true)}
-          onDelete={() => void editPlan(list, (p) => deleteSection(p, index))}
+          onDelete={() =>
+            void removeFromPlan(
+              list,
+              (p) => deleteSection(p, index),
+              "Section deleted",
+            )
+          }
           onDate={sectionDue(title) ? undefined : () => setDating(true)}
           onPin={() => setPinning(true)}
         />
@@ -1293,7 +1313,13 @@ function BoardColumn({
         index > 0 ? (
           <HeadingMenu
             onRename={() => setEditing(true)}
-            onDelete={() => void editPlan(list, (p) => deleteSection(p, index))}
+            onDelete={() =>
+              void removeFromPlan(
+                list,
+                (p) => deleteSection(p, index),
+                "Section deleted",
+              )
+            }
             onDate={sectionDue(title) ? undefined : () => setDating(true)}
           />
         ) : undefined
