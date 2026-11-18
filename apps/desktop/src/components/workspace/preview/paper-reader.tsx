@@ -18,6 +18,7 @@ import {
   savePdfNotes,
 } from "@/lib/pdf-notes";
 import { reanchor } from "@/lib/pdf-reanchor";
+import { onFlush } from "@/lib/flush";
 import { addPdfPassageToNote } from "@/lib/vault/pdf-passage";
 import { ReadingStatusButton } from "./reading-status";
 import { addPassageToNote } from "@/lib/vault/add-passage";
@@ -506,7 +507,19 @@ export function PaperReader({
     const path = paper.filePath;
     let live = true;
     void (async () => {
-      const { notes, version } = await loadPdfNotes(path);
+      let kept: Awaited<ReturnType<typeof loadPdfNotes>>;
+      try {
+        kept = await loadPdfNotes(path);
+      } catch (err) {
+        // Unreadable: highlighting stays off for it (localNotes stays null,
+        // so nothing is saved over them), and it says so.
+        console.warn("Couldn't read this PDF's highlights", err);
+        toast.error(
+          "Couldn't read this PDF's highlights. They're left as they were.",
+        );
+        return;
+      }
+      const { notes, version } = kept;
       const now = pdfVersion(paper.data);
       versionRef.current = now;
       if (notes.length === 0 || version === now) {
@@ -547,19 +560,35 @@ export function PaperReader({
     });
   }, [paper.annotations, localNotes, local, added, changed]);
   // Saved whenever they change (after the first load).
+  // What's waiting to be saved: written a moment after the last change,
+  // or at once when the reader closes or the app quits. One at a time.
+  const pendingSave = useRef<(() => Promise<void>) | null>(null);
+  const saving = useRef<Promise<void>>(Promise.resolve());
+  const saveNow = useCallback(() => {
+    const save = pendingSave.current;
+    pendingSave.current = null;
+    if (!save) return saving.current;
+    saving.current = saving.current.then(save);
+    return saving.current;
+  }, []);
   useEffect(() => {
     if (!local || !paper.filePath || localNotes === null) return;
-    const timer = setTimeout(
-      () =>
-        void savePdfNotes(
-          paper.filePath as string,
-          annotations,
-          versionRef.current,
-        ),
-      300,
-    );
+    const path = paper.filePath;
+    const notes = annotations;
+    pendingSave.current = () =>
+      savePdfNotes(path, notes, versionRef.current).catch((err) => {
+        toast.error(`Couldn't save the highlights: ${errorText(err)}`);
+      });
+    const timer = setTimeout(() => void saveNow(), 300);
     return () => clearTimeout(timer);
-  }, [local, paper.filePath, localNotes, annotations]);
+  }, [local, paper.filePath, localNotes, annotations, saveNow]);
+  useEffect(() => {
+    const off = onFlush(saveNow);
+    return () => {
+      off();
+      void saveNow();
+    };
+  }, [saveNow]);
   const change = useCallback(
     (key: string, next: Partial<PdfAnnotationRect> | null) => {
       setChanged((c) => ({ ...c, [key]: next }));
@@ -620,7 +649,11 @@ export function PaperReader({
     return () => clearTimeout(timer);
   }, [loaded, focus]);
   const zoteroConnected = useZoteroStore((s) => s.isAuthenticated);
-  const canHighlight = Boolean((paper.zotero && zoteroConnected) || local);
+  // A PDF of your own: only once its highlights are read (unreadable, a new
+  // one couldn't be saved without losing the others).
+  const canHighlight = Boolean(
+    (paper.zotero && zoteroConnected) || (local && localNotes !== null),
+  );
   const [selection, setSelection] = useState<PdfTextSelection | null>(null);
   const [noteFor, setNoteFor] = useState<PdfTextSelection | null>(null);
   // Just highlighted: a comment on it, if you like, without another click.

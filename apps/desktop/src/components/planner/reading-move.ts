@@ -5,6 +5,7 @@ import {
   planTextNow,
   READING,
   usePlanStore,
+  inTurn,
   writePlan,
 } from "@/lib/plan/plan-store";
 import { moveReading } from "@/lib/plan/reading";
@@ -40,8 +41,10 @@ export function useMoveInboxReading() {
         const to = serializePlan(moved.to);
         if (to !== readingText) {
           // The papers land first; only then do they leave the Inbox.
-          await writePlan(READING, to);
-          await writePlan(INBOX, serializePlan(moved.from));
+          await inTurn([READING, INBOX], async () => {
+            await writePlan(READING, to);
+            await writePlan(INBOX, serializePlan(moved.from));
+          });
         }
       }
       try {

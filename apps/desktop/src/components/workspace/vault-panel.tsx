@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -31,6 +31,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { onFlush } from "@/lib/flush";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -1481,6 +1482,18 @@ function NoteEditor({
       useVaultStore.setState({ unsavedEdit: null });
     },
     [],
+  );
+  // Quitting with the note half edited: saved (unless it changed elsewhere
+  // meanwhile, when the conflict check keeps the other version).
+  const latest = useRef(text);
+  latest.current = text;
+  useEffect(
+    () =>
+      onFlush(() => {
+        if (latest.current === initial) return;
+        return saveNote(note.path, latest.current, false).catch(() => {});
+      }),
+    [initial, note.path, saveNote],
   );
 
   const save = async (force = false) => {

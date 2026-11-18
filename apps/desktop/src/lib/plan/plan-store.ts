@@ -13,13 +13,19 @@
  */
 import { useEffect, useMemo } from "react";
 import { appDataDir, join as joinPath } from "@tauri-apps/api/path";
-import { mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import {
+  exists,
+  mkdir,
+  readTextFile,
+  writeTextFile,
+} from "@tauri-apps/plugin-fs";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useNav } from "@/stores/nav-store";
+import { writeTextSafely } from "@/lib/safe-write";
 import { PLAN_FILE } from "./plan-file";
 
 export const INBOX = "inbox";
@@ -55,12 +61,18 @@ async function localFile(key: PlanKey): Promise<string> {
   return joinPath(dir, `${fileOf(key)}.md`);
 }
 
+/**
+ * A file's text; null only when it isn't there. A file that's there but
+ * couldn't be read (locked by a sync app, say) throws: taken for missing, it
+ * would be started afresh, or replaced, and what's in it lost.
+ */
+async function readIfThere(path: string): Promise<string | null> {
+  if (!(await exists(path).catch(() => true))) return null;
+  return readTextFile(path);
+}
+
 async function readLocal(key: PlanKey): Promise<string | null> {
-  try {
-    return await readTextFile(await localFile(key));
-  } catch {
-    return null;
-  }
+  return readIfThere(await localFile(key));
 }
 const rootOf = (key: PlanKey) =>
   key.startsWith("project:") ? key.slice("project:".length) : null;
@@ -90,29 +102,64 @@ function openPlanFile(root: string) {
   return doc.files.find((f) => f.relativePath === PLAN_FILE) ?? null;
 }
 
+/** Each plan's count of edits, so a read from disk that began before an edit
+ *  (and so holds older text) doesn't replace what the edit wrote. */
+const edits = new Map<PlanKey, number>();
+
+/**
+ * Changes to one plan, one after another: each starts from what the one
+ * before left, so two quick changes can't both start from the same text and
+ * one be lost. `keys` are every plan the change touches (a move: two).
+ */
+const queues = new Map<PlanKey, Promise<unknown>>();
+export function inTurn<T>(keys: PlanKey[], run: () => Promise<T>): Promise<T> {
+  const before = Promise.all(keys.map((k) => queues.get(k)?.catch(() => {})));
+  const next = before.then(run);
+  for (const k of keys) queues.set(k, next);
+  void next
+    .finally(() => {
+      for (const k of keys) if (queues.get(k) === next) queues.delete(k);
+    })
+    .catch(() => {});
+  return next;
+}
+
 export const usePlanStore = create<PlanState>((set, get) => ({
   entries: {},
 
   load: async (key) => {
     const root = rootOf(key);
+    const seen = edits.get(key) ?? 0;
     let entry: Entry;
     if (root) {
       const open = openPlanFile(root);
       if (open !== undefined) return; // Read live from the open files.
       try {
-        entry = { text: await readTextFile(join(root, PLAN_FILE)) };
-      } catch {
-        entry = { text: null };
+        entry = { text: await readIfThere(join(root, PLAN_FILE)) };
+      } catch (err) {
+        // There but unreadable: left unknown, so nothing writes over it.
+        console.warn(`Couldn't read ${join(root, PLAN_FILE)}`, err);
+        return;
       }
     } else {
-      let text = await readLocal(key);
+      let text: string | null;
+      try {
+        text = await readLocal(key);
+      } catch (err) {
+        console.warn(`Couldn't read the list ${key}`, err);
+        return;
+      }
+      // Only when there's none here: an older copy from the vault.
       if (text === null) text = await fromVault(key);
       entry = { text };
     }
+    // Edited meanwhile: what was read is older than what's shown.
+    if ((edits.get(key) ?? 0) !== seen) return;
     set((s) => ({ entries: { ...s.entries, [key]: entry } }));
   },
 
   write: async (key, text) => {
+    edits.set(key, (edits.get(key) ?? 0) + 1);
     const root = rootOf(key);
     // Shown at once; saved after (a dropped task lands where it was dropped).
     const known = get().entries[key];
@@ -147,7 +194,7 @@ async function saveTo(key: PlanKey, root: string | null, text: string) {
     set((s) => ({ entries: { ...s.entries, [key]: { text } } }));
     return;
   }
-  await writeTextFile(await localFile(key), text);
+  await writeTextSafely(await localFile(key), text);
   set((s) => ({ entries: { ...s.entries, [key]: { text } } }));
 }
 

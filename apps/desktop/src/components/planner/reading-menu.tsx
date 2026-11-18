@@ -18,6 +18,7 @@ import {
   usePlanStore,
   usePlanTexts,
   writePlan,
+  inTurn,
 } from "@/lib/plan/plan-store";
 import { addReading, readingItems } from "@/lib/plan/reading";
 import { useDocumentStore } from "@/stores/document-store";
@@ -33,12 +34,21 @@ export interface Paper {
 /** The general reading list's name, for papers that belong to no project. */
 export const MY_READING = "My reading";
 
-async function addTo(list: PlanList, paper: Paper) {
+function addTo(list: PlanList, paper: Paper) {
+  // In turn with the plan's other changes, from what they left.
+  return inTurn([list.key], () => addNow(list, paper));
+}
+
+async function addNow(list: PlanList, paper: Paper) {
   try {
     let text = planTextNow(list.key);
     if (text === undefined) {
       await usePlanStore.getState().load(list.key);
       text = planTextNow(list.key);
+    }
+    // Couldn't be read: not taken for empty, or adding would replace it.
+    if (text === undefined) {
+      throw new Error("the list couldn't be read. Try again in a moment");
     }
     const plan = parsePlan(text ?? newPlanText(list.name));
     const next = addReading(plan, paper);

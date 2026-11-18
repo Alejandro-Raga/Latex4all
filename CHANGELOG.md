@@ -21,6 +21,15 @@ tag.
 
 ### Fixed
 
+- Your work is safer:
+  - Edits made in the last seconds are saved when you open another
+    project, close one, close the window or quit.
+  - A file, plan or list that can't be read for a moment (a sync app
+    holding it) is never taken for empty and written over.
+  - Two quick changes to a plan can't undo each other.
+  - Highlights, lists and where you left off are written whole, so a
+    crash can't leave them cut short.
+  - A note half edited in the vault is saved when you quit.
 - Shared projects: switching to another project while a shared one was
   open could send the new project's files (its Plan.md) to the shared one,
   replacing them there and on collaborators' computers.

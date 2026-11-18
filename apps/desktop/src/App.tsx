@@ -17,6 +17,7 @@ import { DailySummary } from "@/components/planner/daily-summary";
 import { QuickTask } from "@/components/planner/quick-task";
 import { BackPill } from "@/components/back-pill";
 import { AppRail } from "@/components/app-rail";
+import { flushAll } from "@/lib/flush";
 import { followPlaceKeys, followProjectNav, useNav } from "@/stores/nav-store";
 import { cn } from "@/lib/utils";
 import { HelpDialog } from "@/components/help-view";
@@ -25,6 +26,7 @@ import { WorkspaceLayout } from "@/components/workspace/workspace-layout";
 import { NewNoteDialog } from "@/components/workspace/topic-menu";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUvSetupStore } from "@/stores/uv-setup-store";
@@ -215,6 +217,33 @@ export function App({ onReady }: { onReady?: () => void }) {
   useEffect(() => followOpenProject(), []);
   useEffect(() => followAnnotations(), []);
   useEffect(() => followProjectNav(), []);
+  // Closing the window, or quitting: everything not yet saved is saved first.
+  useEffect(() => {
+    let offClose: (() => void) | undefined;
+    let offQuit: (() => void) | undefined;
+    void import("@tauri-apps/api/window")
+      .then(({ getCurrentWindow }) =>
+        getCurrentWindow().onCloseRequested(async () => {
+          await flushAll();
+        }),
+      )
+      .then((off) => {
+        offClose = off;
+      })
+      .catch(() => {});
+    void listen("app-will-quit", async () => {
+      await flushAll();
+      await invoke("finish_quit").catch(() => {});
+    })
+      .then((off) => {
+        offQuit = off;
+      })
+      .catch(() => {});
+    return () => {
+      offClose?.();
+      offQuit?.();
+    };
+  }, []);
   useEffect(() => followPlaceKeys(), []);
 
   useEffect(() => {

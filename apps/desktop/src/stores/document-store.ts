@@ -23,7 +23,9 @@ import { clearScrollPositionCache } from "@/components/workspace/preview/pdf-vie
 import { clearZoomCache } from "@/components/workspace/preview/pdf-preview";
 import { clearEditorStateCache } from "@/components/workspace/editor/latex-editor";
 import { useProjectStore } from "@/stores/project-store";
+import { toast } from "sonner";
 import { createLogger } from "@/lib/debug/logger";
+import { onFlush } from "@/lib/flush";
 import { mergeText } from "@/lib/text-merge";
 
 const log = createLogger("document");
@@ -43,6 +45,8 @@ export interface ProjectFile {
   diskContent?: string;
   /** File size in bytes (from stat). Used to skip auto-loading large files. */
   fileSize?: number;
+  /** Couldn't be read from disk: never saved, so it can't be written over. */
+  unreadable?: boolean;
 }
 
 /**
@@ -535,8 +539,13 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
           try {
             pf.content = await readTexFileContent(f.absolutePath);
             pf.diskContent = pf.content;
-          } catch {
+          } catch (err) {
+            // Shown empty but never saved over (see `unreadable`).
+            log.error(`Couldn't read ${f.relativePath}`, {
+              error: String(err),
+            });
             pf.content = "";
+            pf.unreadable = true;
           }
         }
         // Large "other" files: content stays undefined, loaded on-demand via loadFileContent
@@ -564,6 +573,13 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
         (f) => f.name === "main.tex" || f.name === "document.tex",
       ) || projectFiles.find((f) => f.type === "tex");
 
+    // The project open until now: its unsaved edits saved before it's left
+    // (each to its own file, by its full path).
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = null;
+    }
+    await get().saveAllFiles();
     clearPdfBytesCache();
     set({
       projectRoot: rootPath,
@@ -626,6 +642,17 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
     if (autoSaveTimer) {
       clearTimeout(autoSaveTimer);
       autoSaveTimer = null;
+    }
+    // Unsaved edits go to disk (each to its own file's path) before the
+    // project's files are let go of.
+    for (const f of get().files) {
+      if (f.isDirty && f.content != null && !f.unreadable) {
+        void writeTexFileContent(f.absolutePath, f.content).catch((err) =>
+          log.error(`Couldn't save ${f.relativePath} on closing`, {
+            error: String(err),
+          }),
+        );
+      }
     }
     void clearDocCache();
     clearScrollPositionCache();
@@ -980,34 +1007,43 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
   saveFile: async (id) => {
     const state = get();
     const file = state.files.find((f) => f.id === id);
-    if (!file || !file.isDirty || file.content == null) return;
+    if (!file || !file.isDirty || file.content == null || file.unreadable)
+      return;
 
     const written = file.content;
     await writeTexFileContent(file.absolutePath, written);
+    // By its path: the project may have changed while it was written.
     set((s) => ({
-      files: s.files.map((f) => (f.id === id ? savedAs(f, written) : f)),
+      files: s.files.map((f) =>
+        f.absolutePath === file.absolutePath ? savedAs(f, written) : f,
+      ),
     }));
   },
 
   saveAllFiles: async () => {
     const state = get();
     const dirtyFiles = state.files.filter(
-      (f) => f.isDirty && f.content != null,
+      (f) => f.isDirty && f.content != null && !f.unreadable,
     );
     const results = await Promise.allSettled(
       dirtyFiles.map((f) => writeTexFileContent(f.absolutePath, f.content!)),
     );
     // Only mark successfully saved files as clean
+    // By path: the project may have changed while they were written.
     const saved = new Map<string, string>();
     results.forEach((r, i) => {
       if (r.status === "fulfilled") {
-        saved.set(dirtyFiles[i].id, dirtyFiles[i].content!);
+        saved.set(dirtyFiles[i].absolutePath, dirtyFiles[i].content!);
+      } else {
+        log.error(`Couldn't save ${dirtyFiles[i].relativePath}`, {
+          error: String(r.reason),
+        });
       }
     });
     if (saved.size > 0) {
       set((s) => ({
         files: s.files.map((f) => {
-          const written = saved.get(f.id);
+          const written = saved.get(f.absolutePath);
           return written === undefined ? f : savedAs(f, written);
         }),
       }));
@@ -1262,6 +1298,8 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
       }
     }
 
+    // Another project opened meanwhile: what was read is this one's, not its.
+    if (get().projectRoot !== projectRoot) return;
     set((s) => {
       const current = new Map(s.files.map((f) => [f.relativePath, f]));
       const merged: ProjectFile[] = [];
@@ -1310,9 +1348,17 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
           f.id === id ? { ...f, content, diskContent: content } : f,
         ),
       }));
-    } catch {
+    } catch (err) {
+      // Shown empty, but never saved: typing into it would otherwise write
+      // over what's really in the file.
+      log.error(`Couldn't read ${file.relativePath}`, { error: String(err) });
+      toast.error(
+        `Couldn't read ${file.name}. It won't be saved over; try reopening the project.`,
+      );
       set((s) => ({
-        files: s.files.map((f) => (f.id === id ? { ...f, content: "" } : f)),
+        files: s.files.map((f) =>
+          f.id === id ? { ...f, content: "", unreadable: true } : f,
+        ),
       }));
     }
   },
@@ -1349,3 +1395,5 @@ export const useDocumentStore = create<DocumentState>()((set, get) => ({
 }));
 
 storeRef = useDocumentStore;
+// Before the window closes or the app quits: unsaved edits to disk.
+onFlush(() => useDocumentStore.getState().saveAllFiles());

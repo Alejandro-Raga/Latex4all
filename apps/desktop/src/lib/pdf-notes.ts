@@ -5,9 +5,10 @@
  * covered, so a highlight on a draft that changed still says what it was.
  */
 import { appDataDir, join } from "@tauri-apps/api/path";
-import { mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { exists, mkdir, readTextFile } from "@tauri-apps/plugin-fs";
 import type { PdfAnnotationRect } from "@/components/workspace/preview/pdf-viewer";
 import { md5 } from "./md5";
+import { writeTextSafely } from "./safe-write";
 
 async function fileFor(pdfPath: string): Promise<string> {
   const dir = await join(await appDataDir(), "pdf-notes");
@@ -21,16 +22,19 @@ export interface PdfNotes {
   version?: string;
 }
 
+/**
+ * A PDF's highlights; none when it has no file yet. A file that's there but
+ * couldn't be read or understood throws: taken for "none", the next save
+ * would write an empty list over them.
+ */
 export async function loadPdfNotes(pdfPath: string): Promise<PdfNotes> {
-  try {
-    const data = JSON.parse(await readTextFile(await fileFor(pdfPath)));
-    return {
-      notes: Array.isArray(data?.notes) ? data.notes : [],
-      ...(typeof data?.version === "string" ? { version: data.version } : {}),
-    };
-  } catch {
-    return { notes: [] };
-  }
+  const file = await fileFor(pdfPath);
+  if (!(await exists(file).catch(() => true))) return { notes: [] };
+  const data = JSON.parse(await readTextFile(file));
+  return {
+    notes: Array.isArray(data?.notes) ? data.notes : [],
+    ...(typeof data?.version === "string" ? { version: data.version } : {}),
+  };
 }
 
 /** A PDF's version, to tell a rebuilt one from the same one. */
@@ -41,7 +45,7 @@ export async function savePdfNotes(
   notes: PdfAnnotationRect[],
   version?: string,
 ): Promise<void> {
-  await writeTextFile(
+  await writeTextSafely(
     await fileFor(pdfPath),
     JSON.stringify({ path: pdfPath, version, notes }, null, 1),
   );

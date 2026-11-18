@@ -26,7 +26,19 @@ mod zotero;
 mod zotero_db;
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+
+/// Set once the window has saved everything (or had its time): quitting
+/// then goes ahead instead of waiting again.
+static QUIT_READY: AtomicBool = AtomicBool::new(false);
+
+/// Called by the window once it has saved everything, on its way out.
+#[tauri::command]
+fn finish_quit(app: tauri::AppHandle) {
+    QUIT_READY.store(true, Ordering::SeqCst);
+    app.exit(0);
+}
 use tauri_plugin_fs::FsExt;
 
 /// Entry point for the `--tectonic-compile` subprocess mode.
@@ -747,6 +759,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            finish_quit,
             create_new_window,
             set_native_window_theme,
             open_devtools,
@@ -945,7 +958,21 @@ pub fn run() {
                     app_handle.exit(0);
                 }
             }
-            tauri::RunEvent::ExitRequested { .. } => {
+            tauri::RunEvent::ExitRequested { api, .. } => {
+                // Quitting (⌘Q): first the window saves what isn't saved yet
+                // (edits within the last seconds, highlights, the place you
+                // were), then calls finish_quit. Five seconds at most.
+                if !QUIT_READY.load(Ordering::SeqCst) && !app_handle.webview_windows().is_empty() {
+                    api.prevent_exit();
+                    let _ = app_handle.emit("app-will-quit", ());
+                    let handle = app_handle.clone();
+                    std::thread::spawn(move || {
+                        std::thread::sleep(std::time::Duration::from_secs(5));
+                        QUIT_READY.store(true, Ordering::SeqCst);
+                        handle.exit(0);
+                    });
+                    return;
+                }
                 // Clean up LaTeX build temp directories
                 let latex_state = app_handle.state::<latex::LatexCompilerState>();
                 let state_clone = latex_state.inner().clone();

@@ -11,6 +11,7 @@ import {
   listKey,
   useOwnLists,
   type PlanKey,
+  inTurn,
   planTextNow,
   projectKey,
   usePlanStore,
@@ -39,7 +40,12 @@ function allKeys(): PlanKey[] {
 
 type Change = (plan: Plan, itemKey: string) => Plan;
 
-async function changeIn(key: PlanKey, itemKeys: string[], change: Change) {
+function changeIn(key: PlanKey, itemKeys: string[], change: Change) {
+  // In turn with the plan's other changes, from what they left.
+  return inTurn([key], () => applyChange(key, itemKeys, change));
+}
+
+async function applyChange(key: PlanKey, itemKeys: string[], change: Change) {
   let text = planTextNow(key);
   if (text === undefined) {
     await usePlanStore.getState().load(key);

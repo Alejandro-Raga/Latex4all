@@ -5,7 +5,9 @@
  * to disk lazily and what changed just before quitting could be lost.
  */
 import { appDataDir, join } from "@tauri-apps/api/path";
-import { mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { mkdir, readTextFile } from "@tauri-apps/plugin-fs";
+import { onFlush } from "./flush";
+import { writeTextSafely } from "./safe-write";
 
 export interface Place {
   /** "writing", or a part of the start page ("planner", "library"…). */
@@ -57,15 +59,28 @@ export function loadCurrent(): Promise<Place> {
 /** Where you are now, as far as known yet (before reading: this session's). */
 export const placeNow = (): Place => place;
 
+let pending = false;
+
+/** Writes where you are now (once what was there has been read). */
+function writeNow() {
+  pending = false;
+  return loadPlace()
+    .then(() => path())
+    .then((p) => writeTextSafely(p, JSON.stringify(place)))
+    .catch(() => {});
+}
+
 /** Keeps one part of where you are, written a moment later. */
 export function keepPlace<K extends keyof Place>(key: K, value: Place[K]) {
   place = { ...place, [key]: value };
+  pending = true;
   clearTimeout(timer);
-  timer = setTimeout(() => {
-    // Only once what was there has been read, so nothing of it is lost.
-    void loadPlace()
-      .then(() => path())
-      .then((p) => writeTextFile(p, JSON.stringify(place)))
-      .catch(() => {});
-  }, 250);
+  timer = setTimeout(() => void writeNow(), 250);
 }
+
+// Quitting within that moment: written at once.
+onFlush(() => {
+  if (!pending) return;
+  clearTimeout(timer);
+  return writeNow();
+});

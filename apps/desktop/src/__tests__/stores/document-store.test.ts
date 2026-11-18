@@ -701,4 +701,43 @@ describe("useDocumentStore", () => {
       );
     });
   });
+
+  describe("keeping edits safe", () => {
+    it("saves unsaved edits before another project opens", async () => {
+      useDocumentStore.setState({
+        files: [makeFile({ content: "Unsaved words", isDirty: true })],
+      });
+      vi.mocked(invoke).mockResolvedValue(undefined as never);
+      vi.mocked(readDir).mockResolvedValue([] as never);
+      await useDocumentStore.getState().openProject("/other");
+      expect(writeTextFile).toHaveBeenCalledWith(
+        "/project/main.tex",
+        "Unsaved words",
+      );
+      expect(useDocumentStore.getState().projectRoot).toBe("/other");
+    });
+
+    it("saves unsaved edits when the project is closed", () => {
+      useDocumentStore.setState({
+        files: [makeFile({ content: "Last sentence", isDirty: true })],
+      });
+      useDocumentStore.getState().closeProject();
+      expect(writeTextFile).toHaveBeenCalledWith(
+        "/project/main.tex",
+        "Last sentence",
+      );
+    });
+
+    it("never saves over a file it couldn't read", async () => {
+      useDocumentStore.setState({
+        files: [
+          makeFile({ content: "typed", isDirty: true, unreadable: true }),
+        ],
+      });
+      await useDocumentStore.getState().saveAllFiles();
+      await useDocumentStore.getState().saveFile("main.tex");
+      useDocumentStore.getState().closeProject();
+      expect(writeTextFile).not.toHaveBeenCalled();
+    });
+  });
 });

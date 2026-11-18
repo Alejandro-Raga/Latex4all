@@ -32,6 +32,7 @@ import {
 import {
   type PlanKey,
   type PlanList,
+  inTurn,
   planTextNow,
   usePlanStore,
   writePlan,
@@ -49,14 +50,26 @@ async function textNow(key: PlanKey): Promise<string | null> {
     await usePlanStore.getState().load(key);
     text = planTextNow(key);
   }
-  return text ?? null;
+  // Couldn't be read: not taken for empty, or the change would replace it.
+  if (text === undefined) {
+    throw new Error("the plan couldn't be read. Try again in a moment");
+  }
+  return text;
 }
 
 const errorText = (err: unknown) =>
   err instanceof Error ? err.message : String(err);
 
 /** Applies a change to a plan as it is now, starting one if there's none. */
-export async function editPlan(
+export function editPlan(
+  list: Pick<PlanList, "key" | "name">,
+  change: (plan: Plan) => Plan,
+): Promise<void> {
+  // After any change to this plan still under way: from what it left.
+  return inTurn([list.key], () => applyEdit(list, change));
+}
+
+async function applyEdit(
   list: Pick<PlanList, "key" | "name">,
   change: (plan: Plan) => Plan,
 ): Promise<void> {
@@ -73,11 +86,19 @@ export async function editPlan(
 export type { DragTask } from "./planner-dnd";
 
 /** Moves a task to another plan: into its first section (or its reading list). */
-export async function moveToPlan(
+export function moveToPlan(
   drag: DragTask,
   target: Pick<PlanList, "key" | "name">,
 ): Promise<void> {
-  if (drag.list.key === target.key) return;
+  if (drag.list.key === target.key) return Promise.resolve();
+  // Both plans held until it's moved: no other change in between.
+  return inTurn([drag.list.key, target.key], () => applyMove(drag, target));
+}
+
+async function applyMove(
+  drag: DragTask,
+  target: Pick<PlanList, "key" | "name">,
+): Promise<void> {
   try {
     const sourceText = await textNow(drag.list.key);
     if (!sourceText) return;
@@ -85,7 +106,7 @@ export async function moveToPlan(
     const parent = taskAt(source, drag.ref);
     const task = drag.sub === undefined ? parent : parent?.subtasks[drag.sub];
     if (!task) return;
-    await editPlan(target, (plan) => {
+    await applyEdit(target, (plan) => {
       const reading = plan.sections.findIndex((s) => isReadingSection(s.title));
       if (drag.reading) {
         if (reading >= 0) return addTask(plan, detached(task), reading);
