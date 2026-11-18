@@ -247,9 +247,10 @@ function stripesRule(t: AppTheme): string {
   const base = t.dark
     ? `color-mix(in oklab, ${t.colors.bg} 55%, #000)`
     : `color-mix(in oklab, ${fg} 90%, ${surface})`;
-  const width = n * 13;
+  // Each band about as wide as the bar is tall, so the ribbon reads at a glance.
+  const width = n * 22;
   const bar = `html.${t.id} .app-titlebar { position: relative; overflow: hidden; background-color: ${base} !important; background-image: none !important; }`;
-  const ribbon = `html.${t.id} .app-titlebar::after { content: ""; position: absolute; top: 0; bottom: 0; right: 44px; width: ${width}px; transform: skewX(-30deg); background: linear-gradient(90deg, ${bands}); pointer-events: none; }`;
+  const ribbon = `html.${t.id} .app-titlebar::after { content: ""; position: absolute; top: 0; bottom: 0; right: 64px; width: ${width}px; transform: skewX(-30deg); background: linear-gradient(90deg, ${bands}); pointer-events: none; }`;
   return `${wash} ${bar} ${ribbon}`;
 }
 
