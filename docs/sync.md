@@ -69,6 +69,34 @@ a desktop left on, or the headless `l4a-hub` (from this crate) on a NAS or a
 Raspberry Pi. A hub doesn't need the files themselves, only the log: it never
 decrypts anything.
 
+## Always-on storage
+
+Peer-to-peer alone only delivers changes between copies that are online at
+the same time (directly or through another member). To keep today's
+guarantee, every copy also syncs with an always-on store:
+
+- **By default, the free store** (today's relay, running the same program as
+  any hub), with storage limits per project.
+- **A cloud folder** on a service the user already has (Dropbox, OneDrive,
+  iCloud, Google Drive, Seafile…). The app offers the folders it finds.
+- **Their own computer as the server**, if it's always on (the hub switch).
+- **Their own dedicated server**, running `l4a-hub` (Docker).
+
+The choice is asked on install, once again on the first update that brings
+this, and can be changed in Settings → Sync. The prompt:
+
+> Latex4All uses a peer-to-peer service to sync, but to guarantee
+> asynchronous functionality it needs a secure, always-on storage service.
+> By default, this service is offered free of charge, with storage limits per
+> project, but you can choose a backup cloud folder on any service you
+> already use. Alternatively, you can set up Latex4All as its own server on
+> your personal computer (*Use this computer as a server*), as long as it's
+> always on, or install this service on your own dedicated server
+> (*Download the Latex4All server*).
+
+If the free store ever goes away, groups keep syncing directly and are asked
+to pick another store; nothing they have is lost.
+
 ## Moving over from the relay
 
 1. While the relay exists, the app keeps syncing with it as well. Changes go
