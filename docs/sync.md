@@ -72,30 +72,46 @@ decrypts anything.
 ## Always-on storage
 
 Peer-to-peer alone only delivers changes between copies that are online at
-the same time (directly or through another member). To keep today's
-guarantee, every copy also syncs with an always-on store:
+the same time. So every shared project also has an always-on store, which
+holds its encrypted changes and passes them on, as the relay does today:
 
-- **By default, the free store** (today's relay, running the same program as
-  any hub), with storage limits per project.
-- **A cloud folder** on a service the user already has (Dropbox, OneDrive,
-  iCloud, Google Drive, Seafile…). The app offers the folders it finds.
-- **Their own computer as the server**, if it's always on (the hub switch).
-- **Their own dedicated server**, running `l4a-hub` (Docker).
+- **A cloud folder (recommended).** A folder on a service the members
+  already use (Dropbox, OneDrive, iCloud, Google Drive, Seafile…), shared
+  with the project's members. Each copy writes its own encrypted change files
+  there and reads everyone else's. It does what the relay does, in the
+  users' own accounts. The app offers the folders it finds on the computer.
+- **The Latex4All server.** Free, with storage limits per project. The
+  default until a folder is chosen, and the fallback for members who can't
+  reach the folder (for example, a co-author on another cloud service).
+- **This computer**, if it's always on (the hub switch).
+- **Your own server**, running `l4a-hub` (Docker).
 
-The choice is asked on install, once again on the first update that brings
-this, and can be changed in Settings → Sync. The prompt:
+A folder only delivers between members who can all open it, so it's chosen
+per project, and the share link says which service it's on. Members without
+access keep syncing through the Latex4All server; a member with both passes
+changes between them.
 
-> Latex4All uses a peer-to-peer service to sync, but to guarantee
-> asynchronous functionality it needs a secure, always-on storage service.
-> By default, this service is offered free of charge, with storage limits per
-> project, but you can choose a backup cloud folder on any service you
-> already use. Alternatively, you can set up Latex4All as its own server on
-> your personal computer (*Use this computer as a server*), as long as it's
-> always on, or install this service on your own dedicated server
-> (*Download the Latex4All server*).
+Asked on install, once again on the update that brings this, and in
+Settings → Sync (the full text lives there):
 
-If the free store ever goes away, groups keep syncing directly and are asked
-to pick another store; nothing they have is lost.
+> **Sync storage**
+>
+> Shared projects sync directly between computers. When your collaborators
+> aren't online at the same time, changes wait in storage that's always on.
+> Choose where.
+>
+> - **Cloud folder** (recommended): a folder on Dropbox, OneDrive, iCloud,
+>   Google Drive or similar, shared with your collaborators. Your projects
+>   stay in your own account.
+> - **Latex4All server**: free, with a storage limit per project.
+> - **This computer**: only if it's always on.
+> - **Your own server**: run the Latex4All server on a computer that's
+>   always on. *Download*
+>
+> Everything is encrypted before it leaves your computer.
+
+If the Latex4All server ever goes away, groups keep syncing directly and
+through their folders; nothing they have is lost.
 
 ## Moving over from the relay
 
