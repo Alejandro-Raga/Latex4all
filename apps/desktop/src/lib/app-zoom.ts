@@ -1,6 +1,36 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 
 export const APP_ZOOM_STORAGE_KEY = "latex4all-app-zoom";
+/** The interface size chosen in Settings: where the app starts, and ⌘0 returns. */
+export const UI_SIZE_STORAGE_KEY = "latex4all-ui-size";
+
+export const UI_SIZES = [
+  { value: 0.9, label: "Small" },
+  { value: 1, label: "Default" },
+  { value: 1.1, label: "Large" },
+  { value: 1.25, label: "Larger" },
+  { value: 1.4, label: "Largest" },
+] as const;
+
+export function readUiSize(): number {
+  try {
+    const n = Number(window.localStorage.getItem(UI_SIZE_STORAGE_KEY));
+    return n > 0 && Number.isFinite(n) ? clampAppZoom(n) : DEFAULT_APP_ZOOM;
+  } catch {
+    return DEFAULT_APP_ZOOM;
+  }
+}
+
+/** Sets the interface size: kept, and applied now. */
+export async function setUiSize(value: number): Promise<number> {
+  const size = clampAppZoom(value);
+  try {
+    window.localStorage.setItem(UI_SIZE_STORAGE_KEY, size.toString());
+  } catch {
+    // For this session.
+  }
+  return persistAppZoom(size);
+}
 export const LOCAL_ZOOM_SHORTCUTS_ATTR = "data-local-zoom-shortcuts";
 export const DEFAULT_APP_ZOOM = 1;
 export const MIN_APP_ZOOM = 0.5;
@@ -48,8 +78,9 @@ export async function persistAppZoom(value: number): Promise<number> {
 
 export function initializeAppZoom(): Promise<number> {
   installNativeWheelZoomGuard();
+  // ⌘+ and ⌘− last the session; the app starts at the size chosen.
   window.localStorage.removeItem(APP_ZOOM_STORAGE_KEY);
-  return applyAppZoom(DEFAULT_APP_ZOOM);
+  return applyAppZoom(readUiSize());
 }
 
 export function zoomInApp(): Promise<number> {
@@ -61,7 +92,7 @@ export function zoomOutApp(): Promise<number> {
 }
 
 export function resetAppZoom(): Promise<number> {
-  return persistAppZoom(DEFAULT_APP_ZOOM);
+  return persistAppZoom(readUiSize());
 }
 
 export function getAppZoomAction(

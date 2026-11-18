@@ -42,6 +42,8 @@ tag.
 
 ### Added
 
+- Settings → Appearance → Interface size: make the whole app bigger or
+  smaller. It's kept between launches.
 - Eisenhower matrix: a task is urgent when it's due in less than five
   days (was two).
 - Eisenhower matrix: leave a task out, with its subtasks (right-click,

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   APP_ZOOM_STORAGE_KEY,
+  UI_SIZE_STORAGE_KEY,
   DEFAULT_APP_ZOOM,
   LOCAL_ZOOM_SHORTCUTS_ATTR,
   MAX_APP_ZOOM,
@@ -45,6 +46,18 @@ describe("app zoom", () => {
 
     expect(webview.setZoom).toHaveBeenCalledWith(1.25);
     expect(localStorage.getItem(APP_ZOOM_STORAGE_KEY)).toBe("1.25");
+  });
+
+  it("starts at the interface size chosen in Settings", async () => {
+    const webview = getCurrentWebview();
+    localStorage.setItem(APP_ZOOM_STORAGE_KEY, "1.4");
+    localStorage.setItem(UI_SIZE_STORAGE_KEY, "1.25");
+
+    await initializeAppZoom();
+
+    expect(webview.setZoom).toHaveBeenLastCalledWith(1.25);
+    expect(localStorage.getItem(APP_ZOOM_STORAGE_KEY)).toBeNull();
+    localStorage.removeItem(UI_SIZE_STORAGE_KEY);
   });
 
   it("resets stale global zoom on startup", async () => {

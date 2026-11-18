@@ -58,7 +58,7 @@ Other ways to move around:
 
 ### Appearance
 
-**Settings → Appearance** sets the theme. **Menus** makes menus and popups **Clear**, **Frosted** or **Solid**. **Background** can be **Flat** or a **Gradient** of the theme's colors.
+**Settings → Appearance** sets the theme. **Menus** makes menus and popups **Clear**, **Frosted** or **Solid**. **Background** can be **Flat** or a **Gradient** of the theme's colors. **Interface size** makes everything bigger or smaller, from **Small** to **Largest**. The app opens at that size. ⌘+ and ⌘− change it until you quit, and ⌘0 goes back to it.
 
 [Open the projects page](app:projects)
 

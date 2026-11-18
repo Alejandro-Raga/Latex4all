@@ -1,6 +1,7 @@
 import { CheckIcon, MonitorIcon, PipetteIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
+import { readUiSize, setUiSize, UI_SIZES } from "@/lib/app-zoom";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -201,6 +202,7 @@ export function ThemeGrid() {
   const background = useSettingsStore((s) => s.background);
   const setBackground = useSettingsStore((s) => s.setBackground);
   const setGlass = useSettingsStore((s) => s.setGlass);
+  const [uiSize, setUiSizeState] = useState(readUiSize);
   const option = (active: boolean) =>
     cn(
       "flex flex-col gap-1.5 rounded-lg border p-2 text-left text-xs transition-colors",
@@ -262,6 +264,33 @@ export function ThemeGrid() {
             </div>
           </div>
         ))}
+        <div>
+          <p className="mb-1.5 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
+            Interface size
+          </p>
+          <div className="grid grid-cols-5 gap-2">
+            {UI_SIZES.map((size) => (
+              <button
+                key={size.value}
+                type="button"
+                onClick={() => {
+                  setUiSizeState(size.value);
+                  void setUiSize(size.value);
+                }}
+                className={cn(option(uiSize === size.value), "items-center")}
+                aria-pressed={uiSize === size.value}
+              >
+                <span
+                  className="flex h-8 items-end font-medium leading-none"
+                  style={{ fontSize: `${Math.round(size.value * 14)}px` }}
+                >
+                  Aa
+                </span>
+                {size.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div>
           <p className="mb-1.5 font-medium text-[11px] text-muted-foreground uppercase tracking-wide">
             Background
