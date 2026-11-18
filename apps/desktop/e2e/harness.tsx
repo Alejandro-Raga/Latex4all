@@ -60,6 +60,22 @@ const chrome = {
   "--workspace-topbar-height": "40px",
 } as React.CSSProperties;
 
+/** As the app lays itself out: the bar on top, the menu on the left. */
+function AppFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex h-screen flex-col" style={chrome}>
+      <div className="app-titlebar h-[var(--titlebar-height)] shrink-0 bg-frame" />
+      <div
+        className="flex min-h-0 flex-1"
+        style={{ "--titlebar-height": "0px" } as React.CSSProperties}
+      >
+        <AppRail />
+        <div className="h-full min-w-0 flex-1">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 if (scenario === "dock") {
   (window as any).dock = useDockStore;
   useDockStore.setState({
@@ -240,12 +256,9 @@ if (scenario === "projects") {
   });
   root.render(
     <ThemeProvider attribute="class" defaultTheme="light">
-      <div style={{ height: "100vh", display: "flex", ...chrome }}>
-        <AppRail />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <ProjectPicker />
-        </div>
-      </div>
+      <AppFrame>
+        <ProjectPicker />
+      </AppFrame>
     </ThemeProvider>,
   );
 } else if (scenario === "deck-cards") {
@@ -493,12 +506,9 @@ if (scenario === "workspace") {
       root.render(
         <ThemeProvider attribute="class" themes={THEME_IDS} forcedTheme={theme}>
           <ThemeBridge />
-          <div className="flex h-full" style={chrome}>
-            <AppRail />
-            <div className="h-full min-w-0 flex-1">
-              <WorkspaceLayout />
-            </div>
-          </div>
+          <AppFrame>
+            <WorkspaceLayout />
+          </AppFrame>
         </ThemeProvider>,
       ),
   );

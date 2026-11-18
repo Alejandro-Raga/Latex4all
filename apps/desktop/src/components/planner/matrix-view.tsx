@@ -1,6 +1,6 @@
 /**
  * The Eisenhower matrix: every open task by how important it is (its
- * priority, high or highest) and how urgent (due within two days, or late).
+ * priority, high or highest) and how urgent (due in less than five days, or late).
  * Dropping a task in a box makes it so: its priority and date change.
  */
 import { daysUntil, dayFromToday } from "@/lib/plan/dates";
@@ -22,7 +22,8 @@ import type { DragTask } from "./planner-dnd";
 export type Quadrant = "do" | "schedule" | "squeeze" | "later";
 
 export const isImportant = (t: Task) => t.priority >= 3;
-export const isUrgent = (t: Task) => !!t.due && daysUntil(t.due) <= 2;
+/** Due in less than five days, or late. */
+export const isUrgent = (t: Task) => !!t.due && daysUntil(t.due) < 5;
 
 export function quadrantOf(t: Task): Quadrant {
   if (isImportant(t)) return isUrgent(t) ? "do" : "schedule";
