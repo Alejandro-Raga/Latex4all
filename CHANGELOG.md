@@ -21,6 +21,9 @@ tag.
 
 ### Fixed
 
+- Clicking the project that's already open, on the projects page, goes
+  back to writing in it.
+- Choosing a project type: "Something else…" is now "New type…".
 - Retro themes keep their look with the Gradient background: flat panels
   in their own colors (Beige no longer turns blue), the colored bands on
   top.

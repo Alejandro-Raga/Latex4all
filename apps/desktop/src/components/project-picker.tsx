@@ -122,7 +122,12 @@ import {
   PRIORITY_COLOR,
   PRIORITY_LABEL,
 } from "@/components/planner/task-parts";
-import { inProject, openInPlanner, useNav } from "@/stores/nav-store";
+import {
+  goToProject,
+  inProject,
+  openInPlanner,
+  useNav,
+} from "@/stores/nav-store";
 import { ProjectPriorityMenu } from "@/components/planner/project-priority-menu";
 import { useProjectFolders } from "@/stores/project-folders-store";
 import {
@@ -433,7 +438,8 @@ export function ProjectPicker() {
 
   const handleOpenRecent = async (path: string) => {
     try {
-      await openProject(path);
+      // The project already open: back to writing in it, as it was.
+      await goToProject(path);
       addRecentProject(path);
     } catch (err) {
       removeRecentProject(path);
@@ -1719,7 +1725,7 @@ function ProjectMenu({
           ))}
           <ContextMenuSeparator />
           <ContextMenuItem onSelect={actions.onCustomType}>
-            Something else…
+            New type…
           </ContextMenuItem>
           {type && (
             <ContextMenuItem onSelect={() => actions.onSetType(null)}>
