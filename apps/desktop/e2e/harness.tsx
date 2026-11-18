@@ -100,7 +100,7 @@ if (scenario === "dock") {
 
 if (scenario === "reader") {
   // The Library's reader on a project's draft (highlights kept here).
-  fetch("/examples/letter-formal/main.pdf")
+  fetch(`/examples/${params.get("pdf") ?? "letter-formal"}/main.pdf`)
     .then((r) => r.arrayBuffer())
     .then(async (buf) => {
       const { PaperReader } = await import(
