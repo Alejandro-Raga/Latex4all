@@ -52,9 +52,14 @@ Yjs merges them today.
 ### Finding each other
 
 The share link carries the inviter's node id. A copy that joins connects to
-it first. Each copy writes a *member* entry into the log (its node id, a
-device name, whether it's a hub), so after one sync every copy knows every
-member and can reach any of them. iroh resolves node ids to addresses.
+it first. When two copies meet, each tells the other the members it knows of,
+and keeps that list next to the project's log. A copy keeps trying the
+members it knows but isn't connected to, so after one sync every copy can
+reach every other, even once the inviter is offline. iroh resolves node ids
+to addresses.
+
+Still to come: a *member* entry in the log (device name, whether it's a hub),
+so the app can show who's in a project.
 
 ### The hub
 

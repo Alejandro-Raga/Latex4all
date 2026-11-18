@@ -22,8 +22,8 @@ use tokio::sync::broadcast::error::RecvError;
 #[serde(tag = "type", rename_all = "kebab-case")]
 enum Frame {
     Hello { project: String, challenge: Vec<u8> },
-    Welcome { challenge: Vec<u8>, answer: Vec<u8>, vector: Vector },
-    Proof { answer: Vec<u8>, vector: Vector },
+    Welcome { challenge: Vec<u8>, answer: Vec<u8>, vector: Vector, peers: Vec<String> },
+    Proof { answer: Vec<u8>, vector: Vector, peers: Vec<String> },
     Entries { entries: Vec<WireEntry> },
 }
 
@@ -68,7 +68,7 @@ pub async fn dial(conn: Connection, me: String, project: Arc<Project>) -> anyhow
     let (mut tx, mut rx) = conn.open_bi().await?;
     let mine = proof::challenge();
     send(&mut tx, &Frame::Hello { project: project.id.clone(), challenge: mine.to_vec() }).await?;
-    let Frame::Welcome { challenge, answer, vector } = recv(&mut rx).await? else {
+    let Frame::Welcome { challenge, answer, vector, peers } = recv(&mut rx).await? else {
         bail!("unexpected reply");
     };
     if !proof::check(&project.token, &mine, &them, &me, &answer) {
@@ -79,9 +79,12 @@ pub async fn dial(conn: Connection, me: String, project: Arc<Project>) -> anyhow
         &Frame::Proof {
             answer: proof::answer(&project.token, &challenge, &me, &them),
             vector: project.vector(),
+            peers: project.known_peers(),
         },
     )
     .await?;
+    // A member, proven: it, and the members it knows, are worth reaching.
+    project.learn(std::iter::once(them.clone()).chain(peers), &me);
     live(tx, rx, them, vector, project).await
 }
 
@@ -107,15 +110,17 @@ pub async fn answer(
             challenge: mine.to_vec(),
             answer: proof::answer(&project.token, &challenge, &me, &them),
             vector: project.vector(),
+            peers: project.known_peers(),
         },
     )
     .await?;
-    let Frame::Proof { answer, vector } = recv(&mut rx).await? else {
+    let Frame::Proof { answer, vector, peers } = recv(&mut rx).await? else {
         bail!("unexpected reply");
     };
     if !proof::check(&project.token, &mine, &them, &me, &answer) {
         bail!("the other copy doesn't hold this project's key");
     }
+    project.learn(std::iter::once(them.clone()).chain(peers), &me);
     live(tx, rx, them, vector, project).await
 }
 

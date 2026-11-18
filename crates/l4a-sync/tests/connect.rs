@@ -81,3 +81,40 @@ async fn a_copy_without_the_key_gets_nothing() -> anyhow::Result<()> {
     assert!(pb.is_empty(), "nothing received");
     Ok(())
 }
+
+#[tokio::test]
+async fn a_newcomer_learns_every_member_from_one() -> anyhow::Result<()> {
+    use iroh::address_lookup::memory::MemoryLookup;
+    let book = MemoryLookup::new();
+    let start = || {
+        Node::start_with(
+            SecretKey::generate(),
+            Minimal,
+            Some(book.clone()),
+            Duration::from_millis(100),
+        )
+    };
+    let (a, b, c) = (start().await?, start().await?, start().await?);
+    for n in [&a, &b, &c] {
+        book.add_endpoint_info(n.addr());
+    }
+    let dirs = (tempfile::tempdir()?, tempfile::tempdir()?, tempfile::tempdir()?);
+    a.open("paper", b"secret", dirs.0.path())?;
+    let pb = b.open("paper", b"secret", dirs.1.path())?;
+    let pc = c.open("paper", b"secret", dirs.2.path())?;
+    // B knows A; C is given only A, then finds B through it.
+    b.join("paper", a.addr()).await?;
+    assert!(eventually(|| b.is_syncing_with("paper", a.id())).await);
+    c.join("paper", a.addr()).await?;
+    assert!(
+        eventually(|| c.is_syncing_with("paper", b.id()) || b.is_syncing_with("paper", c.id())).await,
+        "C reached B, though only told of A"
+    );
+    // So with A gone, B's changes still reach C.
+    a.close().await;
+    b.write("paper", b"after A left".to_vec())?;
+    assert!(eventually(|| pc.len() == pb.len() && pc.len() == 1).await);
+    // And it's remembered for next time.
+    assert!(std::fs::read_to_string(dirs.2.path().join("peers.json"))?.contains(b.id()));
+    Ok(())
+}
