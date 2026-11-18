@@ -62,6 +62,14 @@ snapshot and the entries after it. Entries a snapshot covers are dropped
 only once every member heard from recently is known to have them; one gone
 longer gets the snapshot when it's back, as a newcomer would.
 
+### Large files
+
+PDFs, figures and data files stay out of the log. Each is stored once, named
+by the SHA-256 of its encrypted bytes, and a change refers to it by that
+name. A copy fetches a file when it needs it; a hub fetches every file, so
+it can hand them on to members who aren't online at the same time. A file is
+only kept if its bytes match its name.
+
 ### What each member has
 
 Every copy keeps an account of what each member has: from meeting them,

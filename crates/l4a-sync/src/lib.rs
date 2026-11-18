@@ -4,6 +4,7 @@
 //! - [`log`]: a shared project as a log of encrypted changes, each named by
 //!   its author and a number; what a copy has, as a version vector.
 //! - [`store`]: that log on disk.
+//! - [`blobs`]: large files, apart from the log, fetched as needed.
 //! - [`sign`]: each entry signed by its author, checked by everyone.
 //! - [`members`]: what each member has, as far as a copy knows.
 //! - [`proof`]: two copies show each other they hold the project's key
@@ -12,6 +13,7 @@
 //! - [`Node`]: a copy of the app on the network: its projects, the members
 //!   it's joined, and those who join it.
 
+pub mod blobs;
 pub mod log;
 pub mod members;
 pub mod proof;
@@ -41,6 +43,16 @@ pub const ALPN: &[u8] = b"latex4all/sync/1";
 pub enum Change {
     Entry(Entry),
     Snapshot { snapshot: Snapshot, lacked: bool },
+    /// A file (by name) is here now.
+    Blob(String),
+}
+
+/// Between a project's syncs: files someone has, and files wanted.
+#[derive(Clone, Debug)]
+pub(crate) enum BlobNews {
+    /// This copy has it now (and which member it came from).
+    Have(String, Option<String>),
+    Want(String),
 }
 
 /// A shared project on this copy: its log (on disk and in memory) and who
@@ -59,6 +71,12 @@ pub struct Project {
     changes: broadcast::Sender<(Change, Option<String>)>,
     /// This copy's id, to tell its own entries.
     me: String,
+    pub(crate) blobs: blobs::Blobs,
+    pub(crate) blob_news: broadcast::Sender<BlobNews>,
+    /// Files asked for and not here yet.
+    pub(crate) wanted: Mutex<HashSet<String>>,
+    /// Fetch every file any member has (a hub), not only those asked for.
+    pub(crate) keep_all: AtomicBool,
     /// What each member has, as far as this copy knows; kept on disk.
     members: Mutex<Members>,
     members_file: PathBuf,
@@ -86,7 +104,12 @@ impl Project {
             .and_then(|b| serde_json::from_slice(&b).ok())
             .unwrap_or_default();
         let (changes, _) = broadcast::channel(1024);
+        let (blob_news, _) = broadcast::channel(1024);
         Ok(Project {
+            blobs: blobs::Blobs::open(dir)?,
+            blob_news,
+            wanted: Mutex::new(HashSet::new()),
+            keep_all: AtomicBool::new(false),
             members: Mutex::new(members),
             members_file,
             members_saved: AtomicU64::new(0),
@@ -109,6 +132,53 @@ impl Project {
 
     pub fn missing_for(&self, theirs: &Vector, their_snap: Option<&Vector>) -> (Option<Snapshot>, Vec<Entry>) {
         self.log.lock().unwrap().missing_for(theirs, their_snap)
+    }
+
+    /// Keeps a file of this project's (encrypted by the app), for members
+    /// to fetch; returns its name, to refer to it in a change.
+    pub fn put_blob(&self, data: &[u8]) -> anyhow::Result<String> {
+        let name = self.blobs.put(data)?;
+        let _ = self.blob_news.send(BlobNews::Have(name.clone(), None));
+        Ok(name)
+    }
+
+    /// A file, if it's here.
+    pub fn blob(&self, name: &str) -> Option<Vec<u8>> {
+        self.blobs.get(name)
+    }
+
+    /// Asks connected members for a file (and those who connect later);
+    /// [`Change::Blob`] says when it's here.
+    pub fn want_blob(&self, name: &str) {
+        if self.blobs.has(name) {
+            return;
+        }
+        self.wanted.lock().unwrap().insert(name.to_string());
+        let _ = self.blob_news.send(BlobNews::Want(name.to_string()));
+    }
+
+    /// Whether to fetch every file members have: for a hub, so it can hand
+    /// them on to members who aren't online at the same time.
+    pub fn keep_all_blobs(&self, on: bool) {
+        self.keep_all.store(on, Ordering::Relaxed);
+    }
+
+    /// A file received from `from`: kept if it's what its name says.
+    pub(crate) fn receive_blob(&self, name: &str, data: &[u8], from: &str) -> anyhow::Result<()> {
+        if !self.blobs.put_named(name, data)? {
+            self.refused.fetch_add(1, Ordering::Relaxed);
+            return Ok(());
+        }
+        self.wanted.lock().unwrap().remove(name);
+        let _ = self.blob_news.send(BlobNews::Have(name.to_string(), Some(from.to_string())));
+        let _ = self.changes.send((Change::Blob(name.to_string()), Some(from.to_string())));
+        Ok(())
+    }
+
+    /// Whether to ask for a file a member has.
+    pub(crate) fn should_fetch(&self, name: &str) -> bool {
+        !self.blobs.has(name)
+            && (self.keep_all.load(Ordering::Relaxed) || self.wanted.lock().unwrap().contains(name))
     }
 
     /// The latest snapshot: the document as of it, to build on.

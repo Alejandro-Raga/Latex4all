@@ -1,5 +1,6 @@
 //! A live sync between two copies of the same project, on one
-//! bidirectional stream of `[u32 length][JSON]` frames:
+//! bidirectional stream of `[u32 length][frame]` frames (postcard, a compact
+//! binary encoding):
 //!
 //!   dialer → `Hello { project, challenge }`
 //!   listener → `Welcome { challenge, answer, vector }`
@@ -12,7 +13,8 @@
 use crate::log::{Entry, Snapshot, Vector};
 use crate::members::Members;
 use crate::proof;
-use crate::{Change, Project};
+use crate::{BlobNews, Change, Project};
+use std::collections::HashMap;
 use anyhow::{bail, Context};
 use iroh::endpoint::{Connection, RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
@@ -20,7 +22,6 @@ use std::sync::Arc;
 use tokio::sync::broadcast::error::RecvError;
 
 #[derive(Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "kebab-case")]
 enum Frame {
     Hello { project: String, challenge: Vec<u8> },
     Welcome { challenge: Vec<u8>, answer: Vec<u8>, vector: Vector, peers: Vec<String>, members: Members, snapshot: Option<Vector> },
@@ -29,6 +30,12 @@ enum Frame {
     Snapshot { author: String, covers: Vector, data: Vec<u8>, sig: Vec<u8> },
     /// What the sender has now: an acknowledgement of entries received.
     Have { vector: Vector },
+    /// Files the sender has.
+    Blobs { names: Vec<String> },
+    /// Files the sender asks for.
+    Want { names: Vec<String> },
+    /// A piece of a file: `total` bytes in all, this from `at`.
+    Piece { name: String, total: u64, at: u64, data: Vec<u8> },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -40,9 +47,18 @@ struct WireEntry {
 }
 
 const MAX_FRAME: usize = 64 * 1024 * 1024;
+/// The largest file taken.
+const MAX_FILE: u64 = 2 * 1024 * 1024 * 1024;
+
+/// What the reading side asks the writing side to send.
+enum Out {
+    Ack(Vector),
+    Frame(Frame),
+    File(String),
+}
 
 async fn send(stream: &mut SendStream, frame: &Frame) -> anyhow::Result<()> {
-    let body = serde_json::to_vec(frame)?;
+    let body = postcard::to_stdvec(frame)?;
     stream.write_all(&(body.len() as u32).to_be_bytes()).await?;
     stream.write_all(&body).await?;
     Ok(())
@@ -57,7 +73,7 @@ async fn recv(stream: &mut RecvStream) -> anyhow::Result<Frame> {
     }
     let mut body = vec![0u8; len];
     stream.read_exact(&mut body).await?;
-    Ok(serde_json::from_slice(&body)?)
+    Ok(postcard::from_bytes(&body)?)
 }
 
 fn wire(entries: Vec<Entry>) -> Vec<WireEntry> {
@@ -163,23 +179,57 @@ async fn live(
     note_sent(&mut sent, &catch_up);
     send(&mut tx, &Frame::Entries { entries: wire(catch_up) }).await?;
 
+    // Files: what we have, and what we're after.
+    let mut news = project.blob_news.subscribe();
+    send(&mut tx, &Frame::Blobs { names: project.blobs.names() }).await?;
+    let wanted: Vec<String> = project.wanted.lock().unwrap().iter().cloned().collect();
+    if !wanted.is_empty() {
+        send(&mut tx, &Frame::Want { names: wanted }).await?;
+    }
+
     let writer_project = project.clone();
     let writer_them = them.clone();
-    // What we have after taking in their entries, to acknowledge them.
-    let (ack, mut acks) = tokio::sync::mpsc::unbounded_channel::<Vector>();
+    // Replies from the reading side: acknowledgements, requests, files.
+    let (out, mut outs) = tokio::sync::mpsc::unbounded_channel::<Out>();
     let writer = tokio::spawn(async move {
         loop {
             let change = tokio::select! {
                 change = changes.recv() => change,
-                Some(mut vector) = acks.recv() => {
-                    while let Ok(newer) = acks.try_recv() {
-                        vector = newer;
+                Some(o) = outs.recv() => {
+                    match o {
+                        Out::Ack(vector) => send(&mut tx, &Frame::Have { vector }).await?,
+                        Out::Frame(f) => send(&mut tx, &f).await?,
+                        Out::File(name) => {
+                            // Read when it's its turn, sent in pieces.
+                            if let Some(data) = writer_project.blob(&name) {
+                                let total = data.len() as u64;
+                                for (i, piece) in data.chunks(crate::blobs::PIECE).enumerate() {
+                                    let at = (i * crate::blobs::PIECE) as u64;
+                                    send(&mut tx, &Frame::Piece { name: name.clone(), total, at, data: piece.to_vec() }).await?;
+                                }
+                                if data.is_empty() {
+                                    send(&mut tx, &Frame::Piece { name, total: 0, at: 0, data: vec![] }).await?;
+                                }
+                            }
+                        }
                     }
-                    send(&mut tx, &Frame::Have { vector }).await?;
+                    continue;
+                }
+                n = news.recv() => {
+                    match n {
+                        Ok(BlobNews::Have(name, from)) if from.as_deref() != Some(writer_them.as_str()) => {
+                            send(&mut tx, &Frame::Blobs { names: vec![name] }).await?;
+                        }
+                        Ok(BlobNews::Want(name)) => {
+                            send(&mut tx, &Frame::Want { names: vec![name] }).await?;
+                        }
+                        _ => {}
+                    }
                     continue;
                 }
             };
             match change {
+                Ok((Change::Blob(_), _)) => {}
                 Ok((Change::Snapshot { snapshot, .. }, from)) => {
                     if from.as_deref() != Some(writer_them.as_str()) {
                         send(&mut tx, &snapshot_frame(snapshot)).await?;
@@ -207,6 +257,7 @@ async fn live(
         }
     });
 
+    let mut partial: HashMap<String, Vec<u8>> = HashMap::new();
     let reading = async {
         loop {
             match recv(&mut rx).await? {
@@ -217,13 +268,39 @@ async fn live(
                         project.receive(entry, &them)?;
                     }
                     if any {
-                        let _ = ack.send(project.vector());
+                        let _ = out.send(Out::Ack(project.vector()));
+                    }
+                }
+                Frame::Blobs { names } => {
+                    let fetch: Vec<String> = names.into_iter().filter(|n| project.should_fetch(n)).collect();
+                    if !fetch.is_empty() {
+                        let _ = out.send(Out::Frame(Frame::Want { names: fetch }));
+                    }
+                }
+                Frame::Want { names } => {
+                    for name in names {
+                        if project.blobs.has(&name) {
+                            let _ = out.send(Out::File(name));
+                        }
+                    }
+                }
+                Frame::Piece { name, total, at, data } => {
+                    // Pieces come in order; a file too big, or out of step, is dropped.
+                    if total > MAX_FILE || at != partial.get(&name).map_or(0, |p| p.len() as u64) {
+                        partial.remove(&name);
+                        continue;
+                    }
+                    let buf = partial.entry(name.clone()).or_default();
+                    buf.extend_from_slice(&data);
+                    if buf.len() as u64 >= total {
+                        let buf = partial.remove(&name).unwrap_or_default();
+                        project.receive_blob(&name, &buf, &them)?;
                     }
                 }
                 Frame::Have { vector } => project.heard(&them, &vector, None),
                 Frame::Snapshot { author, covers, data, sig } => {
                     project.receive_snapshot(Snapshot { author, covers, data, sig }, &them)?;
-                    let _ = ack.send(project.vector());
+                    let _ = out.send(Out::Ack(project.vector()));
                 }
                 _ => bail!("unexpected frame"),
             }

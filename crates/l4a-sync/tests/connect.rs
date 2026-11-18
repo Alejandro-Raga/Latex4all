@@ -191,3 +191,30 @@ async fn old_history_goes_once_everyone_has_it_and_newcomers_start_from_a_snapsh
     assert_eq!(a.write("paper", b"next".to_vec())?.n, 7);
     Ok(())
 }
+
+#[tokio::test]
+async fn a_hub_keeps_every_file_and_hands_it_on_later() -> anyhow::Result<()> {
+    let dirs = (tempfile::tempdir()?, tempfile::tempdir()?, tempfile::tempdir()?);
+    let (a, hub, c) = (node().await?, node().await?, node().await?);
+    let pa = a.open("paper", b"secret", dirs.0.path())?;
+    let ph = hub.open("paper", b"secret", dirs.1.path())?;
+    ph.keep_all_blobs(true);
+    let pc = c.open("paper", b"secret", dirs.2.path())?;
+    // A file over three pieces long.
+    let figure: Vec<u8> = (0..3_500_000u32).map(|i| (i % 251) as u8).collect();
+    let name = pa.put_blob(&figure)?;
+    a.write("paper", name.as_bytes().to_vec())?;
+    a.join("paper", hub.addr()).await?;
+    assert!(eventually(|| ph.blob(&name).is_some()).await, "the hub fetched it by itself");
+    a.close().await;
+    // C, never online with A, asks for it when it needs it.
+    c.join("paper", hub.addr()).await?;
+    assert!(eventually(|| pc.len() == 1).await);
+    assert!(pc.blob(&name).is_none(), "not fetched until wanted");
+    let mut news = pc.subscribe();
+    pc.want_blob(&name);
+    assert!(eventually(|| pc.blob(&name).is_some()).await);
+    assert_eq!(pc.blob(&name).unwrap(), figure);
+    assert!(matches!(news.try_recv(), Ok((l4a_sync::Change::Blob(n), _)) if n == name));
+    Ok(())
+}
