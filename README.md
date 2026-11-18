@@ -38,16 +38,16 @@
 
 <p align="center">
   <a href="https://github.com/Alejandro-Raga/Latex4all/releases/download/testing-latest/Latex4All-macOS.dmg">
-    <img src="https://img.shields.io/badge/Test_build-macOS-2ea44f?style=flat-square&logo=apple&logoColor=white" alt="Test build for macOS" />
+    <img src="https://img.shields.io/badge/Test_build_(in_development)-macOS-2ea44f?style=flat-square&logo=apple&logoColor=white" alt="Test build for macOS (in development)" />
   </a>&nbsp;
   <a href="https://github.com/Alejandro-Raga/Latex4all/releases/download/testing-latest/Latex4All-Windows-setup.exe">
-    <img src="https://img.shields.io/badge/Test_build-Windows-2ea44f?style=flat-square&logo=windows&logoColor=white" alt="Test build for Windows" />
+    <img src="https://img.shields.io/badge/Test_build_(in_development)-Windows-2ea44f?style=flat-square&logo=windows&logoColor=white" alt="Test build for Windows (in development)" />
   </a>
 </p>
 
 <p align="center"><sub>
-  The features below marked <b>new</b> are in the test builds now, and in the next release.<br/>
-  Test builds carry every change as it lands, and are rougher than a release.<br/>
+  The features below marked <b>new</b> are still in development: they're only in the test builds,<br/>
+  which carry every change as it lands and can have bugs. They'll come to a release once they're stable.<br/>
   Linux and Intel macOS are no longer published — build from source if you need either.
 </sub></p>
 
