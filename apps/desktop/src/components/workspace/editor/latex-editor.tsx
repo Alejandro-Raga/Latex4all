@@ -1566,7 +1566,7 @@ export function LatexEditor() {
       },
       {
         id: "add-note",
-        label: "Add note",
+        label: "Comment",
         icon: <MessageSquarePlusIcon className="size-4" />,
         hint: "⌘⌥M",
       },

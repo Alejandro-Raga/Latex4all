@@ -78,7 +78,7 @@ Files save as you type.
 Select text in the editor or in the PDF, then choose:
 
 - **Highlight**, to mark it in a color.
-- **Add note**, to leave a comment that others can answer and resolve.
+- **Comment**, to leave a comment that others can answer and resolve.
 - **Suggest edit**, to propose new wording that can be accepted or rejected.
 
 The **Notes** panel lists all of them. Right-click one to add the passage to a note in your vault.

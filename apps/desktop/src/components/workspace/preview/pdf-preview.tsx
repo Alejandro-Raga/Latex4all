@@ -482,7 +482,7 @@ export function PdfPreview() {
       },
       {
         id: "note",
-        label: "Add note",
+        label: "Comment",
         icon: <MessageSquarePlusIcon className="size-4" />,
       },
       {
@@ -492,9 +492,9 @@ export function PdfPreview() {
       },
       {
         id: "navigate",
-        label: "Navigate to source",
+        label: "Go to source",
         icon: <FileTextIcon className="size-4" />,
-        hint: "dbl-click",
+        hint: "Double-click",
       },
       {
         id: "file",

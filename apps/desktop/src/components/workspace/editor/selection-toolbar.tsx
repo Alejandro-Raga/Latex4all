@@ -147,37 +147,21 @@ export function SelectionToolbar({
       )}
 
       {/* Action buttons */}
-      {/* Many actions sit two to a row, so the toolbar stays small enough
-          not to cover what's around the selection. */}
+      {/* One action a row, each named in full. */}
       {actions.length > 0 && (
-        <div
-          className={
-            actions.length > 4
-              ? "grid grid-cols-2 gap-x-1 p-1"
-              : "flex flex-col py-1"
-          }
-        >
+        <div className="flex flex-col py-1">
           {actions.map((action) => (
             <button
               key={action.id}
               onClick={() => onAction(action.id)}
-              title={
-                actions.length > 4 && action.hint
-                  ? `${action.label} (${action.hint})`
-                  : undefined
-              }
-              className={
-                actions.length > 4
-                  ? "flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-foreground text-xs transition-colors hover:bg-muted"
-                  : "flex items-center gap-2.5 px-3 py-1.5 text-left text-foreground text-sm transition-colors hover:bg-muted"
-              }
+              className="flex items-center gap-2.5 px-3 py-1.5 text-left text-foreground text-sm transition-colors hover:bg-muted"
             >
-              <span className="size-4 text-muted-foreground">
+              <span className="size-4 shrink-0 text-muted-foreground">
                 {action.icon}
               </span>
-              <span className="truncate">{action.label}</span>
-              {action.hint && actions.length <= 4 && (
-                <span className="ml-auto text-muted-foreground text-xs">
+              <span className="min-w-0 truncate">{action.label}</span>
+              {action.hint && (
+                <span className="ml-auto shrink-0 pl-2 text-muted-foreground text-xs">
                   {action.hint}
                 </span>
               )}

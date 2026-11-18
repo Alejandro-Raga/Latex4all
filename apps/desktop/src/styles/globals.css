@@ -522,9 +522,10 @@
 [data-background="gradient"] body,
 [data-background="gradient"] .app-shell,
 [data-background="gradient"]
-  :is(.bg-sidebar, .bg-frame, .pane-header):not(
-    :is(.inset-card, .inset-panel) *
-  ) {
+  :is(.bg-sidebar, .bg-frame):not(:is(.inset-card, .inset-panel) *),
+/* Every toolbar the frame's color, inside a panel too, so the bars along
+   the top read as one with the rails beside them. */
+[data-background="gradient"] .pane-header {
   background-image: var(--frame-wash);
   background-attachment: fixed;
 }

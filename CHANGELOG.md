@@ -260,6 +260,10 @@ tag.
 
 ### Fixed
 
+- The menu over selected text lists its actions one a row, in full
+  (Comment, Go to source…), instead of two cramped columns.
+- With the Gradient background, the toolbars above the editor and PDF
+  take the frame's color, like the rails beside them.
 - Drag a project onto a folder on All projects to put it there, or onto
   All projects in the title to take it out.
 - Opening a paper from a reading list no longer marks it as being read;
