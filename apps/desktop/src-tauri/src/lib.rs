@@ -7,6 +7,7 @@ mod claude;
 mod claude_process;
 mod collab;
 mod p2p;
+mod sync_commands;
 mod dictionary;
 mod grammar;
 mod history;
@@ -857,6 +858,9 @@ pub fn run() {
             collab::collab_disconnect,
             collab::collab_publish,
             collab::collab_p2p_peers,
+            sync_commands::sync_settings,
+            sync_commands::set_sync_settings,
+            sync_commands::sync_cloud_folders,
             collab::collab_awareness,
             collab::collab_send_chat,
             collab::collab_load_chat,

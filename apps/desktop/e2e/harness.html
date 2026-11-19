@@ -43,6 +43,17 @@
           }
           // The bug report window: its system details, and the report sent
           // kept for the test to read.
+          // Settings → Sync: kept for the page, two cloud folders found.
+          if (cmd === "sync_settings") {
+            return JSON.parse(sessionStorage.getItem("sync-settings") ?? "null") ?? { enabled: false, storage: "", folder: null, hubCode: null, hubbed: [], chosen: false };
+          }
+          if (cmd === "set_sync_settings") {
+            sessionStorage.setItem("sync-settings", JSON.stringify(args.settings));
+            return null;
+          }
+          if (cmd === "sync_cloud_folders") {
+            return ["/Users/me/Library/CloudStorage/Dropbox", "/Users/me/Library/CloudStorage/OneDrive-Universitat"];
+          }
           if (location.search.includes("scenario=bug")) {
             if (cmd === "get_system_info") {
               return { os: "macos", os_version: "15", arch: "aarch64", app_version: "1.2.120" };

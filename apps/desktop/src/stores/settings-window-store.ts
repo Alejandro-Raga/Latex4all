@@ -10,6 +10,7 @@ export type SettingsSection =
   | "zotero"
   | "vault"
   | "zotero-sync"
+  | "sync"
   | "environment"
   | "languages"
   | "planner"

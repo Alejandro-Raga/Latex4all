@@ -19,9 +19,79 @@ fn base() -> Option<PathBuf> {
     Some(dirs::data_local_dir()?.join("Latex4All").join("sync"))
 }
 
+/// Settings → Sync, kept in `sync/settings.json`.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SyncSettings {
+    /// Peer-to-peer sync on (beta).
+    pub enabled: bool,
+    /// Where changes wait: `server` (the Latex4All server, as now),
+    /// `folder`, `computer` (this one, always on) or `hub` (your own).
+    pub storage: String,
+    /// The cloud folder chosen, for `folder`.
+    pub folder: Option<String>,
+    /// The code of your own server, for `hub`.
+    pub hub_code: Option<String>,
+    /// Projects already given to that hub.
+    pub hubbed: Vec<String>,
+    /// Whether the choice was made (asked at the first share otherwise).
+    pub chosen: bool,
+}
+
+pub fn settings() -> SyncSettings {
+    base()
+        .and_then(|b| std::fs::read(b.join("settings.json")).ok())
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_settings(s: &SyncSettings) -> anyhow::Result<()> {
+    let dir = base().ok_or_else(|| anyhow::anyhow!("no data folder"))?;
+    std::fs::create_dir_all(&dir)?;
+    let tmp = dir.join("settings.json.new");
+    std::fs::write(&tmp, serde_json::to_vec_pretty(s)?)?;
+    std::fs::rename(tmp, dir.join("settings.json"))?;
+    Ok(())
+}
+
 pub fn enabled() -> bool {
-    std::env::var("L4A_P2P").is_ok_and(|v| v == "1")
-        || base().is_some_and(|b| b.join("enabled").exists())
+    std::env::var("L4A_P2P").is_ok_and(|v| v == "1") || settings().enabled
+}
+
+/// Cloud folders on this computer (Dropbox, OneDrive, iCloud Drive, Google
+/// Drive, Seafile…), to offer for `folder`.
+pub fn cloud_folders() -> Vec<String> {
+    let Some(home) = dirs::home_dir() else { return Vec::new() };
+    let mut found = Vec::new();
+    let mut look = |p: PathBuf| {
+        if p.is_dir() && !found.contains(&p) {
+            found.push(p);
+        }
+    };
+    // macOS keeps most under ~/Library/CloudStorage.
+    if let Ok(items) = std::fs::read_dir(home.join("Library/CloudStorage")) {
+        for item in items.flatten() {
+            look(item.path());
+        }
+    }
+    look(home.join("Library/Mobile Documents/com~apple~CloudDocs"));
+    if let Ok(items) = std::fs::read_dir(&home) {
+        for item in items.flatten() {
+            let name = item.file_name().to_string_lossy().to_lowercase();
+            if ["dropbox", "onedrive", "google drive", "googledrive", "icloud", "seafile", "box", "nextcloud", "pcloud"]
+                .iter()
+                .any(|k| name.starts_with(k))
+            {
+                look(item.path());
+            }
+        }
+    }
+    for var in ["OneDrive", "OneDriveCommercial", "OneDriveConsumer"] {
+        if let Ok(p) = std::env::var(var) {
+            look(PathBuf::from(p));
+        }
+    }
+    found.into_iter().map(|p| p.to_string_lossy().to_string()).collect()
 }
 
 /// This computer's sync node: its identity kept in the app's data folder.
@@ -73,6 +143,36 @@ pub fn start(
         let Some(dir) = base().map(|b| b.join("projects").join(safe(&project))) else { return };
         let Ok(log) = node.open(&project, &token, &dir) else { return };
         ready(node.id().to_string());
+        // The always-on store chosen in Settings → Sync.
+        let choice = settings();
+        match choice.storage.as_str() {
+            "folder" => {
+                if let Some(root) = choice.folder.as_deref().map(PathBuf::from) {
+                    // A co-author's shared folder, wherever their service put
+                    // it; otherwise one of ours, in the app's own subfolder.
+                    let place = l4a_sync::folder::find(&[root.clone()], &project)
+                        .unwrap_or_else(|| root.join("Latex4All").join(safe(&project)));
+                    let _ = node.use_folder(&project, place, dir.join("folder-state.json"), std::time::Duration::from_secs(30));
+                }
+            }
+            "computer" => log.keep_all_blobs(true),
+            "hub" => {
+                if let Some(code) = choice.hub_code.as_deref() {
+                    if !choice.hubbed.contains(&project)
+                        && node.add_to_hub(code, &project, &token, None).await.is_ok()
+                    {
+                        let mut s = settings();
+                        s.hubbed.push(project.clone());
+                        let _ = save_settings(&s);
+                    }
+                    // The hub, as a member to reach.
+                    if let Some(hub) = code.split('.').next().and_then(|h| h.parse::<iroh::EndpointId>().ok()) {
+                        let _ = node.join(&project, hub).await;
+                    }
+                }
+            }
+            _ => {}
+        }
         let mut changes = log.subscribe();
         // What arrived while the app was closed.
         for e in log.entries() {

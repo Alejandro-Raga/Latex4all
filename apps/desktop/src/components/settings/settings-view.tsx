@@ -48,6 +48,7 @@ import { clearPdfCache, pdfCacheSize } from "@/lib/zotero-pdf-cache";
 import { ZoteroSourceControls } from "@/components/zotero-source-controls";
 import { NoteTypesSettings } from "./note-types-settings";
 import { ZoteroSyncSettings } from "./zotero-sync-settings";
+import { SyncSettingsSection } from "./sync-settings";
 import { AiUsageSettings } from "./ai-usage-settings";
 import { AgentAccounts } from "./agent-accounts";
 import { SkillsSettings } from "./skills-settings";
@@ -682,6 +683,14 @@ export function SettingsView({
       meta: zoteroSync ? "On" : "Off",
       icon: RefreshCwIcon,
       body: <ZoteroSyncSettings />,
+      flush: true,
+    },
+    {
+      id: "sync",
+      label: "Sync",
+      meta: "Shared projects",
+      icon: RefreshCwIcon,
+      body: <SyncSettingsSection />,
       flush: true,
     },
     {
