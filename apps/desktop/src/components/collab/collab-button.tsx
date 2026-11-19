@@ -26,6 +26,18 @@ import {
 import { useDocumentStore } from "@/stores/document-store";
 import { useSettingsStore } from "@/stores/settings-store";
 import { SyncFilesDialog } from "./sync-files-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { SyncStorageChoice } from "@/components/settings/sync-settings";
+import {
+  getSyncSettings,
+  setSyncSettings,
+  type SyncSettings,
+} from "@/lib/tauri/sync-settings";
 
 function initials(name: string) {
   return (
@@ -217,6 +229,7 @@ export function CollabButton() {
   const stopSyncing = useCollabStore((s) => s.stopSyncing);
   const warnings = useCollabStore((s) => s.warnings);
   const usage = useCollabStore((s) => s.usage);
+  const peerStatus = useCollabStore((s) => s.peerStatus);
   const [copied, setCopied] = useState(false);
   const [choosingFiles, setChoosingFiles] = useState(false);
   const projectRoot = useDocumentStore((s) => s.projectRoot);
@@ -243,12 +256,19 @@ export function CollabButton() {
   const failing = warnings.some((w) => w.level === "error");
   const warningColor = failing ? "text-red-500" : "text-amber-500";
 
-  const handleShare = () => {
+  const shareNow = () => {
     share().catch((err) =>
       toast.error("Couldn't share this project", {
         description: err instanceof Error ? err.message : String(err),
       }),
     );
+  };
+  // Where changes wait: asked at the first share, once peer-to-peer is on.
+  const [asking, setAsking] = useState<SyncSettings | null>(null);
+  const handleShare = () => {
+    getSyncSettings()
+      .then((s) => (s.enabled && !s.chosen ? setAsking(s) : shareNow()))
+      .catch(shareNow);
   };
 
   const handleCopy = () => {
@@ -260,148 +280,189 @@ export function CollabButton() {
   };
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant={shared ? "secondary" : "ghost"}
-          size="sm"
-          className="h-6 shrink-0 gap-1.5 px-2 text-xs"
-        >
-          {shared && peers.length > 0 ? (
-            <span className="flex -space-x-1.5">
-              {peers.slice(0, 3).map((peer) => (
-                <PeerAvatar key={peer.clientId} peer={peer} />
-              ))}
-            </span>
-          ) : (
-            <UsersIcon className="size-3.5" />
-          )}
-          {shared &&
-            (warnings.length > 0 ? (
-              <AlertTriangleIcon className={cn("size-3.5", warningColor)} />
-            ) : (
-              <span
-                className={cn("size-1.5 rounded-full", STATUS[status].dot)}
-              />
-            ))}
-          {shared ? "Shared" : "Share"}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 space-y-3 p-3">
-        {!shared ? (
-          <>
-            <YouRow />
-            {filesButton}
-            <Button
-              className="w-full"
-              size="sm"
-              onClick={handleShare}
-              disabled={progress !== null}
-            >
-              {progress && <Loader2Icon className="size-3.5 animate-spin" />}
-              {progress ?? "Share project"}
-            </Button>
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-2 text-xs">
-              <span
-                className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  STATUS[status].dot,
-                )}
-              />
-              <span className="text-muted-foreground">
-                {STATUS[status].label}
+    <>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant={shared ? "secondary" : "ghost"}
+            size="sm"
+            className="h-6 shrink-0 gap-1.5 px-2 text-xs"
+          >
+            {shared && peers.length > 0 ? (
+              <span className="flex -space-x-1.5">
+                {peers.slice(0, 3).map((peer) => (
+                  <PeerAvatar key={peer.clientId} peer={peer} />
+                ))}
               </span>
-              {usage && (
+            ) : (
+              <UsersIcon className="size-3.5" />
+            )}
+            {shared &&
+              (warnings.length > 0 ? (
+                <AlertTriangleIcon className={cn("size-3.5", warningColor)} />
+              ) : (
+                <span
+                  className={cn("size-1.5 rounded-full", STATUS[status].dot)}
+                />
+              ))}
+            {shared ? "Shared" : "Share"}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-72 space-y-3 p-3">
+          {!shared ? (
+            <>
+              <YouRow />
+              {filesButton}
+              <Button
+                className="w-full"
+                size="sm"
+                onClick={handleShare}
+                disabled={progress !== null}
+              >
+                {progress && <Loader2Icon className="size-3.5 animate-spin" />}
+                {progress ?? "Share project"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-xs">
                 <span
                   className={cn(
-                    "ml-auto shrink-0",
-                    usage.projectBytes >= usage.maxProjectBytes * 0.8
-                      ? warningColor
-                      : "text-muted-foreground",
+                    "size-2 shrink-0 rounded-full",
+                    STATUS[status].dot,
                   )}
-                >
-                  {megabytes(usage.projectBytes)} of{" "}
-                  {megabytes(usage.maxProjectBytes)} MB
-                </span>
-              )}
-            </div>
-            {warnings.length > 0 && (
-              <div className="space-y-1.5">
-                {warnings.map((warning) => (
-                  <div key={warning.id} className="flex gap-1.5 text-xs">
-                    <AlertTriangleIcon
-                      className={cn(
-                        "mt-px size-3.5 shrink-0",
-                        warning.level === "error"
-                          ? "text-red-500"
-                          : "text-amber-500",
-                      )}
-                    />
-                    <span>{warning.text}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {link && (
-              <div className="flex gap-1.5">
-                <Input
-                  readOnly
-                  value={link}
-                  onFocus={(e) => e.currentTarget.select()}
-                  className="h-8 font-mono text-xs"
-                  aria-label="Invite link"
                 />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="size-8 shrink-0"
-                  onClick={handleCopy}
-                  aria-label="Copy invite link"
-                >
-                  {copied ? (
-                    <CheckIcon className="size-3.5" />
-                  ) : (
-                    <CopyIcon className="size-3.5" />
-                  )}
-                </Button>
-              </div>
-            )}
-            {peers.length > 0 && (
-              <div className="space-y-1.5">
-                {peers.map((peer) => (
-                  <div
-                    key={peer.clientId}
-                    className="flex min-w-0 items-center gap-2 text-sm"
-                  >
-                    <PeerAvatar peer={peer} />
-                    <span className="truncate">{peer.name}</span>
-                    {peer.file && (
-                      <span className="ml-auto truncate text-muted-foreground text-xs">
-                        {peer.file.split("/").pop()}
-                      </span>
+                <span className="text-muted-foreground">
+                  {STATUS[status].label}
+                </span>
+                {usage && (
+                  <span
+                    className={cn(
+                      "ml-auto shrink-0",
+                      usage.projectBytes >= usage.maxProjectBytes * 0.8
+                        ? warningColor
+                        : "text-muted-foreground",
                     )}
-                  </div>
-                ))}
+                  >
+                    {megabytes(usage.projectBytes)} of{" "}
+                    {megabytes(usage.maxProjectBytes)} MB
+                  </span>
+                )}
               </div>
-            )}
-            <YouRow />
-            <ConnectionDetails />
-            {filesButton}
+              {peerStatus && (
+                <p className="text-muted-foreground text-xs">
+                  {peerStatus.members === 0
+                    ? "Peer to peer: no one else yet"
+                    : peerStatus.waiting === 0
+                      ? `Peer to peer: everyone has your changes (${peerStatus.connected} of ${peerStatus.members} online)`
+                      : `Peer to peer: ${peerStatus.waiting} of ${peerStatus.members} still waiting for your changes`}
+                </p>
+              )}
+              {warnings.length > 0 && (
+                <div className="space-y-1.5">
+                  {warnings.map((warning) => (
+                    <div key={warning.id} className="flex gap-1.5 text-xs">
+                      <AlertTriangleIcon
+                        className={cn(
+                          "mt-px size-3.5 shrink-0",
+                          warning.level === "error"
+                            ? "text-red-500"
+                            : "text-amber-500",
+                        )}
+                      />
+                      <span>{warning.text}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {link && (
+                <div className="flex gap-1.5">
+                  <Input
+                    readOnly
+                    value={link}
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="h-8 font-mono text-xs"
+                    aria-label="Invite link"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="size-8 shrink-0"
+                    onClick={handleCopy}
+                    aria-label="Copy invite link"
+                  >
+                    {copied ? (
+                      <CheckIcon className="size-3.5" />
+                    ) : (
+                      <CopyIcon className="size-3.5" />
+                    )}
+                  </Button>
+                </div>
+              )}
+              {peers.length > 0 && (
+                <div className="space-y-1.5">
+                  {peers.map((peer) => (
+                    <div
+                      key={peer.clientId}
+                      className="flex min-w-0 items-center gap-2 text-sm"
+                    >
+                      <PeerAvatar peer={peer} />
+                      <span className="truncate">{peer.name}</span>
+                      {peer.file && (
+                        <span className="ml-auto truncate text-muted-foreground text-xs">
+                          {peer.file.split("/").pop()}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <YouRow />
+              <ConnectionDetails />
+              {filesButton}
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => void stopSyncing()}
+              >
+                Stop syncing on this device
+              </Button>
+            </>
+          )}
+        </PopoverContent>
+        <SyncFilesDialog open={choosingFiles} onOpenChange={setChoosingFiles} />
+      </Popover>
+      <Dialog
+        open={asking !== null}
+        onOpenChange={(o) => !o && setAsking(null)}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Sync storage</DialogTitle>
+          </DialogHeader>
+          {asking && (
+            <SyncStorageChoice settings={asking} onChange={setAsking} />
+          )}
+          <div className="flex justify-end">
             <Button
-              variant="outline"
               size="sm"
-              className="w-full"
-              onClick={() => void stopSyncing()}
+              onClick={() => {
+                if (!asking) return;
+                const chosen = {
+                  ...asking,
+                  storage: asking.storage || "server",
+                  chosen: true,
+                } satisfies SyncSettings;
+                setAsking(null);
+                void setSyncSettings(chosen).finally(shareNow);
+              }}
             >
-              Stop syncing on this device
+              Share project
             </Button>
-          </>
-        )}
-      </PopoverContent>
-      <SyncFilesDialog open={choosingFiles} onOpenChange={setChoosingFiles} />
-    </Popover>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

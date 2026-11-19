@@ -4,6 +4,12 @@ import * as Y from "yjs";
 import { LOADED, REMOTE, liveBlobs } from "./project-doc";
 
 /** Events from the sync client (collab.rs `SyncEvent`). */
+export interface PeerStatus {
+  members: number;
+  connected: number;
+  waiting: number;
+}
+
 export type SyncEvent =
   | {
       type: "status";
@@ -25,6 +31,8 @@ export type SyncEvent =
   | { type: "peerUpdate"; data: string }
   /** This copy's peer-to-peer id, to put in the document for others. */
   | { type: "peerId"; id: string }
+  /** How peer-to-peer sync stands: members known, connected, still waiting. */
+  | { type: "peerStatus"; members: number; connected: number; waiting: number }
   | { type: "snapshot"; upTo: number; data: string }
   | { type: "awareness"; data: string }
   | { type: "chat"; seq: number; at: number; data: string }
@@ -80,6 +88,7 @@ interface Hooks {
   onStatus?: (status: SessionStatus) => void;
   /** Caught up with the relay; `changed` if others' changes came in. */
   onCaughtUp?: (changed: boolean) => void;
+  onPeerStatus?: (status: PeerStatus) => void;
   onError?: (code: string) => void;
   /**
    * Caught up after changes were made both here and elsewhere without the
@@ -145,6 +154,9 @@ export class SharedSession {
       case "update":
         this.receive(fromBase64(event.data));
         this.advance(event.seq);
+        break;
+      case "peerStatus":
+        this.hooks.onPeerStatus?.(event);
         break;
       case "peerUpdate":
         this.receive(fromBase64(event.data));

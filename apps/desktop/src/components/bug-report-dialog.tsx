@@ -17,6 +17,8 @@ import { prepareImage } from "@/lib/collab/chat";
 import { type SystemInfo, useLogStore } from "@/lib/debug/log-store";
 import { providerLabel, useClaudeChatStore } from "@/stores/claude-chat-store";
 import { useDocumentStore } from "@/stores/document-store";
+import { getSyncSettings } from "@/lib/tauri/sync-settings";
+import { useCollabStore } from "@/stores/collab-store";
 import { useSettingsStore } from "@/stores/settings-store";
 
 /** Opens the "Report a bug" window from anywhere. */
@@ -51,6 +53,16 @@ async function appDetails(): Promise<{
     ai: providerLabel(tab?.providerKey ?? null),
     screen: `${window.innerWidth}×${window.innerHeight}`,
   };
+  // Sync, without the hub code (it holds a secret) or folder names.
+  const sync = await getSyncSettings().catch(() => null);
+  const collab = useCollabStore.getState();
+  if (sync) {
+    app.sync = `${sync.enabled ? "p2p on" : "p2p off"}, storage ${sync.storage || "unset"}`;
+  }
+  if (collab.status !== "none") {
+    const p = collab.peerStatus;
+    app.shared = `${collab.status}${p ? `; peers ${p.connected}/${p.members} online, ${p.waiting} waiting` : ""}`;
+  }
   // Only what's known.
   for (const [k, v] of Object.entries(app)) if (!v) delete app[k];
   const log = useLogStore

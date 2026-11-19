@@ -8,6 +8,7 @@ import { layout, metaMap } from "@/lib/collab/project-doc";
 import { type Known, ProjectSync } from "@/lib/collab/project-sync";
 import {
   type SessionStatus,
+  type PeerStatus,
   SharedSession,
   type SyncEvent,
 } from "@/lib/collab/shared-session";
@@ -127,6 +128,8 @@ interface CollabState {
   warnings: SyncWarning[];
   /** The relay's latest figures for the open project. */
   usage: Usage | null;
+  /** Peer-to-peer sync, when it's on. */
+  peerStatus: PeerStatus | null;
 
   setDisplayName: (name: string) => void;
   /** Your color in shared projects: cursor, notes and chat. Kept across
@@ -606,6 +609,9 @@ export const useCollabStore = create<CollabState>()(
             onStatus: (status) => {
               if (active === target) set({ status });
             },
+            onPeerStatus: (peerStatus) => {
+              if (active === target) set({ peerStatus });
+            },
             onCaughtUp: (changed) => {
               caughtUp?.();
               caughtUp = null;
@@ -641,6 +647,7 @@ export const useCollabStore = create<CollabState>()(
           peers: [],
           warnings: [],
           usage: null,
+          peerStatus: null,
         });
 
         const chat = useChatStore.getState();
@@ -785,6 +792,7 @@ export const useCollabStore = create<CollabState>()(
           peers: [],
           warnings: [],
           usage: null,
+          peerStatus: null,
           revision: s.revision + 1,
         }));
       }
@@ -803,6 +811,7 @@ export const useCollabStore = create<CollabState>()(
         progress: null,
         warnings: [],
         usage: null,
+        peerStatus: null,
 
         setColor: (color) => {
           set({ color });

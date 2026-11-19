@@ -118,6 +118,17 @@ async fn node() -> anyhow::Result<Arc<Node>> {
     .cloned()
 }
 
+/// How peer-to-peer sync stands for a project, now and then.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct Status {
+    /// Other members this copy knows of.
+    pub members: usize,
+    /// Connected to right now.
+    pub connected: usize,
+    /// Known to lack some of this copy's changes.
+    pub waiting: usize,
+}
+
 /// What the relay side hands to a project's peer-to-peer sync.
 pub enum Input {
     /// An update made here (plain; sealed before it's written).
@@ -136,6 +147,7 @@ pub fn start(
     open: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + 'static,
     deliver: impl Fn(Vec<u8>) + Send + 'static,
     ready: impl FnOnce(String) + Send + 'static,
+    status: impl Fn(Status) + Send + 'static,
 ) -> mpsc::UnboundedSender<Input> {
     let (tx, mut rx) = mpsc::unbounded_channel::<Input>();
     tauri::async_runtime::spawn(async move {
@@ -174,6 +186,7 @@ pub fn start(
             _ => {}
         }
         let mut changes = log.subscribe();
+        let mut every = tokio::time::interval(std::time::Duration::from_secs(10));
         // What arrived while the app was closed.
         for e in log.entries() {
             if e.author != node.id() {
@@ -184,6 +197,12 @@ pub fn start(
         }
         loop {
             tokio::select! {
+                _ = every.tick() => {
+                    let members = log.members();
+                    let waiting = members.keys().filter(|m| log.waiting_for(m) > 0).count();
+                    let connected = members.keys().filter(|m| node.is_syncing_with(&project, m)).count();
+                    status(Status { members: members.len(), connected, waiting });
+                }
                 input = rx.recv() => match input {
                     None => return,
                     Some(Input::Publish(update)) => {

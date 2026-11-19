@@ -628,6 +628,12 @@ pub enum SyncEvent {
     PeerId {
         id: String,
     },
+    /// How peer-to-peer sync stands.
+    PeerStatus {
+        members: usize,
+        connected: usize,
+        waiting: usize,
+    },
     #[serde(rename_all = "camelCase")]
     Snapshot {
         up_to: u64,
@@ -1424,7 +1430,7 @@ pub fn collab_connect(
     }
     if crate::p2p::enabled() {
         let (seal_keys, open_keys) = (keys.clone(), keys.clone());
-        let (deliver_to, ready_to) = (window.clone(), window.clone());
+        let (deliver_to, ready_to, status_to) = (window.clone(), window.clone(), window.clone());
         let emit_to = |w: &WebviewWindow, event: SyncEvent| {
             let _ = w.emit_to(EventTarget::webview_window(w.label()), "collab://event", event);
         };
@@ -1435,6 +1441,9 @@ pub fn collab_connect(
             move |sealed| open_keys.open(Kind::Update, sealed).ok(),
             move |plain| emit_to(&deliver_to, SyncEvent::PeerUpdate { data: BASE64.encode(plain) }),
             move |id| emit_to(&ready_to, SyncEvent::PeerId { id }),
+            move |s: crate::p2p::Status| {
+                emit_to(&status_to, SyncEvent::PeerStatus { members: s.members, connected: s.connected, waiting: s.waiting })
+            },
         );
         if let Ok(mut p2p) = state.p2p.lock() {
             p2p.insert(window.label().to_string(), input);
