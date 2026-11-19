@@ -170,6 +170,59 @@ let closeShared: () => Promise<void> = async () => {};
  * Called once the app has mounted: the document store and this one import
  * each other (through the editor), so neither may use the other at load.
  */
+/** This copy of the app, to tell the project's owner from the others. */
+function deviceId(): string {
+  const key = "latex4all-device-id";
+  try {
+    let id = localStorage.getItem(key);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The .tex file the owner (who shared the project) last edited: kept in the
+ * shared project, so the others' copies open on it. Before an owner is known
+ * (projects shared before this), anyone's last edit counts.
+ */
+function trackLastTex(target: Active) {
+  const meta = metaMap(target.session.doc);
+  const me = deviceId();
+  const record = (path: string) => {
+    const owner = meta.get("owner");
+    if (owner && owner !== me) return;
+    if (meta.get("lastTex") !== path) meta.set("lastTex", path);
+  };
+  target.cleanup.push(
+    useDocumentStore.subscribe((state, prev) => {
+      if (state.files === prev.files) return;
+      const file = state.files.find((f) => f.id === state.activeFileId);
+      if (file?.type === "tex" && file.isDirty) record(file.id);
+    }),
+  );
+}
+
+/** Opens a co-author's copy on the owner's last .tex file, or the main one. */
+function openOnLastTex(target: Active) {
+  const meta = metaMap(target.session.doc);
+  if (meta.get("owner") === deviceId()) return;
+  const documents = useDocumentStore.getState();
+  const tex = documents.files.filter((f) => f.type === "tex");
+  const pick =
+    tex.find((f) => f.id === meta.get("lastTex")) ??
+    (tex.some((f) => f.id === documents.activeFileId)
+      ? undefined
+      : (tex.find((f) => f.name === "main.tex") ?? tex[0]));
+  if (pick && pick.id !== documents.activeFileId) {
+    documents.setActiveFile(pick.id);
+  }
+}
+
 const OWNERS = "latex4all-share-owners";
 
 /**
@@ -766,6 +819,8 @@ export const useCollabStore = create<CollabState>()(
           .catch(() => {});
         for (const event of buffered?.splice(0) ?? []) session.handle(event);
         buffered = null;
+        openOnLastTex(target);
+        trackLastTex(target);
         trackPresence(target);
         trackPeople(target);
         bumpRevision();
@@ -848,7 +903,10 @@ export const useCollabStore = create<CollabState>()(
               .rememberSharedProject(info.projectId, root);
             await inSequence(() => open(root, info));
             const doc = getSharedDoc(root);
-            if (doc) await moveAnnotationsIntoShared(doc, root, annotations);
+            if (doc) {
+              metaMap(doc).set("owner", deviceId());
+              await moveAnnotationsIntoShared(doc, root, annotations);
+            }
           } finally {
             set({ progress: null });
           }
