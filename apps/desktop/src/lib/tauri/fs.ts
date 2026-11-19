@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import {
   readTextFile,
   writeTextFile,
@@ -375,6 +376,15 @@ export async function writeBytesToProject(
 export async function deleteFileFromDisk(absolutePath: string): Promise<void> {
   log.debug(`Deleting file: ${absolutePath}`);
   await whileLocked(() => remove(absolutePath));
+}
+
+/**
+ * A file removed by a sync (deleted on another computer): to the Trash, so
+ * it can be got back; if the Trash can't take it, it stays where it is.
+ */
+export async function trashFileFromDisk(absolutePath: string): Promise<void> {
+  log.debug(`Moving to the Trash: ${absolutePath}`);
+  await invoke("trash_file", { path: absolutePath });
 }
 
 export async function deleteFolderFromDisk(

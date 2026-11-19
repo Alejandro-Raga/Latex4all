@@ -117,6 +117,22 @@ export function warningForError(message: string): SyncWarning | null {
     case "chat-too-large":
       return null;
   }
+  if (/files are missing from this folder/.test(message)) {
+    return {
+      id: "many-missing",
+      code: "R10",
+      level: "warning",
+      text: message.replace(/ \(R10\)$/, "."),
+    };
+  }
+  if (/another program has it open$/.test(message)) {
+    return {
+      id: `locked:${message}`,
+      code: "R11",
+      level: "warning",
+      text: `${message}. Syncing waits until it's closed.`,
+    };
+  }
   const file = message.match(/^Couldn't (share|get|download) (.+?): (.*)$/);
   if (file) {
     const [, action, path, reason] = file;

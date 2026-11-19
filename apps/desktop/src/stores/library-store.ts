@@ -151,6 +151,8 @@ interface Entry {
   where?: string;
   /** Retired as the same folder as another entry. */
   duplicateOf?: string;
+  /** Devices it was deleted or stopped on: not fetched there again. */
+  skipOn?: Record<string, boolean>;
   /** Devices that have it at `where`, the same place a cloud app keeps in
    * step for them: when every device does, that app carries its files. */
   cloud?: Record<string, boolean>;
@@ -166,6 +168,20 @@ let session: SharedSession | null = null;
 const cleanup: Array<() => void> = [];
 let reconciling: Promise<void> | null = null;
 let again = false;
+/**
+ * A project deleted, or stopped syncing, on this device: not fetched here
+ * again. The other devices keep theirs.
+ */
+export function leftOnThisDevice(projectId: string) {
+  const projects = session && projectsMap(session.doc);
+  const entry = projects?.get(projectId);
+  if (!projects || !entry) return;
+  projects.set(projectId, {
+    ...entry,
+    skipOn: { ...(entry.skipOn ?? {}), [deviceId()]: true },
+  });
+}
+
 /** Stores changed by another device: read again from what's saved. */
 async function reloadStores(keys: string[]) {
   const loaders: Record<string, () => Promise<unknown>> = {
@@ -264,6 +280,8 @@ function markLibrary(root: string) {
  * its own name once the shared copy says it: the folder is renamed.
  */
 async function nameFetched(root: string, listed?: string) {
+  // Never the folder of the project open now.
+  if (useDocumentStore.getState().projectRoot === root) return;
   const parts = root.split(/[\\/]/);
   const base = parts.pop() ?? "";
   if (!isPlaceholderName(base)) return;
@@ -431,6 +449,10 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       if (!root || entry.removed) continue;
       const info = await readLink(root).catch(() => null);
       if (info?.projectId !== id) continue;
+      // Its place as the device that added it has it: each device writing
+      // its own made them overwrite each other, and two projects could seem
+      // to share a place.
+      if (entry.by !== me && entry.where) continue;
       const where = portable(root, homeMap);
       if (where.startsWith("@home") && entry.where !== where) {
         projects.set(id, { ...(projects.get(id) ?? entry), where });
@@ -445,7 +467,11 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       if (entry.removed || !entry.where) continue;
       const first = byWhere.get(entry.where);
       if (first && first !== id) {
-        projects.set(id, { ...entry, removed: true, duplicateOf: first });
+        projects.set(id, {
+          ...(projects.get(id) ?? entry),
+          removed: true,
+          duplicateOf: first,
+        });
       } else byWhere.set(entry.where, id);
     }
 
@@ -460,12 +486,9 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       if (current === there) continue;
       if (useDocumentStore.getState().projectRoot === there) continue;
       const link = await readLink(there).catch(() => null);
-      if (link && link.projectId !== id) {
-        // Its own identity: kept if it's shared with people (switching it
-        // would leave them); otherwise it takes the library's.
-        if (sharedWithPeople().has(there) && !entry.people) continue;
-      }
-      if (link?.projectId !== id) await writeLink(there, entry.link);
+      // A folder that's another project keeps its identity: never relinked.
+      if (link && link.projectId !== id) continue;
+      if (!link) await writeLink(there, entry.link);
       const projectsStore = useProjectStore.getState();
       projectsStore.rememberSharedProject(id, there);
       projectsStore.addRecentProject(there);
@@ -493,15 +516,22 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       const info = await readLink(p.path).catch(() => null);
       if (info) {
         hereIds.add(info.projectId);
-        if (store.sharedProjects[info.projectId] !== p.path) {
-          useProjectStore
-            .getState()
-            .rememberSharedProject(info.projectId, p.path);
-        }
+        const current =
+          useProjectStore.getState().sharedProjects[info.projectId];
+        if (current === p.path) continue;
+        // Already at a folder that still is this project: kept (with copies
+        // of one project in several folders, the one in use doesn't change).
+        const still = current
+          ? await readLink(current).catch(() => null)
+          : null;
+        if (still?.projectId === info.projectId) continue;
+        useProjectStore
+          .getState()
+          .rememberSharedProject(info.projectId, p.path);
       }
     }
     for (const [id, entry] of projects) {
-      if (entry.removed || hereIds.has(id)) continue;
+      if (entry.removed || hereIds.has(id) || entry.skipOn?.[me]) continue;
       if (session !== s) return;
       const there = store.sharedProjects[id];
       if (there) {
@@ -510,7 +540,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       }
       set({ busy: `Getting ${entry.name}…` });
       try {
-        const path = await fetchInBackground(entry.link, parent);
+        const path = await fetchInBackground(entry.link, parent, entry.name);
         useProjectStore.getState().addRecentProject(path);
         markLibrary(path);
         if (entry.people) markSharedWithPeople(path);
@@ -602,7 +632,9 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       const theirs = entry.type ?? null;
       if (here !== (known ?? null) && (known !== undefined || here !== null)) {
         // Changed here (or first seen with one): into the library.
-        if (theirs !== here) projects.set(id, { ...entry, type: here });
+        if (theirs !== here) {
+          projects.set(id, { ...(projects.get(id) ?? entry), type: here });
+        }
         typesKnown[id] = here;
       } else if (theirs !== (known ?? null)) {
         // Changed on another device: onto this one.

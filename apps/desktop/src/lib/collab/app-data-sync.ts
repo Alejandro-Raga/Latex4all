@@ -13,15 +13,10 @@
 
 import * as Y from "yjs";
 import { appDataDir, join } from "@tauri-apps/api/path";
-import {
-  exists,
-  mkdir,
-  readDir,
-  readTextFile,
-  remove,
-} from "@tauri-apps/plugin-fs";
+import { exists, mkdir, readDir, readTextFile } from "@tauri-apps/plugin-fs";
 import { applyTextChange, textHash } from "./project-doc";
 import { writeTextSafely } from "@/lib/safe-write";
+import { trashFileFromDisk } from "@/lib/tauri/fs";
 import { INBOX, listKey, READING, usePlanStore } from "@/lib/plan/plan-store";
 
 /** The folders synced, inside the app's data folder. */
@@ -66,7 +61,10 @@ async function writeLocal(path: string, text: string) {
 async function removeLocal(path: string) {
   const [folder, name] = path.split("/");
   if (!FOLDERS.includes(folder) || !name || name.includes("..")) return;
-  await remove(await join(await appDataDir(), folder, name)).catch(() => {});
+  // Deleted on another device: to the Trash here, so it can be got back.
+  await trashFileFromDisk(await join(await appDataDir(), folder, name)).catch(
+    () => {},
+  );
 }
 
 function parses(path: string, text: string) {
@@ -126,6 +124,9 @@ export async function syncAppData(
 ): Promise<AppKnown> {
   const files = appFiles(doc);
   const local = await localFiles();
+  // Nothing here while files are known: the folder isn't readable now, not
+  // emptied; nothing is passed on (or deleted) this time.
+  if (local.size === 0 && Object.keys(known).length > 0) return known;
   const next: AppKnown = { ...known };
   const written: string[] = [];
 

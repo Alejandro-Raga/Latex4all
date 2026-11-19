@@ -239,6 +239,18 @@ class FakeWorkspace implements Workspace {
     this.disk.delete(path);
     await this.refresh();
   }
+  /** Another program has it open: there, but its text can't be read. */
+  markUnreadable(path: string) {
+    const file = this.view.get(path);
+    if (!file) return;
+    this.view.set(path, {
+      ...file,
+      content: undefined,
+      size: 0,
+      unreadable: true,
+    });
+    this.changed();
+  }
   async userMoves(from: string, to: string) {
     await this.move(from, to);
     await this.refresh();
@@ -750,6 +762,49 @@ describe("shared projects", () => {
       "fig.png": "PNG",
       "main.tex": "x",
     });
+  });
+
+  it("never sends a file it can't read as emptied or deleted", async () => {
+    const relay = new FakeRelay();
+    const a = new Device(
+      relay,
+      new FakeWorkspace(relay, { "main.tex": "hello", "refs.bib": "@a{}" }),
+    );
+    await a.open();
+    const b = new Device(relay, new FakeWorkspace(relay));
+    await b.open();
+    await settleAll(a, b);
+
+    a.workspace.markUnreadable("main.tex");
+    await settleAll(a, b);
+    expect(b.workspace.snapshot()).toEqual({
+      "main.tex": "hello",
+      "refs.bib": "@a{}",
+    });
+  });
+
+  it("holds back many deletions at once (a folder half loaded)", async () => {
+    const relay = new FakeRelay();
+    const files: Record<string, string> = {};
+    for (const n of [1, 2, 3, 4, 5, 6]) files[`ch${n}.tex`] = `chapter ${n}`;
+    const a = new Device(relay, new FakeWorkspace(relay, files));
+    await a.open();
+    const b = new Device(relay, new FakeWorkspace(relay));
+    await b.open();
+    await settleAll(a, b);
+
+    for (const n of [1, 2, 3, 4, 5]) a.workspace.disk.delete(`ch${n}.tex`);
+    await a.workspace.refresh();
+    await settleAll(a, b);
+    expect(Object.keys(b.workspace.snapshot()).length).toBe(6);
+
+    // One file deleted is a deletion, sent at once.
+    const c = new Device(relay, new FakeWorkspace(relay));
+    await c.open();
+    await settleAll(a, b, c);
+    await b.workspace.userDeletes("ch6.tex");
+    await settleAll(a, b, c);
+    expect(c.workspace.snapshot()["ch6.tex"]).toBeUndefined();
   });
 
   it("deletes and renames reach everyone", async () => {

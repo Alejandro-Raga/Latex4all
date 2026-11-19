@@ -273,6 +273,8 @@ Every sync problem the app shows carries a code, also sent with bug reports.
 | R07 | A file couldn't be downloaded | Retried by itself |
 | R08 | The sync server is nearly full overall | Its owner adds room |
 | R09 | The project is nearly full | Remove large files soon |
+| R10 | Many files are missing from the folder at once; their deletion is held back for 10 minutes | If you deleted them, nothing to do; otherwise let the cloud app finish |
+| R11 | A file can't be read (another program has it open); syncing waits | Close it in the other program |
 | P01 | Peer-to-peer can't start (network blocks UDP, or iroh's servers are down) | Nothing: the sync server still carries changes |
 | P02 | This computer's sync identity was damaged; a new one was made | Nothing |
 | P03 | Two computers sync as one (app data copied) | Restart Latex4All; a new identity was made |

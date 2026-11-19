@@ -1,7 +1,7 @@
 import type * as Y from "yjs";
 import {
   createDirectory,
-  deleteFileFromDisk,
+  trashFileFromDisk,
   join,
   renameFileOnDisk,
   writeTexFileContent,
@@ -79,7 +79,8 @@ export function documentStoreWorkspace(
           local = {
             path: file.relativePath,
             kind: isText ? "text" : "blob",
-            content: isText ? file.content : undefined,
+            content: isText && !file.unreadable ? file.content : undefined,
+            unreadable: file.unreadable,
             size: file.fileSize ?? file.content?.length ?? 0,
             dirty: file.isDirty,
             shareable,
@@ -136,7 +137,7 @@ export function documentStoreWorkspace(
 
     async remove(path) {
       await saveFirst();
-      await deleteFileFromDisk(await absolute(path));
+      await trashFileFromDisk(await absolute(path));
     },
 
     refresh() {

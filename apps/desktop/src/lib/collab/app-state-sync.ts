@@ -139,6 +139,15 @@ export function exportStore(
   if (drop && value && typeof value === "object" && "state" in value) {
     const state = { ...(value as { state: Record<string, unknown> }).state };
     for (const f of drop) delete state[f];
+    if (key === "latex4all-projects") {
+      // Projects outside the home folder and not shared between the devices
+      // (on another drive, say) can't be found on the others: left out.
+      const here = (p: string) => /@p:|@home/.test(portable(p, map));
+      const recent = state.recentProjects as { path: string }[] | undefined;
+      if (recent) state.recentProjects = recent.filter((r) => here(r.path));
+      const favorites = state.favorites as string[] | undefined;
+      if (favorites) state.favorites = favorites.filter(here);
+    }
     value = { ...(value as object), state };
   }
   return JSON.stringify(mapValue(value, (s) => portable(s, map)));

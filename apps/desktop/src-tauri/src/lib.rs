@@ -474,6 +474,21 @@ async fn duplicate_project(src_path: String, dst_path: String) -> Result<(), Str
     .map_err(|e| format!("Copy task panicked: {}", e))?
 }
 
+/// Moves one file to the Trash: a file a sync removes (deleted on another
+/// computer) can still be got back. Only files, never folders.
+#[tauri::command]
+async fn trash_file(path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let p = Path::new(&path);
+        if !p.is_absolute() || !p.is_file() {
+            return Err("That file no longer exists.".to_string());
+        }
+        trash::delete(p).map_err(|e| format!("Couldn't move it to the Trash: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Delete task panicked: {}", e))?
+}
+
 /// Moves a project folder to the Trash.
 #[tauri::command]
 async fn trash_project(path: String) -> Result<(), String> {
@@ -777,6 +792,7 @@ pub fn run() {
             move_project,
             duplicate_project,
             trash_project,
+            trash_file,
             list_default_projects,
             detect_editors,
             open_in_editor,

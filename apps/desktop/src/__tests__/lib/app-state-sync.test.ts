@@ -76,6 +76,25 @@ describe("app state between linked devices", () => {
     ]);
   });
 
+  it("leaves out projects the other device can't find (another drive)", () => {
+    const raw = JSON.stringify({
+      state: {
+        recentProjects: [
+          { path: "/Users/me/Projects/Thesis", name: "Thesis" },
+          { path: "/Volumes/USB/Old", name: "Old" },
+        ],
+        favorites: ["/Volumes/USB/Old", "/Users/me/Projects/Thesis"],
+      },
+      version: 1,
+    });
+    const out = JSON.parse(exportStore("latex4all-projects", raw, mac) as string)
+      .state;
+    expect(out.recentProjects.map((p: { name: string }) => p.name)).toEqual([
+      "Thesis",
+    ]);
+    expect(out.favorites).toEqual([`@p:${ID}`]);
+  });
+
   it("carries a change from one device to the other through the document", () => {
     const doc = new Y.Doc();
     localStorage.setItem(

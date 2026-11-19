@@ -8,7 +8,7 @@
 import type * as Y from "yjs";
 import {
   createDirectory,
-  deleteFileFromDisk,
+  trashFileFromDisk,
   join,
   LARGE_FILE_THRESHOLD,
   readTexFileContent,
@@ -62,7 +62,16 @@ export function diskWorkspace(
         try {
           content = await readTexFileContent(f.absolutePath);
         } catch {
-          // Unreadable now (a sync app has it): left out this time.
+          // Unreadable now (a sync app has it): there, but not synced
+          // until it can be read (never taken for deleted).
+          next.push({
+            path: f.relativePath,
+            kind: "text",
+            size: 0,
+            dirty: false,
+            shareable,
+            unreadable: true,
+          });
           continue;
         }
         next.push({
@@ -145,7 +154,7 @@ export function diskWorkspace(
     },
 
     async remove(path) {
-      await deleteFileFromDisk(await absolute(path));
+      await trashFileFromDisk(await absolute(path));
     },
 
     async refresh() {

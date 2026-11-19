@@ -24,6 +24,10 @@ export interface LocalFile {
   dirty: boolean;
   /** False for files that exist but aren't shared, like compiled PDFs. */
   shareable?: boolean;
+  /** There, but couldn't be read just now (another program has it open):
+   * nothing is synced until it can be, so it's never taken for emptied or
+   * deleted. */
+  unreadable?: boolean;
 }
 
 /** The open project's files, and the ways the sync may change them. */
@@ -111,6 +115,8 @@ export class ProjectSync {
    * else (the relay or the connection briefly down) is tried again later,
    * waiting longer each time.
    */
+  /** Since when many known files have been missing (see reconcile). */
+  private manyMissingSince: number | null = null;
   private failedUploads = new Map<string, { retryAt: number; wait: number }>();
   /**
    * Images and other binary files left to download when opening: fetched
@@ -414,6 +420,19 @@ export class ProjectSync {
     const placed = layout(this.doc);
     const byId = new Map([...placed.values()].map((f) => [f.fileId, f]));
     let local = this.localFiles();
+    // A file that can't be read now would look emptied or deleted: this
+    // round waits for it.
+    const blocked = [...local.values()].find((f) => f.unreadable);
+    if (blocked) {
+      this.hooks.onError?.(
+        `Couldn't read ${blocked.path}: another program has it open`,
+      );
+      const timer = setTimeout(() => {
+        if (!this.stopped) this.schedule();
+      }, 30_000);
+      this.cleanup.push(() => clearTimeout(timer));
+      return;
+    }
     let wrote = false;
     // Binary files put off until after opening: left alone this time round,
     // so an old copy on disk isn't taken for a change made here.
@@ -582,6 +601,24 @@ export class ProjectSync {
         !this.isNotSynced(f.path),
     );
     const missing = [...this.known].filter(([, k]) => !local.has(k.path));
+    // Many files gone at once is more likely a folder half loaded (a cloud
+    // app catching up, a disk not there yet) than deletions: they're held
+    // back, and sent only if still gone ten minutes on.
+    const many = missing.length >= 5 && missing.length >= this.known.size / 3;
+    if (!many) this.manyMissingSince = null;
+    else {
+      this.manyMissingSince ??= Date.now();
+      if (Date.now() - this.manyMissingSince < 10 * 60e3) {
+        this.hooks.onError?.(
+          `${missing.length} files are missing from this folder. Their deletion isn't sent yet (R10)`,
+        );
+        const timer = setTimeout(() => {
+          if (!this.stopped) this.schedule();
+        }, 60_000);
+        this.cleanup.push(() => clearTimeout(timer));
+        missing.length = 0;
+      }
+    }
     for (const [fileId, known] of missing) {
       const shared = byId.get(fileId);
       const entry = this.entry(fileId);

@@ -54,6 +54,7 @@ import {
   writeLink,
 } from "@/lib/tauri/collab";
 import { join, scanProjectFolder } from "@/lib/tauri/fs";
+import { exists } from "@tauri-apps/plugin-fs";
 import {
   onProjectRelocated,
   setSharedSaving,
@@ -321,6 +322,12 @@ export async function leaveSharedProject(
     return;
   }
   const info = await readLink(root).catch(() => null);
+  // Not fetched back here by the library.
+  if (info) {
+    void import("@/stores/library-store").then((m) =>
+      m.leftOnThisDevice(info.projectId),
+    );
+  }
   if (keepNotes) {
     const saved = await loadDoc(root).catch(() => null);
     if (saved) {
@@ -373,6 +380,11 @@ function setFirstOpens(roots: string[]) {
 export async function shareInBackground(root: string): Promise<LinkInfo> {
   const there = await readLink(root).catch(() => null);
   if (there) return there;
+  // A folder that's gone isn't shared (writing its link would make it again,
+  // empty).
+  if (!(await exists(root).catch(() => false))) {
+    throw new Error("The project's folder isn't there.");
+  }
   const info = await parseLink(await createSharedProject());
   await writeLink(root, info.link);
   useProjectStore.getState().rememberSharedProject(info.projectId, root);
@@ -388,8 +400,10 @@ export async function shareInBackground(root: string): Promise<LinkInfo> {
 export function fetchInBackground(
   link: string,
   destParent: string,
+  /** The folder's name: the project's name in the library. */
+  name?: string,
 ): Promise<string> {
-  const run = backgroundQueue.then(() => fetchNow(link, destParent));
+  const run = backgroundQueue.then(() => fetchNow(link, destParent, name));
   backgroundQueue = run.then(
     () => {},
     () => {},
@@ -397,7 +411,11 @@ export function fetchInBackground(
   return run;
 }
 
-async function fetchNow(link: string, destParent: string): Promise<string> {
+async function fetchNow(
+  link: string,
+  destParent: string,
+  listed?: string,
+): Promise<string> {
   const info = await parseLink(link);
   // A channel of its own: two runs sharing one heard each other's changes.
   const channel = `fetch${++backgroundRuns}`;
@@ -430,7 +448,14 @@ async function fetchNow(link: string, destParent: string): Promise<string> {
   try {
     await connect(info.link, 0, null, channel);
     await caughtUp;
-    const name = metaMap(session.doc).get("name") || "Shared project";
+    if (!sameProject(session.doc, info.projectId)) throw new Error("X01");
+    const shared = metaMap(session.doc).get("name");
+    const name =
+      listed && !isPlaceholderName(listed)
+        ? listed
+        : shared && !isPlaceholderName(shared)
+          ? shared
+          : "Shared project";
     const path = await createProjectFolder(destParent, name);
     await writeLink(path, info.link);
     await saveDoc(path, session.seq, "{}", Y.encodeStateAsUpdate(session.doc));
@@ -473,8 +498,10 @@ export function syncInBackground(
   const run = backgroundQueue
     .then(async () => {
       const channel = `bg${++backgroundRuns}`;
-      const saved = await loadDoc(root).catch(() => null);
-      const known: Known = saved ? JSON.parse(saved.local || "{}") : {};
+      const kept = await loadDoc(root).catch(() => null);
+      const linkInfo = await parseLink(link);
+      const saved = ownSaved(kept, linkInfo.projectId);
+      const known: Known = kept ? JSON.parse(kept.local || "{}") : {};
       let sync: ProjectSync | null = null;
       let resolve = () => {};
       const caughtUp = new Promise<void>((res) => {
@@ -583,6 +610,30 @@ export function syncInBackground(
   backgroundQueue = run.catch(() => {});
   inBackground.set(root, run);
   return run;
+}
+
+/**
+ * A folder's saved copy of its shared project, if it's this project's: it
+ * says so in its own document. One saved under another project (a folder
+ * renamed, a new one at an old path) or before copies said whose they are
+ * is left unused, and the project is fetched whole instead; what this
+ * device knows of its files is kept either way (another project's file ids
+ * match nothing here).
+ */
+function ownSaved<T extends { data: Uint8Array }>(
+  saved: T | null,
+  projectId: string,
+): T | null {
+  if (!saved) return null;
+  const doc = new Y.Doc();
+  try {
+    Y.applyUpdate(doc, saved.data);
+    return metaMap(doc).get("projectId") === projectId ? saved : null;
+  } catch {
+    return null;
+  } finally {
+    doc.destroy();
+  }
 }
 
 /** The document class of a project's main .tex, from its text. */
@@ -925,8 +976,10 @@ export const useCollabStore = create<CollabState>()(
       async function open(root: string, info: LinkInfo) {
         // A background sync of it finishes first: never two on one folder.
         await inBackground.get(root)?.catch(() => {});
-        const saved = await loadDoc(root).catch(() => null);
-        const known: Known = saved ? JSON.parse(saved.local || "{}") : {};
+        const kept = await loadDoc(root).catch(() => null);
+        // Only this project's saved copy is used (see ownSaved).
+        const saved = ownSaved(kept, info.projectId);
+        const known: Known = kept ? JSON.parse(kept.local || "{}") : {};
         let buffered: SyncEvent[] | null = [];
         // The relay's copy, in full, the first time it's been sent.
         let caughtUp: (() => void) | null = null;
@@ -1380,6 +1433,9 @@ export const useCollabStore = create<CollabState>()(
         stopSyncing: async () => {
           const current = active;
           if (!current) return;
+          void import("@/stores/library-store").then((m) =>
+            m.leftOnThisDevice(current.info.projectId),
+          );
           await moveAnnotationsOutOfShared(
             current.session.doc,
             current.root,

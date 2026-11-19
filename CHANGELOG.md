@@ -316,6 +316,17 @@ tag.
 
 ### Fixed
 
+- Sync safety:
+  - A file another program has open is never synced as emptied or
+    deleted; syncing waits until it can be read.
+  - Many files missing from a folder at once (a cloud app catching up) are
+    not deleted for everyone; the deletion waits 10 minutes.
+  - Files removed by a sync (deleted on another computer) go to the Trash.
+  - A project's saved sync state is only used for that project.
+  - A project deleted or stopped on one computer isn't fetched back there.
+  - Linked computers no longer overwrite each other's record of where a
+    project is, and a folder that is another project is never relinked.
+
 - Linked devices: two projects syncing in the background at the same time
   could write one project's files into the other. Background syncs now run
   one at a time and apart, a shared copy is only synced into its own
