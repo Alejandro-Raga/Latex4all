@@ -242,6 +242,36 @@ co-author's copy of the folder by its marker file, `latex4all-project.json`.
 - Bug reports include the sync state: routes working, what each member has,
   last errors.
 
+## Error codes
+
+Every sync problem the app shows carries a code, also sent with bug reports.
+
+| Code | What happened | What to do |
+|---|---|---|
+| R01 | The sync server can't be reached (shown as Offline) | Wait or check the connection; changes are kept and go out later |
+| R02 | The project is full on the sync server | Remove large files |
+| R03 | The project is no longer shared on the server | Files stay; share again if wanted |
+| R04 | The server needs a newer app | Update |
+| R05 | A change or file is too large to send (25 MB per file) | Split it, or keep the file out |
+| R06 | A file couldn't be uploaded (network, server, file locked) | Retried by itself |
+| R07 | A file couldn't be downloaded | Retried by itself |
+| R08 | The sync server is nearly full overall | Its owner adds room |
+| R09 | The project is nearly full | Remove large files soon |
+| P01 | Peer-to-peer can't start (network blocks UDP, or iroh's servers are down) | Nothing: the sync server still carries changes |
+| P02 | This computer's sync identity was damaged; a new one was made | Nothing |
+| P03 | Two computers sync as one (app data copied) | Restart Latex4All; a new identity was made |
+| P04 | Changes refused: not signed by a member | Nothing; reported in case of trouble |
+| F01 | The sync folder isn't there | Start the cloud app, or choose the folder again |
+| F02 | The sync folder (or this computer's sync data) can't be written | Free space; check permissions |
+| H01 | Your server can't be reached | Changes wait; check the server |
+| H02 | Your server refused its code | Paste the code again |
+| L01 | The device code wasn't found or has expired | Show a new code on the other device |
+| L02 | A project from another device couldn't be fetched | Retried every 30 s |
+| L03 | A project couldn't be added for the other devices (offline, or too big for the server) | Retried; check its size |
+| X00 | Anything else (its message is shown) | Report it |
+
+Linked devices show theirs (L01–L03) in Settings → Sync.
+
 ## Moving over from the relay
 
 1. While the relay exists, the app keeps syncing with it as well. Changes go

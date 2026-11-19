@@ -14,6 +14,8 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, OnceCell};
 
 static NODE: OnceCell<Arc<Node>> = OnceCell::const_new();
+/// The identity file was damaged at start and a new one made (P02).
+static KEY_REPLACED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn base() -> Option<PathBuf> {
     Some(dirs::data_local_dir()?.join("Latex4All").join("sync"))
@@ -105,7 +107,12 @@ async fn node() -> anyhow::Result<Arc<Node>> {
                 let bytes: [u8; 32] = b[..32].try_into()?;
                 iroh::SecretKey::from_bytes(&bytes)
             }
-            _ => {
+            other => {
+                if other.is_ok() {
+                    // Damaged: kept aside, a new identity made.
+                    let _ = std::fs::rename(&key_file, dir.join("key.damaged"));
+                    KEY_REPLACED.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
                 let k = iroh::SecretKey::generate();
                 std::fs::write(&key_file, k.to_bytes())?;
                 k
@@ -127,6 +134,23 @@ pub struct Status {
     pub connected: usize,
     /// Known to lack some of this copy's changes.
     pub waiting: usize,
+    /// Problem codes now (docs/sync.md, "Error codes").
+    pub problems: Vec<String>,
+}
+
+impl Status {
+    fn problem(code: &str) -> Self {
+        Status { members: 0, connected: 0, waiting: 0, problems: vec![code.to_string()] }
+    }
+}
+
+/// After a clash (this identity in use on another computer too): a new one
+/// for the next start, so the two stop writing as one.
+fn renew_identity() {
+    if let Some(dir) = base() {
+        let k = iroh::SecretKey::generate();
+        let _ = std::fs::write(dir.join("key"), k.to_bytes());
+    }
 }
 
 /// For "this computer as a server": every shared project this computer has
@@ -181,7 +205,14 @@ pub fn start(
 ) -> mpsc::UnboundedSender<Input> {
     let (tx, mut rx) = mpsc::unbounded_channel::<Input>();
     tauri::async_runtime::spawn(async move {
-        let Ok(node) = node().await else { return };
+        let node = match node().await {
+            Ok(node) => node,
+            Err(e) => {
+                eprintln!("[sync] peer-to-peer can't start: {e:#}");
+                status(Status::problem("P01"));
+                return;
+            }
+        };
         let Some(dir) = base().map(|b| b.join("projects").join(safe(&project))) else { return };
         // Opened once per run (a server opens them all at start), so two
         // never write the same files.
@@ -189,9 +220,15 @@ pub fn start(
             Some(log) => log,
             None => match node.open(&project, &token, &dir) {
                 Ok(log) => log,
-                Err(_) => return,
+                Err(e) => {
+                    eprintln!("[sync] couldn't open the project's log: {e:#}");
+                    status(Status::problem("F02"));
+                    return;
+                }
             },
         };
+        // Problems found while setting up, reported with every status.
+        let mut setup: Vec<String> = Vec::new();
         let _ = std::fs::write(dir.join("id"), &project);
         ready(node.id().to_string());
         // The always-on store chosen in Settings → Sync.
@@ -203,18 +240,34 @@ pub fn start(
                     // it; otherwise one of ours, in the app's own subfolder.
                     let place = l4a_sync::folder::find(&[root.clone()], &project)
                         .unwrap_or_else(|| root.join("Latex4All").join(safe(&project)));
-                    let _ = node.use_folder(&project, place, dir.join("folder-state.json"), std::time::Duration::from_secs(30));
+                    if !root.is_dir() {
+                        setup.push("F01".into());
+                    } else if let Err(e) = node.use_folder(&project, place, dir.join("folder-state.json"), std::time::Duration::from_secs(30)) {
+                        eprintln!("[sync] folder: {e:#}");
+                        setup.push("F02".into());
+                    }
                 }
             }
             "computer" => log.keep_all_blobs(true),
             "hub" => {
                 if let Some(code) = choice.hub_code.as_deref() {
-                    if !choice.hubbed.contains(&project)
-                        && node.add_to_hub(code, &project, &token, None).await.is_ok()
-                    {
-                        let mut s = settings();
-                        s.hubbed.push(project.clone());
-                        let _ = save_settings(&s);
+                    if !choice.hubbed.contains(&project) {
+                        match node.add_to_hub(code, &project, &token, None).await {
+                            Ok(()) => {
+                                let mut s = settings();
+                                s.hubbed.push(project.clone());
+                                let _ = save_settings(&s);
+                            }
+                            Err(e) => {
+                                eprintln!("[sync] hub: {e:#}");
+                                let text = format!("{e:#}").to_lowercase();
+                                setup.push(if text.contains("pair") || text.contains("secret") || text.contains("refus") {
+                                    "H02".into()
+                                } else {
+                                    "H01".into()
+                                });
+                            }
+                        }
                     }
                     // The hub, as a member to reach.
                     if let Some(hub) = code.split('.').next().and_then(|h| h.parse::<iroh::EndpointId>().ok()) {
@@ -226,6 +279,7 @@ pub fn start(
         }
         let mut changes = log.subscribe();
         let mut every = tokio::time::interval(std::time::Duration::from_secs(10));
+        let mut renewed = false;
         // What arrived while the app was closed.
         for e in log.entries() {
             if e.author != node.id() {
@@ -240,7 +294,21 @@ pub fn start(
                     let members = log.members();
                     let waiting = members.keys().filter(|m| log.waiting_for(m) > 0).count();
                     let connected = members.keys().filter(|m| node.is_syncing_with(&project, m)).count();
-                    status(Status { members: members.len(), connected, waiting });
+                    let mut problems = setup.clone();
+                    if log.clashed() {
+                        if !renewed {
+                            renewed = true;
+                            renew_identity();
+                        }
+                        problems.push("P03".into());
+                    }
+                    if KEY_REPLACED.load(std::sync::atomic::Ordering::Relaxed) {
+                        problems.push("P02".into());
+                    }
+                    if log.refused() > 0 {
+                        problems.push("P04".into());
+                    }
+                    status(Status { members: members.len(), connected, waiting, problems });
                 }
                 input = rx.recv() => match input {
                     None => return,

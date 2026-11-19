@@ -171,6 +171,8 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       devices.set(me, { id: me, name: deviceName(), at: Date.now() });
     }
     const projects = projectsMap(doc);
+    // What went wrong this pass, with its code (docs/sync.md).
+    const problems: string[] = [];
 
     // This device's projects, shared (if they aren't) and listed.
     const recent = useProjectStore.getState().recentProjects;
@@ -193,6 +195,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
             path: project.path,
             error: String(err),
           });
+          problems.push(`Couldn't add ${project.name} (L03)`);
           return null;
         });
       }
@@ -209,8 +212,22 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     // The list's projects this device lacks, fetched into its folder.
     const store = useProjectStore.getState();
     const parent = store.lastProjectFolder ?? (await defaultProjectFolder());
+    // Every project here by its id, wherever it is now (a moved or renamed
+    // folder isn't fetched again as a copy).
+    const hereIds = new Set<string>();
+    for (const p of useProjectStore.getState().recentProjects) {
+      const info = await readLink(p.path).catch(() => null);
+      if (info) {
+        hereIds.add(info.projectId);
+        if (store.sharedProjects[info.projectId] !== p.path) {
+          useProjectStore
+            .getState()
+            .rememberSharedProject(info.projectId, p.path);
+        }
+      }
+    }
     for (const [id, entry] of projects) {
-      if (entry.removed) continue;
+      if (entry.removed || hereIds.has(id)) continue;
       if (session !== s) return;
       const there = store.sharedProjects[id];
       if (there) {
@@ -226,6 +243,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
           name: entry.name,
           error: String(err),
         });
+        problems.push(`Couldn't get ${entry.name} (L02)`);
       }
     }
     // The app's own data (Planner lists, highlights) too.
@@ -233,7 +251,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       appKnown = await syncAppData(doc, appKnown);
       s.scheduleSave();
     }
-    set({ error: null });
+    set({ error: problems.length ? problems.join(" · ") : null });
     refresh();
   }
 
@@ -368,7 +386,11 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     linkTo: async (text) => {
       const trimmed = text.trim();
       const link = /^[\s\w-]{12,20}$/.test(trimmed)
-        ? await resolveCode(trimmed)
+        ? await resolveCode(trimmed).catch((err) => {
+            throw new Error(
+              `${err instanceof Error ? err.message : err} (L01)`,
+            );
+          })
         : trimmed;
       const info = await parseLink(link);
       await writeLink(await libraryRoot(), info.link);

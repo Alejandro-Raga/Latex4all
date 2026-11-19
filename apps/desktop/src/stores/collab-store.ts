@@ -21,6 +21,7 @@ import {
   type Usage,
   usageWarnings,
   warningForError,
+  warningForPeerProblem,
 } from "@/lib/collab/sync-warnings";
 import {
   type LinkInfo,
@@ -595,6 +596,21 @@ function warnAbout(message: string) {
   announce(warning);
 }
 
+/** Peer-to-peer problems as they stand: new ones shown, gone ones cleared. */
+function applyPeerProblems(codes: string[]) {
+  const { warnings } = useCollabStore.getState();
+  const fresh = codes.map(warningForPeerProblem);
+  for (const warning of fresh) {
+    if (!warnings.some((w) => w.id === warning.id)) {
+      log.warn("Sync problem", { code: warning.code });
+      announce(warning);
+    }
+  }
+  useCollabStore.setState({
+    warnings: [...warnings.filter((w) => !w.id.startsWith("peer:")), ...fresh],
+  });
+}
+
 /** The relay's figures: warns as the project or the relay fills up. */
 function applyUsage(usage: Usage) {
   const { warnings } = useCollabStore.getState();
@@ -739,7 +755,9 @@ export const useCollabStore = create<CollabState>()(
               if (active === target) set({ status });
             },
             onPeerStatus: (peerStatus) => {
-              if (active === target) set({ peerStatus });
+              if (active !== target) return;
+              set({ peerStatus });
+              applyPeerProblems(peerStatus.problems ?? []);
             },
             onCaughtUp: (changed) => {
               caughtUp?.();

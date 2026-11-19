@@ -18,6 +18,7 @@ import { type SystemInfo, useLogStore } from "@/lib/debug/log-store";
 import { providerLabel, useClaudeChatStore } from "@/stores/claude-chat-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { getSyncSettings } from "@/lib/tauri/sync-settings";
+import { useLibraryStore } from "@/stores/library-store";
 import { useCollabStore } from "@/stores/collab-store";
 import { useSettingsStore } from "@/stores/settings-store";
 
@@ -62,6 +63,12 @@ async function appDetails(): Promise<{
   if (collab.status !== "none") {
     const p = collab.peerStatus;
     app.shared = `${collab.status}${p ? `; peers ${p.connected}/${p.members} online, ${p.waiting} waiting` : ""}`;
+    const codes = collab.warnings.map((w) => w.code).filter(Boolean);
+    if (codes.length) app.syncCodes = codes.join(" ");
+  }
+  const lib = useLibraryStore.getState();
+  if (lib.link) {
+    app.linked = `${lib.devices.length} devices, ${lib.here}/${lib.projects} projects here, ${lib.status}${lib.error ? `; ${lib.error}` : ""}`;
   }
   // Only what's known.
   for (const [k, v] of Object.entries(app)) if (!v) delete app[k];

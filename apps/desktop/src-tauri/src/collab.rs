@@ -684,6 +684,7 @@ pub enum SyncEvent {
         members: usize,
         connected: usize,
         waiting: usize,
+        problems: Vec<String>,
     },
     #[serde(rename_all = "camelCase")]
     Snapshot {
@@ -1573,7 +1574,7 @@ pub fn collab_connect(
                 move |id| emit_to(&ready_to, SyncEvent::PeerId { id })
             },
             move |s: crate::p2p::Status| {
-                emit_to(&status_to, SyncEvent::PeerStatus { members: s.members, connected: s.connected, waiting: s.waiting })
+                emit_to(&status_to, SyncEvent::PeerStatus { members: s.members, connected: s.connected, waiting: s.waiting, problems: s.problems })
             },
         );
         if let Ok(mut p2p) = state.p2p.lock() {

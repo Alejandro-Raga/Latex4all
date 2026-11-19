@@ -9,6 +9,8 @@ export interface SyncWarning {
   /** `error`: changes aren't reaching the others. */
   level: "warning" | "error";
   text: string;
+  /** Its code (docs/sync.md, "Error codes"), to look up or report. */
+  code?: string;
 }
 
 export interface Usage {
@@ -29,6 +31,7 @@ export function megabytes(bytes: number) {
 
 const FULL: SyncWarning = {
   id: "full",
+  code: "R02",
   level: "error",
   text: "This project is full, so new changes and files don't reach the others. Remove large files to make room.",
 };
@@ -40,6 +43,7 @@ export function usageWarnings(usage: Usage): SyncWarning[] {
   else if (share >= NEARLY_FULL) {
     warnings.push({
       id: "nearly-full",
+      code: "R09",
       level: "warning",
       text: `This project uses ${megabytes(usage.projectBytes)} of its ${megabytes(usage.maxProjectBytes)} MB. Once full, changes stop reaching the others.`,
     });
@@ -47,6 +51,7 @@ export function usageWarnings(usage: Usage): SyncWarning[] {
   if (usage.relayNearlyFull) {
     warnings.push({
       id: "relay-full",
+      code: "R08",
       level: "warning",
       text: "The sync server is nearly full. Syncing may stop for everyone.",
     });
@@ -89,18 +94,21 @@ export function warningForError(message: string): SyncWarning | null {
     case "too-large":
       return {
         id: "too-large",
+        code: "R05",
         level: "error",
         text: "A change was too large to send. Try splitting it up.",
       };
     case "outdated":
       return {
         id: "outdated",
+        code: "R04",
         level: "error",
         text: "This project needs a newer Latex4All. Update to keep syncing; your changes are kept.",
       };
     case "gone":
       return {
         id: "gone",
+        code: "R03",
         level: "error",
         text: "This project is no longer shared. Your files are still here.",
       };
@@ -116,6 +124,7 @@ export function warningForError(message: string): SyncWarning | null {
     if (reason === "too-large") {
       return {
         id: `too-large:${path}`,
+        code: "R05",
         level: "warning",
         text: `${path} is over 25 MB, so it isn't shared.`,
       };
@@ -124,14 +133,67 @@ export function warningForError(message: string): SyncWarning | null {
     return action === "share"
       ? {
           id: `share:${path}`,
+          code: "R06",
           level: "warning",
           text: `Couldn't share ${path}${why}. Trying again in a few minutes.`,
         }
       : {
           id: `get:${path}`,
+          code: "R07",
           level: "warning",
           text: `Couldn't get the latest ${path}${why}. Trying again.`,
         };
   }
-  return { id: message, level: "warning", text: message };
+  return { id: message, code: "X00", level: "warning", text: message };
+}
+
+/**
+ * Peer-to-peer and storage problems, by the code the sync reports
+ * (src-tauri/src/p2p.rs `Problem`); docs/sync.md lists them all.
+ */
+const PEER_PROBLEMS: Record<string, Omit<SyncWarning, "id" | "code">> = {
+  P01: {
+    level: "warning",
+    text: "Peer-to-peer sync can't start: this network may block it. Changes still go through the sync server.",
+  },
+  P02: {
+    level: "warning",
+    text: "This computer's sync identity couldn't be read, so it made a new one.",
+  },
+  P03: {
+    level: "error",
+    text: "Another computer is syncing as this one (its app data was copied from here). Restart Latex4All on one of them to give it its own identity.",
+  },
+  P04: {
+    level: "warning",
+    text: "Some changes from others were refused: they weren't signed by a member.",
+  },
+  F01: {
+    level: "error",
+    text: "The sync folder can't be found. Check it's still there and your cloud app is running, or choose it again in Settings → Sync.",
+  },
+  F02: {
+    level: "error",
+    text: "The sync folder can't be written to. Check your cloud app has room and the folder isn't read-only.",
+  },
+  H01: {
+    level: "warning",
+    text: "Your server can't be reached. Changes wait here and go out when it's back.",
+  },
+  H02: {
+    level: "error",
+    text: "Your server didn't accept its code. Copy the code from it again into Settings → Sync.",
+  },
+};
+
+export function warningForPeerProblem(code: string): SyncWarning {
+  const known = PEER_PROBLEMS[code];
+  return known
+    ? { id: `peer:${code}`, code, ...known }
+    : {
+        id: `peer:${code}`,
+        code,
+        level: "warning",
+        text: "Peer-to-peer sync had a problem.",
+      };
 }

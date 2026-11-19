@@ -411,7 +411,14 @@ export function CollabButton() {
                             : "text-amber-500",
                         )}
                       />
-                      <span>{warning.text}</span>
+                      <span>
+                        {warning.text}
+                        {warning.code && (
+                          <span className="ml-1 font-mono text-[10px] opacity-60">
+                            {warning.code}
+                          </span>
+                        )}
+                      </span>
                     </div>
                   ))}
                 </div>

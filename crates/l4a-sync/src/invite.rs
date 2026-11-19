@@ -27,6 +27,9 @@ pub const RELAY: &str = "https://dns.iroh.link/pkarr";
 /// How long a code works.
 pub const VALID_FOR: Duration = Duration::from_secs(24 * 60 * 60);
 
+/// How far a clock may be off before a valid code is refused.
+const SLACK: Duration = Duration::from_secs(24 * 60 * 60);
+
 /// No 0/O, 1/I/L or U, so codes read out and typed survive.
 const LETTERS: &[u8] = b"23456789ABCDEFGHJKMNPQRSTVWXYZ";
 const LEN: usize = 12;
@@ -132,7 +135,8 @@ pub fn open(code: &str, payload: &[u8]) -> Result<String> {
         };
         let plain = String::from_utf8(plain).map_err(|_| anyhow!("bad record"))?;
         let (until, link) = plain.split_once(' ').ok_or_else(|| anyhow!("bad record"))?;
-        if until.parse::<u64>().unwrap_or(0) < now() {
+        // A day's slack, for a computer whose clock is off.
+        if until.parse::<u64>().unwrap_or(0) + SLACK.as_secs() < now() {
             bail!("That code has expired. Ask for a new one.");
         }
         return Ok(link.to_string());
@@ -156,10 +160,14 @@ mod tests {
         assert_eq!(open(&code, &body).unwrap(), link);
         // Another code can't open it.
         assert!(open(&new_code(), &body).is_err());
-        // An expired one is refused.
-        let (_, old) = record(&code, link, Duration::ZERO).unwrap();
-        std::thread::sleep(Duration::from_millis(1100));
-        assert!(open(&code, &old).is_err());
+        // One long expired is refused (a day's slack for clocks aside).
+        let until = now() - 3 * 24 * 60 * 60;
+        let cipher = ChaCha20Poly1305::new(Key::from_slice(&derive(&normalize(&code).unwrap(), "encrypt")));
+        let nonce = [0u8; 12];
+        let mut bytes = nonce.to_vec();
+        bytes.extend(cipher.encrypt(Nonce::from_slice(&nonce), format!("{until} {link}").as_bytes()).unwrap());
+        let packet = SignedPacket::from_txt_strings(&signing_key(&normalize(&code).unwrap()), NAME, [B64.encode(&bytes)], 60).unwrap();
+        assert!(open(&code, &packet.to_relay_payload()).is_err());
     }
 
     #[test]

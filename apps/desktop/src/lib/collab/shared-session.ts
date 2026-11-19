@@ -8,6 +8,8 @@ export interface PeerStatus {
   members: number;
   connected: number;
   waiting: number;
+  /** Problem codes now (see sync-warnings `warningForPeerProblem`). */
+  problems?: string[];
 }
 
 export type SyncEvent =
@@ -32,7 +34,13 @@ export type SyncEvent =
   /** This copy's peer-to-peer id, to put in the document for others. */
   | { type: "peerId"; id: string }
   /** How peer-to-peer sync stands: members known, connected, still waiting. */
-  | { type: "peerStatus"; members: number; connected: number; waiting: number }
+  | {
+      type: "peerStatus";
+      members: number;
+      connected: number;
+      waiting: number;
+      problems?: string[];
+    }
   | { type: "snapshot"; upTo: number; data: string }
   | { type: "awareness"; data: string }
   | { type: "chat"; seq: number; at: number; data: string }
