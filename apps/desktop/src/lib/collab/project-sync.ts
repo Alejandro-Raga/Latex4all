@@ -13,6 +13,34 @@ import type { Author } from "@/lib/annotations/types";
 import { noteDifferences } from "./concurrent-edits";
 import { isUnder, rejoined, neverShared } from "./sync-choices";
 
+/**
+ * Paths compared as one: an accented name can be stored two ways (macOS
+ * often decomposes "ó" into "o" and an accent, Windows doesn't), and the
+ * same file must never look like two, one of them "deleted".
+ */
+const same = (path: string) => path.normalize("NFC");
+
+class PathMap<V> extends Map<string, V> {
+  override get(path: string) {
+    return super.get(same(path));
+  }
+  override has(path: string) {
+    return super.has(same(path));
+  }
+  override set(path: string, value: V) {
+    return super.set(same(path), value);
+  }
+  override delete(path: string) {
+    return super.delete(same(path));
+  }
+}
+
+function byPath<V>(entries: Iterable<[string, V]>): PathMap<V> {
+  const map = new PathMap<V>();
+  for (const [k, v] of entries) map.set(k, v);
+  return map;
+}
+
 /** A file in the open project, as the sync sees it. */
 export interface LocalFile {
   path: string;
@@ -222,7 +250,7 @@ export class ProjectSync {
   async dropIdenticalCopies(): Promise<string[]> {
     if (this.stopped || !this.workspace.available()) return [];
     const local = this.localFiles();
-    const byPath = new Map([...this.known.values()].map((k) => [k.path, k]));
+    const knownAt = byPath([...this.known.values()].map((k) => [k.path, k]));
     const removed: string[] = [];
     for (const file of local.values()) {
       const m = /^(.*) \((?:\d+|conflicted copy(?: \d+)?)\)(\.[^./]*)?$/.exec(
@@ -231,13 +259,13 @@ export class ProjectSync {
       if (!m || file.dirty || this.isNotSynced(file.path)) continue;
       const original = local.get(m[1] + (m[2] ?? ""));
       if (!original || original.kind !== file.kind) continue;
-      const blobId = byPath.get(file.path)?.blobId;
+      const blobId = knownAt.get(file.path)?.blobId;
       const same =
         file.kind === "text"
           ? file.content !== undefined && file.content === original.content
           : file.size === original.size &&
             blobId !== undefined &&
-            blobId === byPath.get(original.path)?.blobId;
+            blobId === knownAt.get(original.path)?.blobId;
       if (!same) continue;
       try {
         await this.workspace.remove(file.path);
@@ -261,7 +289,7 @@ export class ProjectSync {
   textAt(path: string): { fileId: string; text: Y.Text } | null {
     // Left out here: edited as a file of this computer's own.
     if (this.isNotSynced(path)) return null;
-    const file = layout(this.doc).get(path);
+    const file = byPath(layout(this.doc)).get(path);
     return file?.kind === "text"
       ? { fileId: file.fileId, text: file.text }
       : null;
@@ -304,7 +332,7 @@ export class ProjectSync {
   }
 
   private checkLayout() {
-    const signature = [...layout(this.doc).values()]
+    const signature = [...byPath(layout(this.doc)).values()]
       .map((f) => `${f.path}|${f.fileId}`)
       .sort()
       .join("\n");
@@ -315,7 +343,7 @@ export class ProjectSync {
   }
 
   private localFiles() {
-    return new Map(this.workspace.files().map((f) => [f.path, f]));
+    return byPath(this.workspace.files().map((f) => [f.path, f]));
   }
 
   private mayRetry(attempt: string): boolean {
@@ -389,13 +417,13 @@ export class ProjectSync {
   /** Someone else's typing, into the open project. */
   private pullText(fileIds: Set<string>) {
     const local = this.localFiles();
-    for (const file of layout(this.doc).values()) {
+    for (const file of byPath(layout(this.doc)).values()) {
       if (file.kind !== "text" || !fileIds.has(file.fileId)) continue;
       if (this.isNotSynced(file.path)) continue;
       const mine = local.get(file.path);
       if (mine?.kind !== "text" || mine.content === undefined) continue;
       const text = file.text.toString();
-      if (text !== mine.content) this.workspace.setText(file.path, text);
+      if (text !== mine.content) this.workspace.setText(mine.path, text);
     }
   }
 
@@ -406,7 +434,7 @@ export class ProjectSync {
       if (this.seen.get(file.path) === file) continue;
       this.seen.set(file.path, file);
       if (file.kind !== "text" || file.content === undefined) continue;
-      placed ??= layout(this.doc);
+      placed ??= byPath(layout(this.doc));
       const shared = placed.get(file.path);
       if (shared?.kind !== "text" || !this.known.has(shared.fileId)) continue;
       if (shared.text.toString() === file.content) continue;
@@ -417,9 +445,12 @@ export class ProjectSync {
 
   private async reconcile(opening: boolean) {
     if (this.stopped || !this.workspace.available()) return;
-    const placed = layout(this.doc);
+    const placed = byPath(layout(this.doc));
     const byId = new Map([...placed.values()].map((f) => [f.fileId, f]));
     let local = this.localFiles();
+    // A file already here keeps the name it has here (its accents stored as
+    // this computer has them), so a write never makes a second copy.
+    const here = (path: string) => local.get(path)?.path ?? path;
     // A file that can't be read now would look emptied or deleted: this
     // round waits for it.
     const blocked = [...local.values()].find((f) => f.unreadable);
@@ -489,11 +520,11 @@ export class ProjectSync {
         if (opening) {
           this.blobsLater = true;
           later.add(fileId);
-          later.add(shared.path);
+          later.add(same(shared.path));
           continue;
         }
         const downloaded = await guard(`Couldn't download ${shared.path}`, () =>
-          this.workspace.download(shared.path, shared.blobId),
+          this.workspace.download(here(shared.path), shared.blobId),
         );
         if (downloaded) {
           known.blobId = shared.blobId;
@@ -552,7 +583,7 @@ export class ProjectSync {
         );
         if (found !== null) {
           const written = await guard(`Couldn't get ${shared.path}`, () =>
-            this.workspace.writeText(shared.path, text),
+            this.workspace.writeText(here(shared.path), text),
           );
           if (!written) continue;
           for (const from of found) noted.push({ path: shared.path, from });
@@ -568,8 +599,8 @@ export class ProjectSync {
         if (existing && !(await setAside(shared.path))) continue;
         const written = await guard(`Couldn't get ${shared.path}`, () =>
           shared.kind === "text"
-            ? this.workspace.writeText(shared.path, text)
-            : this.workspace.download(shared.path, shared.blobId),
+            ? this.workspace.writeText(here(shared.path), text)
+            : this.workspace.download(here(shared.path), shared.blobId),
         );
         if (!written) continue;
         this.hooks.onSynced?.(shared.path);
@@ -593,11 +624,13 @@ export class ProjectSync {
     if (local.size === 0 && this.known.size > 0) return;
 
     // 2. Bring the document up to date with the files on disk.
-    const knownPaths = new Set([...this.known.values()].map((k) => k.path));
+    const knownPaths = new Set(
+      [...this.known.values()].map((k) => same(k.path)),
+    );
     const added = [...local.values()].filter(
       (f) =>
-        !knownPaths.has(f.path) &&
-        !later.has(f.path) &&
+        !knownPaths.has(same(f.path)) &&
+        !later.has(same(f.path)) &&
         !this.isNotSynced(f.path),
     );
     const missing = [...this.known].filter(([, k]) => !local.has(k.path));
@@ -718,7 +751,7 @@ export class ProjectSync {
         if (known.hash !== undefined && textHash(mine.content) === known.hash) {
           // The disk simply hadn't caught up with the document when the app
           // last closed; the document is newer.
-          this.workspace.setText(known.path, text);
+          this.workspace.setText(mine.path, text);
         } else {
           // Edited outside the app while it was closed.
           const content = mine.content;

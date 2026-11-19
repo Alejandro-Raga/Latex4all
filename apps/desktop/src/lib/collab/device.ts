@@ -51,6 +51,19 @@ const PEOPLE = "latex4all-shared-with-people";
 
 /** Projects shared with other people (the Share button, or joined from
  * someone's link), as opposed to only synced between one's own devices. */
+/** Paths compared as one whatever way their accents are stored. */
+export class PathSet extends Set<string> {
+  override has(path: string) {
+    return super.has(path.normalize("NFC"));
+  }
+  override add(path: string) {
+    return super.add(path.normalize("NFC"));
+  }
+  override delete(path: string) {
+    return super.delete(path.normalize("NFC"));
+  }
+}
+
 export function sharedWithPeople(): Set<string> {
   try {
     // Marks from before people were told apart by who's in the project:
@@ -59,9 +72,12 @@ export function sharedWithPeople(): Set<string> {
       localStorage.removeItem(PEOPLE);
       localStorage.setItem(`${PEOPLE}-v2`, "1");
     }
-    return new Set(JSON.parse(localStorage.getItem(PEOPLE) ?? "[]"));
+    const set = new PathSet();
+    for (const p of JSON.parse(localStorage.getItem(PEOPLE) ?? "[]"))
+      set.add(p);
+    return set;
   } catch {
-    return new Set();
+    return new PathSet();
   }
 }
 

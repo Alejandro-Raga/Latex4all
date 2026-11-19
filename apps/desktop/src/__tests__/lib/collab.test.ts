@@ -807,6 +807,24 @@ describe("shared projects", () => {
     expect(c.workspace.snapshot()["ch6.tex"]).toBeUndefined();
   });
 
+  it("an accented name stored two ways is one file, not two", async () => {
+    const nfd = "Presentaci\u006f\u0301n.tex";
+    const nfc = "Presentaci\u00f3n.tex";
+    const relay = new FakeRelay();
+    const a = new Device(relay, new FakeWorkspace(relay, { [nfd]: "slides" }));
+    await a.open();
+    const b = new Device(relay, new FakeWorkspace(relay, { [nfc]: "slides" }));
+    await b.open();
+    await settleAll(a, b);
+    expect(Object.keys(a.workspace.snapshot())).toEqual([nfd]);
+    expect(Object.keys(b.workspace.snapshot())).toEqual([nfc]);
+    // An edit on one reaches the other, under the name it has there.
+    a.workspace.setText(nfd, "slides, edited");
+    a.workspace.save();
+    await settleAll(a, b);
+    expect(b.workspace.snapshot()).toEqual({ [nfc]: "slides, edited" });
+  });
+
   it("deletes and renames reach everyone", async () => {
     const relay = new FakeRelay();
     const a = new Device(

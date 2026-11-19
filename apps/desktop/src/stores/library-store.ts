@@ -37,6 +37,7 @@ import {
   deviceId,
   deviceName,
   markSharedWithPeople,
+  PathSet,
   setLinkedDevices,
   sharedWithPeople,
   unmarkSharedWithPeople,
@@ -257,9 +258,13 @@ const LIBRARY_ROOTS = "latex4all-library-roots";
 
 export function libraryRoots(): Set<string> {
   try {
-    return new Set(JSON.parse(localStorage.getItem(LIBRARY_ROOTS) ?? "[]"));
+    const set = new PathSet();
+    for (const p of JSON.parse(localStorage.getItem(LIBRARY_ROOTS) ?? "[]")) {
+      set.add(p);
+    }
+    return set;
   } catch {
-    return new Set();
+    return new PathSet();
   }
 }
 
