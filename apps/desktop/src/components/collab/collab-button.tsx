@@ -5,8 +5,10 @@ import {
   CheckIcon,
   CopyIcon,
   Loader2Icon,
+  QrCodeIcon,
   UsersIcon,
 } from "lucide-react";
+import QRCode from "qrcode";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -277,6 +279,21 @@ export function CollabButton() {
       .catch(shareNow);
   };
 
+  // The invite link as a QR code, to open it on another device.
+  const [qr, setQr] = useState<string | null>(null);
+  const [showQr, setShowQr] = useState(false);
+  useEffect(() => {
+    setQr(null);
+    if (!link || !showQr) return;
+    let live = true;
+    QRCode.toDataURL(link, { margin: 1, width: 240, errorCorrectionLevel: "M" })
+      .then((url) => live && setQr(url))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [link, showQr]);
+
   const handleCopy = () => {
     if (!link) return;
     navigator.clipboard.writeText(link).then(() => {
@@ -403,7 +420,24 @@ export function CollabButton() {
                       <CopyIcon className="size-3.5" />
                     )}
                   </Button>
+                  <Button
+                    variant={showQr ? "secondary" : "outline"}
+                    size="icon"
+                    className="size-8 shrink-0"
+                    onClick={() => setShowQr((v) => !v)}
+                    aria-label="Show QR code"
+                    title="QR code"
+                  >
+                    <QrCodeIcon className="size-3.5" />
+                  </Button>
                 </div>
+              )}
+              {link && showQr && qr && (
+                <img
+                  src={qr}
+                  alt="QR code of the invite link"
+                  className="mx-auto size-48 rounded bg-white p-1"
+                />
               )}
               {peers.length > 0 && (
                 <div className="space-y-1.5">
