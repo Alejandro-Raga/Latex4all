@@ -125,6 +125,7 @@ import {
   projectKey,
   usePlannerRequest,
   usePlanTexts,
+  useReloadPlans,
 } from "@/lib/plan/plan-store";
 import {
   PRIORITY_COLOR,
@@ -666,10 +667,14 @@ export function ProjectPicker() {
     [projectTypes],
   );
 
-  // Each project's priority, from its plan.
-  const planTexts = usePlanTexts(
-    visibleProjects.map((p) => projectKey(p.path)),
+  // Each project's priority, from its plan: read here (and again on coming
+  // back to the window), not only once the Planner has been opened.
+  const allPlanKeys = useMemo(
+    () => recentProjects.map((p) => projectKey(p.path)),
+    [recentProjects],
   );
+  useReloadPlans(allPlanKeys);
+  const planTexts = usePlanTexts(allPlanKeys);
   const { priorities, done } = useMemo(() => {
     const priorities = new Map<string, number>();
     const done = new Set<string>();

@@ -21,6 +21,9 @@ tag.
 
 ### Fixed
 
+- Home screen: project priority flags show right away, not only after the
+  Planner has been opened once.
+
 - Linked devices: projects arrive with their files and tasks, and their own
   names, without opening them first; projects stay in step in the
   background. Project cards say "Shared" for projects shared with people
