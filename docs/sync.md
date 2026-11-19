@@ -150,8 +150,13 @@ time they're opened). From then on each project syncs as a shared project.
 A project's owner is any of the linked devices, so the one you shared from
 and your other computers count as you.
 
-Still to come: app data (Planner, Inbox, reading lists, PDF highlights) in
-the library; removing a project from every device.
+App data goes in the library too: the app's own Planner lists (when there's
+no vault, which syncs by itself) and highlights on PDFs outside Zotero, each
+file a text in the library's document. A change goes in as the words that
+changed, so edits on two devices both stay; a JSON file that wouldn't parse
+once merged takes the device's own version. The first time two devices meet,
+files both had are put together (every line of a list, every highlight). A
+file deleted on one device is deleted on the others unless changed there.
 
 ## Always-on storage
 

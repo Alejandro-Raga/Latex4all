@@ -43,6 +43,7 @@ import {
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
 import { createLogger } from "@/lib/debug/logger";
+import { type AppKnown, syncAppData } from "@/lib/collab/app-data-sync";
 
 const log = createLogger("library");
 const CHANNEL = "library";
@@ -93,6 +94,8 @@ let session: SharedSession | null = null;
 const cleanup: Array<() => void> = [];
 let reconciling: Promise<void> | null = null;
 let again = false;
+/** App data as it was when last in step (see app-data-sync). */
+let appKnown: AppKnown = {};
 
 function projectsMap(doc: Y.Doc) {
   return doc.getMap<Entry>("projects");
@@ -206,6 +209,11 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
         });
       }
     }
+    // The app's own data (Planner lists, highlights) too.
+    if (session === s) {
+      appKnown = await syncAppData(doc, appKnown);
+      s.scheduleSave();
+    }
     set({ error: null });
     refresh();
   }
@@ -214,6 +222,11 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     await stop();
     const root = await libraryRoot();
     const saved = await loadDoc(root).catch(() => null);
+    try {
+      appKnown = JSON.parse(saved?.local || "{}").app ?? {};
+    } catch {
+      appKnown = {};
+    }
     const s = new SharedSession(
       {
         publish: (update) => {
@@ -231,7 +244,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
         save: (seq, local, state) => saveDoc(root, seq, local, state),
       },
       {
-        local: () => ({}),
+        local: () => ({ app: appKnown }),
         onStatus: (status) => {
           if (session !== s) return;
           set({
@@ -271,6 +284,9 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       devicesMap(s.doc).unobserve(changed);
     });
     // Projects added on this device: listed too.
+    // App data changed on this device: looked at now and then.
+    const every = setInterval(() => void reconcile(), 30_000);
+    cleanup.push(() => clearInterval(every));
     cleanup.push(
       useProjectStore.subscribe((state, prev) => {
         if (state.recentProjects.length > prev.recentProjects.length) {

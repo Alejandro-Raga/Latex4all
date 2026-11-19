@@ -91,7 +91,8 @@ tag.
   offline: the Latex4All server, a cloud folder you already use, this
   computer, or your own server. Asked the first time you share a project.
 - Settings → Sync → Link another device: your computers get the same
-  projects and keep them in sync. Show a code on one, type it on the other.
+  projects, Planner lists and PDF highlights, and keep them in sync. Show a
+  code on one, type it on the other.
 - Share: a much shorter invite link (latex4all://join/…) that opens
   Latex4All when clicked, and as a QR code. Older links still work.
 - Share: "Get a code to type instead" gives a short code (like
