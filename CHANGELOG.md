@@ -21,6 +21,9 @@ tag.
 
 ### Fixed
 
+- Sync settings: a choice made at a first share (or anywhere else) is no
+  longer undone by Settings → Sync if it was open at the time.
+
 - Timeline: tasks in a lane per section under the line; tasks too close
   together become a count you can click to list (red when some are late).
   The Inbox and your own lists have a timeline too. No scrollbar on Windows

@@ -32,3 +32,35 @@ test("Settings → Sync: the choice of storage is kept", async ({ page }) => {
     await page.screenshot({ path: `${process.env.SHOTS}/sync-settings.png` });
   }
 });
+
+test("Settings → Sync: a change made elsewhere isn't undone by the open section", async ({
+  page,
+}) => {
+  await page.goto("/e2e/harness.html?scenario=settings&section=sync");
+  await expect(page.getByText(/peer-to-peer service to sync/)).toBeVisible();
+  // Chosen at a first share while the section was open.
+  await page.evaluate(() =>
+    sessionStorage.setItem(
+      "sync-settings",
+      JSON.stringify({
+        enabled: false,
+        storage: "folder",
+        folder: "/Users/me/Dropbox",
+        hubCode: null,
+        hubbed: [],
+        chosen: true,
+      }),
+    ),
+  );
+  await page.getByRole("switch", { name: "Peer-to-peer sync" }).click();
+  const saved = () =>
+    page.evaluate(() =>
+      JSON.parse(sessionStorage.getItem("sync-settings") ?? "{}"),
+    );
+  await expect.poll(async () => (await saved()).enabled).toBe(true);
+  expect(await saved()).toMatchObject({
+    storage: "folder",
+    folder: "/Users/me/Dropbox",
+    chosen: true,
+  });
+});

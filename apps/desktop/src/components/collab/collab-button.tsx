@@ -37,7 +37,7 @@ import {
 import { SyncStorageChoice } from "@/components/settings/sync-settings";
 import {
   getSyncSettings,
-  setSyncSettings,
+  patchSyncSettings,
   type SyncSettings,
 } from "@/lib/tauri/sync-settings";
 import { inviteCode } from "@/lib/tauri/collab";
@@ -537,12 +537,13 @@ export function CollabButton() {
               onClick={() => {
                 if (!asking) return;
                 const chosen = {
-                  ...asking,
                   storage: asking.storage || "server",
+                  folder: asking.folder,
+                  hubCode: asking.hubCode,
                   chosen: true,
-                } satisfies SyncSettings;
+                } satisfies Partial<SyncSettings>;
                 setAsking(null);
-                void setSyncSettings(chosen)
+                void patchSyncSettings(chosen)
                   .catch(() => {})
                   .finally(() => {
                     shareNow();

@@ -8,7 +8,8 @@ import {
   getSyncSettings,
   isHubCode,
   SERVER_DOWNLOAD,
-  setSyncSettings,
+  changed,
+  patchSyncSettings,
   type SyncSettings,
 } from "@/lib/tauri/sync-settings";
 import { SettingRow, Toggle } from "./settings-parts";
@@ -166,15 +167,28 @@ export function SyncStorageChoice({
 /** Settings → Sync. */
 export function SyncSettingsSection() {
   const [settings, setSettings] = useState<SyncSettings | null>(null);
+  // Read again on coming back: something else may have changed them.
   useEffect(() => {
-    getSyncSettings()
-      .then(setSettings)
-      .catch(() => {});
+    const load = () =>
+      getSyncSettings()
+        .then(setSettings)
+        .catch(() => {});
+    void load();
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
   }, []);
   if (!settings) return null;
   const save = (next: SyncSettings) => {
+    const before = settings;
     setSettings(next);
-    void setSyncSettings(next);
+    patchSyncSettings(changed(before, next))
+      .then(setSettings)
+      .catch((err) => {
+        setSettings(before);
+        toast.error("Couldn't save the sync settings", {
+          description: err instanceof Error ? err.message : String(err),
+        });
+      });
   };
   return (
     <div>

@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   getSyncSettings,
-  setSyncSettings,
+  patchSyncSettings,
   type SyncSettings,
 } from "@/lib/tauri/sync-settings";
 import { useProjectStore } from "@/stores/project-store";
@@ -36,11 +36,12 @@ export function SyncStoragePrompt() {
   }, []);
   const done = (s: SyncSettings) => {
     setAsking(null);
-    void setSyncSettings({
-      ...s,
+    void patchSyncSettings({
       storage: s.storage || "server",
+      folder: s.folder,
+      hubCode: s.hubCode,
       chosen: true,
-    });
+    }).catch(() => {});
   };
   return (
     <Dialog
