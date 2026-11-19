@@ -18,7 +18,7 @@ import {
   RefreshCwIcon,
   ServerIcon,
   UnplugIcon,
-  HistoryIcon,
+  SlidersHorizontalIcon,
   LaptopIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -727,7 +727,7 @@ export function SettingsView({
       label: "Spelling",
       meta: languagePacks.length
         ? `${languagePacks.filter((p) => p.installed || p.systemSupported).length} of ${languagePacks.length}`
-        : "Spelling",
+        : "Dictionaries",
       icon: LanguagesIcon,
       body: <LanguagePacksSettings />,
       flush: true,
@@ -754,7 +754,7 @@ export function SettingsView({
       id: "memory",
       label: "General",
       meta: memoryFresh ? "Start fresh" : "Resume where you left off",
-      icon: HistoryIcon,
+      icon: SlidersHorizontalIcon,
       body: <MemorySettings />,
       flush: true,
     },
