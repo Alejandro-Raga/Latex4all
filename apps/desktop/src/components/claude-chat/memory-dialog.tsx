@@ -40,17 +40,29 @@ export function MemoryDialog() {
   const [log, setLog] = useState<AiLogEntry[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // What's read is this project's: one read for a project left meanwhile
+  // never lands here (where saving would write it into this one).
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
   useEffect(() => {
     if (!open || !root) return;
+    let live = true;
+    setLoadedFor(null);
     void readMemory(root).then((m) => {
+      if (!live) return;
       setText(m ?? "");
       setExists(m !== null);
+      setLoadedFor(root);
     });
-    void readLog(root).then((l) => setLog(l.slice(-12).reverse()));
+    void readLog(root).then((l) => {
+      if (live) setLog(l.slice(-12).reverse());
+    });
+    return () => {
+      live = false;
+    };
   }, [open, root]);
 
   const save = async () => {
-    if (!root) return;
+    if (!root || loadedFor !== root) return;
     // Nothing written and no memory yet: no empty file.
     if (!text.trim() && !exists) {
       onOpenChange(false);

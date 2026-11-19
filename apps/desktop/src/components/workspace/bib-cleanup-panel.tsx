@@ -20,6 +20,28 @@ const plural = (n: number, one: string, many: string) =>
  * which copy of a twice-written key stays, and citations to point at the
  * entry they mean. Nothing changes until "Clean up"; Undo puts it all back.
  */
+/** A checkbox for one entry (outside the panel, so it isn't made anew on
+ * every render and keeps its focus). */
+function Check({
+  on,
+  toggle,
+  label,
+}: {
+  on: boolean;
+  toggle: () => void;
+  label: string;
+}) {
+  return (
+    <input
+      type="checkbox"
+      className="mt-0.5 size-3.5 shrink-0 accent-primary"
+      checked={on}
+      onChange={toggle}
+      aria-label={label}
+    />
+  );
+}
+
 export function BibCleanupPanel({
   problems,
   tex,
@@ -107,24 +129,6 @@ export function BibCleanupPanel({
       </p>
     );
   }
-
-  const Check = ({
-    on,
-    toggle,
-    label,
-  }: {
-    on: boolean;
-    toggle: () => void;
-    label: string;
-  }) => (
-    <input
-      type="checkbox"
-      className="mt-0.5 size-3.5 shrink-0 accent-primary"
-      checked={on}
-      onChange={toggle}
-      aria-label={label}
-    />
-  );
 
   return (
     <>

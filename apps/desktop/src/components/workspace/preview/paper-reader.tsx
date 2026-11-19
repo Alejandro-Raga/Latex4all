@@ -134,7 +134,11 @@ async function saveHighlight(
     if (!quiet) toast.success(comment ? "Comment saved" : "Highlight saved");
     return key;
   }
-  if (!paper.zotero || !apiKey || !userID) return null;
+  if (!paper.zotero) return null;
+  if (!apiKey || !userID) {
+    toast.error("Connect Zotero in Settings to save highlights on this paper.");
+    return null;
+  }
   try {
     const key = await createZoteroHighlight(
       apiKey,

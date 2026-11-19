@@ -316,6 +316,12 @@ tag.
 
 ### Fixed
 
+- Switching project while the AI memory window was open could show (and
+  save) the previous project's memory; the vault beside a project could
+  open the previous project's note.
+- Highlighting a Zotero paper with Zotero disconnected now says so instead
+  of doing nothing.
+
 - Saving is safer: your files, plans, vault notes, highlights and project
   settings are written whole, so a crash or a full disk never leaves one
   cut short. Files and folders deleted in the app, conflicted copies and

@@ -12,6 +12,7 @@
 import { loadPlace } from "@/lib/place-memory";
 import { useSettingsStore } from "@/stores/settings-store";
 import { useVaultStore } from "@/stores/vault-store";
+import { useDocumentStore } from "@/stores/document-store";
 import { projectNoteFor, projectNoteId } from "./note-changes";
 
 /** The Library's note this session (undefined: not been there yet). */
@@ -52,6 +53,8 @@ export async function enterProjectVault(
     setCurrent(null);
   } else if (memory.vaultProject === "project") {
     const id = await projectNoteId(root).catch(() => null);
+    // Another project opened meanwhile: its own arrival decides.
+    if (useDocumentStore.getState().projectRoot !== root) return undefined;
     const path = projectNoteFor(id, root);
     const note = useVaultStore
       .getState()
