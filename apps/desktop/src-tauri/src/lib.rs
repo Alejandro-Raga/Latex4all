@@ -856,6 +856,8 @@ pub fn run() {
             vault_webdav::vault_webdav_request,
             collab::collab_create,
             collab::collab_parse_link,
+            collab::collab_invite_code,
+            collab::collab_resolve_code,
             collab::collab_read_link,
             collab::collab_write_link,
             collab::collab_remove_link,

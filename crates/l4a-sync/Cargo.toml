@@ -18,6 +18,8 @@ rand = "0.8"
 curve25519-dalek = "5"
 chacha20poly1305 = "0.10"
 hkdf = "0.12"
+iroh-dns = "1.4"
+base64 = "0.22"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }

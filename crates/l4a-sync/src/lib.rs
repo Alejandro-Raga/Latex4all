@@ -19,6 +19,7 @@
 pub mod blobs;
 pub mod folder;
 pub mod hub;
+pub mod invite;
 pub mod log;
 pub mod members;
 pub mod proof;

@@ -1379,6 +1379,50 @@ pub fn collab_parse_link(link: String) -> Result<LinkInfo, String> {
     })
 }
 
+/// A code that stands for the link for a day (see l4a_sync::invite), to
+/// type or read out instead.
+#[tauri::command]
+pub async fn collab_invite_code(link: String) -> Result<String, String> {
+    use l4a_sync::invite;
+    let link = Link::parse(&link)?;
+    let code = invite::new_code();
+    let (path, body) =
+        invite::record(&code, &link.short(), invite::VALID_FOR).map_err(|e| e.to_string())?;
+    let offline = |_| "Couldn't make a code: no connection.".to_string();
+    let response = reqwest::Client::new()
+        .put(format!("{}/{path}", invite::RELAY))
+        .timeout(Duration::from_secs(20))
+        .body(body)
+        .send()
+        .await
+        .map_err(offline)?;
+    if !response.status().is_success() {
+        return Err(format!("Couldn't make a code ({}).", response.status()));
+    }
+    Ok(code)
+}
+
+/// The link an invite code stands for.
+#[tauri::command]
+pub async fn collab_resolve_code(code: String) -> Result<String, String> {
+    use l4a_sync::invite;
+    let path = invite::path(&code).map_err(|_| "That isn't an invite code.".to_string())?;
+    let response = reqwest::Client::new()
+        .get(format!("{}/{path}", invite::RELAY))
+        .timeout(Duration::from_secs(20))
+        .send()
+        .await
+        .map_err(|_| "Couldn't look the code up: no connection.".to_string())?;
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Err("No project has that code. Check it, or ask for a new one.".into());
+    }
+    if !response.status().is_success() {
+        return Err(format!("Couldn't look the code up ({}).", response.status()));
+    }
+    let body = response.bytes().await.map_err(|e| e.to_string())?;
+    invite::open(&code, &body).map_err(|e| e.to_string())
+}
+
 /// The link of the shared project in this folder, if it is one.
 #[tauri::command]
 pub fn collab_read_link(project_root: String) -> Option<LinkInfo> {

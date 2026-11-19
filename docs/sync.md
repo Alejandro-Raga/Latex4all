@@ -100,6 +100,21 @@ the records that missed it and catches up when one includes it.
 Nothing about a project (its members, what each has) is sent until both
 copies have proven they're members.
 
+### Links and codes
+
+The share link is `latex4all://join/<key>`: the project's id is worked out
+from its key, and the relay's address is left out when it's the default
+(projects shared before keep their own id in the link, so theirs is a bit
+longer). Clicking it opens the app's join dialog.
+
+For typing or reading out, the app makes a code (`K7QM-3XRP-9TWD`, about 59
+bits) that stands for the link for 24 hours. The code is turned into a
+signing key and an encryption key; the link, encrypted, is published as a
+signed record under that key on the pkarr directory iroh already uses
+(`dns.iroh.link`). The joiner's app works out the same key from the code,
+fetches the record and decrypts it. Without the code the record can't be
+found or read (`crates/l4a-sync/src/invite.rs`).
+
 ### Finding each other
 
 The share link carries the inviter's node id. A copy that joins connects to

@@ -1537,11 +1537,13 @@ name = "l4a-sync"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chacha20poly1305",
  "curve25519-dalek",
  "hkdf",
  "hmac",
  "iroh",
+ "iroh-dns",
  "postcard",
  "rand 0.8.8",
  "serde",

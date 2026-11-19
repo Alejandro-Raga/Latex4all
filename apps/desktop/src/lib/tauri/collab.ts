@@ -17,6 +17,16 @@ export function createSharedProject() {
   return invoke<string>("collab_create", { relayUrl: null });
 }
 
+/** A code that stands for the link for a day, to type or read out. */
+export function inviteCode(link: string) {
+  return invoke<string>("collab_invite_code", { link });
+}
+
+/** The link an invite code stands for. */
+export function resolveCode(code: string) {
+  return invoke<string>("collab_resolve_code", { code });
+}
+
 /** Validates a pasted link. */
 export function parseLink(link: string) {
   return invoke<LinkInfo>("collab_parse_link", { link });

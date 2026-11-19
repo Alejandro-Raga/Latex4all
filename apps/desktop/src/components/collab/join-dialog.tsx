@@ -22,6 +22,7 @@ import {
 } from "@/stores/collab-store";
 import { useProjectStore } from "@/stores/project-store";
 import { FileChoices } from "./sync-files-dialog";
+import { resolveCode } from "@/lib/tauri/collab";
 
 /** The project's files, shown before downloading, and the answer to give. */
 interface Choosing {
@@ -35,8 +36,12 @@ const LINK =
   /^https?:\/\/[^\s/]+(?:\/[^\s#]*)?\/p\/[0-9a-f]{32}#[A-Za-z0-9_-]{20,}$/;
 /** The short one: latex4all://join/<key>, maybe with @<relay>. */
 const SHORT = /^latex4all:\/\/join\/[A-Za-z0-9_-]{43,64}(?:@[^\s@]+)?\/?$/i;
+/** An invite code: 12 letters and digits (no 0, 1, I, L, O, U). */
+const CODE = /^[2-9A-HJKMNP-TV-Z]{12}$/;
+export const looksLikeCode = (text: string) =>
+  CODE.test(text.replace(/[\s.-]/g, "").toUpperCase());
 const looksLikeLink = (text: string) =>
-  LINK.test(text.trim()) || SHORT.test(text.trim());
+  LINK.test(text.trim()) || SHORT.test(text.trim()) || looksLikeCode(text);
 
 /** A link to join, clicked outside the app (latex4all://join/…). */
 export const useJoinRequest = create<{
@@ -120,7 +125,9 @@ export function JoinDialog({
               }),
             )
         : undefined;
-      await join(link.trim(), {
+      const text = link.trim();
+      const target = looksLikeCode(text) ? await resolveCode(text) : text;
+      await join(target, {
         destParent: folder ?? undefined,
         into: into ?? undefined,
         chooseFiles,
@@ -155,7 +162,7 @@ export function JoinDialog({
         <DialogHeader>
           <DialogTitle>Join a shared project</DialogTitle>
           <DialogDescription>
-            Paste the invite link you were sent.
+            Paste the invite link you were sent, or type its code.
           </DialogDescription>
         </DialogHeader>
         {choosing ? (
@@ -194,7 +201,7 @@ export function JoinDialog({
             }}
           >
             <div className="space-y-1.5">
-              <Label htmlFor="join-link">Invite link</Label>
+              <Label htmlFor="join-link">Invite link or code</Label>
               {/* Pasted with ⌘V into the box, which has focus: reading the
                 clipboard from the page would make macOS ask first. */}
               <Input
@@ -209,7 +216,7 @@ export function JoinDialog({
               />
               {invalid && (
                 <p className="text-destructive text-xs">
-                  That isn't a shared project link.
+                  That isn't a shared project link or code.
                 </p>
               )}
             </div>

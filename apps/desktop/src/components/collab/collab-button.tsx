@@ -40,6 +40,7 @@ import {
   setSyncSettings,
   type SyncSettings,
 } from "@/lib/tauri/sync-settings";
+import { inviteCode } from "@/lib/tauri/collab";
 
 function initials(name: string) {
   return (
@@ -294,6 +295,23 @@ export function CollabButton() {
     };
   }, [link, showQr]);
 
+  // A code for the link, for a day: to type or read out.
+  const [code, setCode] = useState<string | null>(null);
+  const [making, setMaking] = useState(false);
+  useEffect(() => setCode(null), [link]);
+  const makeCode = () => {
+    if (!link || making) return;
+    setMaking(true);
+    inviteCode(link)
+      .then(setCode)
+      .catch((err) =>
+        toast.error("Couldn't make a code", {
+          description: err instanceof Error ? err.message : String(err),
+        }),
+      )
+      .finally(() => setMaking(false));
+  };
+
   const handleCopy = () => {
     if (!link) return;
     navigator.clipboard.writeText(link).then(() => {
@@ -432,6 +450,28 @@ export function CollabButton() {
                   </Button>
                 </div>
               )}
+              {link &&
+                (code ? (
+                  <div className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5">
+                    <span className="select-all font-mono text-sm tracking-wider">
+                      {code}
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      Works for 24 hours
+                    </span>
+                  </div>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-full text-xs"
+                    onClick={makeCode}
+                    disabled={making}
+                  >
+                    {making && <Loader2Icon className="size-3 animate-spin" />}
+                    Get a code to type instead
+                  </Button>
+                ))}
               {link && showQr && qr && (
                 <img
                   src={qr}

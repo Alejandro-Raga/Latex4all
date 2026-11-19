@@ -88,6 +88,8 @@ tag.
   computer, or your own server. Asked the first time you share a project.
 - Share: a much shorter invite link (latex4all://join/…) that opens
   Latex4All when clicked, and as a QR code. Older links still work.
+- Share: "Get a code to type instead" gives a short code (like
+  K7QM-3XRP-9TWD) for the invite, to type or read out. It works for 24 hours.
 - Shared projects open on the .tex file the person who shared it last
   edited (for a thesis in several files, the chapter they're working on).
 - Timeline: the scale changes as you zoom, from years and months to weeks
