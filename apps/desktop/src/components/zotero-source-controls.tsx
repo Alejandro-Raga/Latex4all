@@ -188,7 +188,8 @@ export function ZoteroSourceControls() {
             Latex4All reads a copy of Zotero's database on this computer. You
             can browse, search and open papers with their highlights. Nothing is
             saved to Zotero, and .bib files aren't updated until Zotero or
-            zotero.org is available again. BibTeX reflects the last library update.
+            zotero.org is available again. BibTeX reflects the last library
+            update.
           </p>
         )}
       </div>
