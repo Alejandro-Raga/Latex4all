@@ -54,6 +54,7 @@ import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
 import { projectKey, usePlanStore } from "@/lib/plan/plan-store";
 import { isPlaceholderName } from "@/lib/collab/project-doc";
+import { readProjectMeta, writeProjectType } from "@/lib/project-meta";
 import { createLogger } from "@/lib/debug/logger";
 import { type AppKnown, syncAppData } from "@/lib/collab/app-data-sync";
 
@@ -128,6 +129,8 @@ interface Entry {
   removed?: boolean;
   /** Shared with other people too, not only between one's devices. */
   people?: boolean;
+  /** Its type on the home screen (Article, Thesis…), one's own setting. */
+  type?: string | null;
 }
 
 export interface LibraryProject {
@@ -211,6 +214,8 @@ async function nameFetched(root: string, listed?: string) {
 
 /** App data as it was when last in step (see app-data-sync). */
 let appKnown: AppKnown = {};
+/** Each project's type as last in step with the library, by project id. */
+let typesKnown: Record<string, string | null> = {};
 
 function projectsMap(doc: Y.Doc) {
   return doc.getMap<Entry>("projects");
@@ -401,6 +406,30 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     }
     set({ progress: null });
 
+    // Each project's type: changed here goes to the library, changed on
+    // another device comes here.
+    for (const [id, entry] of projects) {
+      if (session !== s || entry.removed) continue;
+      const root = useProjectStore.getState().sharedProjects[id];
+      if (!root) continue;
+      const mine = await readProjectMeta(root).catch(() => null);
+      if (!mine) continue;
+      const here =
+        typeof mine.type === "string" && mine.type ? mine.type : null;
+      const known = id in typesKnown ? typesKnown[id] : undefined;
+      const theirs = entry.type ?? null;
+      if (here !== (known ?? null) && (known !== undefined || here !== null)) {
+        // Changed here (or first seen with one): into the library.
+        if (theirs !== here) projects.set(id, { ...entry, type: here });
+        typesKnown[id] = here;
+      } else if (theirs !== (known ?? null)) {
+        // Changed on another device: onto this one.
+        await writeProjectType(root, theirs).catch(() => {});
+        useProjectStore.getState().cacheProjectType(root, theirs);
+        typesKnown[id] = theirs;
+      }
+    }
+
     // The app's own data (Planner lists, highlights) too.
     if (session === s) {
       appKnown = await syncAppData(doc, appKnown);
@@ -415,7 +444,9 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     const root = await libraryRoot();
     const saved = await loadDoc(root).catch(() => null);
     try {
-      appKnown = JSON.parse(saved?.local || "{}").app ?? {};
+      const local = JSON.parse(saved?.local || "{}");
+      appKnown = local.app ?? {};
+      typesKnown = local.types ?? {};
     } catch {
       appKnown = {};
     }
@@ -436,7 +467,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
         save: (seq, local, state) => saveDoc(root, seq, local, state),
       },
       {
-        local: () => ({ app: appKnown }),
+        local: () => ({ app: appKnown, types: typesKnown }),
         onStatus: (status) => {
           if (session !== s) return;
           set({
