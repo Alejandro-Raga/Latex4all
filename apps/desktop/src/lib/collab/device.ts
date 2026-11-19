@@ -1,0 +1,49 @@
+/**
+ * This copy of the app, and the other devices linked to it (Settings →
+ * Sync → Link another device): to tell a project's owner from the others.
+ */
+
+const ID = "latex4all-device-id";
+const LINKED = "latex4all-linked-devices";
+
+export function deviceId(): string {
+  try {
+    let id = localStorage.getItem(ID);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(ID, id);
+    }
+    return id;
+  } catch {
+    return "";
+  }
+}
+
+/** The ids of this device and the ones linked to it. */
+export function myDevices(): Set<string> {
+  const ids = new Set([deviceId()]);
+  try {
+    for (const id of JSON.parse(localStorage.getItem(LINKED) ?? "[]")) {
+      if (typeof id === "string") ids.add(id);
+    }
+  } catch {
+    // None.
+  }
+  return ids;
+}
+
+export function setLinkedDevices(ids: string[]) {
+  try {
+    localStorage.setItem(LINKED, JSON.stringify(ids));
+  } catch {
+    // Kept in memory only by the library's document.
+  }
+}
+
+/** A name for this device, for the list of linked ones. */
+export function deviceName(): string {
+  const ua = navigator.userAgent;
+  if (/Windows/i.test(ua)) return "Windows computer";
+  if (/Mac/i.test(ua)) return "Mac";
+  return "Linux computer";
+}

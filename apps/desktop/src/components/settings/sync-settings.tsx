@@ -12,6 +12,11 @@ import {
   type SyncSettings,
 } from "@/lib/tauri/sync-settings";
 import { SettingRow, Toggle } from "./settings-parts";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { toast } from "sonner";
+import { inviteCode } from "@/lib/tauri/collab";
+import { deviceId } from "@/lib/collab/device";
+import { useLibraryStore } from "@/stores/library-store";
 
 const folderName = (path: string) =>
   path.split(/[\\/]/).filter(Boolean).pop() ?? path;
@@ -186,6 +191,118 @@ export function SyncSettingsSection() {
       <div className="px-5 pt-1 pb-5">
         <SyncStorageChoice settings={settings} onChange={save} />
       </div>
+      <LinkedDevices />
+    </div>
+  );
+}
+
+/** Settings → Sync → Linked devices: your computers with the same projects. */
+function LinkedDevices() {
+  const lib = useLibraryStore();
+  const [code, setCode] = useState<string | null>(null);
+  const [text, setText] = useState("");
+  const [working, setWorking] = useState(false);
+  const main = getCurrentWebviewWindow().label === "main";
+  const me = deviceId();
+
+  const run = (fn: () => Promise<unknown>) => {
+    setWorking(true);
+    fn()
+      .catch((err) =>
+        toast.error(err instanceof Error ? err.message : String(err)),
+      )
+      .finally(() => setWorking(false));
+  };
+  const showCode = () =>
+    run(async () => {
+      if (!lib.link) await lib.create();
+      const link = useLibraryStore.getState().link;
+      if (link) setCode(await inviteCode(link));
+    });
+
+  return (
+    <div className="space-y-3 border-t px-5 py-5">
+      <div>
+        <h3 className="font-medium text-sm">Link another device</h3>
+        <p className="mt-1 text-muted-foreground text-xs">
+          Your computers get the same projects and keep them in sync. A project
+          from another device gets its files when you first open it.
+        </p>
+      </div>
+      {!main ? (
+        <p className="text-muted-foreground text-xs">
+          Manage linked devices from the first Latex4All window.
+        </p>
+      ) : (
+        <>
+          {lib.link && (
+            <div className="space-y-1 text-xs">
+              {lib.devices.map((d) => (
+                <div key={d.id} className="flex justify-between">
+                  <span>
+                    {d.name}
+                    {d.id === me && " (this one)"}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {new Date(d.at).toLocaleDateString()}
+                  </span>
+                </div>
+              ))}
+              <p className="text-muted-foreground">
+                {lib.busy ??
+                  (lib.status === "synced"
+                    ? `${lib.here} of ${lib.projects} projects on this device`
+                    : lib.status === "offline"
+                      ? "Offline: syncs when you're back online"
+                      : "Syncing…")}
+              </p>
+              {lib.error && <p className="text-destructive">{lib.error}</p>}
+            </div>
+          )}
+          {code ? (
+            <div className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-1.5">
+              <span className="select-all font-mono text-sm tracking-wider">
+                {code}
+              </span>
+              <span className="text-muted-foreground text-xs">
+                Type it on the other device. Works for 24 hours
+              </span>
+            </div>
+          ) : (
+            <Button size="sm" onClick={showCode} disabled={working}>
+              Show a code for another device
+            </Button>
+          )}
+          {!lib.link && (
+            <div className="flex gap-1.5">
+              <Input
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Or type the code from your other device"
+                className="h-8 font-mono text-xs"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={working || !text.trim()}
+                onClick={() => run(() => lib.linkTo(text))}
+              >
+                Link
+              </Button>
+            </div>
+          )}
+          {lib.link && (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={working}
+              onClick={() => run(lib.unlink)}
+            >
+              Unlink this device
+            </Button>
+          )}
+        </>
+      )}
     </div>
   );
 }

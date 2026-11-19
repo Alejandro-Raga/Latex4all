@@ -68,39 +68,55 @@ export function saveDoc(
 }
 
 /** Connects this window; `projectRoot` is null while joining. */
+// `channel`: a connection kept beside the open project's (`library`, what
+// linked devices share); none for the open project.
 export function connect(
   link: string,
   after: number,
   projectRoot: string | null,
+  channel?: string,
 ) {
-  return invoke<void>("collab_connect", { link, after, projectRoot });
+  return invoke<void>("collab_connect", {
+    link,
+    after,
+    projectRoot,
+    channel: channel ?? null,
+  });
 }
 
-export function disconnect() {
-  return invoke<void>("collab_disconnect");
+export function disconnect(channel?: string) {
+  return invoke<void>("collab_disconnect", { channel: channel ?? null });
 }
 
-export function publish(update: Uint8Array) {
-  return invoke<void>("collab_publish", { data: toBase64(update) });
+export function publish(update: Uint8Array, channel?: string) {
+  return invoke<void>("collab_publish", {
+    data: toBase64(update),
+    channel: channel ?? null,
+  });
 }
 
-export function p2pPeers(ids: string[]) {
-  return invoke<void>("collab_p2p_peers", { ids });
+export function p2pPeers(ids: string[], channel?: string) {
+  return invoke<void>("collab_p2p_peers", { ids, channel: channel ?? null });
 }
 
-export function sendAwareness(data: Uint8Array) {
-  return invoke<void>("collab_awareness", { data: toBase64(data) });
+export function sendAwareness(data: Uint8Array, channel?: string) {
+  return invoke<void>("collab_awareness", {
+    data: toBase64(data),
+    channel: channel ?? null,
+  });
 }
 
 export function compact(
   upTo: number,
   snapshot: Uint8Array,
   liveBlobs: string[],
+  channel?: string,
 ) {
   return invoke<void>("collab_compact", {
     upTo,
     data: toBase64(snapshot),
     liveBlobs,
+    channel: channel ?? null,
   });
 }
 
@@ -140,9 +156,13 @@ export function defaultCollabName() {
 }
 
 /** Sync events addressed to this window. */
-export function listenForSyncEvents(handler: (event: SyncEvent) => void) {
-  return getCurrentWebviewWindow().listen<SyncEvent>("collab://event", (e) =>
-    handler(e.payload),
+export function listenForSyncEvents(
+  handler: (event: SyncEvent) => void,
+  channel?: string,
+) {
+  return getCurrentWebviewWindow().listen<SyncEvent>(
+    channel ? `collab://event/${channel}` : "collab://event",
+    (e) => handler(e.payload),
   );
 }
 

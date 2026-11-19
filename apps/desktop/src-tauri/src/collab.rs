@@ -1338,11 +1338,32 @@ pub struct CollabState {
 
 impl CollabState {
     fn send(&self, window: &WebviewWindow, command: Command) {
+        self.send_on(window, None, command)
+    }
+
+    fn send_on(&self, window: &WebviewWindow, channel: Option<&str>, command: Command) {
         if let Ok(connections) = self.connections.lock() {
-            if let Some(tx) = connections.get(window.label()) {
+            if let Some(tx) = connections.get(&conn_key(window, channel)) {
                 let _ = tx.send(command);
             }
         }
+    }
+}
+
+/// A window's connection: its open project's (no channel), or another one it
+/// keeps beside it (`library`: the projects and data linked devices share).
+fn conn_key(window: &WebviewWindow, channel: Option<&str>) -> String {
+    match channel {
+        Some(c) => format!("{}#{c}", window.label()),
+        None => window.label().to_string(),
+    }
+}
+
+/// The event name a channel's sync events go to.
+fn event_name(channel: Option<&str>) -> String {
+    match channel {
+        Some(c) => format!("collab://event/{c}"),
+        None => "collab://event".to_string(),
     }
 }
 
@@ -1516,7 +1537,11 @@ pub fn collab_connect(
     link: String,
     after: u64,
     project_root: Option<String>,
+    channel: Option<String>,
 ) -> Result<(), String> {
+    let channel = channel.filter(|c| c.chars().all(|ch| ch.is_ascii_alphanumeric()));
+    let key = conn_key(&window, channel.as_deref());
+    let event = event_name(channel.as_deref());
     let link = Link::parse(&link)?;
     let keys = Arc::new(Keys::derive(&link));
     let dir = project_root.map(|root| device_state_dir(Path::new(&root)));
@@ -1525,27 +1550,34 @@ pub fn collab_connect(
     let (tx, rx) = mpsc::unbounded_channel();
     {
         let mut connections = state.connections.lock().map_err(|e| e.to_string())?;
-        connections.insert(window.label().to_string(), tx);
+        connections.insert(key.clone(), tx);
     }
     if crate::p2p::enabled() {
+        let event = event.clone();
         let (seal_keys, open_keys) = (keys.clone(), keys.clone());
         let (deliver_to, ready_to, status_to) = (window.clone(), window.clone(), window.clone());
-        let emit_to = |w: &WebviewWindow, event: SyncEvent| {
-            let _ = w.emit_to(EventTarget::webview_window(w.label()), "collab://event", event);
+        let emit_to = move |w: &WebviewWindow, e: SyncEvent| {
+            let _ = w.emit_to(EventTarget::webview_window(w.label()), event.as_str(), e);
         };
         let input = crate::p2p::start(
             keys.project_id.clone(),
             keys.p2p_token.clone(),
             move |plain| seal_keys.seal(Kind::Update, plain).ok(),
             move |sealed| open_keys.open(Kind::Update, sealed).ok(),
-            move |plain| emit_to(&deliver_to, SyncEvent::PeerUpdate { data: BASE64.encode(plain) }),
-            move |id| emit_to(&ready_to, SyncEvent::PeerId { id }),
+            {
+                let emit_to = emit_to.clone();
+                move |plain| emit_to(&deliver_to, SyncEvent::PeerUpdate { data: BASE64.encode(plain) })
+            },
+            {
+                let emit_to = emit_to.clone();
+                move |id| emit_to(&ready_to, SyncEvent::PeerId { id })
+            },
             move |s: crate::p2p::Status| {
                 emit_to(&status_to, SyncEvent::PeerStatus { members: s.members, connected: s.connected, waiting: s.waiting })
             },
         );
         if let Ok(mut p2p) = state.p2p.lock() {
-            p2p.insert(window.label().to_string(), input);
+            p2p.insert(key.clone(), input);
         }
     }
     let target = window.clone();
@@ -1556,32 +1588,38 @@ pub fn collab_connect(
         outbox,
         chat,
         rx,
-        move |event| {
-            let _ = target.emit_to(
-                EventTarget::webview_window(target.label()),
-                "collab://event",
-                event,
-            );
+        move |e| {
+            let _ = target.emit_to(EventTarget::webview_window(target.label()), event.as_str(), e);
         },
     ));
     Ok(())
 }
 
 #[tauri::command]
-pub fn collab_disconnect(window: WebviewWindow, state: tauri::State<'_, CollabState>) {
+pub fn collab_disconnect(
+    window: WebviewWindow,
+    state: tauri::State<'_, CollabState>,
+    channel: Option<String>,
+) {
+    let key = conn_key(&window, channel.as_deref());
     if let Ok(mut connections) = state.connections.lock() {
-        connections.remove(window.label());
+        connections.remove(&key);
     }
     if let Ok(mut p2p) = state.p2p.lock() {
-        p2p.remove(window.label());
+        p2p.remove(&key);
     }
 }
 
 /// Members' peer-to-peer ids, as the shared document has them.
 #[tauri::command]
-pub fn collab_p2p_peers(window: WebviewWindow, state: tauri::State<'_, CollabState>, ids: Vec<String>) {
+pub fn collab_p2p_peers(
+    window: WebviewWindow,
+    state: tauri::State<'_, CollabState>,
+    ids: Vec<String>,
+    channel: Option<String>,
+) {
     if let Ok(p2p) = state.p2p.lock() {
-        if let Some(tx) = p2p.get(window.label()) {
+        if let Some(tx) = p2p.get(&conn_key(&window, channel.as_deref())) {
             let _ = tx.send(crate::p2p::Input::Peers(ids));
         }
     }
@@ -1592,17 +1630,19 @@ pub fn collab_publish(
     window: WebviewWindow,
     state: tauri::State<'_, CollabState>,
     data: String,
+    channel: Option<String>,
 ) -> Result<(), String> {
     let update = decode(&data)?;
     if update.len() > MAX_UPDATE_BYTES {
         return Err("too-large".into());
     }
+    let channel = channel.as_deref();
     if let Ok(p2p) = state.p2p.lock() {
-        if let Some(tx) = p2p.get(window.label()) {
+        if let Some(tx) = p2p.get(&conn_key(&window, channel)) {
             let _ = tx.send(crate::p2p::Input::Publish(update.clone()));
         }
     }
-    state.send(&window, Command::Publish(update));
+    state.send_on(&window, channel, Command::Publish(update));
     Ok(())
 }
 
@@ -1648,8 +1688,9 @@ pub fn collab_awareness(
     window: WebviewWindow,
     state: tauri::State<'_, CollabState>,
     data: String,
+    channel: Option<String>,
 ) -> Result<(), String> {
-    state.send(&window, Command::Awareness(decode(&data)?));
+    state.send_on(&window, channel.as_deref(), Command::Awareness(decode(&data)?));
     Ok(())
 }
 
@@ -1662,10 +1703,12 @@ pub fn collab_compact(
     up_to: u64,
     data: String,
     live_blobs: Vec<String>,
+    channel: Option<String>,
 ) -> Result<(), String> {
     let live_blobs = live_blobs.into_iter().filter(|b| is_hex(b, 64)).collect();
-    state.send(
+    state.send_on(
         &window,
+        channel.as_deref(),
         Command::Compact {
             up_to,
             snapshot: decode(&data)?,

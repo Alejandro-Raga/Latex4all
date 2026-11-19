@@ -135,6 +135,24 @@ a desktop left on, or the headless `l4a-hub` (from this crate) on a NAS or a
 Raspberry Pi. A hub doesn't need the files themselves, only the log: it never
 decrypts anything.
 
+### Linked devices
+
+One person's computers get the same projects (Settings → Sync → Link another
+device). The first device shows a code; the other types it. Both then hold
+the *library*: a shared document of its own, synced like a shared project
+on a connection kept beside the open project's, that lists every project by
+its share link and the devices linked.
+
+Each device shares its projects (without opening them: a link now, the files
+go in the first time it's opened) and adds them to the list, and fetches the
+ones it lacks into its projects folder (their files are written the first
+time they're opened). From then on each project syncs as a shared project.
+A project's owner is any of the linked devices, so the one you shared from
+and your other computers count as you.
+
+Still to come: app data (Planner, Inbox, reading lists, PDF highlights) in
+the library; removing a project from every device.
+
 ## Always-on storage
 
 Peer-to-peer alone only delivers changes between copies that are online at

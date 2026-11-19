@@ -5,6 +5,7 @@ import { homeDir } from "@tauri-apps/api/path";
 import * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { layout, metaMap } from "@/lib/collab/project-doc";
+import { deviceId, myDevices } from "@/lib/collab/device";
 import { type Known, ProjectSync } from "@/lib/collab/project-sync";
 import {
   type SessionStatus,
@@ -172,21 +173,6 @@ let closeShared: () => Promise<void> = async () => {};
  * Called once the app has mounted: the document store and this one import
  * each other (through the editor), so neither may use the other at load.
  */
-/** This copy of the app, to tell the project's owner from the others. */
-function deviceId(): string {
-  const key = "latex4all-device-id";
-  try {
-    let id = localStorage.getItem(key);
-    if (!id) {
-      id = crypto.randomUUID();
-      localStorage.setItem(key, id);
-    }
-    return id;
-  } catch {
-    return "";
-  }
-}
-
 /**
  * The .tex file the owner (who shared the project) last edited: kept in the
  * shared project, so the others' copies open on it. Before an owner is known
@@ -194,10 +180,9 @@ function deviceId(): string {
  */
 function trackLastTex(target: Active) {
   const meta = metaMap(target.session.doc);
-  const me = deviceId();
   const record = (path: string) => {
     const owner = meta.get("owner");
-    if (owner && owner !== me) return;
+    if (owner && !myDevices().has(owner)) return;
     if (meta.get("lastTex") !== path) meta.set("lastTex", path);
   };
   target.cleanup.push(
@@ -212,7 +197,8 @@ function trackLastTex(target: Active) {
 /** Opens a co-author's copy on the owner's last .tex file, or the main one. */
 function openOnLastTex(target: Active) {
   const meta = metaMap(target.session.doc);
-  if (meta.get("owner") === deviceId()) return;
+  const owner = meta.get("owner");
+  if (owner && myDevices().has(owner)) return;
   const documents = useDocumentStore.getState();
   const tex = documents.files.filter((f) => f.type === "tex");
   const pick =
@@ -349,6 +335,94 @@ export async function leaveSharedProject(
 }
 
 /** The shared text for a file, while its project is open and shared. */
+/** Projects shared without being opened (for linked devices): their owner
+ * and local annotations go into the shared copy the first time they open. */
+const FIRST_OPEN = "latex4all-share-first-open";
+
+function firstOpens(): string[] {
+  try {
+    return JSON.parse(localStorage.getItem(FIRST_OPEN) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function setFirstOpens(roots: string[]) {
+  try {
+    localStorage.setItem(FIRST_OPEN, JSON.stringify(roots));
+  } catch {
+    // Then the annotations stay local; nothing is lost.
+  }
+}
+
+/**
+ * Shares a project that isn't open: it gets a link now, and its files go
+ * into the shared copy the next time it's opened (as when sharing it open).
+ */
+export async function shareInBackground(root: string): Promise<LinkInfo> {
+  const there = await readLink(root).catch(() => null);
+  if (there) return there;
+  const info = await parseLink(await createSharedProject());
+  await writeLink(root, info.link);
+  useProjectStore.getState().rememberSharedProject(info.projectId, root);
+  setFirstOpens([...firstOpens().filter((r) => r !== root), root]);
+  return info;
+}
+
+/**
+ * Fetches a shared project into a new folder in `destParent` without
+ * opening it (and without touching the project open now): its files are
+ * written the first time it's opened.
+ */
+export async function fetchInBackground(
+  link: string,
+  destParent: string,
+): Promise<string> {
+  const info = await parseLink(link);
+  const channel = "fetch";
+  let resolve = () => {};
+  let reject: (err: Error) => void = () => {};
+  const caughtUp = new Promise<void>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  const session = new SharedSession(
+    {
+      publish: () => {},
+      awareness: () => {},
+      compact: () => {},
+      save: async () => {},
+    },
+    {
+      local: () => ({}),
+      onCaughtUp: () => resolve(),
+      onError: (code) => {
+        if (code === "gone") reject(new Error(describeError("gone")));
+      },
+    },
+  );
+  const unlisten = await listenForSyncEvents((e) => session.handle(e), channel);
+  const timeout = setTimeout(
+    () => reject(new Error("Couldn't reach the shared project.")),
+    JOIN_TIMEOUT_MS,
+  );
+  try {
+    await connect(info.link, 0, null, channel);
+    await caughtUp;
+    const name = metaMap(session.doc).get("name") || "Shared project";
+    const path = await createProjectFolder(destParent, name);
+    await writeLink(path, info.link);
+    await saveDoc(path, session.seq, "{}", Y.encodeStateAsUpdate(session.doc));
+    useProjectStore.getState().rememberSharedProject(info.projectId, path);
+    return path;
+  } finally {
+    clearTimeout(timeout);
+    unlisten();
+    await disconnect(channel).catch(() => {});
+    session.doc.destroy();
+  }
+}
+
 export function getSharedText(relativePath: string): Y.Text | null {
   return active?.sync?.textAt(relativePath)?.text ?? null;
 }
@@ -822,6 +896,17 @@ export const useCollabStore = create<CollabState>()(
           .catch(() => {});
         for (const event of buffered?.splice(0) ?? []) session.handle(event);
         buffered = null;
+        if (firstOpens().includes(root)) {
+          setFirstOpens(firstOpens().filter((r) => r !== root));
+          metaMap(session.doc).set("owner", deviceId());
+          await moveAnnotationsIntoShared(
+            session.doc,
+            root,
+            await takeLocalAnnotations(root),
+          ).catch((err) =>
+            log.warn("Couldn't move annotations", { error: String(err) }),
+          );
+        }
         openOnLastTex(target);
         trackLastTex(target);
         trackPresence(target);

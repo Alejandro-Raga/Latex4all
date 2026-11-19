@@ -1,4 +1,6 @@
 import { ThemeProvider, useTheme } from "next-themes";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { useLibraryStore } from "@/stores/library-store";
 import { isDarkTheme, THEME_IDS } from "@/lib/app-themes";
 import { ThemeBridge } from "@/components/theme-bridge";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -213,6 +215,14 @@ export function App({ onReady }: { onReady?: () => void }) {
   useKeyboardShortcuts();
   useDeepLinks();
 
+  // Linked devices: the library syncs from the first window only.
+  useEffect(() => {
+    if (getCurrentWebviewWindow().label !== "main") return;
+    void useLibraryStore
+      .getState()
+      .init()
+      .catch(() => {});
+  }, []);
   // Shared projects connect as they open.
   useEffect(() => followOpenProject(), []);
   useEffect(() => followAnnotations(), []);
