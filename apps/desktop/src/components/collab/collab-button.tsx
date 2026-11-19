@@ -37,7 +37,9 @@ import {
 import { SyncStorageChoice } from "@/components/settings/sync-settings";
 import {
   getSyncSettings,
+  needsStorageQuestion,
   patchSyncSettings,
+  storageQuestionAnswered,
   type SyncSettings,
 } from "@/lib/tauri/sync-settings";
 import { inviteCode } from "@/lib/tauri/collab";
@@ -272,7 +274,7 @@ export function CollabButton() {
   const handleShare = () => {
     getSyncSettings()
       .then((s) => {
-        if (!s.enabled || s.chosen) return shareNow();
+        if (!needsStorageQuestion(s)) return shareNow();
         // The popover closes first: two focus traps at once lock the window.
         setMenuOpen(false);
         setTimeout(() => setAsking(s), 0);
@@ -543,6 +545,7 @@ export function CollabButton() {
                   chosen: true,
                 } satisfies Partial<SyncSettings>;
                 setAsking(null);
+                storageQuestionAnswered();
                 void patchSyncSettings(chosen)
                   .catch(() => {})
                   .finally(() => {

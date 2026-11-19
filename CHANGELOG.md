@@ -21,8 +21,9 @@ tag.
 
 ### Fixed
 
-- Sync settings: a choice made at a first share (or anywhere else) is no
-  longer undone by Settings → Sync if it was open at the time.
+- Sync settings: the "Sync storage" question no longer comes back after
+  updates once answered, and a choice made elsewhere is no longer undone by
+  Settings → Sync if it was open at the time.
 
 - Timeline: tasks in a lane per section under the line; tasks too close
   together become a count you can click to list (red when some are late).

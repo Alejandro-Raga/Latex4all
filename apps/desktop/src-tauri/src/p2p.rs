@@ -41,10 +41,41 @@ pub struct SyncSettings {
 }
 
 pub fn settings() -> SyncSettings {
-    base()
-        .and_then(|b| std::fs::read(b.join("settings.json")).ok())
-        .and_then(|b| serde_json::from_slice(&b).ok())
-        .unwrap_or_default()
+    read_settings().unwrap_or_default()
+}
+
+/// The settings as saved: defaults when there's no file yet, `None` when
+/// there is one that can't be read now (another program has it open for a
+/// moment, on Windows). Tried a few times; never taken for "no settings",
+/// so nothing writes defaults over someone's choice.
+fn read_settings() -> Option<SyncSettings> {
+    let path = base()?.join("settings.json");
+    for attempt in 0..5 {
+        match std::fs::read(&path) {
+            Ok(b) => {
+                if let Ok(s) = serde_json::from_slice(&b) {
+                    return Some(s);
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Some(SyncSettings::default())
+            }
+            Err(_) => {}
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50 * (attempt + 1)));
+    }
+    None
+}
+
+/// Notes a project as on a server (`hubbed`), onto the settings as saved;
+/// left alone if they can't be read (it's only noted again next time).
+fn note_hubbed(mark: String) {
+    if let Some(mut s) = read_settings() {
+        if !s.hubbed.contains(&mark) {
+            s.hubbed.push(mark);
+            let _ = save_settings(&s);
+        }
+    }
 }
 
 pub fn save_settings(s: &SyncSettings) -> anyhow::Result<()> {
@@ -288,9 +319,7 @@ pub fn start(
                     if !choice.hubbed.contains(&project) {
                         match node.add_to_hub(code, &project, &token, None).await {
                             Ok(()) => {
-                                let mut s = settings();
-                                s.hubbed.push(project.clone());
-                                let _ = save_settings(&s);
+                                note_hubbed(project.clone());
                             }
                             Err(e) => {
                                 eprintln!("[sync] hub: {e:#}");
@@ -320,9 +349,7 @@ pub fn start(
             if !settings().hubbed.contains(&mark) {
                 match node.add_to_public_hub(code, &project, &token, &access, None).await {
                     Ok(()) => {
-                        let mut s = settings();
-                        s.hubbed.push(mark);
-                        let _ = save_settings(&s);
+                        note_hubbed(mark);
                     }
                     Err(e) => eprintln!("[sync] Latex4All server hub: {e:#}"),
                 }

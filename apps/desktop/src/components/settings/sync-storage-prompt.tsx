@@ -9,7 +9,9 @@ import {
 } from "@/components/ui/dialog";
 import {
   getSyncSettings,
+  needsStorageQuestion,
   patchSyncSettings,
+  storageQuestionAnswered,
   type SyncSettings,
 } from "@/lib/tauri/sync-settings";
 import { useProjectStore } from "@/stores/project-store";
@@ -28,7 +30,7 @@ export function SyncStoragePrompt() {
       if (shares.length === 0) return;
       getSyncSettings()
         .then((s) => {
-          if (s.enabled && !s.chosen) setAsking(s);
+          if (needsStorageQuestion(s)) setAsking(s);
         })
         .catch(() => {});
     }, 4000);
@@ -36,6 +38,7 @@ export function SyncStoragePrompt() {
   }, []);
   const done = (s: SyncSettings) => {
     setAsking(null);
+    storageQuestionAnswered();
     void patchSyncSettings({
       storage: s.storage || "server",
       folder: s.folder,

@@ -10,6 +10,7 @@ import {
   SERVER_DOWNLOAD,
   changed,
   patchSyncSettings,
+  storageQuestionAnswered,
   type SyncSettings,
 } from "@/lib/tauri/sync-settings";
 import { SettingRow, Toggle } from "./settings-parts";
@@ -181,6 +182,7 @@ export function SyncSettingsSection() {
   const save = (next: SyncSettings) => {
     const before = settings;
     setSettings(next);
+    if (next.storage) storageQuestionAnswered();
     patchSyncSettings(changed(before, next))
       .then(setSettings)
       .catch((err) => {

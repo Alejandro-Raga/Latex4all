@@ -48,6 +48,28 @@ export function changed(
 }
 export const cloudFolders = () => invoke<string[]>("sync_cloud_folders");
 
+const ASKED = "latex4all-sync-storage-asked";
+
+/** Whether to ask where changes wait: only if never answered, here or in
+ * the settings (a choice of storage counts as an answer). */
+export function needsStorageQuestion(s: SyncSettings): boolean {
+  if (!s.enabled || s.chosen || s.storage) return false;
+  try {
+    return localStorage.getItem(ASKED) !== "1";
+  } catch {
+    return true;
+  }
+}
+
+/** The question was answered on this computer: not asked again. */
+export function storageQuestionAnswered() {
+  try {
+    localStorage.setItem(ASKED, "1");
+  } catch {
+    // The settings file still says so.
+  }
+}
+
 /** A hub code: the hub's id, a dot, its secret (64 hex digits). */
 export function isHubCode(code: string): boolean {
   return /^[0-9a-z]{32,80}\.[0-9a-f]{64}$/i.test(code.trim());
