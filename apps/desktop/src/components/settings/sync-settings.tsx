@@ -291,15 +291,55 @@ function LinkedDevices() {
               </Button>
             </div>
           )}
+          {lib.link && lib.list.length > 0 && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-muted-foreground">
+                Projects on your devices
+              </summary>
+              <div className="mt-1.5 max-h-56 space-y-1 overflow-y-auto">
+                {lib.list.map((p) => (
+                  <label
+                    key={p.id}
+                    className="flex cursor-pointer items-center gap-2"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!p.removed}
+                      onChange={(e) => lib.setOnDevices(p.id, e.target.checked)}
+                    />
+                    <span className="truncate">{p.name}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1.5 text-muted-foreground">
+                Unticked: not added to your other devices. Copies already on
+                them stay.
+              </p>
+            </details>
+          )}
           {lib.link && (
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={working}
-              onClick={() => run(lib.unlink)}
-            >
-              Unlink this device
-            </Button>
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={working}
+                onClick={() => run(lib.unlink)}
+              >
+                Unlink this device
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={working}
+                title="If a device is lost: link your other devices again with the new code. The lost one gets no new projects or app data, though it keeps the projects it has."
+                onClick={() => {
+                  setCode(null);
+                  run(lib.startOver);
+                }}
+              >
+                Start a new library
+              </Button>
+            </div>
           )}
         </>
       )}

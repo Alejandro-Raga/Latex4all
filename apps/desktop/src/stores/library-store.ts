@@ -62,6 +62,7 @@ interface LibraryState {
   devices: LinkedDevice[];
   /** Projects in the library, and how many are on this device. */
   projects: number;
+  list: LibraryProject[];
   here: number;
   /** Working through the list (sharing, fetching). */
   busy: string | null;
@@ -75,6 +76,10 @@ interface LibraryState {
   linkTo: (text: string) => Promise<void>;
   /** This device leaves; its projects stay, and stay shared. */
   unlink: () => Promise<void>;
+  /** A project on, or off, the other devices. */
+  setOnDevices: (id: string, on: boolean) => void;
+  /** A new library (new key): for a lost device, which keeps the old one. */
+  startOver: () => Promise<void>;
 }
 
 /** Where the library's link and document are kept on this device. */
@@ -88,6 +93,15 @@ interface Entry {
   /** Who added it, and when. */
   by: string;
   at: number;
+  /** Taken off the other devices: kept (so it isn't added again), not
+   * fetched; copies already on a device stay there. */
+  removed?: boolean;
+}
+
+export interface LibraryProject {
+  id: string;
+  name: string;
+  removed: boolean;
 }
 
 let session: SharedSession | null = null;
@@ -113,11 +127,15 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     );
     setLinkedDevices(devices.map((d) => d.id));
     const shared = useProjectStore.getState().sharedProjects;
-    const ids = [...projectsMap(session.doc).keys()];
+    const all = [...projectsMap(session.doc).entries()];
+    const ids = all.filter(([, e]) => !e.removed).map(([id]) => id);
     set({
       devices,
       projects: ids.length,
       here: ids.filter((id) => shared[id]).length,
+      list: all
+        .map(([id, e]) => ({ id, name: e.name, removed: !!e.removed }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     });
   }
 
@@ -192,6 +210,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     const store = useProjectStore.getState();
     const parent = store.lastProjectFolder ?? (await defaultProjectFolder());
     for (const [id, entry] of projects) {
+      if (entry.removed) continue;
       if (session !== s) return;
       const there = store.sharedProjects[id];
       if (there) {
@@ -314,9 +333,24 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     status: "off",
     devices: [],
     projects: 0,
+    list: [],
     here: 0,
     busy: null,
     error: null,
+
+    setOnDevices: (id, on) => {
+      const projects = session && projectsMap(session.doc);
+      const entry = projects?.get(id);
+      if (!projects || !entry) return;
+      projects.set(id, { ...entry, removed: !on });
+      refresh();
+      if (on) void reconcile();
+    },
+
+    startOver: async () => {
+      await get().unlink();
+      await get().create();
+    },
 
     init: async () => {
       if (session) return;
@@ -351,6 +385,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
         status: "off",
         devices: [],
         projects: 0,
+        list: [],
         here: 0,
         busy: null,
         error: null,
