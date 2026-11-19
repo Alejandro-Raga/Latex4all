@@ -408,3 +408,70 @@ async fn an_app_sets_up_a_hub_with_its_code_and_it_keeps_the_project() -> anyhow
     assert!(eventually(|| pc.len() == 1).await);
     Ok(())
 }
+
+#[tokio::test]
+async fn a_public_hub_takes_members_only_and_brings_the_relay_history_over() -> anyhow::Result<()> {
+    use iroh::address_lookup::memory::MemoryLookup;
+    use l4a_sync::hub::{Hub, Options};
+    use sha2::Digest;
+    let book = MemoryLookup::new();
+    let start = |k: iroh::SecretKey| Node::start_with(k, Minimal, Some(book.clone()), Duration::from_millis(100));
+    // The relay's folder for one project: access hash, a snapshot, two
+    // updates after it, one file.
+    let relay = tempfile::tempdir()?;
+    let id = "0123456789abcdef0123456789abcdef";
+    let p = relay.path().join(id);
+    std::fs::create_dir_all(p.join("blobs"))?;
+    let hash: String = sha2::Sha256::digest(b"access-token").iter().map(|b| format!("{b:02x}")).collect();
+    std::fs::write(p.join("meta.json"), format!(r#"{{"accessHash":"{hash}","created":1}}"#))?;
+    let mut snap = 5u64.to_be_bytes().to_vec();
+    snap.extend_from_slice(b"snapshot to 5");
+    std::fs::write(p.join("snapshot.bin"), snap)?;
+    let record = |seq: u64, data: &[u8]| {
+        let mut r = seq.to_be_bytes().to_vec();
+        r.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        r.extend_from_slice(data);
+        r
+    };
+    let mut log = record(4, b"old, in the snapshot");
+    log.extend(record(6, b"update 6"));
+    log.extend(record(7, b"update 7"));
+    std::fs::write(p.join("log.bin"), &log)?;
+    std::fs::write(p.join("blobs").join("ab".repeat(32)), b"a sealed file")?;
+
+    let data = tempfile::tempdir()?;
+    let hub = Hub::start_with(
+        start(iroh::SecretKey::generate()).await?,
+        data.path(),
+        Options { public: true, relay: Some(relay.path().to_path_buf()) },
+    )?;
+    let a = start(iroh::SecretKey::generate()).await?;
+    for n in [&*hub.node, &a] {
+        book.add_endpoint_info(n.addr());
+    }
+    let code = hub.code();
+    assert!(code.ends_with(".public"));
+    let dir = tempfile::tempdir()?;
+    let pa = a.open(id, b"secret", dir.path())?;
+    // Without the access token: refused.
+    assert!(a.add_to_public_hub(&code, id, b"secret", b"guess", None).await.is_err());
+    assert!(hub.projects().is_empty());
+    a.add_to_public_hub(&code, id, b"secret", b"access-token", None).await?;
+    assert_eq!(hub.projects(), vec![id.to_string()]);
+    // The snapshot and the updates after it, in order, and the file.
+    assert!(eventually(|| pa.len() == 3).await);
+    let got: Vec<Vec<u8>> = pa.entries().into_iter().map(|e| e.data.clone()).collect();
+    assert_eq!(got, vec![b"snapshot to 5".to_vec(), b"update 6".to_vec(), b"update 7".to_vec()]);
+    let hp = hub.node.project(id).unwrap();
+    assert!(hp.blob(&{
+        let h = sha2::Sha256::digest(b"a sealed file");
+        h.iter().map(|b| format!("{b:02x}")).collect::<String>()
+    }).is_some());
+    // An update reaching the relay later is brought over too, once.
+    log.extend(record(8, b"update 8"));
+    std::fs::write(p.join("log.bin"), &log)?;
+    hub.import_all();
+    hub.import_all();
+    assert!(eventually(|| pa.len() == 4).await);
+    Ok(())
+}

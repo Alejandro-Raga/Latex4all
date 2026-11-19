@@ -1564,7 +1564,13 @@ pub fn collab_connect(
             keys.project_id.clone(),
             keys.p2p_token.clone(),
             move |plain| seal_keys.seal(Kind::Update, plain).ok(),
-            move |sealed| open_keys.open(Kind::Update, sealed).ok(),
+            // Updates, and snapshots the relay kept (its history, moved over).
+            move |sealed| {
+                open_keys
+                    .open(Kind::Update, sealed)
+                    .or_else(|_| open_keys.open(Kind::Snapshot, sealed))
+                    .ok()
+            },
             {
                 let emit_to = emit_to.clone();
                 move |plain| emit_to(&deliver_to, SyncEvent::PeerUpdate { data: BASE64.encode(plain) })

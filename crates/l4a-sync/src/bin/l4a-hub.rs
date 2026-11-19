@@ -2,10 +2,17 @@
 //! Pi. `l4a-hub [data folder]` (default `./hub-data`, or `$L4A_HUB_DATA`).
 //! Prints the hub code to paste in the app (Settings → Sync), then runs
 //! until stopped.
+//!
+//! `L4A_HUB_PUBLIC=1` makes it public (anyone may add a project they're in);
+//! `L4A_RELAY_DATA=<relay's projects folder>` lets it check membership
+//! against the relay and bring each project's relay history over.
 
 use iroh::endpoint::presets::N0;
 use iroh::SecretKey;
-use l4a_sync::{hub::Hub, Node};
+use l4a_sync::{
+    hub::{Hub, Options},
+    Node,
+};
 use std::path::PathBuf;
 
 #[tokio::main]
@@ -26,7 +33,11 @@ async fn main() -> anyhow::Result<()> {
             k
         }
     };
-    let hub = Hub::start(Node::start(key, N0).await?, &dir)?;
+    let options = Options {
+        public: std::env::var("L4A_HUB_PUBLIC").is_ok_and(|v| v == "1"),
+        relay: std::env::var("L4A_RELAY_DATA").ok().map(PathBuf::from),
+    };
+    let hub = Hub::start_with(Node::start(key, N0).await?, &dir, options)?;
     println!("Latex4All hub running. {} project(s).", hub.projects().len());
     println!();
     println!("Hub code (paste it in Latex4All → Settings → Sync → Your own server):");
