@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { inviteCode } from "@/lib/tauri/collab";
 import { deviceId } from "@/lib/collab/device";
 import { useLibraryStore } from "@/stores/library-store";
+import { revealInFileManager } from "@/lib/reveal";
 import { LibraryProgress } from "@/components/collab/library-progress";
 
 const folderName = (path: string) =>
@@ -307,6 +308,26 @@ function LinkedDevices() {
               >
                 Link
               </Button>
+            </div>
+          )}
+          {lib.link && lib.leftovers.length > 0 && (
+            <div className="space-y-1 rounded-md border px-2.5 py-2 text-xs">
+              <p>
+                These copies were fetched before Latex4All found the project's
+                own folder (your cloud app syncs it). They're no longer used;
+                delete them when you like.
+              </p>
+              {lib.leftovers.map((path) => (
+                <button
+                  key={path}
+                  type="button"
+                  className="block max-w-full truncate text-left text-primary hover:underline"
+                  onClick={() => revealInFileManager(path)}
+                  title="Show in folder"
+                >
+                  {path}
+                </button>
+              ))}
             </div>
           )}
           {lib.link && lib.list.length > 0 && (

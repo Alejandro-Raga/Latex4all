@@ -33,6 +33,10 @@ tag.
   arrived as "Shared project (n)" get their real names; a project's priority
   flag and deadline show on the home screen as soon as its plan arrives;
   project types (Article, Thesis…) are the same on all your devices.
+- Linked devices: a project whose folder your cloud app (Seafile, Dropbox…)
+  already syncs is used where it is on the other computer, instead of a
+  second copy beside it, so it builds as it does on the first and isn't
+  listed twice; copies made before are listed in Settings → Sync to delete.
 - Linked devices are replicas: everything Latex4All keeps (settings,
   favourites, home-screen folders and custom types, bookmarks, the dock,
   vault and Zotero settings, the reading queue, each project's layout…) is

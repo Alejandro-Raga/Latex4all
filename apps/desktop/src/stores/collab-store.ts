@@ -495,6 +495,7 @@ export function syncInBackground(
       if (active?.root === root) return;
       const meta = metaMap(session.doc);
       nameFromFolder(session.doc, root);
+      noteWhoIsIn(session.doc, root);
       if (
         name &&
         !isPlaceholderName(name) &&
@@ -566,6 +567,18 @@ export function getSharedDoc(root: string): Y.Doc | null {
  */
 function peopleMap(doc: Y.Doc) {
   return doc.getMap<string>("people");
+}
+
+/**
+ * Shared with other people, or only between one's own devices: anyone but
+ * you among those who've worked in it says it's shared with people.
+ */
+function noteWhoIsIn(doc: Y.Doc, root: string) {
+  const me = useCollabStore.getState().displayName.trim() || "Anonymous";
+  const others = [...peopleMap(doc).keys()].some(
+    (name) => name.trim() && name.trim() !== me,
+  );
+  if (others) markSharedWithPeople(root);
 }
 
 let introduceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -980,6 +993,7 @@ export const useCollabStore = create<CollabState>()(
           if (active !== target) return;
         }
         nameFromFolder(session.doc, root);
+        noteWhoIsIn(session.doc, root);
         const notSynced = () =>
           useSettingsStore.getState().notSynced[root] ?? [];
         target.sync = new ProjectSync(

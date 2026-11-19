@@ -58,7 +58,9 @@ import { readProjectMeta, writeProjectType } from "@/lib/project-meta";
 import { createLogger } from "@/lib/debug/logger";
 import { type AppKnown, syncAppData } from "@/lib/collab/app-data-sync";
 import {
+  local,
   pathMap,
+  portable,
   type StateKnown,
   syncAppState,
 } from "@/lib/collab/app-state-sync";
@@ -94,6 +96,8 @@ interface LibraryState {
   busy: string | null;
   /** Bumped when which projects are in the library changes. */
   revision: number;
+  /** Copies no longer used (see `leftovers`), to show and remove. */
+  leftovers: string[];
   /** How each library project's last background sync went, by folder. */
   states: Record<string, ProjectSyncState>;
   /** Projects synced so far in this round, and the one under way. */
@@ -138,6 +142,11 @@ interface Entry {
   type?: string | null;
   /** Starred on the home screen. */
   favorite?: boolean;
+  /** Where its folder is, under the home folder (`@home/Seafile/…`): a
+   * device whose cloud app already put it there uses that folder. */
+  where?: string;
+  /** Retired as the same folder as another entry. */
+  duplicateOf?: string;
 }
 
 export interface LibraryProject {
@@ -202,6 +211,19 @@ async function reloadStores(keys: string[]) {
     );
   }
 }
+
+/** Copies fetched before a project's own (cloud-synced) folder was found
+ * here: off the home screen, left on disk for the person to remove. */
+const LEFTOVERS = "latex4all-library-leftovers";
+const leftovers = new Set<string>(
+  (() => {
+    try {
+      return JSON.parse(localStorage.getItem(LEFTOVERS) ?? "[]") as string[];
+    } catch {
+      return [];
+    }
+  })(),
+);
 
 /** When each project last synced in the background, by folder. */
 const lastBackground = new Map<string, number>();
@@ -347,15 +369,6 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     for (const project of recent) {
       if (session !== s) return;
       let info = await readLink(project.path).catch(() => null);
-      // Shared before it came into the library, from here: with people.
-      if (
-        info &&
-        !libraryRoots().has(project.path) &&
-        (!projects.has(info.projectId) ||
-          projects.get(info.projectId)?.by === me)
-      ) {
-        markSharedWithPeople(project.path);
-      }
       if (!info && useDocumentStore.getState().projectRoot === project.path) {
         // The open one: shared as from the Share button, to sync right away.
         set({ busy: `Sharing ${project.name}…` });
@@ -387,6 +400,64 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
           at: Date.now(),
           people: sharedWithPeople().has(project.path),
         });
+      }
+    }
+
+    // Where each project's folder is, as this device has it.
+    const homeMap = await pathMap({});
+    for (const [id, entry] of projects) {
+      const root = useProjectStore.getState().sharedProjects[id];
+      if (!root || entry.removed) continue;
+      const info = await readLink(root).catch(() => null);
+      if (info?.projectId !== id) continue;
+      const where = portable(root, homeMap);
+      if (where.startsWith("@home") && entry.where !== where) {
+        projects.set(id, { ...(projects.get(id) ?? entry), where });
+      }
+    }
+    // Two entries for one folder (each device shared its cloud copy before
+    // they were linked): the first stays, the other is retired.
+    const byWhere = new Map<string, string>();
+    for (const [id, entry] of [...projects.entries()].sort(
+      (a, b) => a[1].at - b[1].at,
+    )) {
+      if (entry.removed || !entry.where) continue;
+      const first = byWhere.get(entry.where);
+      if (first && first !== id) {
+        projects.set(id, { ...entry, removed: true, duplicateOf: first });
+      } else byWhere.set(entry.where, id);
+    }
+
+    // A project already here because a cloud app syncs its folder: that
+    // folder is used, rather than a copy fetched beside it.
+    for (const [id, entry] of projects) {
+      if (session !== s || entry.removed || !entry.where) continue;
+      const there = local(entry.where, homeMap);
+      if (!there || !(await exists(there).catch(() => false))) continue;
+      const current = useProjectStore.getState().sharedProjects[id];
+      if (current === there) continue;
+      if (useDocumentStore.getState().projectRoot === there) continue;
+      const link = await readLink(there).catch(() => null);
+      if (link && link.projectId !== id) {
+        // Its own identity: kept if it's shared with people (switching it
+        // would leave them); otherwise it takes the library's.
+        if (sharedWithPeople().has(there) && !entry.people) continue;
+      }
+      if (link?.projectId !== id) await writeLink(there, entry.link);
+      const projectsStore = useProjectStore.getState();
+      projectsStore.rememberSharedProject(id, there);
+      projectsStore.addRecentProject(there);
+      markLibrary(there);
+      if (current && current !== there) {
+        // The copy fetched earlier: off the home screen, left on disk.
+        projectsStore.removeRecentProject(current);
+        leftovers.add(current);
+        try {
+          localStorage.setItem(LEFTOVERS, JSON.stringify([...leftovers]));
+        } catch {
+          // Shown until the app closes.
+        }
+        useLibraryStore.setState({ leftovers: [...leftovers] });
       }
     }
 
@@ -617,6 +688,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     revision: 0,
     states: {},
     progress: null,
+    leftovers: [...leftovers],
     error: null,
 
     syncNow: async () => {

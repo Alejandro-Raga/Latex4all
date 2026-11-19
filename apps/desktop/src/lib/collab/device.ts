@@ -54,6 +54,12 @@ const PEOPLE = "latex4all-shared-with-people";
  * someone's link), as opposed to only synced between one's own devices. */
 export function sharedWithPeople(): Set<string> {
   try {
+    // Marks from before people were told apart by who's in the project:
+    // they marked every project, so they're dropped once.
+    if (localStorage.getItem(`${PEOPLE}-v2`) !== "1") {
+      localStorage.removeItem(PEOPLE);
+      localStorage.setItem(`${PEOPLE}-v2`, "1");
+    }
     return new Set(JSON.parse(localStorage.getItem(PEOPLE) ?? "[]"));
   } catch {
     return new Set();
