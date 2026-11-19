@@ -1,6 +1,7 @@
 import { ThemeProvider, useTheme } from "next-themes";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useLibraryStore } from "@/stores/library-store";
+import { SyncStoragePrompt } from "@/components/settings/sync-storage-prompt";
 import { isDarkTheme, THEME_IDS } from "@/lib/app-themes";
 import { ThemeBridge } from "@/components/theme-bridge";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -324,6 +325,7 @@ export function App({ onReady }: { onReady?: () => void }) {
           </div>
           <EnvironmentOnboarding />
           <BugReportDialog />
+          <SyncStoragePrompt />
           <ZoteroPdfDialog />
           <HelpDialog />
           <NewNoteDialog />
