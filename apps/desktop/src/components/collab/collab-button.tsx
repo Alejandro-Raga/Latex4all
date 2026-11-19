@@ -265,9 +265,15 @@ export function CollabButton() {
   };
   // Where changes wait: asked at the first share, once peer-to-peer is on.
   const [asking, setAsking] = useState<SyncSettings | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const handleShare = () => {
     getSyncSettings()
-      .then((s) => (s.enabled && !s.chosen ? setAsking(s) : shareNow()))
+      .then((s) => {
+        if (!s.enabled || s.chosen) return shareNow();
+        // The popover closes first: two focus traps at once lock the window.
+        setMenuOpen(false);
+        setTimeout(() => setAsking(s), 0);
+      })
       .catch(shareNow);
   };
 
@@ -281,7 +287,7 @@ export function CollabButton() {
 
   return (
     <>
-      <Popover>
+      <Popover open={menuOpen} onOpenChange={setMenuOpen}>
         <PopoverTrigger asChild>
           <Button
             variant={shared ? "secondary" : "ghost"}
@@ -455,7 +461,12 @@ export function CollabButton() {
                   chosen: true,
                 } satisfies SyncSettings;
                 setAsking(null);
-                void setSyncSettings(chosen).finally(shareNow);
+                void setSyncSettings(chosen)
+                  .catch(() => {})
+                  .finally(() => {
+                    shareNow();
+                    setTimeout(() => setMenuOpen(true), 0);
+                  });
               }}
             >
               Share project
