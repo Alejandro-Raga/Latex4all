@@ -32,8 +32,13 @@ tag.
 - Linked devices: a progress bar shows while projects sync; projects that
   arrived as "Shared project (n)" get their real names; a project's priority
   flag and deadline show on the home screen as soon as its plan arrives;
-  project types (Article, Thesis…) and favourites are the same on all your
-  devices.
+  project types (Article, Thesis…) are the same on all your devices.
+- Linked devices are replicas: everything Latex4All keeps (settings,
+  favourites, home-screen folders and custom types, bookmarks, the dock,
+  vault and Zotero settings, the reading queue, each project's layout…) is
+  the same on each, with folders translated to where they are on each
+  computer. Only what belongs to one computer stays its own (its window
+  size and zoom, where new projects go, sign-ins).
 - Sync settings: the "Sync storage" question no longer comes back after
   updates once answered, and a choice made elsewhere is no longer undone by
   Settings → Sync if it was open at the time.

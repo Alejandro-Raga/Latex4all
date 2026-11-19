@@ -57,6 +57,11 @@ import { isPlaceholderName } from "@/lib/collab/project-doc";
 import { readProjectMeta, writeProjectType } from "@/lib/project-meta";
 import { createLogger } from "@/lib/debug/logger";
 import { type AppKnown, syncAppData } from "@/lib/collab/app-data-sync";
+import {
+  pathMap,
+  type StateKnown,
+  syncAppState,
+} from "@/lib/collab/app-state-sync";
 
 const log = createLogger("library");
 const CHANNEL = "library";
@@ -145,6 +150,59 @@ let session: SharedSession | null = null;
 const cleanup: Array<() => void> = [];
 let reconciling: Promise<void> | null = null;
 let again = false;
+/** Stores changed by another device: read again from what's saved. */
+async function reloadStores(keys: string[]) {
+  const loaders: Record<string, () => Promise<unknown>> = {
+    "latex4all-settings": () =>
+      import("@/stores/settings-store").then((m) =>
+        m.useSettingsStore.persist.rehydrate(),
+      ),
+    "latex4all-projects": () =>
+      Promise.resolve(useProjectStore.persist.rehydrate()),
+    "project-folders": () =>
+      import("@/stores/project-folders-store").then((m) =>
+        m.useProjectFolders.persist.rehydrate(),
+      ),
+    "latex4all-bookmarks": () =>
+      import("@/stores/bookmark-store").then((m) =>
+        m.useBookmarkStore.persist.rehydrate(),
+      ),
+    "latex4all-dock": () =>
+      import("@/stores/dock-store").then((m) =>
+        m.useDockStore.persist.rehydrate(),
+      ),
+    "latex4all-vault": () =>
+      import("@/stores/vault-store").then((m) =>
+        m.useVaultStore.persist.rehydrate(),
+      ),
+    "latex4all-zotero": () =>
+      import("@/stores/zotero-store").then((m) =>
+        m.useZoteroStore.persist.rehydrate(),
+      ),
+    "latex4all-ai-usage": () =>
+      import("@/lib/ai-usage").then((m) => m.useAiUsage.persist.rehydrate()),
+    "latex4all-agent-accounts": () =>
+      import("@/lib/agent-accounts").then((m) =>
+        m.useAgentAccounts.persist.rehydrate(),
+      ),
+    "planner-own-lists": () =>
+      import("@/lib/plan/plan-store").then((m) =>
+        m.useOwnLists.persist.rehydrate(),
+      ),
+    "reading-queue": () =>
+      import("@/components/planner/reading-home").then((m) =>
+        m.useQueue.persist.rehydrate(),
+      ),
+    "latex4all-collab": () =>
+      Promise.resolve(useCollabStore.persist.rehydrate()),
+  };
+  for (const key of keys) {
+    await loaders[key]?.().catch((err) =>
+      log.warn("Couldn't reload a synced store", { key, error: String(err) }),
+    );
+  }
+}
+
 /** When each project last synced in the background, by folder. */
 const lastBackground = new Map<string, number>();
 
@@ -218,8 +276,8 @@ async function nameFetched(root: string, listed?: string) {
 let appKnown: AppKnown = {};
 /** Each project's type as last in step with the library, by project id. */
 let typesKnown: Record<string, string | null> = {};
-/** Each project's star as last in step with the library, by project id. */
-let favoritesKnown: Record<string, boolean> = {};
+/** Each saved store as last in step with the library (app-state-sync). */
+let stateKnown: StateKnown = {};
 
 function projectsMap(doc: Y.Doc) {
   return doc.getMap<Entry>("projects");
@@ -434,29 +492,16 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       }
     }
 
-    // Stars, the same way: changed here goes out, changed there comes here.
-    for (const [id, entry] of projects) {
-      if (session !== s || entry.removed) continue;
-      const root = useProjectStore.getState().sharedProjects[id];
-      if (!root) continue;
-      const store = useProjectStore.getState();
-      const here = store.favorites.includes(root);
-      const known = favoritesKnown[id];
-      const theirs = entry.favorite ?? false;
-      if (known === undefined ? here : here !== known) {
-        if (theirs !== here) {
-          projects.set(id, { ...(projects.get(id) ?? entry), favorite: here });
-        }
-        favoritesKnown[id] = here;
-      } else if (theirs !== (known ?? false)) {
-        if (here !== theirs) store.toggleFavorite(root);
-        favoritesKnown[id] = theirs;
-      }
-    }
-
     // The app's own data (Planner lists, highlights) too.
     if (session === s) {
       appKnown = await syncAppData(doc, appKnown);
+      // And everything else it keeps: a replica (app-state-sync).
+      const roots: Record<string, string> = {};
+      const shared = useProjectStore.getState().sharedProjects;
+      for (const id of projects.keys()) if (shared[id]) roots[id] = shared[id];
+      const result = syncAppState(doc, stateKnown, await pathMap(roots));
+      stateKnown = result.known;
+      if (result.changed.length) await reloadStores(result.changed);
       s.scheduleSave();
     }
     set({ error: problems.length ? problems.join(" · ") : null });
@@ -471,7 +516,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       const local = JSON.parse(saved?.local || "{}");
       appKnown = local.app ?? {};
       typesKnown = local.types ?? {};
-      favoritesKnown = local.favorites ?? {};
+      stateKnown = local.state ?? {};
     } catch {
       appKnown = {};
     }
@@ -495,7 +540,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
         local: () => ({
           app: appKnown,
           types: typesKnown,
-          favorites: favoritesKnown,
+          state: stateKnown,
         }),
         onStatus: (status) => {
           if (session !== s) return;

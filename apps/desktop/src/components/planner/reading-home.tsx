@@ -55,7 +55,10 @@ const idOf = (list: PlanList, item: ReadingItem) =>
   `${list.key}|${item.itemKey ?? item.title}`;
 
 /** The order of Up next, across every list: yours, by dragging. */
-const useQueue = create<{ order: string[]; set: (o: string[]) => void }>()(
+export const useQueue = create<{
+  order: string[];
+  set: (o: string[]) => void;
+}>()(
   persist((set) => ({ order: [], set: (order) => set({ order }) }), {
     name: "reading-queue",
   }),

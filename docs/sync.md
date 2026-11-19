@@ -153,6 +153,19 @@ the last sync went) for those in the library; a project can be both.
 A project's owner is any of the linked devices, so the one you shared from
 and your other computers count as you.
 
+Linked devices are replicas. Every store the app keeps (settings,
+favourites, home-screen folders and types, bookmarks, dock, vault and
+Zotero settings, reading queue, per-project layouts) goes into the library
+as JSON with paths made portable: a project's folder becomes
+`@p:<project id>`, anything else under the home folder `@home/…`; on the
+way in they become the device's own paths and separators, and entries about
+projects it lacks are left out (`app-state-sync.ts`). Per device: identity,
+window size and zoom, where new projects go, which folders hold shared
+projects, sign-in tokens. The first time a device links it takes the
+library's state (the original device's); after that a store changed on one
+device goes to the others, the project list put together rather than
+replaced.
+
 App data goes in the library too: the app's own Planner lists (when there's
 no vault, which syncs by itself) and highlights on PDFs outside Zotero, each
 file a text in the library's document. A change goes in as the words that
