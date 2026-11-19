@@ -82,11 +82,10 @@ export function SyncStorageChoice({
   return (
     <div className="space-y-3">
       <p className="text-muted-foreground text-sm leading-relaxed">
-        Shared projects sync directly between computers. When collaborators
-        aren't online at the same time, changes wait in storage. The Latex4All
-        server is free, with a size limit per project. You can use a cloud
-        folder you already have instead, a computer of yours that stays on, or
-        your own server. Everything is encrypted before it leaves this computer.
+        When collaborators aren't online at the same time, changes wait in
+        storage. The Latex4All server is free, up to a size limit per project.
+        You can also use a cloud folder, a computer that stays on, or your own
+        server. Everything is encrypted.
       </p>
       <div className="space-y-2">
         {option(
@@ -123,7 +122,7 @@ export function SyncStorageChoice({
         {option(
           "computer",
           "Use this computer as a server",
-          "Only if it's always on. It keeps every shared project for the others, and stays in the menu bar when you close the window. Starts with the app's next launch.",
+          "For a computer that's always on. It stays in the menu bar when you close the window.",
         )}
         {option(
           "hub",
@@ -194,7 +193,7 @@ export function SyncSettingsSection() {
     <div>
       <SettingRow
         label="Peer-to-peer sync (beta)"
-        detail="Sync shared projects directly between computers. Applies when a project is opened."
+        detail="Sync shared projects directly between computers."
       >
         <Toggle
           label="Peer-to-peer sync"
@@ -307,11 +306,7 @@ export function LinkedDevices() {
           )}
           {lib.link && lib.leftovers.length > 0 && (
             <div className="space-y-1 rounded-md border px-2.5 py-2 text-xs">
-              <p>
-                These copies were made before Latex4All found each project's
-                folder in your cloud service. They're no longer used and can be
-                deleted.
-              </p>
+              <p>Old copies, no longer used. You can delete them.</p>
               {lib.leftovers.map((path) => (
                 <button
                   key={path}
@@ -346,8 +341,7 @@ export function LinkedDevices() {
                 ))}
               </div>
               <p className="mt-1.5 text-muted-foreground">
-                Unchecked projects aren't added to other devices. Copies already
-                there stay.
+                Unchecked projects stay off your other devices.
               </p>
             </details>
           )}
@@ -373,7 +367,7 @@ export function LinkedDevices() {
                 size="sm"
                 variant="ghost"
                 disabled={working}
-                title="Use this if a device is lost. Link your other devices again with the new code. The lost device keeps what it has but gets nothing new."
+                title="For a lost device. Link your other devices again with the new code."
                 onClick={() => {
                   setCode(null);
                   run(lib.startOver);

@@ -144,9 +144,8 @@ export function SyncFilesDialog({
         <DialogHeader>
           <DialogTitle>Files to sync</DialogTitle>
           <DialogDescription>
-            Unchecked files aren't sent or received on this computer, so you can
-            sync them another way, such as Dropbox. Collaborators keep their
-            copies.
+            Unchecked files don't sync on this computer, so you can sync them
+            another way, such as Dropbox.
           </DialogDescription>
         </DialogHeader>
         <FileChoices

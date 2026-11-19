@@ -26,6 +26,13 @@ Zotero word their settings.
   changes", "automatically", "monthly quota".
 - No sentences that justify themselves ("So Zotero suggests…"). Say what
   it does.
+- No reassurance nobody asked for: "Copies already there stay", "Your
+  changes are kept", "Your files are still here", "Nothing else
+  changes". Keep a second sentence only if it tells people something they
+  need, like what to do next or that nothing is needed ("Changes still go
+  through the sync server").
+- A description never repeats its label ("On launch — What the app shows
+  when it starts"). If the name says it, leave the description out.
 - Buttons are verbs: "Sync now", "Add", "Remove provider".
 - Use "your" only where it's needed ("Favorites", not "Your favorites").
   Never "we".

@@ -514,9 +514,7 @@ export function PaperReader({
         // Unreadable: highlighting stays off for it (localNotes stays null,
         // so nothing is saved over them), and it says so.
         console.warn("Couldn't read this PDF's highlights", err);
-        toast.error(
-          "Couldn't read this PDF's highlights. They weren't changed.",
-        );
+        toast.error("Couldn't read this PDF's highlights.");
         return;
       }
       const { notes, version } = kept;

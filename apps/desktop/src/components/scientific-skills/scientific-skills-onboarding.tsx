@@ -350,10 +350,7 @@ export function ScientificSkillsOnboarding({
               </DialogDescription>
             ) : (
               !error && (
-                <DialogDescription>
-                  This downloads about 230 MB and can take several minutes on a
-                  slow connection. Progress shows below.
-                </DialogDescription>
+                <DialogDescription>About 230 MB to download.</DialogDescription>
               )
             )}
           </DialogHeader>

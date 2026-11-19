@@ -209,7 +209,7 @@ export function BibCleanupPanel({
               {k.identical ? (
                 <span className="text-muted-foreground">
                   {" "}
-                  — identical copies; one is kept.
+                  — identical copies.
                 </span>
               ) : (
                 <span className="text-amber-700 dark:text-amber-400">

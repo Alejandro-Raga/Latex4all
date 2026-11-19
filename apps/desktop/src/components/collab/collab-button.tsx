@@ -220,7 +220,7 @@ const STATUS = {
   },
   gone: { label: "No longer shared", dot: "bg-red-500" },
   outdated: {
-    label: "Update Latex4All to keep syncing — your changes are kept",
+    label: "Update Latex4All to keep syncing",
     dot: "bg-red-500",
   },
 } as const;

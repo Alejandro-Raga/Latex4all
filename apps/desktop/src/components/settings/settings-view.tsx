@@ -108,7 +108,7 @@ function PlannerSettings() {
       <div className="divide-y divide-border/60">
         <SettingRow
           label="Weekly reading goal"
-          detail="Papers to finish each week. Progress shows in Reading."
+          detail="Papers to finish each week."
         >
           <Toggle
             checked={goal > 0}
@@ -203,7 +203,7 @@ function EditorSettings() {
       </SettingRow>
       <SettingRow
         label="Grammar checking"
-        detail="Check grammar with LanguageTool on this computer."
+        detail="Uses LanguageTool on this computer."
       >
         <Toggle
           checked={grammar}
@@ -365,10 +365,8 @@ function ZoteroTagsSettings() {
         />
       </SettingRow>
       <p className="mx-5 mb-3 text-muted-foreground text-xs">
-        Adds one note to your Zotero library, “Ideas and topics in your vault”,
-        tagged with each idea and topic (“idea: …”, “topic: …”). It updates when
-        the vault changes. Nothing else in Zotero changes, and Zotero's
-        automatic tags are ignored.
+        Adds one note to your Zotero library, tagged with every idea and topic
+        in your vault.
       </p>
     </>
   );
@@ -546,7 +544,7 @@ function VaultSettings() {
       {projectRoot && (
         <SettingRow
           label="Keep this project's note in the vault"
-          detail="Includes the project's citations, outline, highlights and notes."
+          detail="Citations, outline, highlights and notes."
         >
           <Toggle
             checked={projectLinked}

@@ -683,7 +683,7 @@ function describeError(code: string) {
     case "too-large":
       return "A file is too large to share (25 MB at most).";
     case "gone":
-      return "This shared project no longer exists. Your files are still here.";
+      return "This shared project no longer exists.";
     case "outdated":
       return "This shared project needs a newer version of Latex4All. Update to keep syncing.";
     case "chat-too-large":

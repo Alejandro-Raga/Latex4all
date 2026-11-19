@@ -103,14 +103,14 @@ export function warningForError(message: string): SyncWarning | null {
         id: "outdated",
         code: "R04",
         level: "error",
-        text: "This project needs a newer Latex4All. Update to keep syncing. Your changes are kept.",
+        text: "This project needs a newer Latex4All. Update to keep syncing.",
       };
     case "gone":
       return {
         id: "gone",
         code: "R03",
         level: "error",
-        text: "This project is no longer shared. Your files are still here.",
+        text: "This project is no longer shared.",
       };
     case "corrupt":
     case "chat-quota":
@@ -178,7 +178,7 @@ const PEER_PROBLEMS: Record<string, Omit<SyncWarning, "id" | "code">> = {
   },
   H01: {
     level: "warning",
-    text: "Your server can't be reached. Changes are kept here and sent when it's back.",
+    text: "Your server can't be reached. Changes will be sent when it's back.",
   },
   H02: {
     level: "error",

@@ -69,15 +69,13 @@ export const useConnection = create<ConnectionState>((set, get) => {
       if (!health.internet.ok) {
         set({ outage: "internet" });
         toast.warning("You're offline", {
-          description:
-            "Your changes to this shared project are kept here and will be sent when you're back online.",
+          description: "Changes will be sent when you're back online.",
           duration: 10_000,
         });
       } else if (!health.relay.ok) {
         set({ outage: "service" });
         toast.warning("The sync service isn't answering", {
-          description:
-            "Your changes to this shared project are kept here and will be sent when it's back.",
+          description: "Changes will be sent when it's back.",
           duration: 10_000,
         });
       }

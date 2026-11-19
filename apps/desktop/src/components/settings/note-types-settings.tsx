@@ -131,9 +131,8 @@ export function NoteTypesSettings() {
       <div className="px-5 pt-1 pb-2">
         <div className="text-sm">Note types</div>
         <div className="text-muted-foreground text-xs">
-          Each type has a folder. Notes in that folder, or with the type's
-          Obsidian tag, get the type automatically. Set each type's Zotero tag
-          in Zotero sync.
+          Notes in a type's folder, or with its Obsidian tag, get that type.
+          Zotero tags are set in Zotero sync.
         </div>
       </div>
 

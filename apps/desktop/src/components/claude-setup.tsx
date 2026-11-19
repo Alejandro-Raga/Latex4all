@@ -1253,8 +1253,7 @@ export function ClaudeSetup({
         <div className="space-y-0.5 px-2">
           {openAiCredentials.length === 0 && (
             <p className="px-2.5 py-2 text-muted-foreground text-xs">
-              No keys yet. A Gemini key from Google AI Studio, or Ollama on this
-              computer, is free to start.
+              No keys yet. Gemini (from Google AI Studio) and Ollama are free.
             </p>
           )}
           {openAiCredentials.map((credential) => {

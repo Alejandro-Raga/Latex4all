@@ -185,11 +185,8 @@ export function ZoteroSourceControls() {
         </p>
         {database && (
           <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-2 text-amber-700 dark:text-amber-400">
-            Latex4All reads a copy of Zotero's database on this computer. You
-            can browse, search and open papers with their highlights. Nothing is
-            saved to Zotero, and .bib files aren't updated until Zotero or
-            zotero.org is available again. BibTeX reflects the last library
-            update.
+            You can browse, search and open papers, but nothing is saved to
+            Zotero and .bib files don't update until it's back.
           </p>
         )}
       </div>

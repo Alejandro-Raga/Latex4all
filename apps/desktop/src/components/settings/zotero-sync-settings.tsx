@@ -200,11 +200,8 @@ export function ZoteroSyncSettings() {
       </div>
 
       <ul className="mt-4 space-y-1 px-5 text-muted-foreground text-xs">
-        <li>
-          Sync only reads your Zotero library. It changes the library only when
-          you confirm, for example when renaming the vault tag.
-        </li>
-        <li>Text you write outside a note's Zotero section is kept.</li>
+        <li>Sync never changes your Zotero library without asking.</li>
+        <li>Sync only rewrites a note's Zotero section.</li>
         <li>If the vault is on several computers, only one of them syncs.</li>
       </ul>
 
@@ -622,8 +619,7 @@ function TagsDialog({
           <DialogTitle>Your Zotero tags</DialogTitle>
           <DialogDescription>
             Tags like <Tag>topic: Name</Tag> create notes automatically. Check
-            any other tag to pair it with a note. Stop a tag to create no more
-            notes from it. Existing notes stay.
+            any other tag to pair it with a note.
           </DialogDescription>
         </DialogHeader>
         {error ? (

@@ -74,8 +74,8 @@ export function MemoryDialog() {
         <DialogHeader>
           <DialogTitle>Project memory</DialogTitle>
           <DialogDescription>
-            Every AI in this project reads these notes. Ask any of them to
-            remember something and it's added here.
+            Every AI in this project reads these notes. Ask one to remember
+            something to add it here.
           </DialogDescription>
         </DialogHeader>
 

@@ -64,7 +64,7 @@ export function MemorySettings() {
     <div className="divide-y divide-border/60">
       <SettingRow
         label="Start fresh every time"
-        detail="After a restart, open Home, and the Library and vault at their start pages."
+        detail="After a restart, open everything on its start page."
       >
         <Toggle
           label="Start fresh every time"
@@ -72,7 +72,7 @@ export function MemorySettings() {
           onChange={(on) => setMemory(on ? FRESH : DEFAULT_MEMORY)}
         />
       </SettingRow>
-      <SettingRow label="On launch" detail="What the app shows when it starts.">
+      <SettingRow label="On launch">
         <Choice
           label="On launch"
           value={memory.start}
@@ -83,10 +83,7 @@ export function MemorySettings() {
           onChange={(start) => setMemory({ start })}
         />
       </SettingRow>
-      <SettingRow
-        label="Library"
-        detail="What the Library shows after a restart."
-      >
+      <SettingRow label="Library" detail="After a restart.">
         <Choice
           label="Library after a restart"
           value={memory.library}
@@ -97,10 +94,7 @@ export function MemorySettings() {
           onChange={(library) => setMemory({ library })}
         />
       </SettingRow>
-      <SettingRow
-        label="Vault in the Library"
-        detail="What the vault shows after a restart. While the app is open, it stays on the last note."
-      >
+      <SettingRow label="Vault in the Library" detail="After a restart.">
         <Choice
           label="Vault in the Library after a restart"
           value={memory.vaultLibrary}
@@ -111,10 +105,7 @@ export function MemorySettings() {
           onChange={(vaultLibrary) => setMemory({ vaultLibrary })}
         />
       </SettingRow>
-      <SettingRow
-        label="Vault in a project"
-        detail="What the vault shows when you open a project. Without a project note, it shows the whole vault."
-      >
+      <SettingRow label="Vault in a project" detail="When opening a project.">
         <Choice
           label="Vault in a project"
           value={memory.vaultProject}

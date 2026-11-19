@@ -183,7 +183,7 @@ export function ProjectHome({
         </div>
         {projectNote && !linked && (
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Not updated automatically. Update it to match the project.
+            Not updated automatically.
           </p>
         )}
       </div>

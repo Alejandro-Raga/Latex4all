@@ -1975,7 +1975,7 @@ export function LatexEditor() {
                       Updating…
                     </>
                   ) : collabStatus === "outdated" ? (
-                    "Update Latex4All to sync — your changes are kept"
+                    "Update Latex4All to sync"
                   ) : (
                     "Offline — your changes will sync when you reconnect"
                   )}
