@@ -12,7 +12,11 @@ import {
 } from "@/lib/collab/project-doc";
 import { deviceId, markSharedWithPeople, myDevices } from "@/lib/collab/device";
 import { diskWorkspace } from "@/lib/collab/disk-workspace";
-import { type Known, ProjectSync } from "@/lib/collab/project-sync";
+import {
+  type Known,
+  type LocalFile,
+  ProjectSync,
+} from "@/lib/collab/project-sync";
 import {
   type SessionStatus,
   type PeerStatus,
@@ -381,12 +385,22 @@ export async function shareInBackground(root: string): Promise<LinkInfo> {
  * opening it (and without touching the project open now): its files are
  * written the first time it's opened.
  */
-export async function fetchInBackground(
+export function fetchInBackground(
   link: string,
   destParent: string,
 ): Promise<string> {
+  const run = backgroundQueue.then(() => fetchNow(link, destParent));
+  backgroundQueue = run.then(
+    () => {},
+    () => {},
+  );
+  return run;
+}
+
+async function fetchNow(link: string, destParent: string): Promise<string> {
   const info = await parseLink(link);
-  const channel = "fetch";
+  // A channel of its own: two runs sharing one heard each other's changes.
+  const channel = `fetch${++backgroundRuns}`;
   let resolve = () => {};
   let reject: (err: Error) => void = () => {};
   const caughtUp = new Promise<void>((res, rej) => {
@@ -432,6 +446,10 @@ export async function fetchInBackground(
 
 /** Background syncs under way, by folder, so one runs at a time each. */
 const inBackground = new Map<string, Promise<void>>();
+/** Every background sync and fetch, one after another. */
+let backgroundQueue: Promise<void> = Promise.resolve();
+/** Numbers each run's channel. */
+let backgroundRuns = 0;
 
 /**
  * Syncs a shared project that isn't open: its files go into the shared
@@ -449,106 +467,152 @@ export function syncInBackground(
   if (active?.root === root) return Promise.resolve();
   const running = inBackground.get(root);
   if (running) return running;
-  const run = (async () => {
-    const channel = "bg";
-    const saved = await loadDoc(root).catch(() => null);
-    const known: Known = saved ? JSON.parse(saved.local || "{}") : {};
-    let sync: ProjectSync | null = null;
-    let resolve = () => {};
-    const caughtUp = new Promise<void>((res) => {
-      resolve = res;
-    });
-    const session = new SharedSession(
-      {
-        publish: (update) => {
-          publish(update, channel).catch(() => {});
-        },
-        awareness: () => {},
-        compact: (upTo, snapshot, blobs) => {
-          compact(upTo, snapshot, blobs, channel).catch(() => {});
-        },
-        peers: (ids) => {
-          p2pPeers(ids, channel).catch(() => {});
-        },
-        save: (seq, local, state) => saveDoc(root, seq, local, state),
-      },
-      {
-        local: () => sync?.knownFiles() ?? known,
-        onCaughtUp: () => resolve(),
-      },
-    );
-    if (saved) session.load(saved.seq, saved.data);
-    const unlisten = await listenForSyncEvents(
-      (e) => session.handle(e),
-      channel,
-    );
-    const workspace = diskWorkspace(root, link, session.doc);
-    try {
-      await connect(link, session.seq, root, channel);
-      session.connecting();
-      await Promise.race([
-        caughtUp,
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("offline")), 60_000),
-        ),
-      ]);
-      if (active?.root === root) return;
-      const meta = metaMap(session.doc);
-      nameFromFolder(session.doc, root);
-      noteWhoIsIn(session.doc, root);
-      if (
-        name &&
-        !isPlaceholderName(name) &&
-        isPlaceholderName(meta.get("name"))
-      ) {
-        meta.set("name", name);
-      }
-      if (firstOpens().includes(root)) {
-        setFirstOpens(firstOpens().filter((r) => r !== root));
-        meta.set("owner", deviceId());
-        await moveAnnotationsIntoShared(
-          session.doc,
-          root,
-          await takeLocalAnnotations(root),
-        ).catch(() => {});
-      }
-      await workspace.load();
-      sync = new ProjectSync(
-        session.doc,
-        workspace,
-        known,
+  // One at a time, whoever asks (the library's round, a click on a
+  // project's pill), each on a channel of its own: two at once on one
+  // channel heard each other, and wrote one project's files into another.
+  const run = backgroundQueue
+    .then(async () => {
+      const channel = `bg${++backgroundRuns}`;
+      const saved = await loadDoc(root).catch(() => null);
+      const known: Known = saved ? JSON.parse(saved.local || "{}") : {};
+      let sync: ProjectSync | null = null;
+      let resolve = () => {};
+      const caughtUp = new Promise<void>((res) => {
+        resolve = res;
+      });
+      const session = new SharedSession(
         {
-          onError: (message) => log.warn("Background sync", { root, message }),
-          me: () => ({
-            name: useCollabStore.getState().displayName.trim() || "Anonymous",
-            color:
-              useCollabStore.getState().color ||
-              peerColor(session.doc.clientID),
-          }),
+          publish: (update) => {
+            publish(update, channel).catch(() => {});
+          },
+          awareness: () => {},
+          compact: (upTo, snapshot, blobs) => {
+            compact(upTo, snapshot, blobs, channel).catch(() => {});
+          },
+          peers: (ids) => {
+            p2pPeers(ids, channel).catch(() => {});
+          },
+          save: (seq, local, state) => saveDoc(root, seq, local, state),
         },
-        useSettingsStore.getState().notSynced[root] ?? [],
+        {
+          local: () => sync?.knownFiles() ?? known,
+          onCaughtUp: () => resolve(),
+        },
       );
-      await sync.start();
-      await sync.idle();
-      // What came onto disk shows: the plan (priority, deadline, tasks) is
-      // read again, for the home screen and the Planner.
-      void import("@/lib/plan/plan-store").then(
-        ({ usePlanStore, projectKey }) =>
-          usePlanStore.getState().load(projectKey(root)),
+      if (saved) session.load(saved.seq, saved.data);
+      const unlisten = await listenForSyncEvents(
+        (e) => session.handle(e),
+        channel,
       );
-      // A moment for the last changes to reach the relay (what doesn't is
-      // kept and sent next time).
-      await new Promise((r) => setTimeout(r, 3000));
-    } finally {
-      sync?.stop();
-      workspace.stop();
-      unlisten();
-      await session.destroy().catch(() => {});
-      await disconnect(channel).catch(() => {});
-    }
-  })().finally(() => inBackground.delete(root));
+      const workspace = diskWorkspace(root, link, session.doc);
+      try {
+        await connect(link, session.seq, root, channel);
+        session.connecting();
+        await Promise.race([
+          caughtUp,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("offline")), 60_000),
+          ),
+        ]);
+        if (active?.root === root) return;
+        const meta = metaMap(session.doc);
+        const info = await parseLink(link);
+        if (!sameProject(session.doc, info.projectId)) {
+          throw new Error("X01");
+        }
+        nameFromFolder(session.doc, root);
+        noteWhoIsIn(session.doc, root);
+        if (
+          name &&
+          !isPlaceholderName(name) &&
+          isPlaceholderName(meta.get("name"))
+        ) {
+          meta.set("name", name);
+        }
+        if (firstOpens().includes(root)) {
+          setFirstOpens(firstOpens().filter((r) => r !== root));
+          meta.set("owner", deviceId());
+          await moveAnnotationsIntoShared(
+            session.doc,
+            root,
+            await takeLocalAnnotations(root),
+          ).catch(() => {});
+        }
+        await workspace.load();
+        // A brake: a main.tex of another kind of document (a book arriving in
+        // a report) is another project's, not an edit. Nothing is written.
+        if (differentDocument(session.doc, workspace.files())) {
+          throw new Error("X01");
+        }
+        sync = new ProjectSync(
+          session.doc,
+          workspace,
+          known,
+          {
+            onError: (message) =>
+              log.warn("Background sync", { root, message }),
+            me: () => ({
+              name: useCollabStore.getState().displayName.trim() || "Anonymous",
+              color:
+                useCollabStore.getState().color ||
+                peerColor(session.doc.clientID),
+            }),
+          },
+          useSettingsStore.getState().notSynced[root] ?? [],
+        );
+        await sync.start();
+        await sync.idle();
+        // What came onto disk shows: the plan (priority, deadline, tasks) is
+        // read again, for the home screen and the Planner.
+        void import("@/lib/plan/plan-store").then(
+          ({ usePlanStore, projectKey }) =>
+            usePlanStore.getState().load(projectKey(root)),
+        );
+        // A moment for the last changes to reach the relay (what doesn't is
+        // kept and sent next time).
+        await new Promise((r) => setTimeout(r, 3000));
+      } finally {
+        sync?.stop();
+        workspace.stop();
+        unlisten();
+        await session.destroy().catch(() => {});
+        await disconnect(channel).catch(() => {});
+      }
+    })
+    .finally(() => inBackground.delete(root));
+  backgroundQueue = run.catch(() => {});
   inBackground.set(root, run);
   return run;
+}
+
+/** The document class of a project's main .tex, from its text. */
+function documentClass(text: string | undefined): string | null {
+  return text?.match(/\\documentclass(?:\[[^\]]*\])?\{([^}]+)\}/)?.[1] ?? null;
+}
+
+/** The shared copy's main.tex and the folder's are different documents. */
+function differentDocument(doc: Y.Doc, local: LocalFile[]): boolean {
+  const here = local.find((f) => f.path === "main.tex")?.content;
+  const shared = [...layout(doc).values()].find((f) => f.path === "main.tex");
+  if (!here || !shared || shared.kind !== "text") return false;
+  const a = documentClass(here);
+  const b = documentClass(shared.text?.toString());
+  return Boolean(a && b && a !== b);
+}
+
+/**
+ * The shared copy belongs to this project: it says so (and is marked so if
+ * it doesn't yet). A copy that took in another project's changes carries
+ * that project's id instead, and is never synced into this folder.
+ */
+function sameProject(doc: Y.Doc, projectId: string): boolean {
+  const meta = metaMap(doc);
+  const id = meta.get("projectId");
+  if (!id) {
+    meta.set("projectId", projectId);
+    return true;
+  }
+  return id === projectId;
 }
 
 export function getSharedText(relativePath: string): Y.Text | null {
@@ -731,6 +795,16 @@ function warnAbout(message: string) {
   if (!warning) return;
   const { warnings } = useCollabStore.getState();
   if (warnings.some((w) => w.id === warning.id)) return;
+  useCollabStore.setState({ warnings: [...warnings, warning] });
+  announce(warning);
+}
+
+/** A problem by its code alone (see sync-warnings). */
+function warnAboutCode(code: string) {
+  const warning = warningForPeerProblem(code);
+  const { warnings } = useCollabStore.getState();
+  if (warnings.some((w) => w.id === warning.id)) return;
+  log.warn("Sync problem", { code });
   useCollabStore.setState({ warnings: [...warnings, warning] });
   announce(warning);
 }
@@ -991,6 +1065,10 @@ export const useCollabStore = create<CollabState>()(
           // Offline, it waits (shown as syncing) rather than guess.
           await firstCatchUp;
           if (active !== target) return;
+        }
+        if (!sameProject(session.doc, info.projectId)) {
+          warnAboutCode("X01");
+          return;
         }
         nameFromFolder(session.doc, root);
         noteWhoIsIn(session.doc, root);

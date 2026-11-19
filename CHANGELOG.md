@@ -316,6 +316,12 @@ tag.
 
 ### Fixed
 
+- Linked devices: two projects syncing in the background at the same time
+  could write one project's files into the other. Background syncs now run
+  one at a time and apart, a shared copy is only synced into its own
+  project's folder, and a sync stops if the shared main.tex is a different
+  kind of document from the folder's.
+
 - Linked devices: projects in a folder your cloud app syncs (Seafile,
   Dropbox…) are no longer also synced in the background, which made
   conflicted copies. Settings → Devices lists projects found in more than

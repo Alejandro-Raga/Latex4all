@@ -544,7 +544,11 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
           error: String(err),
         });
         if (String(err).includes("offline")) break;
-        problems.push(`Couldn't sync ${entry.name} (L02)`);
+        problems.push(
+          String(err).includes("X01")
+            ? `Didn't sync ${entry.name}. Its shared copy holds another project's changes (X01)`
+            : `Couldn't sync ${entry.name} (L02)`,
+        );
       }
     }
     set({ progress: null });

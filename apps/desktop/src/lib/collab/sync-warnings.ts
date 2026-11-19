@@ -152,6 +152,10 @@ export function warningForError(message: string): SyncWarning | null {
  * (src-tauri/src/p2p.rs `Problem`); docs/sync.md lists them all.
  */
 const PEER_PROBLEMS: Record<string, Omit<SyncWarning, "id" | "code">> = {
+  X01: {
+    level: "error",
+    text: "This project's shared copy has another project's changes in it, so it isn't synced. Your files here are untouched.",
+  },
   P01: {
     level: "warning",
     text: "Peer-to-peer sync can't start. This network may block it. Changes still go through the sync server.",

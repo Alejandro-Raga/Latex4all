@@ -284,6 +284,7 @@ Every sync problem the app shows carries a code, also sent with bug reports.
 | L01 | The device code wasn't found or has expired | Show a new code on the other device |
 | L02 | A project from another device couldn't be fetched | Retried every 30 s |
 | L03 | A project couldn't be added for the other devices (offline, or too big for the server) | Retried; check its size |
+| X01 | A shared copy holds another project's changes, so it isn't synced into this folder | Report it; the folder is untouched |
 | X00 | Anything else (its message is shown) | Report it |
 
 Linked devices show theirs (L01–L03) in Settings → Sync.
