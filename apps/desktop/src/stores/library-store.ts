@@ -131,6 +131,8 @@ interface Entry {
   people?: boolean;
   /** Its type on the home screen (Article, Thesis…), one's own setting. */
   type?: string | null;
+  /** Starred on the home screen. */
+  favorite?: boolean;
 }
 
 export interface LibraryProject {
@@ -216,6 +218,8 @@ async function nameFetched(root: string, listed?: string) {
 let appKnown: AppKnown = {};
 /** Each project's type as last in step with the library, by project id. */
 let typesKnown: Record<string, string | null> = {};
+/** Each project's star as last in step with the library, by project id. */
+let favoritesKnown: Record<string, boolean> = {};
 
 function projectsMap(doc: Y.Doc) {
   return doc.getMap<Entry>("projects");
@@ -430,6 +434,26 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       }
     }
 
+    // Stars, the same way: changed here goes out, changed there comes here.
+    for (const [id, entry] of projects) {
+      if (session !== s || entry.removed) continue;
+      const root = useProjectStore.getState().sharedProjects[id];
+      if (!root) continue;
+      const store = useProjectStore.getState();
+      const here = store.favorites.includes(root);
+      const known = favoritesKnown[id];
+      const theirs = entry.favorite ?? false;
+      if (known === undefined ? here : here !== known) {
+        if (theirs !== here) {
+          projects.set(id, { ...(projects.get(id) ?? entry), favorite: here });
+        }
+        favoritesKnown[id] = here;
+      } else if (theirs !== (known ?? false)) {
+        if (here !== theirs) store.toggleFavorite(root);
+        favoritesKnown[id] = theirs;
+      }
+    }
+
     // The app's own data (Planner lists, highlights) too.
     if (session === s) {
       appKnown = await syncAppData(doc, appKnown);
@@ -447,6 +471,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       const local = JSON.parse(saved?.local || "{}");
       appKnown = local.app ?? {};
       typesKnown = local.types ?? {};
+      favoritesKnown = local.favorites ?? {};
     } catch {
       appKnown = {};
     }
@@ -467,7 +492,11 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
         save: (seq, local, state) => saveDoc(root, seq, local, state),
       },
       {
-        local: () => ({ app: appKnown, types: typesKnown }),
+        local: () => ({
+          app: appKnown,
+          types: typesKnown,
+          favorites: favoritesKnown,
+        }),
         onStatus: (status) => {
           if (session !== s) return;
           set({
