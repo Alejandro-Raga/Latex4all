@@ -38,6 +38,23 @@ export function metaMap(doc: Y.Doc) {
   return doc.getMap<string>("meta");
 }
 
+/** The name given to a folder fetched before its project's name was known:
+ * never a project's name. */
+export const isPlaceholderName = (name: string | undefined) =>
+  !name || /^Shared project(?: \(\d+\))?$/.test(name.trim());
+
+/**
+ * Gives the shared copy this folder's name if it has none (or only a
+ * placeholder), unless the folder's name is itself a placeholder.
+ */
+export function nameFromFolder(doc: Y.Doc, root: string) {
+  const meta = metaMap(doc);
+  const folder = root.split(/[\\/]/).filter(Boolean).pop() ?? "";
+  if (isPlaceholderName(meta.get("name")) && !isPlaceholderName(folder)) {
+    meta.set("name", folder);
+  }
+}
+
 export function newFileId() {
   const bytes = crypto.getRandomValues(new Uint8Array(8));
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");

@@ -38,6 +38,7 @@ import {
   useLibraryStore,
 } from "@/stores/library-store";
 import { sharedWithPeople } from "@/lib/collab/device";
+import { LibraryProgress } from "@/components/collab/library-progress";
 import {
   CheckCircle2Icon,
   FolderPlusIcon,
@@ -814,6 +815,7 @@ export function ProjectPicker() {
                   </div>
                 )}
               </header>
+              {activeSection === "projects" && <LibraryProgressBand />}
 
               <div className="min-h-0 flex-1 overflow-auto">
                 {activeSection === "settings" ? (
@@ -1874,6 +1876,17 @@ function SyncedPill({
       )}
       {text}
     </Tag>
+  );
+}
+
+/** The devices' sync progress, under the header while it runs. */
+function LibraryProgressBand() {
+  const progress = useLibraryStore((s) => s.progress);
+  if (!progress) return null;
+  return (
+    <div className="shrink-0 border-border/70 border-b px-5 py-2">
+      <LibraryProgress />
+    </div>
   );
 }
 

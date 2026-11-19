@@ -26,6 +26,9 @@ tag.
   background. Project cards say "Shared" for projects shared with people
   and "Synced" for those on your devices, with how the last sync went;
   click it to sync that project now, or use Sync now in Settings → Sync.
+- Linked devices: a progress bar shows while projects sync; projects that
+  arrived as "Shared project (n)" get their real names; a project's priority
+  flag and deadline show on the home screen as soon as its plan arrives.
 - Sync settings: the "Sync storage" question no longer comes back after
   updates once answered, and a choice made elsewhere is no longer undone by
   Settings → Sync if it was open at the time.

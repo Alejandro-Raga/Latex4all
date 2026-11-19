@@ -52,6 +52,8 @@ import {
 import { exists, rename } from "@tauri-apps/plugin-fs";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
+import { projectKey, usePlanStore } from "@/lib/plan/plan-store";
+import { isPlaceholderName } from "@/lib/collab/project-doc";
 import { createLogger } from "@/lib/debug/logger";
 import { type AppKnown, syncAppData } from "@/lib/collab/app-data-sync";
 
@@ -88,6 +90,8 @@ interface LibraryState {
   revision: number;
   /** How each library project's last background sync went, by folder. */
   states: Record<string, ProjectSyncState>;
+  /** Projects synced so far in this round, and the one under way. */
+  progress: { done: number; total: number; name: string } | null;
   error: string | null;
 
   /** Connects, if this device is linked (on start). */
@@ -167,22 +171,30 @@ function markLibrary(root: string) {
  * A project fetched before its name was known ("Shared project 2") gets
  * its own name once the shared copy says it: the folder is renamed.
  */
-async function nameFetched(root: string) {
+async function nameFetched(root: string, listed?: string) {
   const parts = root.split(/[\\/]/);
   const base = parts.pop() ?? "";
-  if (!/^Shared project(?: \(\d+\))?$/.test(base)) return;
+  if (!isPlaceholderName(base)) return;
   const saved = await loadDoc(root).catch(() => null);
   if (!saved) return;
   const doc = new Y.Doc();
   try {
     Y.applyUpdate(doc, saved.data);
-    const name = doc.getMap<string>("meta").get("name")?.trim();
+    const shared = doc.getMap<string>("meta").get("name")?.trim();
+    // The shared copy's name, or else the library's (from the device that
+    // has the project), never a placeholder.
+    const name = !isPlaceholderName(shared)
+      ? shared
+      : !isPlaceholderName(listed)
+        ? listed?.trim()
+        : undefined;
     if (!name || name === base || /[\\/:*?"<>|]/.test(name)) return;
     const target = [...parts, name].join(root.includes("\\") ? "\\" : "/");
     if (await exists(target).catch(() => true)) return;
     await rename(root, target);
     const projects = useProjectStore.getState();
     projects.renameRecentProject(root, target);
+    void usePlanStore.getState().load(projectKey(target));
     moveShareOwner(root, target);
     const info = await readLink(target).catch(() => null);
     if (info) projects.rememberSharedProject(info.projectId, target);
@@ -352,6 +364,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     }
     // Every project's files, brought up to date in the background (one at
     // a time; each at most every ten minutes; the open one syncs live).
+    const due: Array<{ root: string; entry: Entry }> = [];
     for (const [, entry] of projects) {
       if (session !== s || entry.removed) continue;
       const info = await parseLink(entry.link).catch(() => null);
@@ -361,13 +374,20 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       markLibrary(root);
       const last = lastBackground.get(root) ?? 0;
       if (Date.now() - last < 10 * 60 * 1000) continue;
+      due.push({ root, entry });
+    }
+    for (const [i, { root, entry }] of due.entries()) {
+      if (session !== s) break;
       lastBackground.set(root, Date.now());
-      set({ busy: `Syncing ${entry.name}…` });
+      set({
+        busy: `Syncing ${entry.name}…`,
+        progress: { done: i, total: due.length, name: entry.name },
+      });
       setState(root, "syncing");
       try {
-        await syncInBackground(root, entry.link);
+        await syncInBackground(root, entry.link, entry.name);
         setState(root, "synced");
-        await nameFetched(root);
+        await nameFetched(root, entry.name);
       } catch (err) {
         lastBackground.set(root, 0);
         setState(root, String(err).includes("offline") ? "offline" : "error");
@@ -379,6 +399,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
         problems.push(`Couldn't sync ${entry.name} (L02)`);
       }
     }
+    set({ progress: null });
 
     // The app's own data (Planner lists, highlights) too.
     if (session === s) {
@@ -490,6 +511,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     busy: null,
     revision: 0,
     states: {},
+    progress: null,
     error: null,
 
     syncNow: async () => {
@@ -511,8 +533,9 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
         setState(root, "syncing");
         lastBackground.set(root, Date.now());
         try {
-          await syncInBackground(root, entry.link);
+          await syncInBackground(root, entry.link, entry.name);
           setState(root, "synced");
+          await nameFetched(root, entry.name);
         } catch (err) {
           setState(root, String(err).includes("offline") ? "offline" : "error");
         }

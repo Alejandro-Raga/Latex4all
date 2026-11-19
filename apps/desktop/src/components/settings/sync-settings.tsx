@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { inviteCode } from "@/lib/tauri/collab";
 import { deviceId } from "@/lib/collab/device";
 import { useLibraryStore } from "@/stores/library-store";
+import { LibraryProgress } from "@/components/collab/library-progress";
 
 const folderName = (path: string) =>
   path.split(/[\\/]/).filter(Boolean).pop() ?? path;
@@ -264,6 +265,7 @@ function LinkedDevices() {
                   </span>
                 </div>
               ))}
+              <LibraryProgress />
               <p className="text-muted-foreground">
                 {lib.busy ??
                   (lib.status === "synced"

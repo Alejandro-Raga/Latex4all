@@ -4,7 +4,12 @@ import { toast } from "sonner";
 import { homeDir } from "@tauri-apps/api/path";
 import * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
-import { layout, metaMap } from "@/lib/collab/project-doc";
+import {
+  layout,
+  isPlaceholderName,
+  metaMap,
+  nameFromFolder,
+} from "@/lib/collab/project-doc";
 import { deviceId, markSharedWithPeople, myDevices } from "@/lib/collab/device";
 import { diskWorkspace } from "@/lib/collab/disk-workspace";
 import { type Known, ProjectSync } from "@/lib/collab/project-sync";
@@ -435,7 +440,12 @@ const inBackground = new Map<string, Promise<void>>();
  * here, or fetched here, with nothing opened). Does nothing for the
  * project open now: that one syncs live.
  */
-export function syncInBackground(root: string, link: string): Promise<void> {
+export function syncInBackground(
+  root: string,
+  link: string,
+  /** The project's name as the library has it, to mend a placeholder. */
+  name?: string,
+): Promise<void> {
   if (active?.root === root) return Promise.resolve();
   const running = inBackground.get(root);
   if (running) return running;
@@ -484,8 +494,13 @@ export function syncInBackground(root: string, link: string): Promise<void> {
       ]);
       if (active?.root === root) return;
       const meta = metaMap(session.doc);
-      if (!meta.get("name")) {
-        meta.set("name", root.split(/[\\/]/).filter(Boolean).pop() ?? "");
+      nameFromFolder(session.doc, root);
+      if (
+        name &&
+        !isPlaceholderName(name) &&
+        isPlaceholderName(meta.get("name"))
+      ) {
+        meta.set("name", name);
       }
       if (firstOpens().includes(root)) {
         setFirstOpens(firstOpens().filter((r) => r !== root));
@@ -514,6 +529,12 @@ export function syncInBackground(root: string, link: string): Promise<void> {
       );
       await sync.start();
       await sync.idle();
+      // What came onto disk shows: the plan (priority, deadline, tasks) is
+      // read again, for the home screen and the Planner.
+      void import("@/lib/plan/plan-store").then(
+        ({ usePlanStore, projectKey }) =>
+          usePlanStore.getState().load(projectKey(root)),
+      );
       // A moment for the last changes to reach the relay (what doesn't is
       // kept and sent next time).
       await new Promise((r) => setTimeout(r, 3000));
@@ -958,10 +979,7 @@ export const useCollabStore = create<CollabState>()(
           await firstCatchUp;
           if (active !== target) return;
         }
-        const meta = metaMap(session.doc);
-        if (!meta.get("name")) {
-          meta.set("name", root.split(/[\\/]/).filter(Boolean).pop() ?? "");
-        }
+        nameFromFolder(session.doc, root);
         const notSynced = () =>
           useSettingsStore.getState().notSynced[root] ?? [];
         target.sync = new ProjectSync(
