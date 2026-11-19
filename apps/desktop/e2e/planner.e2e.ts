@@ -1264,3 +1264,37 @@ test("the timeline's task lanes: names never overlap, crowded ones counted", asy
   if (process.env.SHOTS)
     await page.screenshot({ path: `${process.env.SHOTS}/lanes-new.png` });
 });
+
+test("a project's Plan.md thrown away outside the app is put back", async ({
+  page,
+}) => {
+  await open(page, "scenario=planner");
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await expect(main.getByText("Paper 2").first()).toBeVisible();
+  const before = await disk(page, PLAN);
+  expect(before).toBeTruthy();
+  // Its copy is kept, then the file is deleted behind the app's back.
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        [...(window as any).__disk.keys()].some((k: string) =>
+          k.includes("plan-backups"),
+        ),
+      ),
+    )
+    .toBe(true);
+  // A real project has other files; then Plan.md goes.
+  await page.evaluate(() =>
+    (window as any).__disk.set(
+      "/papers/Paper 2/main.tex",
+      "\\documentclass{article}",
+    ),
+  );
+  await page.evaluate((p) => (window as any).__disk.delete(p), PLAN);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(
+    page.getByText(/Plan.md was deleted outside Latex4All/),
+  ).toBeVisible();
+  await expect.poll(() => disk(page, PLAN)).toBe(before);
+});

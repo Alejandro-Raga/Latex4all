@@ -26,6 +26,7 @@ import { useProjectStore } from "@/stores/project-store";
 import { useVaultStore } from "@/stores/vault-store";
 import { useNav } from "@/stores/nav-store";
 import { writeTextSafely } from "@/lib/safe-write";
+import { backUpPlan, restorePlan } from "./plan-guard";
 import { PLAN_FILE } from "./plan-file";
 
 export const INBOX = "inbox";
@@ -136,6 +137,9 @@ export const usePlanStore = create<PlanState>((set, get) => ({
       if (open !== undefined) return; // Read live from the open files.
       try {
         entry = { text: await readIfThere(join(root, PLAN_FILE)) };
+        // Kept safe, or put back if it was thrown away (plan-guard).
+        if (entry.text !== null) void backUpPlan(root, entry.text);
+        else entry = { text: await restorePlan(root) };
       } catch (err) {
         // There but unreadable: left unknown, so nothing writes over it.
         console.warn(`Couldn't read ${join(root, PLAN_FILE)}`, err);
@@ -190,6 +194,7 @@ async function saveTo(key: PlanKey, root: string | null, text: string) {
       return;
     }
     await writeTextFile(join(root, PLAN_FILE), text);
+    void backUpPlan(root, text);
     if (open === null) {
       // A new file in the open project: it joins its files (and the share).
       await useDocumentStore.getState().refreshFiles();

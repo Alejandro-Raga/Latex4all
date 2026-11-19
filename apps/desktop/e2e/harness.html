@@ -17,7 +17,14 @@
           // The Planner: a disk held in memory, for projects' Plan.md.
           if (location.search.includes("scenario=planner")) {
             const disk = (window.__disk ??= new Map());
-            if (cmd === "plugin:fs|exists") return disk.has(args.path);
+            if (cmd === "plugin:fs|exists") {
+              // A folder exists if a file is in it.
+              const dir = `${args.path.replace(/\/+$/, "")}/`;
+              return (
+                disk.has(args.path) ||
+                [...disk.keys()].some((k) => k.startsWith(dir))
+              );
+            }
             if (cmd === "plugin:fs|rename") {
               disk.set(args.newPath, disk.get(args.oldPath));
               disk.delete(args.oldPath);

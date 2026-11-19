@@ -99,6 +99,10 @@ tag.
 
 ### Added
 
+- Plan.md is protected: Latex4All keeps a copy of each project's plan, and
+  if the file is deleted outside the app (taken for a stray file) it's put
+  back, with a notice and a way to keep it deleted.
+
 - Timeline: tasks are easier to read and take less room. Each one is named
   beside its dot, in rows so names never overlap, starting on the section's
   own line when there's room; a section's date shows beside its name ("due

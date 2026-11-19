@@ -2,6 +2,7 @@ import { ThemeProvider, useTheme } from "next-themes";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useLibraryStore } from "@/stores/library-store";
 import { SyncStoragePrompt } from "@/components/settings/sync-storage-prompt";
+import { followOpenPlan } from "@/lib/plan/plan-guard";
 import { isDarkTheme, THEME_IDS } from "@/lib/app-themes";
 import { ThemeBridge } from "@/components/theme-bridge";
 import { useSettingsStore } from "@/stores/settings-store";
@@ -226,6 +227,8 @@ export function App({ onReady }: { onReady?: () => void }) {
   }, []);
   // Shared projects connect as they open.
   useEffect(() => followOpenProject(), []);
+  // Plan.md thrown away by mistake comes back (plan-guard).
+  useEffect(() => followOpenPlan(), []);
   useEffect(() => followAnnotations(), []);
   useEffect(() => followProjectNav(), []);
   // Closing the window, or quitting: everything not yet saved is saved first.
