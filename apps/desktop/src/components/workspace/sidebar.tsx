@@ -6,6 +6,7 @@ import {
   useEffect,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { PLAN_FILE } from "@/lib/plan/plan-file";
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import {
   BookOpenIcon,
@@ -1025,7 +1026,16 @@ export function Sidebar({
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
     new Set(),
   );
-  const tree = useMemo(() => buildFileTree(files, folders), [files, folders]);
+  // Plan.md is the Planner's (its tasks, deadline, priority): not shown
+  // among the files, where it looked like one to tidy away.
+  const tree = useMemo(
+    () =>
+      buildFileTree(
+        files.filter((f) => f.relativePath !== PLAN_FILE),
+        folders,
+      ),
+    [files, folders],
+  );
 
   // Auto-expand parent folders of the active file so it stays visible
   useEffect(() => {

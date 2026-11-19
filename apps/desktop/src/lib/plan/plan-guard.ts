@@ -2,8 +2,8 @@
  * Plan.md sits in the project's folder where it can look like a stray file
  * and be thrown away, taking the project's tasks, deadline and priority
  * with it (and, in a shared or synced project, from every copy). So the app
- * keeps a copy of each project's plan in its own folder, and puts the file
- * back if it disappears, saying so, with a way to let it go.
+ * keeps a copy of each project's plan in its own folder, and quietly puts
+ * the file back if it disappears.
  */
 
 import { appDataDir, join } from "@tauri-apps/api/path";
@@ -11,10 +11,8 @@ import {
   exists,
   mkdir,
   readTextFile,
-  remove,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
-import { toast } from "sonner";
 import { md5 } from "@/lib/md5";
 import { writeTextSafely } from "@/lib/safe-write";
 import { useDocumentStore } from "@/stores/document-store";
@@ -30,8 +28,6 @@ async function backupFile(root: string): Promise<string> {
 
 /** What was last backed up, per project: not written again if the same. */
 const lastSaved = new Map<string, string>();
-/** Projects whose plan was let go: not brought back again. */
-const letGo = new Set<string>();
 /** Restores under way, so one deletion brings one notice. */
 const restoring = new Set<string>();
 
@@ -39,7 +35,6 @@ const restoring = new Set<string>();
 export async function backUpPlan(root: string, text: string) {
   if (!text.trim() || lastSaved.get(root) === text) return;
   lastSaved.set(root, text);
-  letGo.delete(root);
   try {
     await writeTextSafely(await backupFile(root), text);
   } catch {
@@ -56,7 +51,7 @@ export async function restorePlan(
   /** Called once it's back on disk (to re-read the folder, say). */
   afterwards?: () => void | Promise<void>,
 ): Promise<string | null> {
-  if (letGo.has(root) || restoring.has(root)) return null;
+  if (restoring.has(root)) return null;
   restoring.add(root);
   try {
     const copy = await backupFile(root);
@@ -70,21 +65,6 @@ export async function restorePlan(
     await writeTextFile(target, text);
     lastSaved.set(root, text);
     await afterwards?.();
-    toast.info(
-      "Plan.md was deleted outside Latex4All, so it was put back. It holds this project's tasks.",
-      {
-        duration: 12_000,
-        action: {
-          label: "Keep it deleted",
-          onClick: () => {
-            letGo.add(root);
-            lastSaved.delete(root);
-            void remove(copy).catch(() => {});
-            void remove(target).then(() => afterwards?.());
-          },
-        },
-      },
-    );
     return text;
   } catch {
     return null;

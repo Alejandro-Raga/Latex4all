@@ -1265,7 +1265,7 @@ test("the timeline's task lanes: names never overlap, crowded ones counted", asy
     await page.screenshot({ path: `${process.env.SHOTS}/lanes-new.png` });
 });
 
-test("a project's Plan.md thrown away outside the app is put back", async ({
+test("a project's Plan.md thrown away outside the app is put back quietly", async ({
   page,
 }) => {
   await open(page, "scenario=planner");
@@ -1293,8 +1293,7 @@ test("a project's Plan.md thrown away outside the app is put back", async ({
   );
   await page.evaluate((p) => (window as any).__disk.delete(p), PLAN);
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-  await expect(
-    page.getByText(/Plan.md was deleted outside Latex4All/),
-  ).toBeVisible();
+  // Back, quietly.
   await expect.poll(() => disk(page, PLAN)).toBe(before);
+  await expect(page.getByText(/Plan.md was deleted/)).toHaveCount(0);
 });
