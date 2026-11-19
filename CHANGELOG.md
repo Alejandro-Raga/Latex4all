@@ -322,9 +322,10 @@ tag.
   project's folder, and a sync stops if the shared main.tex is a different
   kind of document from the folder's.
 
-- Linked devices: projects in a folder your cloud app syncs (Seafile,
-  Dropbox…) are no longer also synced in the background, which made
-  conflicted copies. Settings → Devices lists projects found in more than
+- Linked devices: projects in a folder your cloud app (Seafile, Dropbox…)
+  syncs to all your devices are no longer also synced in the background,
+  which made conflicted copies. Projects the cloud app doesn't bring to
+  every device still sync as before. Settings → Devices lists projects found in more than
   one folder, so you can keep one.
 
 - Clearer wording across the app, Settings especially: plain names, one

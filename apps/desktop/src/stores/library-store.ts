@@ -150,6 +150,9 @@ interface Entry {
   where?: string;
   /** Retired as the same folder as another entry. */
   duplicateOf?: string;
+  /** Devices that have it at `where`, the same place a cloud app keeps in
+   * step for them: when every device does, that app carries its files. */
+  cloud?: Record<string, boolean>;
 }
 
 export interface LibraryProject {
@@ -506,17 +509,33 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     // Every project's files, brought up to date in the background (one at
     // a time; each at most every ten minutes; the open one syncs live).
     const due: Array<{ root: string; entry: Entry }> = [];
-    for (const [, entry] of projects) {
+    for (const [id, entry] of projects) {
       if (session !== s || entry.removed) continue;
       const info = await parseLink(entry.link).catch(() => null);
       const root =
         info && useProjectStore.getState().sharedProjects[info.projectId];
       if (!root) continue;
       markLibrary(root);
-      // In a folder a cloud app syncs between the devices (the same place
-      // under the home folder on each): that app carries its files, and a
-      // second sync writing them too makes conflicted copies.
-      if (entry.where && local(entry.where, homeMap) === root) {
+      // In a folder a cloud app syncs to every linked device (the same
+      // place under the home folder on each): that app carries its files,
+      // and a second sync writing them too makes conflicted copies. If any
+      // device has it elsewhere, it's synced here as usual.
+      const atWhere = Boolean(
+        entry.where && local(entry.where, homeMap) === root,
+      );
+      if (Boolean(entry.cloud?.[me]) !== atWhere) {
+        const fresh = projects.get(id) ?? entry;
+        projects.set(id, {
+          ...fresh,
+          cloud: { ...(fresh.cloud ?? {}), [me]: atWhere },
+        });
+      }
+      const everyone = [...devicesMap(doc).keys()];
+      const allInCloud =
+        atWhere &&
+        everyone.length > 1 &&
+        everyone.every((d) => d === me || entry.cloud?.[d]);
+      if (allInCloud) {
         setState(root, "synced");
         continue;
       }
