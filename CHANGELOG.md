@@ -86,7 +86,8 @@ tag.
   computers. Choose where changes wait while your collaborators are
   offline: the Latex4All server, a cloud folder you already use, this
   computer, or your own server. Asked the first time you share a project.
-- Share: the invite link as a QR code, next to the copy button.
+- Share: a much shorter invite link (latex4all://join/…) that opens
+  Latex4All when clicked, and as a QR code. Older links still work.
 - Shared projects open on the .tex file the person who shared it last
   edited (for a thesis in several files, the chapter they're working on).
 - Timeline: the scale changes as you zoom, from years and months to weeks

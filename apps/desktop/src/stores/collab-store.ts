@@ -116,6 +116,8 @@ interface CollabState {
   /** `none` when the open project isn't shared. */
   status: "none" | SessionStatus;
   link: string | null;
+  /** The link to give out: short, and opens the app. */
+  shortLink: string | null;
   peers: CollabPeer[];
   displayName: string;
   /** Bumped whenever the shared files change shape, so editors rebind. */
@@ -697,6 +699,7 @@ export const useCollabStore = create<CollabState>()(
         set({
           status: "syncing",
           link: info.link,
+          shortLink: info.short,
           peers: [],
           warnings: [],
           usage: null,
@@ -844,6 +847,7 @@ export const useCollabStore = create<CollabState>()(
         set((s) => ({
           status: "none",
           link: null,
+          shortLink: null,
           peers: [],
           warnings: [],
           usage: null,
@@ -858,6 +862,7 @@ export const useCollabStore = create<CollabState>()(
       return {
         status: "none",
         link: null,
+        shortLink: null,
         peers: [],
         displayName: "",
         color: "",

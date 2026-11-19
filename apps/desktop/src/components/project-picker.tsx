@@ -101,7 +101,7 @@ import {
   type SettingsSection,
   SettingsView,
 } from "@/components/settings/settings-view";
-import { JoinDialog } from "@/components/collab/join-dialog";
+import { JoinDialog, useJoinRequest } from "@/components/collab/join-dialog";
 import { cn } from "@/lib/utils";
 import { createLogger } from "@/lib/debug/logger";
 import { LibraryView } from "@/components/library-view";
@@ -200,6 +200,11 @@ let projectPreviewCompileQueue: Promise<void> = Promise.resolve();
 export function ProjectPicker() {
   const [showModeDialog, setShowModeDialog] = useState(false);
   const [showJoinDialog, setShowJoinDialog] = useState(false);
+  // A latex4all://join/ link clicked outside the app.
+  const joinAsked = useJoinRequest((s) => s.link);
+  useEffect(() => {
+    if (joinAsked) setShowJoinDialog(true);
+  }, [joinAsked]);
   const [wizardMode, setWizardMode] = useState<CreationMode | null>(null);
   // Which part shows is the app's (the menu on the left sets it).
   const activeSection = useNav((st) => st.section) as ProjectPickerSection;

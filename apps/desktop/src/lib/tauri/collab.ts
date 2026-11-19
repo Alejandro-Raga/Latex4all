@@ -7,6 +7,8 @@ import type { SyncEvent } from "@/lib/collab/shared-session";
 
 export interface LinkInfo {
   link: string;
+  /** The same link, short (latex4all://join/…), to give out. */
+  short: string;
   projectId: string;
 }
 

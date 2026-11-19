@@ -96,6 +96,9 @@ struct Link {
 impl Link {
     fn parse(link: &str) -> Result<Self, String> {
         let invalid = || "That link isn't a valid shared project link.".to_string();
+        if let Some(short) = link.trim().strip_prefix(SHORT_PREFIX) {
+            return Self::parse_short(short).ok_or_else(invalid);
+        }
         let (url, key) = link.trim().split_once('#').ok_or_else(invalid)?;
         let key: [u8; 32] = URL_SAFE_NO_PAD
             .decode(key)
@@ -114,15 +117,54 @@ impl Link {
         })
     }
 
+    /// `latex4all://join/<key>`, or `<id><key>` for projects whose id isn't
+    /// derived from the key (shared before short links), then `@<relay>`
+    /// unless it's the default one.
+    fn parse_short(short: &str) -> Option<Self> {
+        let short = short.trim_end_matches('/');
+        let (payload, relay) = match short.split_once('@') {
+            Some((p, r)) => (p, relay_base(r).ok()?),
+            None => (short, DEFAULT_RELAY.to_string()),
+        };
+        let bytes = URL_SAFE_NO_PAD.decode(payload).ok()?;
+        let (project_id, key): (String, [u8; 32]) = match bytes.len() {
+            32 => {
+                let key: [u8; 32] = bytes.try_into().ok()?;
+                (derived_id(&key), key)
+            }
+            48 => (hex(&bytes[..16]), bytes[16..].try_into().ok()?),
+            _ => return None,
+        };
+        Some(Self { relay, project_id, key })
+    }
+
+    /// The link to give out: short, and opens the app when clicked.
+    fn short(&self) -> String {
+        let payload = if self.project_id == derived_id(&self.key) {
+            URL_SAFE_NO_PAD.encode(self.key)
+        } else {
+            let mut bytes = (0..16)
+                .map(|i| u8::from_str_radix(&self.project_id[i * 2..i * 2 + 2], 16).unwrap_or(0))
+                .collect::<Vec<u8>>();
+            bytes.extend_from_slice(&self.key);
+            URL_SAFE_NO_PAD.encode(bytes)
+        };
+        if self.relay == DEFAULT_RELAY {
+            format!("{SHORT_PREFIX}{payload}")
+        } else {
+            let relay = self.relay.strip_prefix("https://").unwrap_or(&self.relay);
+            format!("{SHORT_PREFIX}{payload}@{relay}")
+        }
+    }
+
     fn generate(relay: &str) -> Result<Self, String> {
         let rng = SystemRandom::new();
-        let mut id = [0u8; 16];
         let mut key = [0u8; 32];
-        rng.fill(&mut id).map_err(|_| "No randomness available")?;
         rng.fill(&mut key).map_err(|_| "No randomness available")?;
         Ok(Self {
             relay: relay_base(relay)?,
-            project_id: hex(&id),
+            // From the key, so the short link needs only the key.
+            project_id: derived_id(&key),
             key,
         })
     }
@@ -165,6 +207,15 @@ fn relay_base(url: &str) -> Result<String, String> {
         return Err("That relay address isn't valid.".into());
     }
     Ok(format!("{scheme}://{rest}"))
+}
+
+const SHORT_PREFIX: &str = "latex4all://join/";
+
+/// A project's id worked out from its key (projects shared from now on).
+fn derived_id(key: &[u8; 32]) -> String {
+    let mut input = b"latex4all-project-id".to_vec();
+    input.extend_from_slice(key);
+    hex(&digest::digest(&digest::SHA256, &input).as_ref()[..16])
 }
 
 fn is_hex(value: &str, len: usize) -> bool {
@@ -1312,6 +1363,8 @@ pub async fn collab_create(relay_url: Option<String>) -> Result<String, String> 
 #[serde(rename_all = "camelCase")]
 pub struct LinkInfo {
     link: String,
+    /// The same link, short, to give out.
+    short: String,
     project_id: String,
 }
 
@@ -1321,6 +1374,7 @@ pub fn collab_parse_link(link: String) -> Result<LinkInfo, String> {
     let link = Link::parse(&link)?;
     Ok(LinkInfo {
         project_id: link.project_id.clone(),
+        short: link.short(),
         link: link.to_string(),
     })
 }
@@ -1333,6 +1387,7 @@ pub fn collab_read_link(project_root: String) -> Option<LinkInfo> {
     let link = Link::parse(stored.get("link")?.as_str()?).ok()?;
     Some(LinkInfo {
         project_id: link.project_id.clone(),
+        short: link.short(),
         link: link.to_string(),
     })
 }
@@ -1638,6 +1693,30 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("collab-{label}-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn short_links_round_trip() {
+        // New projects: the key alone.
+        let link = Link::generate(DEFAULT_RELAY).unwrap();
+        let short = link.short();
+        assert!(short.starts_with(SHORT_PREFIX));
+        assert_eq!(short.len(), SHORT_PREFIX.len() + 43);
+        assert_eq!(Link::parse(&short).unwrap(), link);
+        // Projects shared before: their own id goes in too.
+        let old = Link::parse(&format!(
+            "{DEFAULT_RELAY}/p/{}#{}",
+            "0123456789abcdef0123456789abcdef",
+            URL_SAFE_NO_PAD.encode([7u8; 32])
+        ))
+        .unwrap();
+        assert_eq!(old.short().len(), SHORT_PREFIX.len() + 64);
+        assert_eq!(Link::parse(&old.short()).unwrap(), old);
+        // Another relay.
+        let other = Link::generate("https://relay.example.org").unwrap();
+        assert!(other.short().ends_with("@relay.example.org"));
+        assert_eq!(Link::parse(&other.short()).unwrap(), other);
+        assert!(Link::parse("latex4all://join/abc").is_err());
     }
 
     #[test]

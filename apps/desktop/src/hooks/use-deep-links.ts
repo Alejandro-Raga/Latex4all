@@ -8,6 +8,7 @@ import { useLibraryPreview } from "@/components/zotero-pdf-dialog";
 import { useDockStore } from "@/stores/dock-store";
 import { inProject, useNav } from "@/stores/nav-store";
 import { useProjectStore } from "@/stores/project-store";
+import { useJoinRequest } from "@/components/collab/join-dialog";
 
 /** Opens a latex4all:// link's project, at its file and line. */
 export async function followLatex4AllLink(url: string) {
@@ -15,6 +16,12 @@ export async function followLatex4AllLink(url: string) {
 }
 
 async function follow(url: string) {
+  // An invite to a shared project: the join dialog, on the home screen.
+  if (/^latex4all:\/\/join\//i.test(url)) {
+    useNav.getState().goHome("projects");
+    useJoinRequest.getState().ask(url);
+    return;
+  }
   const link = parseLatex4AllLink(url);
   if (!link) return;
   // A PDF (a highlight in it): read in the Library, the project left as is.

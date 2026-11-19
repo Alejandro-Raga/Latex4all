@@ -224,7 +224,7 @@ const STATUS = {
 
 export function CollabButton() {
   const status = useCollabStore((s) => s.status);
-  const link = useCollabStore((s) => s.link);
+  const link = useCollabStore((s) => s.shortLink ?? s.link);
   const peers = useCollabStore((s) => s.peers);
   const progress = useCollabStore((s) => s.progress);
   const share = useCollabStore((s) => s.share);

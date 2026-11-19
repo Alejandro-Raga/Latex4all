@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { create } from "zustand";
 import { FolderOpenIcon, Loader2Icon } from "lucide-react";
 import { homeDir } from "@tauri-apps/api/path";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -32,7 +33,21 @@ interface Choosing {
 /** A shared project link: the relay, /p/<32 hex>, and #<key>. */
 const LINK =
   /^https?:\/\/[^\s/]+(?:\/[^\s#]*)?\/p\/[0-9a-f]{32}#[A-Za-z0-9_-]{20,}$/;
-const looksLikeLink = (text: string) => LINK.test(text.trim());
+/** The short one: latex4all://join/<key>, maybe with @<relay>. */
+const SHORT = /^latex4all:\/\/join\/[A-Za-z0-9_-]{43,64}(?:@[^\s@]+)?\/?$/i;
+const looksLikeLink = (text: string) =>
+  LINK.test(text.trim()) || SHORT.test(text.trim());
+
+/** A link to join, clicked outside the app (latex4all://join/…). */
+export const useJoinRequest = create<{
+  link: string | null;
+  ask: (link: string) => void;
+  clear: () => void;
+}>((set) => ({
+  link: null,
+  ask: (link) => set({ link }),
+  clear: () => set({ link: null }),
+}));
 
 export function JoinDialog({
   open,
@@ -57,6 +72,12 @@ export function JoinDialog({
   const [into, setInto] = useState<string | null>(null);
   const [choosing, setChoosing] = useState<Choosing | null>(null);
   const joining = progress !== null;
+  const asked = useJoinRequest((s) => s.link);
+  useEffect(() => {
+    if (!asked) return;
+    setLink(asked);
+    useJoinRequest.getState().clear();
+  }, [asked]);
   const invalid = link.trim() !== "" && !looksLikeLink(link);
 
   // Where projects are usually kept, unless somewhere else was picked before.
