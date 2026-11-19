@@ -1,5 +1,6 @@
 import { pdfVersion } from "@/lib/pdf-notes";
 import { keepPlace, loadCurrent, placeNow } from "@/lib/place-memory";
+import { useSettingsStore } from "@/stores/settings-store";
 import {
   Fragment,
   useCallback,
@@ -479,7 +480,12 @@ export function QuickReferencePanel({
     if (!onLibraryPage) return;
     let live = true;
     // Where it was a moment ago (another part of the app since), or last time.
-    void loadCurrent().then(({ library: saved, libraryQuery }) => {
+    // After a restart, only if Settings → Where things open says so; within
+    // a session, always where it was.
+    const memory = useSettingsStore.getState().memory;
+    const where =
+      memory.library === "home" ? Promise.resolve(placeNow()) : loadCurrent();
+    void where.then(({ library: saved, libraryQuery }) => {
       restored.current = true;
       if (!live || !saved) return;
       if (typeof saved.project === "string") {

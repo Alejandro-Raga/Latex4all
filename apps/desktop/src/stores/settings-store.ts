@@ -55,6 +55,28 @@ function supportedCheckLanguage(code: unknown): string {
     : DEFAULT_CHECK_LANGUAGE;
 }
 
+/** Where things open (Settings → Where things open). */
+export interface MemorySettings {
+  /** On launch: the part of the app (or project) you were in, or Home. */
+  start: "last" | "home";
+  /** The Library after a restart: the paper and project you had open, or
+   * its start. */
+  library: "last" | "home";
+  /** The Library's vault after a restart: the note you were reading, or the
+   * vault's main page. Within a session it's always where you left it. */
+  vaultLibrary: "last" | "home";
+  /** The vault beside a project, on opening the project: its note (or the
+   * vault's main page if it has none), the last note read, or the main page. */
+  vaultProject: "project" | "last" | "home";
+}
+
+export const DEFAULT_MEMORY: MemorySettings = {
+  start: "last",
+  library: "last",
+  vaultLibrary: "home",
+  vaultProject: "project",
+};
+
 interface SettingsState {
   compilerBackend: CompilerBackend;
   setCompilerBackend: (backend: CompilerBackend) => void;
@@ -86,6 +108,9 @@ interface SettingsState {
   setGlass: (level: GlassLevel) => void;
   background: BackgroundStyle;
   setBackground: (style: BackgroundStyle) => void;
+  /** What the app opens on: where you left off, or a fresh start. */
+  memory: MemorySettings;
+  setMemory: (change: Partial<MemorySettings>) => void;
   /** The Planner's summary of the day, on first opening the app each day. */
   dailySummary: boolean;
   setDailySummary: (on: boolean) => void;
@@ -196,6 +221,9 @@ export const useSettingsStore = create<SettingsState>()(
       setGlass: (level) => set({ glass: level }),
       background: "flat",
       setBackground: (style) => set({ background: style }),
+      memory: DEFAULT_MEMORY,
+      setMemory: (change) =>
+        set((s) => ({ memory: { ...DEFAULT_MEMORY, ...s.memory, ...change } })),
       dailySummary: true,
       setDailySummary: (on) => set({ dailySummary: on }),
       readingGoal: 0,

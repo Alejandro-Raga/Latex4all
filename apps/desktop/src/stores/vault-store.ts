@@ -12,7 +12,7 @@ import {
 } from "@/lib/vault/vault-settings-file";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { keepPlace, loadPlace } from "@/lib/place-memory";
+import { keepPlace } from "@/lib/place-memory";
 import {
   findObsidianVaults,
   LocalVaultSource,
@@ -679,9 +679,4 @@ export function chosenKindFolders(): Record<string, string> {
   return state.kindFolders[vaultKey(state)] ?? EMPTY_COLORS;
 }
 
-// The note you were reading, there again on launch (unless one's open).
-void loadPlace().then(({ note }) => {
-  if (note && !useVaultStore.getState().current) {
-    useVaultStore.setState({ current: note });
-  }
-});
+// Which note opens where (and after a restart): see lib/vault/vault-memory.

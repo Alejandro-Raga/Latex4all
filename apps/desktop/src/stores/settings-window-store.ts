@@ -11,6 +11,8 @@ export type SettingsSection =
   | "vault"
   | "zotero-sync"
   | "sync"
+  | "devices"
+  | "memory"
   | "environment"
   | "languages"
   | "planner"

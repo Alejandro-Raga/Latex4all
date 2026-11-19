@@ -62,6 +62,7 @@ import {
   ZoomInIcon,
   ZoomOutIcon,
   LaptopIcon,
+  RefreshCwIcon,
 } from "lucide-react";
 import * as Y from "yjs";
 import {
@@ -763,6 +764,7 @@ export function ProjectPicker() {
 
                 {activeSection === "projects" && (
                   <div className="flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2">
+                    <DevicesSyncButton />
                     <div className="relative flex min-w-40 flex-1 items-center sm:max-w-sm">
                       <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                       <input
@@ -1881,6 +1883,33 @@ function SyncedPill({
       )}
       {text}
     </Tag>
+  );
+}
+
+/** Sync now with your other devices, from the home screen. */
+function DevicesSyncButton() {
+  const linked = useLibraryStore((s) => s.link !== null);
+  const busy = useLibraryStore((s) => s.progress !== null || s.busy !== null);
+  const status = useLibraryStore((s) => s.status);
+  if (!linked) return null;
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-8 shrink-0"
+      disabled={busy}
+      onClick={() => void useLibraryStore.getState().syncNow()}
+      title={
+        busy
+          ? "Syncing with your devices…"
+          : status === "offline"
+            ? "Offline: syncs with your devices when you're back online"
+            : "Sync with your devices now"
+      }
+      aria-label="Sync with your devices now"
+    >
+      <RefreshCwIcon className={cn("size-4", busy && "animate-spin")} />
+    </Button>
   );
 }
 

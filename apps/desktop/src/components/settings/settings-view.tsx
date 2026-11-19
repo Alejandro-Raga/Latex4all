@@ -18,6 +18,8 @@ import {
   RefreshCwIcon,
   ServerIcon,
   UnplugIcon,
+  HistoryIcon,
+  LaptopIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { ClaudeSetup } from "@/components/claude-setup";
@@ -48,7 +50,9 @@ import { clearPdfCache, pdfCacheSize } from "@/lib/zotero-pdf-cache";
 import { ZoteroSourceControls } from "@/components/zotero-source-controls";
 import { NoteTypesSettings } from "./note-types-settings";
 import { ZoteroSyncSettings } from "./zotero-sync-settings";
-import { SyncSettingsSection } from "./sync-settings";
+import { LinkedDevices, SyncSettingsSection } from "./sync-settings";
+import { MemorySettings } from "./memory-settings";
+import { useLibraryStore } from "@/stores/library-store";
 import { AiUsageSettings } from "./ai-usage-settings";
 import { AgentAccounts } from "./agent-accounts";
 import { SkillsSettings } from "./skills-settings";
@@ -557,6 +561,15 @@ function VaultSettings() {
   );
 }
 
+/** The sections, grouped, in order. */
+const SETTINGS_GROUPS: { title: string; ids: SettingsSection[] }[] = [
+  { title: "General", ids: ["appearance", "memory", "updates"] },
+  { title: "Writing", ids: ["editor", "pdf", "languages", "environment"] },
+  { title: "Research", ids: ["planner", "vault", "zotero", "zotero-sync"] },
+  { title: "AI", ids: ["provider", "ai-usage", "skills"] },
+  { title: "Sync", ids: ["sync", "devices"] },
+];
+
 /** Settings: the sections down the side, the chosen one beside them. */
 export function SettingsView({
   section,
@@ -590,6 +603,13 @@ export function SettingsView({
     refreshLanguagePacks();
   }, [refreshLanguagePacks]);
 
+  const linkedCount = useLibraryStore((s) => s.devices.length);
+  const memory = useSettingsStore((s) => s.memory);
+  const memoryFresh =
+    memory?.start === "home" &&
+    memory.library === "home" &&
+    memory.vaultLibrary === "home" &&
+    memory.vaultProject !== "last";
   const aiEntries = useAiUsage((s) => s.entries);
   const aiPrices = useAiUsage((s) => s.prices);
   const aiToday = `$${summarize(aiEntries, startOfToday(), aiPrices).costUsd.toFixed(2)} billed today`;
@@ -722,6 +742,22 @@ export function SettingsView({
       flush: true,
     },
     {
+      id: "devices",
+      label: "Your devices",
+      meta: linkedCount ? `${linkedCount} linked` : "Not linked",
+      icon: LaptopIcon,
+      body: <LinkedDevices />,
+      flush: true,
+    },
+    {
+      id: "memory",
+      label: "Where things open",
+      meta: memoryFresh ? "Fresh start" : "Where you left off",
+      icon: HistoryIcon,
+      body: <MemorySettings />,
+      flush: true,
+    },
+    {
       id: "updates",
       label: "Updates",
       meta: updateChannel === "test" ? "Test" : "Release",
@@ -730,7 +766,14 @@ export function SettingsView({
       flush: true,
     },
   ];
-  const current = sections.find((s) => s.id === section) ?? sections[0];
+  // In groups, so related settings sit together.
+  const ordered = SETTINGS_GROUPS.flatMap(({ title, ids }) =>
+    ids.flatMap((id, i) => {
+      const s = sections.find((x) => x.id === id);
+      return s ? [{ ...s, heading: i === 0 ? title : undefined }] : [];
+    }),
+  );
+  const current = sections.find((s) => s.id === section) ?? ordered[0];
 
   return (
     <div
@@ -741,15 +784,21 @@ export function SettingsView({
       }
     >
       <aside className="space-y-1 overflow-y-auto border-border/60 border-r pr-4">
-        {sections.map((s) => (
-          <SettingsDetailButton
-            key={s.id}
-            active={s.id === current.id}
-            icon={s.icon}
-            label={s.label}
-            meta={s.meta}
-            onClick={() => onSectionChange(s.id)}
-          />
+        {ordered.map((s) => (
+          <div key={s.id}>
+            {s.heading && (
+              <p className="px-2 pt-3 pb-1 font-medium text-[11px] text-muted-foreground uppercase tracking-wide first:pt-0">
+                {s.heading}
+              </p>
+            )}
+            <SettingsDetailButton
+              active={s.id === current.id}
+              icon={s.icon}
+              label={s.label}
+              meta={s.meta}
+              onClick={() => onSectionChange(s.id)}
+            />
+          </div>
         ))}
       </aside>
       <div className="min-h-0 min-w-0 overflow-y-auto">

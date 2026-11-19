@@ -108,6 +108,15 @@ tag.
 
 ### Added
 
+- Settings → Where things open: whether the app, the Library and the vault
+  open where you left off or fresh, or "Start fresh every time". The vault
+  beside a project opens on the project's note (or the whole vault if it has
+  none); the Library's vault opens on its main page after a restart and
+  where you left it while the app is open, each keeping its own place.
+- Settings are grouped (General, Writing, Research, AI, Sync), and linked
+  devices have their own section, Your devices.
+- Home screen: a Sync button beside the search syncs your devices now.
+
 - Plan.md is protected: it no longer shows among the project's files, and
   Latex4All keeps a copy of each project's plan, putting the file back if
   it's deleted outside the app (taken for a stray file).

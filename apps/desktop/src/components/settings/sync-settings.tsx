@@ -209,13 +209,12 @@ export function SyncSettingsSection() {
       <div className="px-5 pt-1 pb-5">
         <SyncStorageChoice settings={settings} onChange={save} />
       </div>
-      <LinkedDevices />
     </div>
   );
 }
 
 /** Settings → Sync → Linked devices: your computers with the same projects. */
-function LinkedDevices() {
+export function LinkedDevices() {
   const lib = useLibraryStore();
   const [code, setCode] = useState<string | null>(null);
   const [text, setText] = useState("");

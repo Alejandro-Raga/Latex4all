@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  enterLibraryVault,
+  enterProjectVault,
+  noteShown,
+} from "@/lib/vault/vault-memory";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -206,6 +211,24 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
   const projectRoot = useDocumentStore((s) => s.projectRoot);
   const standalone = useVaultStandalone();
   const tab = useVaultTab((s) => s.tab);
+  // Which note it opens on (Settings → Where things open), once the vault
+  // is read; each place keeps its own.
+  const ready = Boolean(index);
+  useEffect(() => {
+    if (!ready) return;
+    if (standalone) void enterLibraryVault();
+    else if (projectRoot) {
+      // No note of its own: the whole vault rather than the project's page.
+      void enterProjectVault(projectRoot).then((found) => {
+        if (found === false) useVaultTab.getState().setTab("all");
+      });
+    }
+  }, [ready, standalone, projectRoot]);
+  useEffect(() => {
+    if (!ready) return;
+    if (standalone) noteShown({ library: true });
+    else if (projectRoot) noteShown({ project: projectRoot });
+  }, [current, ready, standalone, projectRoot]);
 
   return (
     <div
