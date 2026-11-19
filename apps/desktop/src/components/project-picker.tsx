@@ -1807,12 +1807,28 @@ function SyncBadges({ path, conflicts }: { path: string; conflicts: number }) {
   return (
     <>
       {people && <SharedBadge conflicts={conflicts} />}
-      {inLibrary && <SyncedPill state={state} />}
+      {inLibrary && (
+        <SyncedPill
+          state={state}
+          onSync={
+            open
+              ? undefined
+              : () => void useLibraryStore.getState().syncProject(path)
+          }
+        />
+      )}
     </>
   );
 }
 
-function SyncedPill({ state }: { state?: ProjectSyncState }) {
+function SyncedPill({
+  state,
+  onSync,
+}: {
+  state?: ProjectSyncState;
+  /** Syncs it now (not for the open project, which syncs live). */
+  onSync?: () => void;
+}) {
   const text =
     state === "syncing"
       ? "Syncing…"
@@ -1829,15 +1845,27 @@ function SyncedPill({ state }: { state?: ProjectSyncState }) {
         : state === "syncing"
           ? "Syncing with your other devices"
           : "On your linked devices";
+  const Tag = onSync ? "button" : "span";
   return (
-    <span
+    <Tag
+      {...(onSync
+        ? {
+            type: "button" as const,
+            onClick: (e: React.MouseEvent) => {
+              e.stopPropagation();
+              if (state !== "syncing") onSync();
+            },
+          }
+        : {})}
       className={cn(
         "inline-flex w-fit shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 font-medium text-[10px]",
         state === "error"
           ? "bg-destructive/15 text-destructive"
           : "bg-primary/10 text-primary",
       )}
-      title={title}
+      title={
+        onSync && state !== "syncing" ? `${title}. Click to sync now.` : title
+      }
     >
       {state === "syncing" ? (
         <Loader2Icon className="size-3 animate-spin" />
@@ -1845,7 +1873,7 @@ function SyncedPill({ state }: { state?: ProjectSyncState }) {
         <LaptopIcon className="size-3" />
       )}
       {text}
-    </span>
+    </Tag>
   );
 }
 

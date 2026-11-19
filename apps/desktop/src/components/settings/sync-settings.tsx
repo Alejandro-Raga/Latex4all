@@ -337,6 +337,14 @@ function LinkedDevices() {
             <div className="flex flex-wrap gap-1.5">
               <Button
                 size="sm"
+                variant="outline"
+                disabled={working || lib.busy !== null}
+                onClick={() => run(lib.syncNow)}
+              >
+                Sync now
+              </Button>
+              <Button
+                size="sm"
                 variant="ghost"
                 disabled={working}
                 onClick={() => run(lib.unlink)}

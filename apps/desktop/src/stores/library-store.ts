@@ -98,6 +98,10 @@ interface LibraryState {
   linkTo: (text: string) => Promise<void>;
   /** This device leaves; its projects stay, and stay shared. */
   unlink: () => Promise<void>;
+  /** Everything now: projects listed and fetched, each one synced, app data. */
+  syncNow: () => Promise<void>;
+  /** One project (by folder) synced now. */
+  syncProject: (root: string) => Promise<void>;
   /** A project on, or off, the other devices. */
   setOnDevices: (id: string, on: boolean) => void;
   /** A new library (new key): for a lost device, which keeps the old one. */
@@ -487,6 +491,34 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     revision: 0,
     states: {},
     error: null,
+
+    syncNow: async () => {
+      lastBackground.clear();
+      await reconcile();
+    },
+
+    syncProject: async (root) => {
+      const s = session;
+      if (!s) return;
+      for (const [, entry] of projectsMap(s.doc)) {
+        const info = await parseLink(entry.link).catch(() => null);
+        if (
+          !info ||
+          useProjectStore.getState().sharedProjects[info.projectId] !== root
+        ) {
+          continue;
+        }
+        setState(root, "syncing");
+        lastBackground.set(root, Date.now());
+        try {
+          await syncInBackground(root, entry.link);
+          setState(root, "synced");
+        } catch (err) {
+          setState(root, String(err).includes("offline") ? "offline" : "error");
+        }
+        return;
+      }
+    },
 
     setOnDevices: (id, on) => {
       const projects = session && projectsMap(session.doc);
