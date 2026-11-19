@@ -274,17 +274,30 @@ Linked devices show theirs (L01–L03) in Settings → Sync.
 
 ## Moving over from the relay
 
-1. While the relay exists, the app keeps syncing with it as well. Changes go
-   both ways, so members who haven't updated keep working.
-2. The relay server itself becomes a hub, and imports its own log as its
-   entries, in the relay's order and signed with its key. Members get them
-   from it like any other entries, so the history is the same for everyone
-   and nothing is lost.
-3. New changes are written by each copy under its own id and sent to peers
-   and to the relay.
-4. When every member of a project is on peer-to-peer sync and a hub (or the
-   members themselves) holds the log, the relay copy can be retired. The app
-   says when that's safe; nothing is deleted before.
+Built:
+
+1. The app syncs with the relay and peer to peer at once; members who
+   haven't updated keep working.
+2. The Latex4All server runs a public hub beside the relay
+   (`L4A_HUB_PUBLIC=1`, `L4A_RELAY_DATA`). Every copy adds each shared
+   project to it once, proving membership with the project's relay access
+   token, which the hub checks against the relay's own record. The hub
+   imports the relay's snapshot, updates and files as its own signed
+   entries (still sealed: it reads nothing), and every minute imports what
+   reached the relay since from copies not yet updated. Entries sent both
+   ways are stored twice during the move; Yjs applies each once.
+3. Files go peer to peer as well: kept under the hash of their sealed bytes
+   (the bytes the relay holds, so the hub's imported files match), noted in
+   the document by relay id (`p2pBlobs`), and fetched from members or the
+   hub when the relay can't give them.
+
+Still to do, once the beta has run on real groups:
+
+4. The app says when a project no longer needs the relay (every member on
+   peer-to-peer, the hub caught up), and new projects stop being created on
+   it. Removing a member then changes the project's link too, so removal
+   really excludes them.
+5. The relay is switched off; nothing it held is lost, since the hub has it.
 
 Before any of this runs on a project, the app takes a history snapshot of it,
 as it does before every sync today.
