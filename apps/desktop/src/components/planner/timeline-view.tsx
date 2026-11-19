@@ -460,8 +460,8 @@ function Track({
   const usedRows = placed.length
     ? Math.max(...placed.map((p) => p.row)) + 1
     : 0;
-  const labelsY = lineY + 14;
-  const labelsH = usedRows * 16;
+  const labelsY = lineY + 12;
+  const labelsH = usedRows * 15;
 
   // Tasks: a lane per section under the line.
   const taskLanes = compact
@@ -647,7 +647,7 @@ function Track({
               !p.m && "font-medium text-destructive",
               done && "text-muted-foreground line-through",
             )}
-            style={{ left: p.x, top: labelsY + p.row * 16, maxWidth: p.w }}
+            style={{ left: p.x, top: labelsY + p.row * 15, maxWidth: p.w }}
           >
             {p.title}
             <span className="font-normal text-muted-foreground">
@@ -676,9 +676,8 @@ function Track({
 
 /** A lane: its section's name on a line of its own, its tasks below in
  * rows so no two names overlap. */
-const LANE_NAME = 14;
-const LANE_ROW_H = 16;
-const LANE_PAD = 6;
+const LANE_ROW_H = 15;
+const LANE_PAD = 3;
 
 type LaneItem = LaneTask & { x: number; label: string; kind: "task" | "due" };
 
@@ -696,20 +695,15 @@ function layoutOf(
       label: t.title,
       kind: "task" as const,
     }));
-  if (lane.due && lane.due >= span.start && lane.due <= span.end) {
-    items.push({
-      date: lane.due,
-      title: `${lane.name} due`,
-      overdue: false,
-      x: xOf(lane.due),
-      label: `Due ${short(lane.due)}`,
-      kind: "due",
-    });
-  }
-  const { placed, rows } = layoutLane(items, width);
+  // The name, and the section's own date beside it, start the first row;
+  // tasks go after it there when there's room.
+  const header = lane.due ? `${lane.name} · due ${short(lane.due)}` : lane.name;
+  const nameW = Math.min(header.length * 6.4 + 14, 260);
+  const { placed, rows } = layoutLane(items, width, 3, 5.8, nameW);
   return {
     placed,
-    height: LANE_NAME + LANE_PAD + Math.max(rows, 1) * LANE_ROW_H + LANE_PAD,
+    nameW,
+    height: LANE_PAD + Math.max(rows, 1) * LANE_ROW_H + LANE_PAD,
   };
 }
 
@@ -722,8 +716,7 @@ function TaskLane({
   layout: ReturnType<typeof layoutOf>;
   width: number;
 }) {
-  const rowY = (row: number) =>
-    LANE_NAME + LANE_PAD + row * LANE_ROW_H + LANE_ROW_H / 2;
+  const rowY = (row: number) => LANE_PAD + row * LANE_ROW_H + LANE_ROW_H / 2;
   return (
     <div
       className="relative border-border/40 border-t"
@@ -731,10 +724,21 @@ function TaskLane({
     >
       {/* Its name, on a background of its own so nothing runs through it. */}
       <span
-        className="sticky left-0 z-10 inline-block max-w-60 truncate rounded-br bg-background pr-2 pl-1 font-medium text-[11px] text-foreground/80"
-        style={{ lineHeight: `${LANE_NAME}px`, marginTop: 2 }}
+        className="sticky left-0 z-10 inline-block truncate rounded-r bg-background pr-2 pl-1 font-medium text-[11px] text-foreground/80"
+        style={{
+          lineHeight: `${LANE_ROW_H}px`,
+          marginTop: LANE_PAD,
+          maxWidth: layout.nameW,
+        }}
+        title={lane.due ? `${lane.name} · due ${short(lane.due)}` : lane.name}
       >
         {lane.name}
+        {lane.due && (
+          <span className="font-normal text-muted-foreground">
+            {" "}
+            · due {short(lane.due)}
+          </span>
+        )}
       </span>
       {layout.placed.map((p) => {
         if (p.kind === "more") {

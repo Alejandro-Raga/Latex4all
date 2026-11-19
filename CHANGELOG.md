@@ -90,9 +90,10 @@ tag.
 
 ### Added
 
-- Timeline: tasks are easier to read. Each one is named beside its dot, in
-  rows so names never overlap; a section's date reads "Due 27 Feb" instead
-  of an unlabelled square; only tasks with no room left show as "+4 more".
+- Timeline: tasks are easier to read and take less room. Each one is named
+  beside its dot, in rows so names never overlap, starting on the section's
+  own line when there's room; a section's date shows beside its name ("due
+  27 Feb"); only tasks with no room left show as "+4 more".
 
 - Settings → Sync (beta): shared projects can also sync directly between
   computers. Choose where changes wait while your collaborators are

@@ -96,12 +96,14 @@ export function layoutLane<T extends { x: number; label: string }>(
   width: number,
   rows = 3,
   charW = 5.8,
+  /** Room already taken at the start of the first row (the lane's name). */
+  taken = 0,
 ): { placed: Placed<T>[]; rows: number } {
   const DOT = 10;
   const GAP = 10;
   const MAX = 200;
   const MIN = 56;
-  const ends: number[] = [];
+  const ends: number[] = taken > 0 ? [taken] : [];
   const placed: Placed<T>[] = [];
   const left: Array<T & { kind?: "task" | "due" }> = [];
   const sorted = [...items].sort((a, b) => a.x - b.x);

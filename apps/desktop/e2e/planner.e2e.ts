@@ -1258,9 +1258,9 @@ test("the timeline's task lanes: names never overlap, crowded ones counted", asy
   await main.getByRole("radio", { name: "Timeline" }).click();
   await main.getByLabel("Add a milestone").fill("JMP first draft in 160 days");
   await main.getByLabel("Add a milestone").press("Enter");
-  await expect(main.getByText("Writing", { exact: true })).toBeVisible();
+  await expect(main.getByTitle(/^Writing · due /)).toBeVisible();
   await expect(main.getByText("Finish the dataset")).toBeVisible();
-  await expect(main.getByText(/^Due /).first()).toBeVisible();
+  await expect(main.getByText(/· due /).first()).toBeVisible();
   if (process.env.SHOTS)
     await page.screenshot({ path: `${process.env.SHOTS}/lanes-new.png` });
 });
