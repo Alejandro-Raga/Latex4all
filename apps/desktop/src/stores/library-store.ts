@@ -52,6 +52,7 @@ import {
 import { exists, rename } from "@tauri-apps/plugin-fs";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
+import { getSyncSettings } from "@/lib/tauri/sync-settings";
 import { projectKey, usePlanStore } from "@/lib/plan/plan-store";
 import { isPlaceholderName } from "@/lib/collab/project-doc";
 import { readProjectMeta, writeProjectType } from "@/lib/project-meta";
@@ -411,6 +412,20 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
 
     // Where each project's folder is, as this device has it.
     const homeMap = await pathMap({});
+    // A cloud folder counts only if it was chosen as storage (Settings →
+    // Sharing); other cloud copies of a project are left alone, and the
+    // device gets the app's own copy.
+    const chosen = await getSyncSettings().catch(() => null);
+    const cloudRoot =
+      chosen?.storage === "folder" && chosen.folder
+        ? chosen.folder.replace(/[\\/]+$/, "")
+        : null;
+    const inCloud = (path: string | null) =>
+      Boolean(
+        cloudRoot &&
+          path &&
+          path.replace(/\\/g, "/").startsWith(cloudRoot.replace(/\\/g, "/")),
+      );
     for (const [id, entry] of projects) {
       const root = useProjectStore.getState().sharedProjects[id];
       if (!root || entry.removed) continue;
@@ -439,6 +454,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     for (const [id, entry] of projects) {
       if (session !== s || entry.removed || !entry.where) continue;
       const there = local(entry.where, homeMap);
+      if (!inCloud(there)) continue;
       if (!there || !(await exists(there).catch(() => false))) continue;
       const current = useProjectStore.getState().sharedProjects[id];
       if (current === there) continue;
@@ -521,7 +537,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       // and a second sync writing them too makes conflicted copies. If any
       // device has it elsewhere, it's synced here as usual.
       const atWhere = Boolean(
-        entry.where && local(entry.where, homeMap) === root,
+        entry.where && local(entry.where, homeMap) === root && inCloud(root),
       );
       if (Boolean(entry.cloud?.[me]) !== atWhere) {
         const fresh = projects.get(id) ?? entry;

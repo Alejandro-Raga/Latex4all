@@ -31,10 +31,10 @@ tag.
   arrived as "Shared project (n)" get their real names; a project's priority
   flag and deadline show on the home screen as soon as its plan arrives;
   project types (Article, Thesis…) are the same on all your devices.
-- Linked devices: a project whose folder your cloud app (Seafile, Dropbox…)
-  already syncs is used where it is on the other computer, instead of a
-  second copy beside it, so it builds as it does on the first and isn't
-  listed twice; copies made before are listed in Settings → Devices to delete.
+- Linked devices: with a cloud folder chosen as storage (Settings →
+  Sharing), a project already inside it is used where it is on the other
+  computer instead of a second copy. Without one, each computer gets the
+  app's own copy and other cloud copies are left alone.
 - Linked devices are replicas: everything Latex4All keeps (settings,
   favourites, home-screen folders and custom types, bookmarks, the dock,
   vault and Zotero settings, the reading queue, each project's layout…) is
@@ -322,10 +322,9 @@ tag.
   project's folder, and a sync stops if the shared main.tex is a different
   kind of document from the folder's.
 
-- Linked devices: projects in a folder your cloud app (Seafile, Dropbox…)
-  syncs to all your devices are no longer also synced in the background,
-  which made conflicted copies. Projects the cloud app doesn't bring to
-  every device still sync as before. Settings → Devices lists projects found in more than
+- Linked devices: projects in the cloud folder chosen as storage, on every
+  device, are no longer also synced in the background, which made
+  conflicted copies. Settings → Devices lists projects found in more than
   one folder, so you can keep one.
 
 - Clearer wording across the app, Settings especially: plain names, one
