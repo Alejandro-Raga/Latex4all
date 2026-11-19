@@ -120,16 +120,22 @@ export function layout(doc: Y.Doc): Map<string, SharedFile> {
     .map(([fileId, entry]) => readEntry(fileId, entry))
     .filter((file): file is SharedFile => file !== null)
     .sort((a, b) => (a.fileId < b.fileId ? -1 : 1));
-  const taken = new Set(files.map((f) => f.path));
+  // Two paths that differ only in case, or in how their accents are stored,
+  // are one file on macOS and Windows: the second is numbered, so neither
+  // overwrites the other.
+  const key = (path: string) => path.normalize("NFC").toLowerCase();
+  const taken = new Set(files.map((f) => key(f.path)));
+  const used = new Set<string>();
   const placed = new Map<string, SharedFile>();
   for (const file of files) {
     let path = file.path;
-    if (placed.has(path)) {
+    if (used.has(key(path))) {
       let n = 2;
-      while (taken.has(numberedPath(file.path, n))) n++;
+      while (taken.has(key(numberedPath(file.path, n)))) n++;
       path = numberedPath(file.path, n);
-      taken.add(path);
+      taken.add(key(path));
     }
+    used.add(key(path));
     placed.set(path, { ...file, path });
   }
   return placed;
