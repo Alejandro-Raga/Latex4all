@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { usageWarnings, warningForError } from "@/lib/collab/sync-warnings";
+import {
+  usageWarnings,
+  warningForError,
+  warningForPeerProblem,
+} from "@/lib/collab/sync-warnings";
 
 const MB = 1024 * 1024;
 
@@ -33,6 +37,7 @@ describe("sync warnings", () => {
       warningForError("Couldn't share figures/big.pdf: too-large"),
     ).toEqual({
       id: "too-large:figures/big.pdf",
+      code: "R05",
       level: "warning",
       text: "figures/big.pdf is over 25 MB, so it isn't shared.",
     });
@@ -41,6 +46,16 @@ describe("sync warnings", () => {
       warningForError("Couldn't download plot.png: Couldn't reach the relay")
         ?.id,
     ).toBe("get:plot.png");
+    expect(warningForError("gone")?.code).toBe("R03");
+    expect(warningForError("something new")?.code).toBe("X00");
+  });
+
+  it("give peer-to-peer problems a code and words", () => {
+    const w = warningForPeerProblem("F01");
+    expect(w.code).toBe("F01");
+    expect(w.id).toBe("peer:F01");
+    expect(w.text).toMatch(/folder/);
+    expect(warningForPeerProblem("Z99").code).toBe("Z99");
   });
 
   it("say briefly why a file didn't go, and that it's tried again", () => {
