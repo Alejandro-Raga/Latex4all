@@ -129,6 +129,36 @@ pub struct Status {
     pub waiting: usize,
 }
 
+/// For "this computer as a server": every shared project this computer has
+/// synced, opened at start and kept in sync (with all its files), whether
+/// or not a window has it open.
+pub fn serve_all() {
+    let s = settings();
+    if !enabled() || s.storage != "computer" {
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        let Ok(node) = node().await else { return };
+        let Some(dir) = base().map(|b| b.join("projects")) else { return };
+        let Ok(items) = std::fs::read_dir(dir) else { return };
+        for item in items.flatten() {
+            let Ok(id) = std::fs::read_to_string(item.path().join("id")) else { continue };
+            if node.project(&id).is_some() {
+                continue;
+            }
+            // Its tokens are kept beside it, so none is needed here.
+            if let Ok(log) = node.open(&id, &[], item.path()) {
+                log.keep_all_blobs(true);
+            }
+        }
+    });
+}
+
+/// Whether closing the last window should keep the app running.
+pub fn keeps_running() -> bool {
+    enabled() && settings().storage == "computer"
+}
+
 /// What the relay side hands to a project's peer-to-peer sync.
 pub enum Input {
     /// An update made here (plain; sealed before it's written).
@@ -153,7 +183,16 @@ pub fn start(
     tauri::async_runtime::spawn(async move {
         let Ok(node) = node().await else { return };
         let Some(dir) = base().map(|b| b.join("projects").join(safe(&project))) else { return };
-        let Ok(log) = node.open(&project, &token, &dir) else { return };
+        // Opened once per run (a server opens them all at start), so two
+        // never write the same files.
+        let log = match node.project(&project) {
+            Some(log) => log,
+            None => match node.open(&project, &token, &dir) {
+                Ok(log) => log,
+                Err(_) => return,
+            },
+        };
+        let _ = std::fs::write(dir.join("id"), &project);
         ready(node.id().to_string());
         // The always-on store chosen in Settings → Sync.
         let choice = settings();

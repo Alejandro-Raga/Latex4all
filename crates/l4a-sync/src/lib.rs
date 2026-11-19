@@ -823,6 +823,11 @@ impl Node {
         &self.endpoint
     }
 
+    /// A project already open on this copy.
+    pub fn project(&self, id: &str) -> Option<Arc<Project>> {
+        self.projects.lock().unwrap().get(id).cloned()
+    }
+
     /// Whether this copy is syncing a project with a member right now.
     pub fn is_syncing_with(&self, project: &str, peer: &str) -> bool {
         self.live.lock().unwrap().contains(&(project.to_string(), peer.to_string()))

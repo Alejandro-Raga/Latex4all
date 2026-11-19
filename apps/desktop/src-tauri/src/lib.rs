@@ -734,6 +734,14 @@ pub fn run() {
         .manage(zotero::ZoteroOAuthState::default())
         .manage(collab::CollabState::default())
         .setup(|app| {
+            // "This computer as a server": every shared project kept in sync,
+            // and the app kept running in the menu bar or tray.
+            p2p::serve_all();
+            if p2p::keeps_running() {
+                if let Err(e) = server_tray(app.handle()) {
+                    eprintln!("[sync] tray: {e}");
+                }
+            }
             // Build folders no project needs any more (see cleanup_builds).
             std::thread::spawn(|| {
                 std::thread::sleep(std::time::Duration::from_secs(60));
@@ -946,6 +954,35 @@ pub fn run() {
                     let _ = window.emit("window-focus-restored", ());
                 }
             }
+            // As a server, closing the last window hides it: the app keeps
+            // syncing; the Dock icon or the tray brings it back.
+            tauri::RunEvent::WindowEvent {
+                ref label,
+                event: tauri::WindowEvent::CloseRequested { ref api, .. },
+                ..
+            } => {
+                if p2p::keeps_running() {
+                    let visible = app_handle
+                        .webview_windows()
+                        .values()
+                        .filter(|w| w.is_visible().unwrap_or(false))
+                        .count();
+                    if visible <= 1 {
+                        api.prevent_close();
+                        if let Some(window) = app_handle.get_webview_window(label) {
+                            let _ = window.hide();
+                        }
+                    }
+                }
+            }
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen {
+                has_visible_windows, ..
+            } => {
+                if !has_visible_windows {
+                    show_windows(app_handle);
+                }
+            }
             tauri::RunEvent::WindowEvent {
                 label,
                 event: tauri::WindowEvent::Destroyed,
@@ -994,4 +1031,34 @@ pub fn run() {
             _ => {}
         }
     });
+}
+
+/// Shows the app's windows again (after closing them as a server).
+fn show_windows(app: &tauri::AppHandle) {
+    for window in app.webview_windows().values() {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// The menu bar (or tray) icon while this computer is a sync server.
+fn server_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::TrayIconBuilder;
+    let open = MenuItem::with_id(app, "open", "Open Latex4All", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &quit])?;
+    let mut tray = TrayIconBuilder::with_id("sync-server")
+        .tooltip("Latex4All: keeping shared projects in sync")
+        .menu(&menu)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "open" => show_windows(app),
+            "quit" => app.exit(0),
+            _ => {}
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
 }

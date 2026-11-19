@@ -118,7 +118,7 @@ export function SyncStorageChoice({
         {option(
           "computer",
           "Use this computer as a server",
-          "Only if it's always on. It keeps every shared project for the others.",
+          "Only if it's always on. It keeps every shared project for the others, and stays in the menu bar when you close the window. Starts with the app's next launch.",
         )}
         {option(
           "hub",
