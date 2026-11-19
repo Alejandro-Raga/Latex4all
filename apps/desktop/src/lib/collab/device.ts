@@ -1,6 +1,5 @@
 /**
- * This copy of the app, and the other devices linked to it (Settings →
- * Sync → Link another device): to tell a project's owner from the others.
+ * This copy of the app, and the other devices linked to it (Settings → Devices): to tell a project's owner from the others.
  */
 
 const ID = "latex4all-device-id";

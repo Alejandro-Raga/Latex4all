@@ -211,7 +211,7 @@ export function VaultPanel({ onClose }: { onClose: () => void }) {
   const projectRoot = useDocumentStore((s) => s.projectRoot);
   const standalone = useVaultStandalone();
   const tab = useVaultTab((s) => s.tab);
-  // Which note it opens on (Settings → Where things open), once the vault
+  // Which note it opens on (Settings → General), once the vault
   // is read; each place keeps its own.
   const ready = Boolean(index);
   useEffect(() => {

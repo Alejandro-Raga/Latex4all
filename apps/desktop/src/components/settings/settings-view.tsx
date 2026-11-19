@@ -564,7 +564,7 @@ function VaultSettings() {
 
 /** The sections, grouped, in order. */
 const SETTINGS_GROUPS: { title: string; ids: SettingsSection[] }[] = [
-  { title: "General", ids: ["appearance", "memory", "updates"] },
+  { title: "General", ids: ["memory", "appearance", "updates"] },
   { title: "Writing", ids: ["editor", "pdf", "languages", "environment"] },
   { title: "Research", ids: ["planner", "vault", "zotero", "zotero-sync"] },
   { title: "AI", ids: ["provider", "ai-usage", "skills"] },
@@ -624,7 +624,7 @@ export function SettingsView({
   }[] = [
     {
       id: "provider",
-      label: "Provider",
+      label: "Accounts",
       meta: isClaudeReady ? "Ready" : "Setup",
       icon: KeyRoundIcon,
       body: (
@@ -637,7 +637,7 @@ export function SettingsView({
     },
     {
       id: "ai-usage",
-      label: "AI usage",
+      label: "Usage",
       meta: aiToday,
       icon: GaugeIcon,
       body: <AiUsageSettings />,
@@ -671,7 +671,7 @@ export function SettingsView({
     },
     {
       id: "pdf",
-      label: "PDF",
+      label: "PDF viewer",
       meta: PDF_THEMES.find((t) => t.id === pdfTheme)?.label ?? "Light",
       icon: FileTextIcon,
       body: <PdfSettings />,
@@ -700,7 +700,7 @@ export function SettingsView({
     },
     {
       id: "zotero-sync",
-      label: "Zotero sync",
+      label: "Zotero notes",
       meta: zoteroSync ? "On" : "Off",
       icon: RefreshCwIcon,
       body: <ZoteroSyncSettings />,
@@ -708,7 +708,7 @@ export function SettingsView({
     },
     {
       id: "sync",
-      label: "Sync",
+      label: "Sharing",
       meta: "Shared projects",
       icon: RefreshCwIcon,
       body: <SyncSettingsSection />,
@@ -716,15 +716,15 @@ export function SettingsView({
     },
     {
       id: "environment",
-      label: "Environment",
-      meta: "Python / Skills",
+      label: "Tools",
+      meta: "Python, LaTeX, grammar",
       icon: CheckCircle2Icon,
       body: <EnvironmentStatus appVersion={appVersion} />,
       flush: true,
     },
     {
       id: "languages",
-      label: "Languages",
+      label: "Spelling",
       meta: languagePacks.length
         ? `${languagePacks.filter((p) => p.installed || p.systemSupported).length} of ${languagePacks.length}`
         : "Spelling",
@@ -734,7 +734,7 @@ export function SettingsView({
     },
     {
       id: "planner",
-      label: "Planner & reading",
+      label: "Planner",
       meta: readingGoal
         ? `Matrix, ${readingGoal} papers a week`
         : "Daily summary, reading, matrix",
@@ -744,7 +744,7 @@ export function SettingsView({
     },
     {
       id: "devices",
-      label: "Your devices",
+      label: "Devices",
       meta: linkedCount ? `${linkedCount} linked` : "Not linked",
       icon: LaptopIcon,
       body: <LinkedDevices />,
@@ -752,8 +752,8 @@ export function SettingsView({
     },
     {
       id: "memory",
-      label: "Where things open",
-      meta: memoryFresh ? "Fresh start" : "Where you left off",
+      label: "General",
+      meta: memoryFresh ? "Start fresh" : "Resume where you left off",
       icon: HistoryIcon,
       body: <MemorySettings />,
       flush: true,

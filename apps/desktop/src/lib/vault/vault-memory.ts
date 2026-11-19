@@ -1,5 +1,5 @@
 /**
- * Which note the vault opens on, by where it's shown (Settings → Where
+ * Which note the vault opens on, by where it's shown (Settings → General
  * things open): the Library's vault and each project's keep their own
  * place, so opening a project doesn't move the Library's, and the reverse.
  *

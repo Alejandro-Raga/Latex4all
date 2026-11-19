@@ -573,7 +573,7 @@ export const useAiUsage = create<AiUsageState>()(
               serviceWarned: { ...s.serviceWarned, [service]: today },
             }));
             toast.warning(`${service} today is past your $${own} budget`, {
-              description: `About $${spent.toFixed(2)}. Settings → AI usage has the details.`,
+              description: `About $${spent.toFixed(2)}. Settings → Usage has the details.`,
             });
           }
         }
@@ -582,7 +582,7 @@ export const useAiUsage = create<AiUsageState>()(
         if (spent >= dailyBudgetUsd) {
           set({ warnedDay: today });
           toast.warning(`AI use today is past your $${dailyBudgetUsd} budget`, {
-            description: `About $${spent.toFixed(2)}. Settings → AI usage has the details.`,
+            description: `About $${spent.toFixed(2)}. Settings → Usage has the details.`,
           });
         }
       },

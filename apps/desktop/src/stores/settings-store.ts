@@ -55,7 +55,7 @@ function supportedCheckLanguage(code: unknown): string {
     : DEFAULT_CHECK_LANGUAGE;
 }
 
-/** Where things open (Settings → Where things open). */
+/** Where things open (Settings → General). */
 export interface MemorySettings {
   /** On launch: the part of the app (or project) you were in, or Home. */
   start: "last" | "home";

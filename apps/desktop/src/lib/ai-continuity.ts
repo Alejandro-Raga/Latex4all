@@ -312,7 +312,7 @@ export function onLimitHit(tabId: string, request: string | null) {
   if (!toId) {
     chat._setError(
       tabId,
-      `${serviceLabel(fromId)} reached its usage limit and no other AI is set up to continue. Add one from the model menu → Add an AI, or set the order in Settings → AI usage.`,
+      `${serviceLabel(fromId)} reached its usage limit and no other AI is set up to continue. Add one from the model menu → Add an AI, or set the order in Settings → Usage.`,
     );
     return;
   }

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("Settings → Where things open, in its group", async ({ page }) => {
+test("Settings → General: start fresh, in its group", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 820 });
   await page.goto("/e2e/harness.html?scenario=settings&section=memory");
   await expect(page.getByText("Start fresh every time")).toBeVisible();

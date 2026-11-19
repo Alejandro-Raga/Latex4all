@@ -480,7 +480,7 @@ export function QuickReferencePanel({
     if (!onLibraryPage) return;
     let live = true;
     // Where it was a moment ago (another part of the app since), or last time.
-    // After a restart, only if Settings → Where things open says so; within
+    // After a restart, only if Settings → General says so; within
     // a session, always where it was.
     const memory = useSettingsStore.getState().memory;
     const where =

@@ -184,11 +184,11 @@ You can build your vault from any Zotero app, including on a tablet, by tagging 
 - A tag written `type: name`, such as `topic: Renewable energy`, files the paper or highlight in that note, and makes the note if it doesn't exist.
 - A highlight tagged `idea` becomes an idea note named after your comment.
 
-To turn this on, open **Settings → Zotero sync**. **Choose which tags make notes** lists your Zotero tags so you can pair one with a note, or stop one from making notes.
+To turn this on, open **Settings → Zotero notes**. **Choose which tags make notes** lists your Zotero tags so you can pair one with a note, or stop one from making notes.
 
 The sync runs while Latex4All is open and only reads from Zotero. Anything you write in a note outside its Zotero section is kept. If the vault is on several computers, one of them syncs at a time.
 
-[Open Settings → Zotero sync](app:settings/zotero-sync)
+[Open Settings → Zotero notes](app:settings/zotero-sync)
 
 ## Planner
 
@@ -244,11 +244,11 @@ Switch between **List** and **Board** at the top. On the board, each section is 
 
 - **Today**, **Tomorrow** and **Next 7 days** show what is due in every list.
 - **Calendar** shows dated tasks, milestones, sections and deadlines by month or week. Drag something to another day to change its date. Click a day to see everything on it and add a task. **Export to calendar** saves your dates as a file that Apple Calendar, Google Calendar or Outlook can open.
-- **Eisenhower matrix** puts open tasks in four boxes: urgent and important, important but not urgent, urgent but not important, and neither. By default a task is important if its priority is high or highest, and urgent if it's due within four days or overdue. Change both in **Settings → Planner & reading**. Drag a task to another box to change its priority or date. To keep a task and its subtasks out of the matrix, such as a far-off goal, right-click it and choose **Leave out of the matrix**, or click the grid button in its panel.
+- **Eisenhower matrix** puts open tasks in four boxes: urgent and important, important but not urgent, urgent but not important, and neither. By default a task is important if its priority is high or highest, and urgent if it's due within four days or overdue. Change both in **Settings → Planner**. Drag a task to another box to change its priority or date. To keep a task and its subtasks out of the matrix, such as a far-off goal, right-click it and choose **Leave out of the matrix**, or click the grid button in its panel.
 - **Overview** shows each list and project as a card with its sections and what comes next. Click a card's name to open that list.
 - **All tasks** lists everything open, and **Completed** what you've finished.
 
-The first time you open Latex4All each day, a short note tells you what is due or overdue. You can turn it off in **Settings → Planner & reading**.
+The first time you open Latex4All each day, a short note tells you what is due or overdue. You can turn it off in **Settings → Planner**.
 
 ### Reading
 
@@ -262,7 +262,7 @@ Open **Reading** in the Planner's sidebar to keep up your reading.
 - Add a paper by its title, DOI or a link, or with **Add from Zotero**. Papers added here are general reading; a project's papers go in its own **Reading** tab. You can also right-click a paper in the Library or the vault and choose **Add to reading list**.
 - The circle next to a paper shows how far you are. Click it to change the status. Hover a paper and click **Read by** to give it a date.
 
-To set yourself a weekly goal, open **Settings → Planner & reading** and turn on **Weekly reading goal**. Reading then shows how many papers you've finished this week, the pages you've read, and how many days in a row you've read.
+To set yourself a weekly goal, open **Settings → Planner** and turn on **Weekly reading goal**. Reading then shows how many papers you've finished this week, the pages you've read, and how many days in a row you've read.
 
 While writing, the **Plan** panel (⌘⌥4) shows the project's tasks and reading list next to your text.
 
@@ -272,12 +272,12 @@ A project's tasks are saved in a file called Plan.md in the project, so in a sha
 
 Click the round button at the bottom of the editor to open the chat. The assistant can read your project and edit it. Every change it makes appears in the editor for you to keep or undo.
 
-- Choose the assistant next to the send button. Claude, ChatGPT, Gemini and GitHub Copilot work with your own account; add them in **Settings → Provider**.
+- Choose the assistant next to the send button. Claude, ChatGPT, Gemini and GitHub Copilot work with your own account; add them in **Settings → Accounts**.
 - Select text to improve, shorten, translate or explain it.
 - Press ⌘⇧X and drag over part of the PDF to ask about it.
 - AGENTS.md holds notes that every assistant in the project reads.
 
-[Open Settings → Provider](app:settings/provider)
+[Open Settings → Accounts](app:settings/provider)
 
 ## Shared projects
 

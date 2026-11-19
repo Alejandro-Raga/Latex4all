@@ -52,7 +52,7 @@ const FRESH: Memory = {
   vaultProject: "project",
 };
 
-/** Settings → Where things open. */
+/** Settings → General. */
 export function MemorySettings() {
   const memory = { ...DEFAULT_MEMORY, ...useSettingsStore((s) => s.memory) };
   const setMemory = useSettingsStore((s) => s.setMemory);

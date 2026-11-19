@@ -183,8 +183,7 @@ export function SkillsSettings() {
   if (skills.length === 0) {
     return (
       <p className="px-5 py-4 text-muted-foreground text-sm">
-        No skills installed. Install the scientific skills in Settings →
-        Environment.
+        No skills installed. Install the scientific skills in Settings → Tools.
       </p>
     );
   }

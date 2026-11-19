@@ -1,5 +1,5 @@
 /**
- * Linked devices (Settings → Sync → Link another device): one person's
+ * Linked devices (Settings → Devices): one person's
  * computers with the same projects.
  *
  * The library is a shared document of its own, synced like a shared

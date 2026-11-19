@@ -170,7 +170,7 @@ const PEER_PROBLEMS: Record<string, Omit<SyncWarning, "id" | "code">> = {
   },
   F01: {
     level: "error",
-    text: "The sync folder can't be found. Check it's still there and your cloud app is running, or choose it again in Settings → Sync.",
+    text: "The sync folder can't be found. Check it's still there and your cloud app is running, or choose it again in Settings → Sharing.",
   },
   F02: {
     level: "error",
@@ -182,7 +182,7 @@ const PEER_PROBLEMS: Record<string, Omit<SyncWarning, "id" | "code">> = {
   },
   H02: {
     level: "error",
-    text: "Your server rejected its code. Copy the code from the server into Settings → Sync again.",
+    text: "Your server rejected its code. Copy the code from the server into Settings → Sharing again.",
   },
 };
 

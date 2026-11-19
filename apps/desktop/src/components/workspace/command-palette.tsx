@@ -57,14 +57,22 @@ const PANELS: { panel: DockPanel; label: string; key: string }[] = [
 ];
 
 const SETTINGS: { id: SettingsSection; label: string }[] = [
+  { id: "memory", label: "General" },
   { id: "appearance", label: "Appearance" },
-  { id: "editor", label: "Editor" },
-  { id: "pdf", label: "PDF" },
-  { id: "zotero", label: "Zotero" },
-  { id: "vault", label: "Vault" },
-  { id: "zotero-sync", label: "Zotero sync" },
-  { id: "provider", label: "Provider" },
   { id: "updates", label: "Updates" },
+  { id: "editor", label: "Editor" },
+  { id: "languages", label: "Spelling" },
+  { id: "pdf", label: "PDF viewer" },
+  { id: "environment", label: "Tools" },
+  { id: "planner", label: "Planner" },
+  { id: "vault", label: "Vault" },
+  { id: "zotero", label: "Zotero" },
+  { id: "zotero-sync", label: "Zotero notes" },
+  { id: "provider", label: "Accounts" },
+  { id: "ai-usage", label: "Usage" },
+  { id: "skills", label: "Skills" },
+  { id: "sync", label: "Sharing" },
+  { id: "devices", label: "Devices" },
 ];
 
 /** Steps through the PDF pane's tabs (preview, papers, a widened panel). */

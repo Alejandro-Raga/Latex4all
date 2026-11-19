@@ -1290,7 +1290,7 @@ export function Sidebar({
           size="icon"
           className="size-7 transition-transform duration-300 ease-in-out hover:scale-105"
           onClick={onToggleCollapsed}
-          title="Environment"
+          title="Tools"
           aria-label="Expand environment"
         >
           <AppWindowIcon className="size-3.5" />

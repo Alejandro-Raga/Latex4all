@@ -1957,7 +1957,7 @@ export const useClaudeChatStore = create<ClaudeChatState>()((set, get) => ({
 
   _appendMessage: (tabId: string, msg: ClaudeStreamMessage) => {
     if (msg.type === "result") {
-      // What the request took, for Settings → AI usage, and how it's paid.
+      // What the request took, for Settings → Usage, and how it's paid.
       const { tabs, selectedModel } = get();
       const tab = tabs.find((t) => t.id === tabId);
       const billing = billingOf(tab);

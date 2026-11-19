@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-/** Settings → Sync (kept by the app, read by its sync). */
+/** Settings → Sharing (kept by the app, read by its sync). */
 export interface SyncSettings {
   /** Peer-to-peer sync on (beta). */
   enabled: boolean;

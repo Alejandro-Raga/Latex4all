@@ -19,20 +19,14 @@ URL changed. Branch layout, CI, refactors and tests belong in commit messages.
 Write entries under `## [Unreleased]` and rename it to `## [x.y.z]` when you
 tag.
 
-### Fixed
+## [Unreleased]
 
-- Clearer wording across the app, Settings especially: plain names, one
-  short sentence where a setting needs explaining, and descriptions no
-  longer cut off.
-
-- Home screen: project priority flags show right away, not only after the
-  Planner has been opened once.
+### Added
 
 - Linked devices: projects arrive with their files and tasks, and their own
-  names, without opening them first; projects stay in step in the
-  background. Project cards say "Shared" for projects shared with people
+  names, without opening them first, and keep syncing in the background. Project cards say "Shared" for projects shared with people
   and "Synced" for those on your devices, with how the last sync went;
-  click it to sync that project now, or use Sync now in Settings → Sync.
+  click it to sync that project now, or use Sync now in Settings → Sharing.
 - Linked devices: a progress bar shows while projects sync; projects that
   arrived as "Shared project (n)" get their real names; a project's priority
   flag and deadline show on the home screen as soon as its plan arrives;
@@ -40,85 +34,22 @@ tag.
 - Linked devices: a project whose folder your cloud app (Seafile, Dropbox…)
   already syncs is used where it is on the other computer, instead of a
   second copy beside it, so it builds as it does on the first and isn't
-  listed twice; copies made before are listed in Settings → Sync to delete.
+  listed twice; copies made before are listed in Settings → Devices to delete.
 - Linked devices are replicas: everything Latex4All keeps (settings,
   favourites, home-screen folders and custom types, bookmarks, the dock,
   vault and Zotero settings, the reading queue, each project's layout…) is
   the same on each, with folders translated to where they are on each
   computer. Only what belongs to one computer stays its own (its window
   size and zoom, where new projects go, sign-ins).
-- Sync settings: the "Sync storage" question no longer comes back after
-  updates once answered, and a choice made elsewhere is no longer undone by
-  Settings → Sync if it was open at the time.
 
-- Timeline: tasks in a lane per section under the line; tasks too close
-  together become a count you can click to list (red when some are late).
-  The Inbox and your own lists have a timeline too. No scrollbar on Windows
-  when the timeline isn't zoomed in.
-- Timeline: papers to read show their titles under the line (not their
-  link and tags), and more of the dates there are named.
-- Your work is safer:
-  - Edits made in the last seconds are saved when you open another
-    project, close one, close the window or quit.
-  - A file, plan or list that can't be read for a moment (a sync app
-    holding it) is never taken for empty and written over.
-  - Two quick changes to a plan can't undo each other.
-  - Highlights, lists and where you left off are written whole, so a
-    crash can't leave them cut short.
-  - A note half edited in the vault is saved when you quit.
-  - Deleting a task, section or milestone can be undone from the notice
-    that follows.
-  - A copy of a shared project's folder (made outside the app) doesn't
-    sync, so it can't overwrite the original.
-  - A project's settings, comments or vault note that changed elsewhere,
-    or can't be read, aren't written over.
-- Shared projects: switching to another project while a shared one was
-  open could send the new project's files (its Plan.md) to the shared one,
-  replacing them there and on collaborators' computers.
-- The Library is as you left it after visiting another part of the app:
-  the paper open, the project's files, its unfolded projects and search.
-- Where you left off is kept in a file, so it survives quitting right
-  after moving around (it could be lost before).
-- Phosphor and Amber CRT look like old monitors: everything in shades of
-  their one color, the text glowing faintly, a tinted top bar with its own
-  ribbon, the side rail apart from the file list.
-- The ribbon on Retro themes' top bar is bigger.
-- Clicking the project that's already open, on the projects page, goes
-  back to writing in it.
-- Choosing a project type: "Something else…" is now "New type…".
-- Retro themes keep their look with the Gradient background: flat panels
-  in their own colors (Beige no longer turns blue), the colored bands on
-  top.
-- Library: a project's PDFs are read again each time you open it, so a
-  PDF just exported shows, and a re-exported one opens as it is now.
-- The theme button is back, at the bottom of the left menu.
-- The left menu has its own shade, apart from the file list beside it.
-- Highlights on a project's PDF stay on their text when you rebuild it.
-  Ones whose text you rewrote are listed under "From earlier versions"
-  instead of sitting on the wrong words.
-- Export PDF suggests the project's name (or where each compile is saved),
-  not "main.pdf".
-- Highlights in a project's PDF have the same menu as on a Zotero paper:
-  Add to note, and the notes they're already in. The note links back to
-  the highlight; deleting it or changing its comment updates the note.
-- Library: a project opens in place on its PDFs, ready to read. Code,
-  Word and other files stay out of the way (Show all files lists them).
-- Reading: click a paper's circle to pick its status (Reading, On hold,
-  To re-read…). Papers you're reading now have the right-click menu too.
-- Reading: authors and year show in full under the title, and the circle
-  fills with the pages read for every paper, not only the ones being read.
-
-## [Unreleased]
-
-### Added
-
-- Settings → Where things open: whether the app, the Library and the vault
+- Settings → General: whether the app, the Library and the vault
   open where you left off or fresh, or "Start fresh every time". The vault
   beside a project opens on the project's note (or the whole vault if it has
   none); the Library's vault opens on its main page after a restart and
   where you left it while the app is open, each keeping its own place.
-- Settings are grouped (General, Writing, Research, AI, Sync), and linked
-  devices have their own section, Your devices.
+- Settings are grouped (General, Writing, Research, AI, Sync) and named
+  as in other apps: General, Spelling, PDF viewer, Tools, Planner, Zotero
+  notes, Accounts, Usage, Sharing and Devices.
 - Home screen: a Sync button beside the search syncs your devices now.
 
 - Plan.md is protected: it no longer shows among the project's files, and
@@ -384,6 +315,71 @@ tag.
   new Planner, Library and projects feature.
 
 ### Fixed
+
+- Clearer wording across the app, Settings especially: plain names, one
+  short sentence where a setting needs explaining, and descriptions no
+  longer cut off.
+- Home screen: project priority flags show right away, not only after the
+  Planner has been opened once.
+- Sync settings: the "Sync storage" question no longer comes back after
+  updates once answered, and a choice made elsewhere is no longer undone by
+  Settings → Sharing if it was open at the time.
+- Timeline: tasks in a lane per section under the line; tasks too close
+  together become a count you can click to list (red when some are late).
+  The Inbox and your own lists have a timeline too. No scrollbar on Windows
+  when the timeline isn't zoomed in.
+- Timeline: papers to read show their titles under the line (not their
+  link and tags), and more of the dates there are named.
+- Your work is safer:
+  - Edits made in the last seconds are saved when you open another
+    project, close one, close the window or quit.
+  - A file, plan or list that can't be read for a moment (a sync app
+    holding it) is never taken for empty and written over.
+  - Two quick changes to a plan can't undo each other.
+  - Highlights, lists and where you left off are written whole, so a
+    crash can't leave them cut short.
+  - A note half edited in the vault is saved when you quit.
+  - Deleting a task, section or milestone can be undone from the notice
+    that follows.
+  - A copy of a shared project's folder (made outside the app) doesn't
+    sync, so it can't overwrite the original.
+  - A project's settings, comments or vault note that changed elsewhere,
+    or can't be read, aren't written over.
+- Shared projects: switching to another project while a shared one was
+  open could send the new project's files (its Plan.md) to the shared one,
+  replacing them there and on collaborators' computers.
+- The Library is as you left it after visiting another part of the app:
+  the paper open, the project's files, its unfolded projects and search.
+- Where you left off is kept in a file, so it survives quitting right
+  after moving around (it could be lost before).
+- Phosphor and Amber CRT look like old monitors: everything in shades of
+  their one color, the text glowing faintly, a tinted top bar with its own
+  ribbon, the side rail apart from the file list.
+- The ribbon on Retro themes' top bar is bigger.
+- Clicking the project that's already open, on the projects page, goes
+  back to writing in it.
+- Choosing a project type: "Something else…" is now "New type…".
+- Retro themes keep their look with the Gradient background: flat panels
+  in their own colors (Beige no longer turns blue), the colored bands on
+  top.
+- Library: a project's PDFs are read again each time you open it, so a
+  PDF just exported shows, and a re-exported one opens as it is now.
+- The theme button is back, at the bottom of the left menu.
+- The left menu has its own shade, apart from the file list beside it.
+- Highlights on a project's PDF stay on their text when you rebuild it.
+  Ones whose text you rewrote are listed under "From earlier versions"
+  instead of sitting on the wrong words.
+- Export PDF suggests the project's name (or where each compile is saved),
+  not "main.pdf".
+- Highlights in a project's PDF have the same menu as on a Zotero paper:
+  Add to note, and the notes they're already in. The note links back to
+  the highlight; deleting it or changing its comment updates the note.
+- Library: a project opens in place on its PDFs, ready to read. Code,
+  Word and other files stay out of the way (Show all files lists them).
+- Reading: click a paper's circle to pick its status (Reading, On hold,
+  To re-read…). Papers you're reading now have the right-click menu too.
+- Reading: authors and year show in full under the title, and the circle
+  fills with the pages read for every paper, not only the ones being read.
 
 - The menu over selected text lists its actions one a row, in full
   (Comment, Go to source…), instead of two cramped columns.

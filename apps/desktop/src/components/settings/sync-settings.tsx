@@ -162,7 +162,7 @@ export function SyncStorageChoice({
   );
 }
 
-/** Settings → Sync. */
+/** Settings → Sharing. */
 export function SyncSettingsSection() {
   const [settings, setSettings] = useState<SyncSettings | null>(null);
   // Read again on coming back: something else may have changed them.
@@ -208,7 +208,7 @@ export function SyncSettingsSection() {
   );
 }
 
-/** Settings → Sync → Linked devices: your computers with the same projects. */
+/** Settings → Sharing → Linked devices: your computers with the same projects. */
 export function LinkedDevices() {
   const lib = useLibraryStore();
   const [code, setCode] = useState<string | null>(null);

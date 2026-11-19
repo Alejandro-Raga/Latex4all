@@ -85,7 +85,7 @@ const Tag = ({ children }: { children: React.ReactNode }) => (
   </code>
 );
 
-/** Settings → Zotero sync: how to use it, and its settings. */
+/** Settings → Zotero notes: how to use it, and its settings. */
 export function ZoteroSyncSettings() {
   const connected = useZoteroStore((s) => Boolean(s.apiKey));
   const vaultReady = useVaultStore((s) => Boolean(s.source));

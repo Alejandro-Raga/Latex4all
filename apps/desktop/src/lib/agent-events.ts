@@ -648,7 +648,7 @@ export function engineErrorMessage(
     return `${label} can't use that model on your plan. Pick Auto, or another model in the menu.`;
   }
   if (/not logged in|login|auth|unauthori[sz]ed|401/i.test(raw)) {
-    return `${label} isn't signed in. Sign in again in Settings → Provider.`;
+    return `${label} isn't signed in. Sign in again in Settings → Accounts.`;
   }
   if (/usage limit|rate limit|quota|429/i.test(raw)) {
     return `${label}'s usage limit is reached. ${raw}`;

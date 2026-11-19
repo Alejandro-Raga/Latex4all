@@ -63,7 +63,7 @@ function savePlace() {
 
 /** Back where you left off on launch: that part, or your last project. */
 async function restorePlace() {
-  // Settings → Where things open: a fresh start at Home.
+  // Settings → General: a fresh start at Home.
   const { useSettingsStore } = await import("@/stores/settings-store");
   if (useSettingsStore.getState().memory.start === "home") return;
   const { last } = await loadPlace();
