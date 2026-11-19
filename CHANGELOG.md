@@ -316,6 +316,11 @@ tag.
 
 ### Fixed
 
+- Linked devices: projects in a folder your cloud app syncs (Seafile,
+  Dropbox…) are no longer also synced in the background, which made
+  conflicted copies. Settings → Devices lists projects found in more than
+  one folder, so you can keep one.
+
 - Clearer wording across the app, Settings especially: plain names, one
   short sentence where a setting needs explaining, and descriptions no
   longer cut off.

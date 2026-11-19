@@ -96,6 +96,9 @@ interface LibraryState {
   busy: string | null;
   /** Bumped when which projects are in the library changes. */
   revision: number;
+  /** Projects found in more than one folder; the first path is the one
+   * that syncs. */
+  copies: Array<{ name: string; paths: string[] }>;
   /** Copies no longer used (see `leftovers`), to show and remove. */
   leftovers: string[];
   /** How each library project's last background sync went, by folder. */
@@ -510,6 +513,13 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
         info && useProjectStore.getState().sharedProjects[info.projectId];
       if (!root) continue;
       markLibrary(root);
+      // In a folder a cloud app syncs between the devices (the same place
+      // under the home folder on each): that app carries its files, and a
+      // second sync writing them too makes conflicted copies.
+      if (entry.where && local(entry.where, homeMap) === root) {
+        setState(root, "synced");
+        continue;
+      }
       const last = lastBackground.get(root) ?? 0;
       if (Date.now() - last < 10 * 60 * 1000) continue;
       due.push({ root, entry });
@@ -575,6 +585,24 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       if (result.changed.length) await reloadStores(result.changed);
       s.scheduleSave();
     }
+    // One project in several folders (copies made outside the app, link and
+    // all): listed so the person can keep one.
+    const byId = new Map<string, string[]>();
+    for (const p of useProjectStore.getState().recentProjects) {
+      const info = await readLink(p.path).catch(() => null);
+      if (!info) continue;
+      byId.set(info.projectId, [...(byId.get(info.projectId) ?? []), p.path]);
+    }
+    const copies: Array<{ name: string; paths: string[] }> = [];
+    for (const [id, paths] of byId) {
+      if (paths.length < 2) continue;
+      const main = useProjectStore.getState().sharedProjects[id];
+      copies.push({
+        name: projects.get(id)?.name ?? paths[0].split(/[\\/]/).pop() ?? "",
+        paths: [...paths].sort((a) => (a === main ? -1 : 1)),
+      });
+    }
+    set({ copies });
     set({ error: problems.length ? problems.join(" · ") : null });
     refresh();
   }
@@ -688,6 +716,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     revision: 0,
     states: {},
     progress: null,
+    copies: [],
     leftovers: [...leftovers],
     error: null,
 

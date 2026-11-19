@@ -304,6 +304,33 @@ export function LinkedDevices() {
               </Button>
             </div>
           )}
+          {lib.copies.length > 0 && (
+            <div className="space-y-2 rounded-md border px-2.5 py-2 text-xs">
+              <p>
+                These projects are in more than one folder. Only the first
+                syncs. Delete or move the others.
+              </p>
+              {lib.copies.map((c) => (
+                <div key={c.paths[0]} className="space-y-0.5">
+                  <p className="font-medium">{c.name}</p>
+                  {c.paths.map((path, i) => (
+                    <button
+                      key={path}
+                      type="button"
+                      className={cn(
+                        "block max-w-full truncate text-left hover:underline",
+                        i === 0 ? "text-muted-foreground" : "text-primary",
+                      )}
+                      onClick={() => revealInFileManager(path)}
+                      title="Show in folder"
+                    >
+                      {path}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
           {lib.link && lib.leftovers.length > 0 && (
             <div className="space-y-1 rounded-md border px-2.5 py-2 text-xs">
               <p>Old copies, no longer used. You can delete them.</p>
