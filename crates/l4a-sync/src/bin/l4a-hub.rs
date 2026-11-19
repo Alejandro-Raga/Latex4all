@@ -37,10 +37,14 @@ async fn main() -> anyhow::Result<()> {
         public: std::env::var("L4A_HUB_PUBLIC").is_ok_and(|v| v == "1"),
         relay: std::env::var("L4A_RELAY_DATA").ok().map(PathBuf::from),
     };
-    let hub = Hub::start_with(Node::start(key, N0).await?, &dir, options)?;
+    let hub = Hub::start_with(Node::start(key, N0).await?, &dir, options.clone())?;
     println!("Latex4All hub running. {} project(s).", hub.projects().len());
     println!();
-    println!("Hub code (paste it in Latex4All → Settings → Sync → Your own server):");
+    if options.public {
+        println!("Public hub (apps add their projects themselves). Its code:");
+    } else {
+        println!("Hub code (paste it in Latex4All → Settings → Sync → Your own server):");
+    }
     println!();
     println!("  {}", hub.code());
     println!();

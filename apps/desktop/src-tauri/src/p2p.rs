@@ -154,7 +154,8 @@ pub async fn fetch_blob(project: &str, name: &str, wait: std::time::Duration) ->
 }
 
 /// The Latex4All server's public hub (`<id>.public`), beside the relay.
-pub const DEFAULT_HUB: Option<&str> = None;
+pub const DEFAULT_HUB: Option<&str> =
+    Some("4b0dc2a1ca86781a1e24130509c3071bbc023142e7c24f8af811cffd7d599b4b.public");
 
 /// How peer-to-peer sync stands for a project, now and then.
 #[derive(Clone, Debug, serde::Serialize)]
