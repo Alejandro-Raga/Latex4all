@@ -125,24 +125,31 @@ export function uploadBlob(
   projectRoot: string,
   relativePath: string,
 ) {
-  return invoke<{ blobId: string; size: number }>("collab_upload_blob", {
-    link,
-    projectRoot,
-    relativePath,
-  });
+  return invoke<{ blobId: string; size: number; p2p?: string | null }>(
+    "collab_upload_blob",
+    {
+      link,
+      projectRoot,
+      relativePath,
+    },
+  );
 }
 
+/** A file from the relay, or peer to peer by `p2p` (its name there) when
+ * the relay can't give it; returns its peer-to-peer name, if any. */
 export function downloadBlob(
   link: string,
   projectRoot: string,
   relativePath: string,
   blobId: string,
+  p2p?: string,
 ) {
-  return invoke<void>("collab_download_blob", {
+  return invoke<string | null>("collab_download_blob", {
     link,
     projectRoot,
     relativePath,
     blobId,
+    p2p: p2p ?? null,
   });
 }
 

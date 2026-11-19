@@ -1241,7 +1241,7 @@ pub async fn collab_health(link: String) -> Result<Health, String> {
 }
 
 /// Uploads a file; returns its id and size.
-async fn upload_blob(link: &Link, file: &Path) -> Result<(String, u64), String> {
+async fn upload_blob(link: &Link, file: &Path) -> Result<(String, u64, Option<String>), String> {
     let data = tokio::fs::read(file).await.map_err(|e| e.to_string())?;
     if data.len() > MAX_FILE_BYTES {
         return Err("too-large".into());
@@ -1249,6 +1249,8 @@ async fn upload_blob(link: &Link, file: &Path) -> Result<(String, u64), String> 
     let keys = Keys::derive(link);
     let id = keys.blob_id(&data);
     let body = keys.seal_packed(Kind::Blob, &data, may_compress(&keys.project_id))?;
+    // Kept for peer-to-peer too, the same sealed bytes.
+    let p2p = crate::p2p::keep_blob(&keys.project_id, &body);
     let response = reqwest::Client::new()
         .put(link.url(&format!("/blobs/{id}")))
         .bearer_auth(&keys.access_token)
@@ -1257,32 +1259,51 @@ async fn upload_blob(link: &Link, file: &Path) -> Result<(String, u64), String> 
         .await
         .map_err(|e| format!("Couldn't reach the relay: {e}"))?;
     match response.status().as_u16() {
-        200 | 201 => Ok((id, data.len() as u64)),
+        200 | 201 => Ok((id, data.len() as u64, p2p)),
         status => Err(http_error(status)),
     }
 }
 
-async fn download_blob(link: &Link, blob_id: &str, dest: &Path) -> Result<(), String> {
+/// A file from the relay, or (when the relay can't give it) peer to peer by
+/// its name there. Returns its peer-to-peer name, to note in the document.
+async fn download_blob(
+    link: &Link,
+    blob_id: &str,
+    dest: &Path,
+    p2p: Option<&str>,
+) -> Result<Option<String>, String> {
     if !is_hex(blob_id, 64) {
         return Err("Invalid file id".into());
     }
     let keys = Keys::derive(link);
-    let response = reqwest::Client::new()
-        .get(link.url(&format!("/blobs/{blob_id}")))
-        .bearer_auth(&keys.access_token)
-        .send()
-        .await
-        .map_err(|e| format!("Couldn't reach the relay: {e}"))?;
-    let status = response.status().as_u16();
-    if status != 200 {
-        return Err(http_error(status));
-    }
-    let sealed = response.bytes().await.map_err(|e| e.to_string())?;
+    let from_relay = async {
+        let response = reqwest::Client::new()
+            .get(link.url(&format!("/blobs/{blob_id}")))
+            .bearer_auth(&keys.access_token)
+            .send()
+            .await
+            .map_err(|e| format!("Couldn't reach the relay: {e}"))?;
+        let status = response.status().as_u16();
+        if status != 200 {
+            return Err(http_error(status));
+        }
+        response.bytes().await.map(|b| b.to_vec()).map_err(|e| e.to_string())
+    };
+    let sealed = match from_relay.await {
+        Ok(sealed) => sealed,
+        Err(err) => {
+            let name = p2p.filter(|n| is_hex(n, 64)).ok_or(err.clone())?;
+            crate::p2p::fetch_blob(&keys.project_id, name, Duration::from_secs(60))
+                .await
+                .ok_or(err)?
+        }
+    };
     let data = keys.open(Kind::Blob, &sealed)?;
     if keys.blob_id(&data) != blob_id {
         return Err("A downloaded file didn't match what was shared.".into());
     }
-    write_atomic(dest, &data)
+    write_atomic(dest, &data)?;
+    Ok(crate::p2p::keep_blob(&keys.project_id, &sealed))
 }
 
 // ─── Paths ───
@@ -1563,6 +1584,7 @@ pub fn collab_connect(
         let input = crate::p2p::start(
             keys.project_id.clone(),
             keys.p2p_token.clone(),
+            keys.access_token.clone().into_bytes(),
             move |plain| seal_keys.seal(Kind::Update, plain).ok(),
             // Updates, and snapshots the relay kept (its history, moved over).
             move |sealed| {
@@ -1730,6 +1752,8 @@ pub fn collab_compact(
 pub struct UploadedBlob {
     blob_id: String,
     size: u64,
+    /// Its name for peer-to-peer, when that's running.
+    p2p: Option<String>,
 }
 
 #[tauri::command]
@@ -1740,8 +1764,8 @@ pub async fn collab_upload_blob(
 ) -> Result<UploadedBlob, String> {
     let link = Link::parse(&link)?;
     let file = project_file(&project_root, &relative_path)?;
-    let (blob_id, size) = upload_blob(&link, &file).await?;
-    Ok(UploadedBlob { blob_id, size })
+    let (blob_id, size, p2p) = upload_blob(&link, &file).await?;
+    Ok(UploadedBlob { blob_id, size, p2p })
 }
 
 #[tauri::command]
@@ -1750,10 +1774,11 @@ pub async fn collab_download_blob(
     project_root: String,
     relative_path: String,
     blob_id: String,
-) -> Result<(), String> {
+    p2p: Option<String>,
+) -> Result<Option<String>, String> {
     let link = Link::parse(&link)?;
     let file = project_file(&project_root, &relative_path)?;
-    download_blob(&link, &blob_id, &file).await
+    download_blob(&link, &blob_id, &file, p2p.as_deref()).await
 }
 
 /// Creates the folder a joined project goes in, inside a folder the user chose.
@@ -2190,7 +2215,7 @@ mod tests {
         // Files: encrypted up, verified down, stored once.
         let figure: Vec<u8> = (0..300_000).map(|i| (i % 251) as u8).collect();
         std::fs::write(dir_a.join("figure.png"), &figure).unwrap();
-        let (id, size) = upload_blob(&link, &dir_a.join("figure.png")).await.unwrap();
+        let (id, size, _) = upload_blob(&link, &dir_a.join("figure.png")).await.unwrap();
         assert_eq!(size, figure.len() as u64);
         assert_eq!(
             upload_blob(&link, &dir_a.join("figure.png"))
@@ -2199,7 +2224,7 @@ mod tests {
                 .0,
             id
         );
-        download_blob(&link, &id, &dir_b.join("figures/figure.png"))
+        download_blob(&link, &id, &dir_b.join("figures/figure.png"), None)
             .await
             .unwrap();
         assert_eq!(
@@ -2235,7 +2260,7 @@ mod tests {
                 code: "gone".into()
             }
         );
-        assert!(download_blob(&wrong, &id, &dir_b.join("x.png"))
+        assert!(download_blob(&wrong, &id, &dir_b.join("x.png"), None)
             .await
             .is_err());
 

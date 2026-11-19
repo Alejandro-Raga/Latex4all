@@ -859,7 +859,7 @@ export const useCollabStore = create<CollabState>()(
           useSettingsStore.getState().notSynced[root] ?? [];
         target.sync = new ProjectSync(
           session.doc,
-          documentStoreWorkspace(root, info.link),
+          documentStoreWorkspace(root, info.link, session.doc),
           known,
           {
             onLayoutChanged: bumpRevision,

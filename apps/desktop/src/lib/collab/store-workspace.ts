@@ -1,3 +1,4 @@
+import type * as Y from "yjs";
 import {
   createDirectory,
   deleteFileFromDisk,
@@ -26,9 +27,16 @@ export function isCompiledOutput(file: ProjectFile, texStems: Set<string>) {
 }
 
 /** The open project, as the sync sees it: the document store plus the disk. */
+/** Each file's name for peer-to-peer (by its relay id), so it can be had
+ * from the others and the hub when the relay can't give it. */
+export function p2pBlobs(doc: Y.Doc) {
+  return doc.getMap<string>("p2pBlobs");
+}
+
 export function documentStoreWorkspace(
   projectRoot: string,
   link: string,
+  doc?: Y.Doc,
 ): Workspace {
   const cache = new WeakMap<ProjectFile, LocalFile>();
   let lastSeen: LocalFile[] = [];
@@ -106,12 +114,18 @@ export function documentStoreWorkspace(
       await writeTexFileContent(await absolute(path), content);
     },
 
-    upload(path) {
-      return uploadBlob(link, projectRoot, path);
+    async upload(path) {
+      const { blobId, size, p2p } = await uploadBlob(link, projectRoot, path);
+      if (doc && p2p && p2pBlobs(doc).get(blobId) !== p2p) {
+        p2pBlobs(doc).set(blobId, p2p);
+      }
+      return { blobId, size };
     },
 
     async download(path, blobId) {
-      await downloadBlob(link, projectRoot, path, blobId);
+      const known = doc ? p2pBlobs(doc).get(blobId) : undefined;
+      const p2p = await downloadBlob(link, projectRoot, path, blobId, known);
+      if (doc && p2p && !known) p2pBlobs(doc).set(blobId, p2p);
     },
 
     async move(from, to) {

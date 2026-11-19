@@ -125,6 +125,37 @@ async fn node() -> anyhow::Result<Arc<Node>> {
     .cloned()
 }
 
+/// Keeps a project's file (its sealed bytes, as the relay has them) for
+/// peer-to-peer too; its name there, if peer-to-peer is running.
+pub fn keep_blob(project: &str, sealed: &[u8]) -> Option<String> {
+    NODE.get()?.project(project)?.put_blob(sealed).ok()
+}
+
+/// A project's file by its peer-to-peer name: from here, or asked of the
+/// members (and the hub) for up to `wait`.
+pub async fn fetch_blob(project: &str, name: &str, wait: std::time::Duration) -> Option<Vec<u8>> {
+    let log = NODE.get()?.project(project)?;
+    if let Some(b) = log.blob(name) {
+        return Some(b);
+    }
+    let mut changes = log.subscribe();
+    log.want_blob(name);
+    let deadline = tokio::time::Instant::now() + wait;
+    loop {
+        if let Some(b) = log.blob(name) {
+            return Some(b);
+        }
+        match tokio::time::timeout_at(deadline, changes.recv()).await {
+            Ok(Ok((Change::Blob(n), _))) if n == name => return log.blob(name),
+            Ok(Ok(_)) | Ok(Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => {}
+            _ => return log.blob(name),
+        }
+    }
+}
+
+/// The Latex4All server's public hub (`<id>.public`), beside the relay.
+pub const DEFAULT_HUB: Option<&str> = None;
+
 /// How peer-to-peer sync stands for a project, now and then.
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct Status {
@@ -197,6 +228,8 @@ pub enum Input {
 pub fn start(
     project: String,
     token: Vec<u8>,
+    // The project's relay access token: proves membership to the public hub.
+    access: Vec<u8>,
     seal: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + 'static,
     open: impl Fn(&[u8]) -> Option<Vec<u8>> + Send + 'static,
     deliver: impl Fn(Vec<u8>) + Send + 'static,
@@ -276,6 +309,25 @@ pub fn start(
                 }
             }
             _ => {}
+        }
+        // The Latex4All server's hub, for every project whatever else is
+        // chosen: while anyone in a group uses the server, everyone syncs
+        // with it too, so a group split between a folder and the server
+        // never drifts apart. Added once; reached as a member after.
+        if let Some(code) = DEFAULT_HUB {
+            let mark = format!("pub:{project}");
+            if !settings().hubbed.contains(&mark) {
+                match node.add_to_public_hub(code, &project, &token, &access, None).await {
+                    Ok(()) => {
+                        let mut s = settings();
+                        s.hubbed.push(mark);
+                        let _ = save_settings(&s);
+                    }
+                    Err(e) => eprintln!("[sync] Latex4All server hub: {e:#}"),
+                }
+            } else if let Some(hub) = code.split('.').next().and_then(|h| h.parse::<iroh::EndpointId>().ok()) {
+                let _ = node.join(&project, hub).await;
+            }
         }
         let mut changes = log.subscribe();
         let mut every = tokio::time::interval(std::time::Duration::from_secs(10));
