@@ -1,3 +1,4 @@
+import { create } from "zustand";
 /**
  * A project's timeline, from today (or its first date) to its deadline:
  *
@@ -270,6 +271,67 @@ function useZoom() {
   };
 }
 
+/** How much of the plan's dated tasks the timeline shows, kept between
+ * sessions: one line per section (the rest counted), all, or none. */
+type TaskMode = "compact" | "full" | "off";
+const TASK_MODE_KEY = "latex4all-timeline-tasks";
+const useTaskMode = create<{ mode: TaskMode; set: (m: TaskMode) => void }>(
+  (set) => ({
+    mode: (() => {
+      try {
+        const m = localStorage.getItem(TASK_MODE_KEY);
+        return m === "full" || m === "off" ? m : "compact";
+      } catch {
+        return "compact";
+      }
+    })(),
+    set: (mode) => {
+      try {
+        localStorage.setItem(TASK_MODE_KEY, mode);
+      } catch {
+        // This session only.
+      }
+      set({ mode });
+    },
+  }),
+);
+
+/** Tasks: Compact | Full | Off, beside the zoom. */
+function TaskModeButtons() {
+  const mode = useTaskMode((s) => s.mode);
+  const setMode = useTaskMode((s) => s.set);
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Tasks on the timeline"
+      className="mr-2 flex items-center gap-0.5 text-[11px] text-muted-foreground"
+    >
+      <span className="mr-1">Tasks</span>
+      {(
+        [
+          ["compact", "Compact"],
+          ["full", "Full"],
+          ["off", "Off"],
+        ] as const
+      ).map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          role="radio"
+          aria-checked={mode === id}
+          onClick={() => setMode(id)}
+          className={cn(
+            "h-6 rounded-md px-1.5 hover:bg-muted hover:text-foreground",
+            mode === id && "bg-muted font-medium text-foreground",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ZoomButtons({
   z,
   todayAt,
@@ -464,15 +526,19 @@ function Track({
   const labelsH = usedRows * 15;
 
   // Tasks: a lane per section under the line.
-  const taskLanes = compact
-    ? []
-    : lanesOf(plan, plainTitle).filter(
-        (l) =>
-          (l.due && l.due >= span.start && l.due <= span.end) ||
-          l.tasks.some((t) => t.date >= span.start && t.date <= span.end),
-      );
+  const taskMode = useTaskMode((st) => st.mode);
+  const taskLanes =
+    compact || taskMode === "off"
+      ? []
+      : lanesOf(plan, plainTitle).filter(
+          (l) =>
+            (l.due && l.due >= span.start && l.due <= span.end) ||
+            l.tasks.some((t) => t.date >= span.start && t.date <= span.end),
+        );
   const marksY = labelsY + labelsH + (taskLanes.length ? 10 : 0);
-  const laneLayouts = taskLanes.map((l) => layoutOf(l, span, xOf, width));
+  const laneLayouts = taskLanes.map((l) =>
+    layoutOf(l, span, xOf, width, taskMode === "full" ? 3 : 0),
+  );
   const marksH = laneLayouts.reduce((sum, l) => sum + l.height, 0);
   const height = compact ? lineY + 10 : marksY + marksH + 8;
 
@@ -686,6 +752,8 @@ function layoutOf(
   span: Span,
   xOf: (iso: string) => number,
   width: number,
+  /** Rows below the name's line; 0: the name's line only (compact). */
+  extraRows = 3,
 ) {
   const items: LaneItem[] = lane.tasks
     .filter((t) => t.date >= span.start && t.date <= span.end)
@@ -699,7 +767,14 @@ function layoutOf(
   // tasks go after it there when there's room.
   const header = lane.due ? `${lane.name} · due ${short(lane.due)}` : lane.name;
   const nameW = Math.min(header.length * 6.4 + 14, 260);
-  const { placed, rows } = layoutLane(items, width, 3, 5.8, nameW);
+  const { placed, rows } = layoutLane(
+    items,
+    width,
+    Math.max(1, extraRows),
+    5.8,
+    nameW,
+    extraRows === 0,
+  );
   return {
     placed,
     nameW,
@@ -796,6 +871,8 @@ function TaskLane({
             key={`${p.kind}-${t.date}-${t.title}`}
             className={cn(
               "absolute flex -translate-y-1/2 items-center gap-1.5",
+              // Named ones above the bare dots of tasks beside them.
+              p.labelW > 0 && "z-[1]",
               p.left && "flex-row-reverse",
             )}
             style={
@@ -812,15 +889,17 @@ function TaskLane({
                 !due && (t.overdue ? "bg-destructive" : "bg-muted-foreground"),
               )}
             />
-            <span
-              className={cn(
-                "truncate text-[10px]",
-                due ? "font-medium text-foreground/70" : color,
-              )}
-              style={{ maxWidth: p.labelW }}
-            >
-              {due ? p.items[0].label : t.title}
-            </span>
+            {p.labelW > 0 && (
+              <span
+                className={cn(
+                  "relative z-[1] truncate bg-background pr-0.5 text-[10px]",
+                  due ? "font-medium text-foreground/70" : color,
+                )}
+                style={{ maxWidth: p.labelW }}
+              >
+                {due ? p.items[0].label : t.title}
+              </span>
+            )}
           </div>
         );
       })}
@@ -1265,6 +1344,7 @@ export function TimelineView({ list }: { list: PlanList }) {
       ) : (
         <>
           <div className="mt-4 flex items-center justify-end">
+            <TaskModeButtons />
             <ZoomButtons z={z} todayAt={todayAt(span)} />
           </div>
           <Zoomable z={z} span={span}>

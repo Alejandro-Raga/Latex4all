@@ -98,6 +98,9 @@ export function layoutLane<T extends { x: number; label: string }>(
   charW = 5.8,
   /** Room already taken at the start of the first row (the lane's name). */
   taken = 0,
+  /** Everything on the first row: what doesn't fit there is counted on it
+   * too, rather than in a row of its own. */
+  oneRow = false,
 ): { placed: Placed<T>[]; rows: number } {
   const DOT = 10;
   const GAP = 10;
@@ -136,6 +139,20 @@ export function layoutLane<T extends { x: number; label: string }>(
     if (!done) left.push(item);
   }
   let used = ends.length;
+  if (left.length && oneRow) {
+    // At their own dates, as dots without names (named on hover).
+    for (const item of left) {
+      placed.push({
+        kind: item.kind ?? "task",
+        x: item.x,
+        row: 0,
+        labelW: 0,
+        left: false,
+        items: [item],
+      });
+    }
+    return { placed, rows: 1 };
+  }
   if (left.length) {
     for (const g of gather(left, 28)) {
       placed.push({

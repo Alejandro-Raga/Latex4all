@@ -1259,10 +1259,25 @@ test("the timeline's task lanes: names never overlap, crowded ones counted", asy
   await main.getByLabel("Add a milestone").fill("JMP first draft in 160 days");
   await main.getByLabel("Add a milestone").press("Enter");
   await expect(main.getByTitle(/^Writing · due /)).toBeVisible();
-  await expect(main.getByText("Finish the dataset")).toBeVisible();
+  // Compact: one line a section; what has no room for its name is a dot
+  // at its date, named on hover.
+  await expect(main.getByTitle(/^Finish the dataset · /)).toBeAttached();
+  await expect(main.getByText(/^\+\d+ more$/)).toHaveCount(0);
   await expect(main.getByText(/· due /).first()).toBeVisible();
   if (process.env.SHOTS)
-    await page.screenshot({ path: `${process.env.SHOTS}/lanes-new.png` });
+    await page.screenshot({ path: `${process.env.SHOTS}/lanes-compact.png` });
+  // Full: every task named, in rows.
+  await main.getByRole("radio", { name: "Full" }).click();
+  await expect(
+    main.getByText("Chapter 1: Descriptive Analysis", { exact: true }),
+  ).toBeVisible();
+  await expect(main.getByText("Finish the dataset")).toBeVisible();
+  if (process.env.SHOTS)
+    await page.screenshot({ path: `${process.env.SHOTS}/lanes-full.png` });
+  // Off: only the line.
+  await main.getByRole("radio", { name: "Off" }).click();
+  await expect(main.getByText("Finish the dataset")).toHaveCount(0);
+  await main.getByRole("radio", { name: "Compact" }).click();
 });
 
 test("a project's Plan.md thrown away outside the app is put back quietly", async ({
