@@ -82,6 +82,10 @@ tag.
 
 ### Added
 
+- Settings → Sync (beta): shared projects can also sync directly between
+  computers. Choose where changes wait while your collaborators are
+  offline: the Latex4All server, a cloud folder you already use, this
+  computer, or your own server. Asked the first time you share a project.
 - Timeline: the scale changes as you zoom, from years and months to weeks
   and single days (weekends shaded, today marked), with the larger unit
   above. Zooming keeps your place; Today scrolls to today.
