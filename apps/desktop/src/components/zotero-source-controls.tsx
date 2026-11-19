@@ -44,13 +44,12 @@ const MODES: { value: ZoteroAppMode; label: string; detail: string }[] = [
     value: "fallback",
     label: "As fallback",
     detail:
-      "zotero.org first; the Zotero app or its files when zotero.org can't be reached.",
+      "Use zotero.org, and the Zotero app when zotero.org can't be reached.",
   },
   {
     value: "always",
     label: "Always",
-    detail:
-      "The Zotero app whenever it's open, and its files on this computer; zotero.org otherwise.",
+    detail: "Use the Zotero app when it's open, otherwise zotero.org.",
   },
 ];
 
@@ -178,7 +177,7 @@ export function ZoteroSourceControls() {
             }}
           />
           <span className="font-medium text-foreground text-sm">
-            Zotero's database as a last resort
+            Use Zotero's database as a fallback
           </span>
         </label>
         <p className="text-muted-foreground">
@@ -186,11 +185,10 @@ export function ZoteroSourceControls() {
         </p>
         {database && (
           <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-2 text-amber-700 dark:text-amber-400">
-            Latex4All then reads a copy of Zotero's database on this computer.
-            You can browse, search and open papers with their highlights, but
-            nothing is saved to Zotero and .bib files aren't updated until
-            Zotero or zotero.org is back. BibTeX is as of the last library
-            update.
+            Latex4All reads a copy of Zotero's database on this computer. You
+            can browse, search and open papers with their highlights. Nothing is
+            saved to Zotero, and .bib files aren't updated until Zotero or
+            zotero.org is available again. BibTeX reflects the last library update.
           </p>
         )}
       </div>

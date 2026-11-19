@@ -171,7 +171,7 @@ export function ProjectHome({
             size="sm"
             className="h-6 shrink-0 gap-1 px-2 text-xs"
             onClick={updateProjectNote}
-            title="The papers it cites, its outline and its highlights, in a note in your vault"
+            title="Create a vault note with the project's citations, outline and highlights"
           >
             {projectNote ? (
               <RefreshCwIcon className="size-3" />
@@ -183,7 +183,7 @@ export function ProjectHome({
         </div>
         {projectNote && !linked && (
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Not kept up to date. Update to keep it current as you write.
+            Not updated automatically. Update it to match the project.
           </p>
         )}
       </div>
@@ -272,7 +272,7 @@ export function ProjectHome({
 
       <FoldSection
         id="project:ideas"
-        label="Ideas & topics in play"
+        label="Ideas and topics"
         count={inPlay.length}
         defaultOpen
       >
@@ -301,13 +301,13 @@ export function ProjectHome({
       >
         {worthCiting.length === 0 ? (
           <p className="px-3 py-2 text-muted-foreground text-xs">
-            Papers in the same ideas and topics as the ones you cite show up
-            here, once they have notes in your vault.
+            Papers that share ideas or topics with your citations appear here
+            once they have vault notes.
           </p>
         ) : (
           <>
             <p className="px-3 pb-1 text-[11px] text-muted-foreground">
-              In the same ideas and topics as what you cite, not cited yet.
+              Not cited yet, but in the same ideas and topics as your citations.
             </p>
             {worthCiting.map(({ note, count }) => (
               <NoteRow

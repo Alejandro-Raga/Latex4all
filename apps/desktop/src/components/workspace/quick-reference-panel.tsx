@@ -2502,7 +2502,7 @@ function FilePreview({
             size="sm"
             className="mr-1 h-6 shrink-0 gap-1 px-2 text-xs"
             onClick={() => useReadingStore.getState().open(paper)}
-            title="Opens it in a tab of the big PDF pane, beside your editor"
+            title="Open in a tab of the PDF pane"
           >
             <Maximize2Icon className="size-3" />
             Read in PDF pane

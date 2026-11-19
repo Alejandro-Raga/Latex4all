@@ -97,8 +97,8 @@ export function AddAiContent({
       <div className="mt-2 border-border border-t">
         <div className={heading}>Or use an API key</div>
         <p className="px-5 pb-2 text-muted-foreground text-xs">
-          Paid by use. Free options: a Gemini key from Google AI Studio, or
-          Ollama running models on your computer.
+          Pay per use. Free options include a Gemini key from Google AI Studio,
+          or Ollama on this computer.
         </p>
         <div className="px-5">
           <ClaudeSetup

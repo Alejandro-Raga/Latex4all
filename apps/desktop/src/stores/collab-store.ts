@@ -276,7 +276,7 @@ export function followOpenProject() {
       const owner = await shareOwner(info.projectId, root);
       if (owner) {
         reportError(
-          `This project has the same share link as “${owner.split(/[\\/]/).pop()}”, probably because one is a copy. It won't sync, so neither is overwritten. Stop sharing it here to use it on its own.`,
+          `This project has the same share link as “${owner.split(/[\\/]/).pop()}”, probably because one is a copy. It won't sync, so neither is overwritten. Stop sharing it here to use it separately.`,
         );
         return;
       }
@@ -1013,8 +1013,8 @@ export const useCollabStore = create<CollabState>()(
               showConflicts(
                 found,
                 files === 1
-                  ? `Your copy of ${found[0].path} differs from the shared one: the differences are notes in it.`
-                  : `Your copies of ${files} files differ from the shared ones: the differences are notes in them.`,
+                  ? `Your copy of ${found[0].path} differs from the shared one. The differences are marked as notes in it.`
+                  : `Your copies of ${files} files differ from the shared ones. The differences are marked as notes in them.`,
               );
             },
             onSynced: (path) => {

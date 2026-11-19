@@ -893,7 +893,7 @@ export function ClaudeSetup({
                   ) : (
                     <RefreshCwIcon className="size-3" />
                   )}
-                  Fetch Models
+                  Fetch models
                 </Button>
               </div>
               {modelOptions.length > 0 ? (
@@ -1065,8 +1065,7 @@ export function ClaudeSetup({
           <div>
             <p className="font-medium text-sm">Install Claude Code first</p>
             <p className="text-muted-foreground text-xs">
-              AI providers can be configured after the Claude Code CLI is
-              installed.
+              Install Claude Code to add AI providers.
             </p>
           </div>
         </div>
@@ -1164,7 +1163,7 @@ export function ClaudeSetup({
               ) : (
                 <Trash2Icon className="size-3.5" />
               )}
-              Forget Provider
+              Remove provider
             </Button>
           </div>
         </div>
@@ -1249,13 +1248,13 @@ export function ClaudeSetup({
 
         <div className={heading}>API keys</div>
         <p className="px-4 pb-1.5 text-muted-foreground text-xs">
-          Paid by use, billed by each provider.
+          Pay per use, billed by each provider.
         </p>
         <div className="space-y-0.5 px-2">
           {openAiCredentials.length === 0 && (
             <p className="px-2.5 py-2 text-muted-foreground text-xs">
-              None yet. Free to start: a Gemini key from Google AI Studio, or
-              Ollama on your own computer.
+              No keys yet. A Gemini key from Google AI Studio, or Ollama on this
+              computer, is free to start.
             </p>
           )}
           {openAiCredentials.map((credential) => {
@@ -1375,7 +1374,7 @@ export function ClaudeSetup({
         </div>
 
         <p className="text-center text-[11px] text-muted-foreground">
-          Complete the sign-in in your browser to continue.
+          Finish signing in in your browser.
         </p>
       </div>
     );
@@ -1445,8 +1444,7 @@ export function ClaudeSetup({
           <div>
             <p className="font-medium text-sm">Install Git first</p>
             <p className="text-muted-foreground text-xs">
-              Git for Windows is required before Claude Code can be installed
-              and providers can be configured.
+              Claude Code needs Git for Windows.
             </p>
           </div>
         </div>
@@ -1482,7 +1480,7 @@ export function ClaudeSetup({
           <div>
             <p className="font-medium text-sm">Install Claude Code first</p>
             <p className="text-muted-foreground text-xs">
-              Provider keys can be added after the Claude Code CLI is installed.
+              Install Claude Code to add provider keys.
             </p>
           </div>
         </div>

@@ -82,15 +82,11 @@ export function SyncStorageChoice({
   return (
     <div className="space-y-3">
       <p className="text-muted-foreground text-sm leading-relaxed">
-        Latex4All uses a peer-to-peer service to sync, but to guarantee
-        asynchronous functionality it needs a secure, always-on storage service.
-        By default, this service is offered free of charge, with storage limits
-        per project, but you can choose a cloud folder on any service you
-        already use. Share that folder with your collaborators so their copies
-        can sync through it too. Alternatively, you can set up Latex4All as its
-        own server on your personal computer, as long as it's always on, or
-        install this service on your own dedicated server. Everything is
-        encrypted before it leaves your computer.
+        Shared projects sync directly between computers. When collaborators
+        aren't online at the same time, changes wait in storage. The Latex4All
+        server is free, with a size limit per project. You can use a cloud
+        folder you already have instead, a computer of yours that stays on, or
+        your own server. Everything is encrypted before it leaves this computer.
       </p>
       <div className="space-y-2">
         {option(
@@ -119,8 +115,8 @@ export function SyncStorageChoice({
               Other folder…
             </Button>
             <p className="w-full pt-1 text-muted-foreground text-xs">
-              Each shared project gets its own folder inside. Share it with your
-              collaborators from your cloud service.
+              Each shared project gets a folder here. Share it with
+              collaborators in your cloud service.
             </p>
           </div>,
         )}
@@ -198,7 +194,7 @@ export function SyncSettingsSection() {
     <div>
       <SettingRow
         label="Peer-to-peer sync (beta)"
-        detail="Shared projects also sync directly between computers. Takes effect when a project is opened."
+        detail="Sync shared projects directly between computers. Applies when a project is opened."
       >
         <Toggle
           label="Peer-to-peer sync"
@@ -242,8 +238,8 @@ export function LinkedDevices() {
       <div>
         <h3 className="font-medium text-sm">Link another device</h3>
         <p className="mt-1 text-muted-foreground text-xs">
-          Your computers get the same projects, Planner lists and highlights,
-          and keep them in sync.
+          Keep the same projects, Planner lists, highlights and settings on all
+          your computers.
         </p>
       </div>
       {!main ? (
@@ -283,7 +279,7 @@ export function LinkedDevices() {
                 {code}
               </span>
               <span className="text-muted-foreground text-xs">
-                Type it on the other device. Works for 24 hours
+                Enter it on the other device within 24 hours.
               </span>
             </div>
           ) : (
@@ -296,7 +292,7 @@ export function LinkedDevices() {
               <Input
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="Or type the code from your other device"
+                placeholder="Code from another device"
                 className="h-8 font-mono text-xs"
               />
               <Button
@@ -312,9 +308,9 @@ export function LinkedDevices() {
           {lib.link && lib.leftovers.length > 0 && (
             <div className="space-y-1 rounded-md border px-2.5 py-2 text-xs">
               <p>
-                These copies were fetched before Latex4All found the project's
-                own folder (your cloud app syncs it). They're no longer used;
-                delete them when you like.
+                These copies were made before Latex4All found each project's
+                folder in your cloud service. They're no longer used and can be
+                deleted.
               </p>
               {lib.leftovers.map((path) => (
                 <button
@@ -350,8 +346,8 @@ export function LinkedDevices() {
                 ))}
               </div>
               <p className="mt-1.5 text-muted-foreground">
-                Unticked: not added to your other devices. Copies already on
-                them stay.
+                Unchecked projects aren't added to other devices. Copies already
+                there stay.
               </p>
             </details>
           )}
@@ -377,7 +373,7 @@ export function LinkedDevices() {
                 size="sm"
                 variant="ghost"
                 disabled={working}
-                title="If a device is lost: link your other devices again with the new code. The lost one gets no new projects or app data, though it keeps the projects it has."
+                title="Use this if a device is lost. Link your other devices again with the new code. The lost device keeps what it has but gets nothing new."
                 onClick={() => {
                   setCode(null);
                   run(lib.startOver);

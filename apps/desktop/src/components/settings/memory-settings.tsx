@@ -64,7 +64,7 @@ export function MemorySettings() {
     <div className="divide-y divide-border/60">
       <SettingRow
         label="Start fresh every time"
-        detail="Open on Home, with the Library and vault at their start, after every restart."
+        detail="After a restart, open Home, and the Library and vault at their start pages."
       >
         <Toggle
           label="Start fresh every time"
@@ -72,7 +72,7 @@ export function MemorySettings() {
           onChange={(on) => setMemory(on ? FRESH : DEFAULT_MEMORY)}
         />
       </SettingRow>
-      <SettingRow label="On launch" detail="Where the app opens.">
+      <SettingRow label="On launch" detail="What the app shows when it starts.">
         <Choice
           label="On launch"
           value={memory.start}
@@ -85,21 +85,21 @@ export function MemorySettings() {
       </SettingRow>
       <SettingRow
         label="Library"
-        detail="After a restart: the paper and project you had open, or the start."
+        detail="What the Library shows after a restart."
       >
         <Choice
           label="Library after a restart"
           value={memory.library}
           options={[
             { value: "last", label: "Last paper" },
-            { value: "home", label: "Start" },
+            { value: "home", label: "Start page" },
           ]}
           onChange={(library) => setMemory({ library })}
         />
       </SettingRow>
       <SettingRow
         label="Vault in the Library"
-        detail="After a restart. While the app is open it stays where you left it."
+        detail="What the vault shows after a restart. While the app is open, it stays on the last note."
       >
         <Choice
           label="Vault in the Library after a restart"
@@ -113,7 +113,7 @@ export function MemorySettings() {
       </SettingRow>
       <SettingRow
         label="Vault in a project"
-        detail="On opening a project. Its note, or the whole vault if it has none."
+        detail="What the vault shows when you open a project. Without a project note, it shows the whole vault."
       >
         <Choice
           label="Vault in a project"

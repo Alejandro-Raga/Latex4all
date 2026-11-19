@@ -209,12 +209,12 @@ export function BibCleanupPanel({
               {k.identical ? (
                 <span className="text-muted-foreground">
                   {" "}
-                  — the same each time; one copy stays.
+                  — identical copies; one is kept.
                 </span>
               ) : (
                 <span className="text-amber-700 dark:text-amber-400">
                   {" "}
-                  — the copies differ; pick the one to keep:
+                  — the copies differ. Choose one to keep.
                 </span>
               )}
             </div>

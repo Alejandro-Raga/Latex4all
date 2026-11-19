@@ -106,7 +106,7 @@ export function CompareDialog() {
         />
         {options.length === 0 ? (
           <p className="text-muted-foreground text-xs">
-            Add another AI first (the model menu → Add an AI).
+            Add another AI first, from the model menu.
           </p>
         ) : (
           <Select value={other} onValueChange={setOther}>

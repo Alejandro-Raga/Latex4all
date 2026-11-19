@@ -1786,7 +1786,7 @@ export const ChatComposer: FC<{ isOpen?: boolean }> = ({ isOpen }) => {
           <DialogHeader>
             <DialogTitle>Add an AI</DialogTitle>
             <DialogDescription>
-              With an account you already have, or an API key.
+              Sign in with an account or add an API key.
             </DialogDescription>
           </DialogHeader>
           <AddAiContent

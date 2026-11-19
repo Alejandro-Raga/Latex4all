@@ -395,7 +395,7 @@ export function EditorToolbar({
             size="sm"
             className="h-6 gap-1 px-2 font-mono text-xs"
             onClick={() => setVimMode(false)}
-            title="Vim keys are on: click to turn them off"
+            title="Vim keys are on. Click to turn them off."
           >
             Vim on ×
           </Button>
@@ -468,8 +468,8 @@ export function EditorToolbar({
             <div className="max-h-64 overflow-y-auto p-1.5">
               {ignoredWords.length === 0 ? (
                 <p className="px-1.5 py-2 text-muted-foreground text-xs">
-                  No ignored words yet — right-click a misspelled word and
-                  choose "Ignore".
+                  No ignored words yet. Right-click a misspelled word and choose
+                  Ignore.
                 </p>
               ) : (
                 ignoredWords.map((word) => (

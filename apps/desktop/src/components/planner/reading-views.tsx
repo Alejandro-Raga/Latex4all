@@ -269,7 +269,7 @@ export function open(item: ReadingItem) {
     void shellOpen(item.url).catch(() =>
       toast.error("Couldn't open the link."),
     );
-  else toast.info("Add it to Zotero to read it here, or give it a link.");
+  else toast.info("To read it here, add it to Zotero or give it a link.");
 }
 
 /** Puts a paper typed in by hand into Zotero, and links the entry to it. */
@@ -935,8 +935,8 @@ export function ReadingView({
             plans={{ list, plan }}
           />
           <p className="px-2 pt-4 text-muted-foreground text-xs">
-            Drag papers to set the order you'll read them in. Click the circle
-            to mark one as reading or read; right-click to open it.
+            Drag papers to set your reading order. Click the circle to mark a
+            paper as reading or read. Right-click to open it.
           </p>
         </>
       )}

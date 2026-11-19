@@ -181,8 +181,8 @@ export function BugReportDialog() {
         <DialogHeader>
           <DialogTitle>Report a bug</DialogTitle>
           <DialogDescription>
-            What happened, and what you expected. Screenshots help: paste or
-            drop them here.
+            Describe what happened and what you expected. Paste or drop
+            screenshots here.
           </DialogDescription>
         </DialogHeader>
 

@@ -170,8 +170,8 @@ function ChannelPicker({ onPick }: { onPick: (c: UpdateChannel) => void }) {
         <DialogHeader>
           <DialogTitle>Choose an update channel</DialogTitle>
           <DialogDescription>
-            Latex4All can update itself so you never have to reinstall by hand.
-            You can change this later in Settings → Updates.
+            Latex4All can update itself, so you don't need to reinstall it. You
+            can change this in Settings → Updates.
           </DialogDescription>
         </DialogHeader>
 

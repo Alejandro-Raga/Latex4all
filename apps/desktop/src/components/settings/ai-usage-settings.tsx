@@ -221,7 +221,7 @@ function Fallback() {
   return (
     <div className="border-border border-t px-5 py-3">
       <div className="flex items-center justify-between gap-2 pb-2">
-        <span className="text-sm">When an AI runs out, continue with</span>
+        <span className="text-sm">When a model reaches its limit</span>
         <Select
           value={auto ? "auto" : "ask"}
           onValueChange={(v) => setAuto(v === "auto")}
@@ -470,7 +470,7 @@ function MeasuredShares({ entries }: { entries: AiUsageEntry[] }) {
   return (
     <div className="px-5 pt-3">
       <div className="pb-1 text-muted-foreground text-xs">
-        Measured per reply (share of the plan window it used)
+        Share of the plan's usage window per reply
       </div>
       {[...byWindow].map(([key, deltas]) => {
         const sorted = [...deltas].sort((a, b) => a - b);
@@ -572,12 +572,12 @@ export function AiUsageSettings() {
           {summary.planRequests === summary.requests
             ? "All within your plans, so nothing is billed per request."
             : `${summary.planRequests} of ${summary.requests} were covered by your plans.`}{" "}
-          Billed: API keys and Claude's extra usage.
+          Billed covers API keys and Claude's extra usage.
         </p>
       )}
       {sent > 0 && (
         <p className="px-5 pt-2 text-muted-foreground text-xs">
-          {Math.round((summary.cacheRead / sent) * 100)}% of what was read came
+          {Math.round((summary.cacheRead / sent) * 100)}% of tokens read came
           from the cache.
         </p>
       )}
@@ -640,7 +640,7 @@ export function AiUsageSettings() {
           </Select>
         </Row>
         <Fallback />
-        <Row label="Warn me past, per day">
+        <Row label="Daily spending warning">
           <span className="text-muted-foreground text-sm">$</span>
           <NumberField
             value={budget}
@@ -650,7 +650,7 @@ export function AiUsageSettings() {
           />
         </Row>
         <Services />
-        <Row label="Project memory (shared by every assistant)">
+        <Row label="Project memory">
           <Button
             variant="outline"
             size="sm"

@@ -218,14 +218,14 @@ const QUICK_ACTIONS = [
   {
     id: "translate",
     label: "Translate",
-    title: "To English (or to Spanish if it's English)",
+    title: "Translate to English, or to Spanish if the text is English",
     prompt:
       "Translate the selected text into English, or into Spanish if it is already English. Keep the LaTeX commands. Edit it in place and change nothing else.",
   },
   {
     id: "explain",
     label: "Explain",
-    title: "In plain words, without editing",
+    title: "Explain in plain words, without editing",
     prompt:
       "Explain the selected text in plain words. Do not change any files.",
     answerOnly: true,
@@ -234,7 +234,7 @@ const QUICK_ACTIONS = [
     id: "argue",
     label: "Check argument",
     title:
-      "Finds gaps, unsupported claims and missing citations, without editing",
+      "Find gaps, unsupported claims and missing citations, without editing",
     prompt:
       "Check the argument in the selected text: point out gaps, unsupported claims and places that need a citation. Do not change any files.",
     answerOnly: true,

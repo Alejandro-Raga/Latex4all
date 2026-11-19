@@ -21,6 +21,10 @@ tag.
 
 ### Fixed
 
+- Clearer wording across the app, Settings especially: plain names, one
+  short sentence where a setting needs explaining, and descriptions no
+  longer cut off.
+
 - Home screen: project priority flags show right away, not only after the
   Planner has been opened once.
 

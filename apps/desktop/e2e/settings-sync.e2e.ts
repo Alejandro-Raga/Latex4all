@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("Settings → Sync: the choice of storage is kept", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 820 });
   await page.goto("/e2e/harness.html?scenario=settings&section=sync");
-  await expect(page.getByText(/peer-to-peer service to sync/)).toBeVisible();
+  await expect(page.getByText(/changes wait in storage/)).toBeVisible();
   await page.getByRole("switch", { name: "Peer-to-peer sync" }).click();
   await page.getByRole("radio", { name: /Cloud folder/ }).check();
   await page.getByRole("button", { name: "Dropbox" }).click();
@@ -37,7 +37,7 @@ test("Settings → Sync: a change made elsewhere isn't undone by the open sectio
   page,
 }) => {
   await page.goto("/e2e/harness.html?scenario=settings&section=sync");
-  await expect(page.getByText(/peer-to-peer service to sync/)).toBeVisible();
+  await expect(page.getByText(/changes wait in storage/)).toBeVisible();
   // Chosen at a first share while the section was open.
   await page.evaluate(() =>
     sessionStorage.setItem(

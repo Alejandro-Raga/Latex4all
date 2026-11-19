@@ -144,8 +144,8 @@ export function SyncFilesDialog({
         <DialogHeader>
           <DialogTitle>Files to sync</DialogTitle>
           <DialogDescription>
-            Unticked files aren't sent or received on this computer, so you can
-            keep them in step with Dropbox or similar. Collaborators keep their
+            Unchecked files aren't sent or received on this computer, so you can
+            sync them another way, such as Dropbox. Collaborators keep their
             copies.
           </DialogDescription>
         </DialogHeader>

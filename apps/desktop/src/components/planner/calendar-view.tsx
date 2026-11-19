@@ -348,7 +348,7 @@ export function CalendarView({ lists }: { lists: PlanList[] }) {
           <button
             type="button"
             onClick={() => void exportIcs()}
-            title="Save the deadlines, milestones and dated tasks as a file your calendar app opens (Apple, Google, Outlook)"
+            title="Export deadlines, milestones and dated tasks as a calendar file (Apple, Google, Outlook)"
             className="flex h-8 items-center gap-1.5 rounded-md px-2 text-xs hover:bg-muted"
           >
             <CalendarArrowUpIcon className="size-4" />

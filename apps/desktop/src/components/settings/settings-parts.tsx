@@ -442,7 +442,9 @@ export function SettingRow({
       <div className="min-w-0">
         <div className="text-sm">{label}</div>
         {detail && (
-          <div className="truncate text-muted-foreground text-xs">{detail}</div>
+          <div className="text-pretty text-muted-foreground text-xs">
+            {detail}
+          </div>
         )}
       </div>
       <div className="flex shrink-0 items-center gap-2">{children}</div>

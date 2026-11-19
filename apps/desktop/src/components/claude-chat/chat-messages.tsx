@@ -568,7 +568,7 @@ const ReplyUsage: FC<{ message: ClaudeStreamMessage }> = ({ message }) => {
   return (
     <div
       className="mt-1 px-1 text-right text-[11px] text-muted-foreground/70 tabular-nums"
-      title="Steps: each time the AI read, edited or answered. Each one re-reads the whole chat, so steps decide most of what a reply uses."
+      title="Each step is a read, an edit or an answer. Every step re-reads the whole chat, so steps account for most of a reply's usage."
     >
       {model && `${shortModel(model)} · `}
       {typeof r.num_turns === "number" &&

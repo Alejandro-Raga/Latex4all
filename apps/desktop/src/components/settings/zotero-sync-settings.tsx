@@ -109,8 +109,8 @@ export function ZoteroSyncSettings() {
     <div className="pb-4">
       <div className="space-y-2 border-border/60 border-b px-5 py-4 text-sm">
         <p>
-          Tag papers and highlights in Zotero, on any device, and Latex4All
-          writes the notes in your vault.
+          Tag papers and highlights in Zotero on any device, and Latex4All
+          writes notes for them in your vault.
         </p>
         <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
           <li>
@@ -123,8 +123,8 @@ export function ZoteroSyncSettings() {
             created the first time.
           </li>
           <li>
-            Tag a highlight <Tag>idea</Tag> and write a comment on it: the
-            comment becomes a new idea.
+            Tag a highlight <Tag>idea</Tag> and comment on it to start a new
+            idea.
           </li>
         </ol>
         {(!connected || !vaultReady) && (
@@ -201,11 +201,11 @@ export function ZoteroSyncSettings() {
 
       <ul className="mt-4 space-y-1 px-5 text-muted-foreground text-xs">
         <li>
-          The sync only reads your Zotero library. It's changed only when you
-          agree, as when renaming the vault tag on your items.
+          Sync only reads your Zotero library. It changes the library only when
+          you confirm, for example when renaming the vault tag.
         </li>
-        <li>What you write in a note outside its Zotero part is kept.</li>
-        <li>With the vault on more than one computer, one of them syncs.</li>
+        <li>Text you write outside a note's Zotero section is kept.</li>
+        <li>If the vault is on several computers, only one of them syncs.</li>
       </ul>
 
       <TagsDialog open={pairing} onOpenChange={setPairing} />
@@ -621,9 +621,9 @@ function TagsDialog({
         <DialogHeader>
           <DialogTitle>Your Zotero tags</DialogTitle>
           <DialogDescription>
-            Tags like <Tag>topic: Name</Tag> make notes on their own. Tick any
-            other tag to pair it with a note. Stop a tag to make no more notes
-            from it; the notes you have stay.
+            Tags like <Tag>topic: Name</Tag> create notes automatically. Check
+            any other tag to pair it with a note. Stop a tag to create no more
+            notes from it. Existing notes stay.
           </DialogDescription>
         </DialogHeader>
         {error ? (
@@ -797,7 +797,7 @@ function TagsDialog({
             </ul>
             <div className="flex items-center justify-between gap-2 border-t pt-3">
               <span className="text-muted-foreground text-xs">
-                Tags Zotero added on its own aren't listed.
+                Automatic Zotero tags aren't listed.
               </span>
               <Button
                 size="sm"

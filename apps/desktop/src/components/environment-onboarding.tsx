@@ -302,8 +302,7 @@ export function EnvironmentOnboarding() {
                 Latex4All
               </DialogTitle>
               <DialogDescription className="max-w-sm text-sm leading-relaxed">
-                Set up the local tools and model provider required before
-                entering the workspace.
+                Set up the tools and AI provider the workspace needs.
               </DialogDescription>
             </DialogHeader>
           </div>
@@ -634,7 +633,7 @@ export function EnvironmentOnboarding() {
           <DialogHeader>
             <DialogTitle>Add AI Provider</DialogTitle>
             <DialogDescription>
-              Configure Anthropic or another model provider for this project.
+              Set up Claude or another AI provider.
             </DialogDescription>
           </DialogHeader>
           <ClaudeSetup

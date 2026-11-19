@@ -103,7 +103,7 @@ export function warningForError(message: string): SyncWarning | null {
         id: "outdated",
         code: "R04",
         level: "error",
-        text: "This project needs a newer Latex4All. Update to keep syncing; your changes are kept.",
+        text: "This project needs a newer Latex4All. Update to keep syncing. Your changes are kept.",
       };
     case "gone":
       return {
@@ -154,19 +154,19 @@ export function warningForError(message: string): SyncWarning | null {
 const PEER_PROBLEMS: Record<string, Omit<SyncWarning, "id" | "code">> = {
   P01: {
     level: "warning",
-    text: "Peer-to-peer sync can't start: this network may block it. Changes still go through the sync server.",
+    text: "Peer-to-peer sync can't start. This network may block it. Changes still go through the sync server.",
   },
   P02: {
     level: "warning",
-    text: "This computer's sync identity couldn't be read, so it made a new one.",
+    text: "This computer's sync identity couldn't be read, so a new one was created.",
   },
   P03: {
     level: "error",
-    text: "Another computer is syncing as this one (its app data was copied from here). Restart Latex4All on one of them to give it its own identity.",
+    text: "Another computer is syncing as this one because its app data was copied from here. Restart Latex4All on one of them to give it a new identity.",
   },
   P04: {
     level: "warning",
-    text: "Some changes from others were refused: they weren't signed by a member.",
+    text: "Some changes were refused because they weren't signed by a member.",
   },
   F01: {
     level: "error",
@@ -178,11 +178,11 @@ const PEER_PROBLEMS: Record<string, Omit<SyncWarning, "id" | "code">> = {
   },
   H01: {
     level: "warning",
-    text: "Your server can't be reached. Changes wait here and go out when it's back.",
+    text: "Your server can't be reached. Changes are kept here and sent when it's back.",
   },
   H02: {
     level: "error",
-    text: "Your server didn't accept its code. Copy the code from it again into Settings → Sync.",
+    text: "Your server rejected its code. Copy the code from the server into Settings → Sync again.",
   },
 };
 

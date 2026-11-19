@@ -12,7 +12,7 @@ const CATEGORY: Record<
 > = {
   light: {
     label: "Light",
-    hint: "Fast; uses the least of your month",
+    hint: "Fast, uses the least of your monthly quota",
     className: "text-green-700 dark:text-green-400",
   },
   versatile: {
@@ -22,7 +22,7 @@ const CATEGORY: Record<
   },
   powerful: {
     label: "Powerful",
-    hint: "Most capable; uses the most of your month",
+    hint: "Most capable, uses the most of your monthly quota",
     className: "text-violet-700 dark:text-violet-400",
   },
 };
@@ -167,7 +167,7 @@ export function CopilotModels({
         </>
       )}
       <div className="px-3 pt-1.5 pb-1 text-[11px] text-muted-foreground/80">
-        Lighter models use less of your month.
+        Lighter models use less of your monthly quota.
       </div>
     </>
   );

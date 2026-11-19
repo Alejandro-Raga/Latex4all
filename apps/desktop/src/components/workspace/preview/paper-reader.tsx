@@ -515,7 +515,7 @@ export function PaperReader({
         // so nothing is saved over them), and it says so.
         console.warn("Couldn't read this PDF's highlights", err);
         toast.error(
-          "Couldn't read this PDF's highlights. They're left as they were.",
+          "Couldn't read this PDF's highlights. They weren't changed.",
         );
         return;
       }

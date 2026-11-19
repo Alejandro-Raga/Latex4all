@@ -183,8 +183,8 @@ export function SkillsSettings() {
   if (skills.length === 0) {
     return (
       <p className="px-5 py-4 text-muted-foreground text-sm">
-        No skills installed. Settings → Environment installs the scientific
-        skills.
+        No skills installed. Install the scientific skills in Settings →
+        Environment.
       </p>
     );
   }
@@ -216,7 +216,7 @@ export function SkillsSettings() {
         ))}
       </div>
       <p className="px-5 pb-2 text-muted-foreground text-xs">
-        Tokens: what the enabled skills add to each request.
+        Tokens the enabled skills add to each request.
       </p>
 
       <div className="border-border border-t">

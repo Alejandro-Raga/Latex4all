@@ -96,7 +96,7 @@ function PlannerSettings() {
       <Heading>Every day</Heading>
       <SettingRow
         label="Daily summary"
-        detail="What's due, the first time you open the app each day"
+        detail="Show what's due the first time you open the app each day."
       >
         <Toggle
           checked={dailySummary}
@@ -108,7 +108,7 @@ function PlannerSettings() {
       <div className="divide-y divide-border/60">
         <SettingRow
           label="Weekly reading goal"
-          detail="Papers to finish each week, with pages read and a streak in Reading"
+          detail="Papers to finish each week. Progress shows in Reading."
         >
           <Toggle
             checked={goal > 0}
@@ -134,7 +134,7 @@ function PlannerSettings() {
       <div className="divide-y divide-border/60">
         <SettingRow
           label="Urgent"
-          detail="Due within this many days, or overdue"
+          detail="Tasks due within this many days, or overdue."
         >
           <Input
             type="number"
@@ -147,7 +147,10 @@ function PlannerSettings() {
           />
           <span className="text-muted-foreground text-xs">days</span>
         </SettingRow>
-        <SettingRow label="Important" detail="From this priority up">
+        <SettingRow
+          label="Important"
+          detail="Tasks at this priority or higher."
+        >
           <div
             role="radiogroup"
             aria-label="Important from"
@@ -200,7 +203,7 @@ function EditorSettings() {
       </SettingRow>
       <SettingRow
         label="Grammar checking"
-        detail="LanguageTool, running on this computer"
+        detail="Check grammar with LanguageTool on this computer."
       >
         <Toggle
           checked={grammar}
@@ -353,7 +356,7 @@ function ZoteroTagsSettings() {
     <>
       <SettingRow
         label="Ideas and topics as Zotero tags"
-        detail="So Zotero suggests their names as you tag"
+        detail="Zotero suggests them when you tag papers."
       >
         <Toggle
           checked={on}
@@ -363,9 +366,9 @@ function ZoteroTagsSettings() {
       </SettingRow>
       <p className="mx-5 mb-3 text-muted-foreground text-xs">
         Adds one note to your Zotero library, “Ideas and topics in your vault”,
-        with a tag for each idea and topic (“idea: …”, “topic: …”), kept in step
-        with the vault. Nothing else in Zotero is changed. Zotero's automatic
-        tags are left out.
+        tagged with each idea and topic (“idea: …”, “topic: …”). It updates when
+        the vault changes. Nothing else in Zotero changes, and Zotero's
+        automatic tags are ignored.
       </p>
     </>
   );
@@ -543,7 +546,7 @@ function VaultSettings() {
       {projectRoot && (
         <SettingRow
           label="Keep this project's note in the vault"
-          detail="Its citations, outline, highlights and notes"
+          detail="Includes the project's citations, outline, highlights and notes."
         >
           <Toggle
             checked={projectLinked}

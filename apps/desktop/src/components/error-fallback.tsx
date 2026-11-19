@@ -8,7 +8,7 @@ export function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
           Something went wrong
         </h1>
         <p className="text-muted-foreground text-sm">
-          An unexpected error occurred. You can try again or reload the app.
+          Something went wrong. Try again or reload the app.
         </p>
 
         <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-md border bg-muted p-4 text-xs">

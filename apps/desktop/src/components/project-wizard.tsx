@@ -330,8 +330,7 @@ function ScratchForm({ onBack }: { onBack: () => void }) {
                 What are you writing?
               </span>
               <p className="mt-0.5 text-muted-foreground text-xs leading-relaxed">
-                Describe your document and Claude will generate tailored
-                content.
+                Describe your document and Claude will write a first draft.
               </p>
             </div>
             <Textarea

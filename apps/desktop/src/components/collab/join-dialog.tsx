@@ -168,8 +168,8 @@ export function JoinDialog({
         {choosing ? (
           <div className="space-y-4">
             <p className="text-muted-foreground text-sm">
-              Untick the files you'll get another way, such as Dropbox. They
-              aren't downloaded or synced on this computer.
+              Uncheck files you get another way, such as Dropbox. They won't be
+              downloaded or synced on this computer.
             </p>
             <FileChoices
               paths={choosing.paths}

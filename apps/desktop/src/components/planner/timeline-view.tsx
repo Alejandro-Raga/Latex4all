@@ -1339,7 +1339,7 @@ export function TimelineView({ list }: { list: PlanList }) {
         <Empty
           icon={<DiamondIcon className="size-6" />}
           title="No milestones yet."
-          text="Add the steps on the way, like a first draft or the submission, and set the project's deadline at the top."
+          text="Add milestones such as a first draft or the submission, and set the deadline at the top."
         />
       ) : (
         <>
@@ -1431,7 +1431,7 @@ export function ProjectsTimeline({
       <Empty
         icon={<DiamondIcon className="size-6" />}
         title="No dates yet."
-        text="Give your projects a deadline or milestones (in each project's Timeline) and they line up here."
+        text="Projects with a deadline or milestones appear here. Add them in each project's Timeline."
       />
     );
   }

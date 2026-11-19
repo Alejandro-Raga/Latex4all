@@ -48,7 +48,7 @@ function ColorPick({
           "rounded p-0.5 text-muted-foreground hover:text-foreground",
           !picked && "invisible",
         )}
-        title="Back to its own color"
+        title="Reset color"
         aria-label={`Reset the color for ${label}`}
         tabIndex={picked ? 0 : -1}
       >
@@ -131,9 +131,9 @@ export function NoteTypesSettings() {
       <div className="px-5 pt-1 pb-2">
         <div className="text-sm">Note types</div>
         <div className="text-muted-foreground text-xs">
-          Each type keeps its notes in its own folder. Notes in that folder, or
-          with its Obsidian tag, get the type on their own. Zotero tags for each
-          type are set in Zotero sync.
+          Each type has a folder. Notes in that folder, or with the type's
+          Obsidian tag, get the type automatically. Set each type's Zotero tag
+          in Zotero sync.
         </div>
       </div>
 
@@ -199,7 +199,7 @@ export function NoteTypesSettings() {
             placeholder="Obsidian #tag"
             className="h-7 w-28 shrink-0 text-xs"
             aria-label={`Obsidian tag for ${t.label}`}
-            title="Notes with this tag in Obsidian get this type"
+            title="Notes with this Obsidian tag get this type"
           />
           <Button
             variant="ghost"
