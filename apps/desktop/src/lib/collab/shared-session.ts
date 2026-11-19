@@ -21,6 +21,10 @@ export type SyncEvent =
       chatDays: number;
     }
   | { type: "update"; seq: number; data: string }
+  /** From another member peer to peer: no relay sequence. */
+  | { type: "peerUpdate"; data: string }
+  /** This copy's peer-to-peer id, to put in the document for others. */
+  | { type: "peerId"; id: string }
   | { type: "snapshot"; upTo: number; data: string }
   | { type: "awareness"; data: string }
   | { type: "chat"; seq: number; at: number; data: string }
@@ -40,6 +44,8 @@ export interface SessionTransport {
   awareness(data: Uint8Array): void;
   compact(upTo: number, snapshot: Uint8Array, liveBlobs: string[]): void;
   save(seq: number, local: string, state: Uint8Array): Promise<void>;
+  /** Members' peer-to-peer ids, from the document. */
+  peers?(ids: string[]): void;
 }
 
 /**
@@ -140,6 +146,18 @@ export class SharedSession {
         this.receive(fromBase64(event.data));
         this.advance(event.seq);
         break;
+      case "peerUpdate":
+        this.receive(fromBase64(event.data));
+        break;
+      case "peerId": {
+        // Members find each other through the document itself.
+        const peers = this.doc.getMap<number>("p2p");
+        const tell = () => this.transport.peers?.([...peers.keys()]);
+        peers.observe(tell);
+        if (peers.get(event.id) === undefined) peers.set(event.id, Date.now());
+        tell();
+        break;
+      }
       case "snapshot":
         this.receive(fromBase64(event.data));
         this.advance(event.upTo);

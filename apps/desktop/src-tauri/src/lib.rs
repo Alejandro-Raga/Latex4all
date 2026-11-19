@@ -6,6 +6,7 @@ mod bug_report;
 mod claude;
 mod claude_process;
 mod collab;
+mod p2p;
 mod dictionary;
 mod grammar;
 mod history;
@@ -855,6 +856,7 @@ pub fn run() {
             collab::collab_health,
             collab::collab_disconnect,
             collab::collab_publish,
+            collab::collab_p2p_peers,
             collab::collab_awareness,
             collab::collab_send_chat,
             collab::collab_load_chat,

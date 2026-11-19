@@ -234,6 +234,8 @@ fn set_may_compress(project_id: &str, allowed: bool) {
 struct Keys {
     project_id: String,
     access_token: String,
+    /// Proves membership to other copies, for peer-to-peer sync.
+    p2p_token: Vec<u8>,
     cipher: LessSafeKey,
     blob_ids: hmac::Key,
     rng: SystemRandom,
@@ -249,6 +251,7 @@ impl Keys {
         Self {
             project_id: link.project_id.clone(),
             access_token: hex(sub("access").as_ref()),
+            p2p_token: sub("p2p-token").as_ref().to_vec(),
             cipher,
             blob_ids: hmac::Key::new(hmac::HMAC_SHA256, sub("blob-id").as_ref()),
             rng: SystemRandom::new(),
@@ -616,6 +619,14 @@ pub enum SyncEvent {
     Update {
         seq: u64,
         data: String,
+    },
+    /// An update from another member, peer to peer (no relay sequence).
+    PeerUpdate {
+        data: String,
+    },
+    /// This copy's peer-to-peer sync id, for the shared document.
+    PeerId {
+        id: String,
     },
     #[serde(rename_all = "camelCase")]
     Snapshot {
@@ -1264,6 +1275,8 @@ fn unique_destination(parent: &Path, name: &str) -> PathBuf {
 #[derive(Default)]
 pub struct CollabState {
     connections: Mutex<HashMap<String, mpsc::UnboundedSender<Command>>>,
+    /// Peer-to-peer sync per window, when it's on.
+    p2p: Mutex<HashMap<String, mpsc::UnboundedSender<crate::p2p::Input>>>,
 }
 
 impl CollabState {
@@ -1409,6 +1422,24 @@ pub fn collab_connect(
         let mut connections = state.connections.lock().map_err(|e| e.to_string())?;
         connections.insert(window.label().to_string(), tx);
     }
+    if crate::p2p::enabled() {
+        let (seal_keys, open_keys) = (keys.clone(), keys.clone());
+        let (deliver_to, ready_to) = (window.clone(), window.clone());
+        let emit_to = |w: &WebviewWindow, event: SyncEvent| {
+            let _ = w.emit_to(EventTarget::webview_window(w.label()), "collab://event", event);
+        };
+        let input = crate::p2p::start(
+            keys.project_id.clone(),
+            keys.p2p_token.clone(),
+            move |plain| seal_keys.seal(Kind::Update, plain).ok(),
+            move |sealed| open_keys.open(Kind::Update, sealed).ok(),
+            move |plain| emit_to(&deliver_to, SyncEvent::PeerUpdate { data: BASE64.encode(plain) }),
+            move |id| emit_to(&ready_to, SyncEvent::PeerId { id }),
+        );
+        if let Ok(mut p2p) = state.p2p.lock() {
+            p2p.insert(window.label().to_string(), input);
+        }
+    }
     let target = window.clone();
     tauri::async_runtime::spawn(run_connection(
         link,
@@ -1433,6 +1464,19 @@ pub fn collab_disconnect(window: WebviewWindow, state: tauri::State<'_, CollabSt
     if let Ok(mut connections) = state.connections.lock() {
         connections.remove(window.label());
     }
+    if let Ok(mut p2p) = state.p2p.lock() {
+        p2p.remove(window.label());
+    }
+}
+
+/// Members' peer-to-peer ids, as the shared document has them.
+#[tauri::command]
+pub fn collab_p2p_peers(window: WebviewWindow, state: tauri::State<'_, CollabState>, ids: Vec<String>) {
+    if let Ok(p2p) = state.p2p.lock() {
+        if let Some(tx) = p2p.get(window.label()) {
+            let _ = tx.send(crate::p2p::Input::Peers(ids));
+        }
+    }
 }
 
 #[tauri::command]
@@ -1444,6 +1488,11 @@ pub fn collab_publish(
     let update = decode(&data)?;
     if update.len() > MAX_UPDATE_BYTES {
         return Err("too-large".into());
+    }
+    if let Ok(p2p) = state.p2p.lock() {
+        if let Some(tx) = p2p.get(window.label()) {
+            let _ = tx.send(crate::p2p::Input::Publish(update.clone()));
+        }
     }
     state.send(&window, Command::Publish(update));
     Ok(())

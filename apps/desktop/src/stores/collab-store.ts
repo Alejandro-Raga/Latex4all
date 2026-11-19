@@ -33,6 +33,7 @@ import {
   loadDoc,
   parseLink,
   publish,
+  p2pPeers,
   readLink,
   removeLink,
   saveDoc,
@@ -588,6 +589,9 @@ export const useCollabStore = create<CollabState>()(
             },
             compact: (upTo, snapshot, blobs) => {
               compact(upTo, snapshot, blobs).catch(() => {});
+            },
+            peers: (ids) => {
+              p2pPeers(ids).catch(() => {});
             },
             save: (seq, local, state) =>
               saveDoc(root, seq, local, state).catch((err) => {

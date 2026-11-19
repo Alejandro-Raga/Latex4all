@@ -72,6 +72,10 @@ export function publish(update: Uint8Array) {
   return invoke<void>("collab_publish", { data: toBase64(update) });
 }
 
+export function p2pPeers(ids: string[]) {
+  return invoke<void>("collab_p2p_peers", { ids });
+}
+
 export function sendAwareness(data: Uint8Array) {
   return invoke<void>("collab_awareness", { data: toBase64(data) });
 }
