@@ -87,8 +87,9 @@ describe("app state between linked devices", () => {
       },
       version: 1,
     });
-    const out = JSON.parse(exportStore("latex4all-projects", raw, mac) as string)
-      .state;
+    const out = JSON.parse(
+      exportStore("latex4all-projects", raw, mac) as string,
+    ).state;
     expect(out.recentProjects.map((p: { name: string }) => p.name)).toEqual([
       "Thesis",
     ]);
