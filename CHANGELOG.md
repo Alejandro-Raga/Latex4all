@@ -82,6 +82,10 @@ tag.
 
 ### Added
 
+- Timeline: tasks are easier to read. Each one is named beside its dot, in
+  rows so names never overlap; a section's date reads "Due 27 Feb" instead
+  of an unlabelled square; only tasks with no room left show as "+4 more".
+
 - Settings → Sync (beta): shared projects can also sync directly between
   computers. Choose where changes wait while your collaborators are
   offline: the Latex4All server, a cloud folder you already use, this

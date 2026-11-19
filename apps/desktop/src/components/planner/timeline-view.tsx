@@ -100,7 +100,12 @@ import {
   usePlanTexts,
 } from "@/lib/plan/plan-store";
 import { parseQuickAdd } from "@/lib/plan/quick-add";
-import { gather, type Lane, lanesOf } from "@/lib/plan/task-lanes";
+import {
+  type Lane,
+  type LaneTask,
+  lanesOf,
+  layoutLane,
+} from "@/lib/plan/task-lanes";
 import { PX_PER_DAY_FOR_DAYS, scaleFor } from "@/lib/plan/time-scale";
 import { cn } from "@/lib/utils";
 import { editPlan, removeFromPlan } from "./plan-actions";
@@ -467,7 +472,8 @@ function Track({
           l.tasks.some((t) => t.date >= span.start && t.date <= span.end),
       );
   const marksY = labelsY + labelsH + (taskLanes.length ? 10 : 0);
-  const marksH = taskLanes.length * LANE;
+  const laneLayouts = taskLanes.map((l) => layoutOf(l, span, xOf, width));
+  const marksH = laneLayouts.reduce((sum, l) => sum + l.height, 0);
   const height = compact ? lineY + 10 : marksY + marksH + 8;
 
   return (
@@ -654,12 +660,11 @@ function Track({
       {/* The plan's dated tasks, a lane per section. */}
       {taskLanes.length > 0 && (
         <div className="absolute inset-x-0" style={{ top: marksY }}>
-          {taskLanes.map((lane) => (
+          {taskLanes.map((lane, i) => (
             <TaskLane
               key={lane.name}
               lane={lane}
-              span={span}
-              xOf={xOf}
+              layout={laneLayouts[i]}
               width={width}
             />
           ))}
@@ -669,128 +674,150 @@ function Track({
   );
 }
 
-/** A lane: its section's name on a line of its own, its tasks below. */
-const LANE = 32;
-const LANE_NAME = 13;
-/** Where its tasks sit: the middle of the space below the name. */
-const LANE_ROW = LANE_NAME + 2 + (LANE - LANE_NAME - 2) / 2;
+/** A lane: its section's name on a line of its own, its tasks below in
+ * rows so no two names overlap. */
+const LANE_NAME = 14;
+const LANE_ROW_H = 16;
+const LANE_PAD = 6;
 
-/**
- * One section's dated tasks: a dot each, named where there's room; those
- * too close to tell apart as one count, listed on a click. The section's
- * name stays at the left as the line scrolls.
- */
+type LaneItem = LaneTask & { x: number; label: string; kind: "task" | "due" };
+
+function layoutOf(
+  lane: Lane,
+  span: Span,
+  xOf: (iso: string) => number,
+  width: number,
+) {
+  const items: LaneItem[] = lane.tasks
+    .filter((t) => t.date >= span.start && t.date <= span.end)
+    .map((t) => ({
+      ...t,
+      x: xOf(t.date),
+      label: t.title,
+      kind: "task" as const,
+    }));
+  if (lane.due && lane.due >= span.start && lane.due <= span.end) {
+    items.push({
+      date: lane.due,
+      title: `${lane.name} due`,
+      overdue: false,
+      x: xOf(lane.due),
+      label: `Due ${short(lane.due)}`,
+      kind: "due",
+    });
+  }
+  const { placed, rows } = layoutLane(items, width);
+  return {
+    placed,
+    height: LANE_NAME + LANE_PAD + Math.max(rows, 1) * LANE_ROW_H + LANE_PAD,
+  };
+}
+
 function TaskLane({
   lane,
-  span,
-  xOf,
+  layout,
   width,
 }: {
   lane: Lane;
-  span: Span;
-  xOf: (iso: string) => number;
+  layout: ReturnType<typeof layoutOf>;
   width: number;
 }) {
-  const shown = lane.tasks
-    .filter((t) => t.date >= span.start && t.date <= span.end)
-    .map((t) => ({ ...t, x: xOf(t.date) }));
-  const groups = gather(shown);
+  const rowY = (row: number) =>
+    LANE_NAME + LANE_PAD + row * LANE_ROW_H + LANE_ROW_H / 2;
   return (
     <div
-      className="relative border-border/30 border-t"
-      style={{ height: LANE, width }}
+      className="relative border-border/40 border-t"
+      style={{ height: layout.height, width }}
     >
+      {/* Its name, on a background of its own so nothing runs through it. */}
       <span
-        className="pointer-events-none sticky left-0 inline-block max-w-60 truncate pl-1 font-medium text-[10px] text-muted-foreground/80"
+        className="sticky left-0 z-10 inline-block max-w-60 truncate rounded-br bg-background pr-2 pl-1 font-medium text-[11px] text-foreground/80"
         style={{ lineHeight: `${LANE_NAME}px`, marginTop: 2 }}
       >
         {lane.name}
       </span>
-      {lane.due && lane.due >= span.start && lane.due <= span.end && (
-        <span
-          title={`${lane.name} · ${short(lane.due)}`}
-          className="absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-[2px] bg-muted-foreground/70"
-          style={{ left: xOf(lane.due), top: LANE_ROW }}
-        />
-      )}
-      {groups.map((g, i) => {
-        const next = groups[i + 1]?.x ?? width;
-        if (g.items.length === 1) {
-          const t = g.items[0];
-          // Its name to the right, in the room before the next one.
-          const room = Math.min(next - t.x - 14, width - t.x - 10, 220);
+      {layout.placed.map((p) => {
+        if (p.kind === "more") {
+          const late = p.items.some((t) => t.overdue);
           return (
-            <div
-              key={`${t.date}-${t.title}`}
-              className="absolute flex -translate-y-1/2 items-center gap-1.5"
-              style={{ left: t.x - 3, top: LANE_ROW }}
-              title={`${t.title} · ${short(t.date)}`}
-            >
-              <span
-                className={cn(
-                  "size-1.5 shrink-0 rounded-full",
-                  t.overdue ? "bg-destructive" : "bg-muted-foreground",
-                )}
-              />
-              {room > 48 && (
-                <span
+            <Popover key={`more-${p.x}`}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
                   className={cn(
-                    "truncate text-[10px]",
-                    t.overdue ? "text-destructive" : "text-muted-foreground",
+                    "absolute h-4 -translate-x-1/2 -translate-y-1/2 rounded-full px-1.5 font-medium text-[10px] tabular-nums leading-4",
+                    late
+                      ? "bg-destructive/15 text-destructive"
+                      : "bg-muted text-foreground/80 hover:bg-accent",
                   )}
-                  style={{ maxWidth: room }}
+                  style={{ left: p.x, top: rowY(p.row) }}
+                  title={p.items.map((t) => t.title).join("\n")}
                 >
-                  {t.title}
-                </span>
-              )}
-            </div>
+                  +{p.items.length} more
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="center" className="w-64 p-1.5">
+                <p className="px-1.5 pb-1 text-muted-foreground text-xs">
+                  {lane.name}
+                </p>
+                <ul className="max-h-64 overflow-y-auto">
+                  {p.items.map((t) => (
+                    <li
+                      key={`${t.date}-${t.title}`}
+                      className="flex items-baseline gap-2 rounded-md px-1.5 py-1 text-xs"
+                    >
+                      <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                      <span
+                        className={cn(
+                          "shrink-0 tabular-nums",
+                          t.overdue
+                            ? "text-destructive"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {short(t.date)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </PopoverContent>
+            </Popover>
           );
         }
-        const late = g.items.some((t) => t.overdue);
+        const t = p.items[0];
+        const due = p.kind === "due";
+        const color = t.overdue ? "text-destructive" : "text-muted-foreground";
         return (
-          <Popover key={`g-${g.x}`}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className={cn(
-                  "absolute h-4 min-w-4 -translate-x-1/2 -translate-y-1/2 rounded-full px-1 font-medium text-[10px] tabular-nums leading-4",
-                  late
-                    ? "bg-destructive/15 text-destructive"
-                    : "bg-muted text-foreground/80 hover:bg-accent",
-                )}
-                style={{ left: g.x, top: LANE_ROW }}
-                title={`${g.items.length} tasks`}
-                aria-label={`${g.items.length} tasks in ${lane.name}`}
-              >
-                {g.items.length}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="center" className="w-64 p-1.5">
-              <p className="px-1.5 pb-1 text-muted-foreground text-xs">
-                {lane.name}
-              </p>
-              <ul className="max-h-64 overflow-y-auto">
-                {g.items.map((t) => (
-                  <li
-                    key={`${t.date}-${t.title}`}
-                    className="flex items-baseline gap-2 rounded-md px-1.5 py-1 text-xs"
-                  >
-                    <span className="min-w-0 flex-1 truncate">{t.title}</span>
-                    <span
-                      className={cn(
-                        "shrink-0 tabular-nums",
-                        t.overdue
-                          ? "text-destructive"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      {short(t.date)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </PopoverContent>
-          </Popover>
+          <div
+            key={`${p.kind}-${t.date}-${t.title}`}
+            className={cn(
+              "absolute flex -translate-y-1/2 items-center gap-1.5",
+              p.left && "flex-row-reverse",
+            )}
+            style={
+              p.left
+                ? { right: width - p.x - 3, top: rowY(p.row) }
+                : { left: p.x - 3, top: rowY(p.row) }
+            }
+            title={`${t.title} · ${short(t.date)}`}
+          >
+            <span
+              className={cn(
+                "size-1.5 shrink-0",
+                due ? "size-2 rounded-[2px] bg-foreground/60" : "rounded-full",
+                !due && (t.overdue ? "bg-destructive" : "bg-muted-foreground"),
+              )}
+            />
+            <span
+              className={cn(
+                "truncate text-[10px]",
+                due ? "font-medium text-foreground/70" : color,
+              )}
+              style={{ maxWidth: p.labelW }}
+            >
+              {due ? p.items[0].label : t.title}
+            </span>
+          </div>
         );
       })}
     </div>

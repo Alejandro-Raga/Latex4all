@@ -72,3 +72,80 @@ export function gather<T extends { x: number }>(
   }
   return groups;
 }
+
+/** One thing drawn on a lane: a task, the section's own date, or a count
+ * of tasks there was no room to name. */
+export interface Placed<T> {
+  kind: "task" | "due" | "more";
+  x: number;
+  row: number;
+  /** Its name's width (0: none), and whether it's to the left of the dot. */
+  labelW: number;
+  left: boolean;
+  items: T[];
+}
+
+/**
+ * Lays a lane out so no two names overlap: each task's dot at its date with
+ * its name beside it (to the left near the end of the line), in the first
+ * of `rows` rows with room, its name shortened if that makes it fit. What
+ * still doesn't fit is counted ("+3") in one more row.
+ */
+export function layoutLane<T extends { x: number; label: string }>(
+  items: Array<T & { kind?: "task" | "due" }>,
+  width: number,
+  rows = 3,
+  charW = 5.8,
+): { placed: Placed<T>[]; rows: number } {
+  const DOT = 10;
+  const GAP = 10;
+  const MAX = 200;
+  const MIN = 56;
+  const ends: number[] = [];
+  const placed: Placed<T>[] = [];
+  const left: Array<T & { kind?: "task" | "due" }> = [];
+  const sorted = [...items].sort((a, b) => a.x - b.x);
+  const span = (x: number, w: number) => {
+    const flip = x + DOT + w > width;
+    return flip
+      ? { from: x - DOT - w, to: x + 4, flip }
+      : { from: x - 4, to: x + DOT + w, flip };
+  };
+  for (const item of sorted) {
+    const full = Math.min(MAX, item.label.length * charW + 4);
+    let done = false;
+    for (const w of [full, Math.min(full, 120), Math.min(full, MIN)]) {
+      const s = span(item.x, w);
+      let row = ends.findIndex((end) => end + GAP <= s.from);
+      if (row < 0 && ends.length < rows) row = ends.length;
+      if (row < 0) continue;
+      ends[row] = s.to;
+      placed.push({
+        kind: item.kind ?? "task",
+        x: item.x,
+        row,
+        labelW: w,
+        left: s.flip,
+        items: [item],
+      });
+      done = true;
+      break;
+    }
+    if (!done) left.push(item);
+  }
+  let used = ends.length;
+  if (left.length) {
+    for (const g of gather(left, 28)) {
+      placed.push({
+        kind: "more",
+        x: g.x,
+        row: used,
+        labelW: 0,
+        left: false,
+        items: g.items,
+      });
+    }
+    used += 1;
+  }
+  return { placed, rows: used };
+}

@@ -1236,3 +1236,31 @@ test("the Inbox and lists of one's own have a timeline too", async ({
   await main.getByRole("radio", { name: "Timeline" }).click();
   await expect(main.getByLabel("Add a milestone")).toBeVisible();
 });
+
+test("the timeline's task lanes: names never overlap, crowded ones counted", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await open(page, "scenario=planner");
+  const day = (n: number) => {
+    const d = new Date(Date.now() + n * 86_400_000);
+    return d.toISOString().slice(0, 10);
+  };
+  await page.evaluate(
+    ([path, text]) => (window as any).__disk.set(path, text),
+    [
+      PLAN,
+      `# Paper 2\n\n## Empirical Analysis 📅 ${day(150)}\n\n- [ ] Chapter 1: Descriptive analysis of firms 📅 ${day(20)}\n- [ ] Chapter 3: Returns to innovation 📅 ${day(45)}\n- [ ] Chapter 2: CS & innovative output 📅 ${day(60)}\n- [ ] Robustness 📅 ${day(61)}\n- [ ] Tables 📅 ${day(62)}\n- [ ] Figures 📅 ${day(62)}\n- [ ] Appendix 📅 ${day(63)}\n\n## Writing 📅 ${day(100)}\n\n- [ ] Chapter 4: Introduction 📅 ${day(25)}\n- [ ] Chapter 1: Descriptive Analysis 📅 ${day(32)}\n\n## Data\n\n- [ ] Finish the dataset 📅 ${day(1)}\n`,
+    ],
+  );
+  await page.getByRole("button", { name: /^Paper 2/ }).click();
+  const main = page.getByRole("main");
+  await main.getByRole("radio", { name: "Timeline" }).click();
+  await main.getByLabel("Add a milestone").fill("JMP first draft in 160 days");
+  await main.getByLabel("Add a milestone").press("Enter");
+  await expect(main.getByText("Writing", { exact: true })).toBeVisible();
+  await expect(main.getByText("Finish the dataset")).toBeVisible();
+  await expect(main.getByText(/^Due /).first()).toBeVisible();
+  if (process.env.SHOTS)
+    await page.screenshot({ path: `${process.env.SHOTS}/lanes-new.png` });
+});
