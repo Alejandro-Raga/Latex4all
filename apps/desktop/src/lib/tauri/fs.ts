@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { writeTextSafely } from "@/lib/safe-write";
 import {
   readTextFile,
   writeTextFile,
@@ -65,6 +66,8 @@ const IGNORED_DIRECTORY_NAMES = new Set([
 ]);
 
 const IGNORED_EXTENSIONS = new Set([
+  // A save under way (see writeTextWhole): never part of a project.
+  ".saving",
   // Ignore LaTeX build artifacts, but keep user-imported reference files visible.
   ".aux",
   ".log",
@@ -212,7 +215,25 @@ export async function writeTexFileContent(
   absolutePath: string,
   content: string,
 ): Promise<void> {
-  return whileLocked(() => writeTextFile(absolutePath, content));
+  return writeTextWhole(absolutePath, content);
+}
+
+/**
+ * Saves a file whole or not at all: written beside it, then put in its
+ * place, so a crash, a full disk or a sync app reading midway never leaves
+ * it cut short. If another program keeps the file locked (Windows), it's
+ * written in place after all, as before, rather than not saved.
+ */
+export async function writeTextWhole(
+  absolutePath: string,
+  content: string,
+): Promise<void> {
+  try {
+    await whileLocked(() => writeTextSafely(absolutePath, content));
+  } catch (err) {
+    if (!isLockedFileError(err)) throw err;
+    await whileLocked(() => writeTextFile(absolutePath, content));
+  }
 }
 
 export async function readImageAsDataUrl(
@@ -373,9 +394,15 @@ export async function writeBytesToProject(
   return uniqueName;
 }
 
+/** Deletes a file: to the Trash, or for good where there's none (some
+ * network drives). */
 export async function deleteFileFromDisk(absolutePath: string): Promise<void> {
   log.debug(`Deleting file: ${absolutePath}`);
-  await whileLocked(() => remove(absolutePath));
+  try {
+    await whileLocked(() => trashFileFromDisk(absolutePath));
+  } catch {
+    await whileLocked(() => remove(absolutePath));
+  }
 }
 
 /**
@@ -391,7 +418,12 @@ export async function deleteFolderFromDisk(
   absolutePath: string,
 ): Promise<void> {
   log.debug(`Deleting folder: ${absolutePath}`);
-  await remove(absolutePath, { recursive: true });
+  // To the Trash, or for good where there's none.
+  try {
+    await trashFileFromDisk(absolutePath);
+  } catch {
+    await remove(absolutePath, { recursive: true });
+  }
 }
 
 export async function renameFileOnDisk(

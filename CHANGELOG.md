@@ -316,6 +316,11 @@ tag.
 
 ### Fixed
 
+- Saving is safer: your files, plans, vault notes, highlights and project
+  settings are written whole, so a crash or a full disk never leaves one
+  cut short. Files and folders deleted in the app, conflicted copies and
+  vault notes go to the Trash.
+
 - Sync safety:
   - A file another program has open is never synced as emptied or
     deleted; syncing waits until it can be read.

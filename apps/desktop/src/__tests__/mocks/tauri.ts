@@ -80,3 +80,13 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
   save: vi.fn(),
 }));
+
+// Saving whole (a file beside it, then put in place) is a plain write on the
+// mocked disk: tests check what reaches each file, not the swap.
+vi.mock("@/lib/safe-write", async () => {
+  const fs = await import("@tauri-apps/plugin-fs");
+  return {
+    writeTextSafely: (path: string, text: string) =>
+      fs.writeTextFile(path, text),
+  };
+});

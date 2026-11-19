@@ -1,11 +1,6 @@
 import { create } from "zustand";
-import {
-  exists,
-  mkdir,
-  readTextFile,
-  remove,
-  writeTextFile,
-} from "@tauri-apps/plugin-fs";
+import { writeTextWhole } from "@/lib/tauri/fs";
+import { exists, mkdir, readTextFile, remove } from "@tauri-apps/plugin-fs";
 import type * as Y from "yjs";
 import {
   type AnnotationFile,
@@ -89,7 +84,7 @@ function annotationFile(root: string): AnnotationFile {
     read: async () => ((await exists(path)) ? readTextFile(path) : null),
     write: async (json) => {
       if (!(await exists(dir))) await mkdir(dir, { recursive: true });
-      await writeTextFile(path, json);
+      await writeTextWhole(path, json);
     },
   };
 }

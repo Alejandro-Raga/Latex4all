@@ -474,14 +474,21 @@ async fn duplicate_project(src_path: String, dst_path: String) -> Result<(), Str
     .map_err(|e| format!("Copy task panicked: {}", e))?
 }
 
-/// Moves one file to the Trash: a file a sync removes (deleted on another
-/// computer) can still be got back. Only files, never folders.
+/// Moves a file or folder to the Trash, so it can be got back: what a sync
+/// removes (deleted on another computer), and what's deleted in the app.
+/// Never the disk's root or the home folder.
 #[tauri::command]
 async fn trash_file(path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let p = Path::new(&path);
-        if !p.is_absolute() || !p.is_file() {
+        if !p.is_absolute() || !p.exists() {
             return Err("That file no longer exists.".to_string());
+        }
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(std::path::PathBuf::from);
+        if p.parent().is_none() || home.as_deref() == Some(p) {
+            return Err("That folder can't be deleted from here.".to_string());
         }
         trash::delete(p).map_err(|e| format!("Couldn't move it to the Trash: {}", e))
     })

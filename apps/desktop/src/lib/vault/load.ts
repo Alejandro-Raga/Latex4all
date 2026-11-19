@@ -1,11 +1,11 @@
 import { configDir, join } from "@tauri-apps/api/path";
+import { deleteFileFromDisk, writeTextWhole } from "@/lib/tauri/fs";
 import {
   exists,
   mkdir,
   readDir,
   readFile,
   readTextFile,
-  remove,
   writeTextFile,
 } from "@tauri-apps/plugin-fs";
 import { parseNote, type ParsedNote } from "./parse";
@@ -174,7 +174,7 @@ export class LocalVaultSource implements VaultSource {
   }
 
   async writeNote(path: string, text: string) {
-    await writeTextFile(await this.abs(path), text);
+    await writeTextWhole(await this.abs(path), text);
     return null;
   }
 
@@ -188,7 +188,7 @@ export class LocalVaultSource implements VaultSource {
 
   async deleteNote(path: string) {
     const abs = await this.abs(path);
-    if (await exists(abs)) await remove(abs);
+    if (await exists(abs)) await deleteFileFromDisk(abs);
   }
 }
 

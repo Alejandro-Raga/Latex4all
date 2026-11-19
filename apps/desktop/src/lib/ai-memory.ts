@@ -7,7 +7,8 @@
  * - .latex4all/ai-log.jsonl: who asked what and which files changed, so an
  *   assistant hears what the others did since its own last turn.
  */
-import { mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs";
+import { writeTextWhole } from "@/lib/tauri/fs";
+import { mkdir, readTextFile } from "@tauri-apps/plugin-fs";
 
 export const MEMORY_FILE = "AGENTS.md";
 const LOG_FILE = ".latex4all/ai-log.jsonl";
@@ -38,7 +39,7 @@ export async function readMemory(root: string): Promise<string | null> {
 }
 
 export async function writeMemory(root: string, text: string): Promise<void> {
-  await writeTextFile(join(root, MEMORY_FILE), text);
+  await writeTextWhole(join(root, MEMORY_FILE), text);
 }
 
 export function parseLog(text: string): AiLogEntry[] {
@@ -70,7 +71,7 @@ export function appendLog(root: string, entry: AiLogEntry): Promise<void> {
     try {
       const entries = [...(await readLog(root)), entry].slice(-LOG_KEEP);
       await mkdir(join(root, ".latex4all"), { recursive: true });
-      await writeTextFile(
+      await writeTextWhole(
         join(root, LOG_FILE),
         `${entries.map((e) => JSON.stringify(e)).join("\n")}\n`,
       );

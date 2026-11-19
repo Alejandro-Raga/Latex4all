@@ -9,13 +9,8 @@
  * disturb the file.
  */
 
-import {
-  exists,
-  mkdir,
-  readDir,
-  readTextFile,
-  writeTextFile,
-} from "@tauri-apps/plugin-fs";
+import { writeTextWhole } from "@/lib/tauri/fs";
+import { exists, mkdir, readDir, readTextFile } from "@tauri-apps/plugin-fs";
 import { createLogger } from "@/lib/debug/logger";
 
 const log = createLogger("project-meta");
@@ -138,7 +133,7 @@ export async function updateProjectMeta(
   }
   const dir = `${projectPath}/${META_DIR}`;
   if (!(await exists(dir))) await mkdir(dir, { recursive: true });
-  await writeTextFile(
+  await writeTextWhole(
     metaPath(projectPath),
     `${JSON.stringify(meta, null, 2)}\n`,
   );
@@ -225,7 +220,7 @@ export async function readProjectId(projectPath: string): Promise<string> {
   if (typeof meta.id === "string" && meta.id) return meta.id;
   meta.id = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
   if (!(await exists(dir))) await mkdir(dir, { recursive: true });
-  await writeTextFile(path, `${JSON.stringify(meta, null, 2)}\n`);
+  await writeTextWhole(path, `${JSON.stringify(meta, null, 2)}\n`);
   return meta.id;
 }
 
@@ -257,5 +252,5 @@ export async function writeProjectType(
   if (!(await exists(dir))) {
     await mkdir(dir, { recursive: true });
   }
-  await writeTextFile(path, `${JSON.stringify(meta, null, 2)}\n`);
+  await writeTextWhole(path, `${JSON.stringify(meta, null, 2)}\n`);
 }

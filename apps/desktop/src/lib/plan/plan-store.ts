@@ -11,6 +11,7 @@
  *   what's there comes along the first time a list is read (the vault's
  *   copy is left as it was, and lists found there join the Planner).
  */
+import { writeTextWhole } from "@/lib/tauri/fs";
 import { useEffect, useMemo } from "react";
 import { appDataDir, join as joinPath } from "@tauri-apps/api/path";
 import {
@@ -193,7 +194,7 @@ async function saveTo(key: PlanKey, root: string | null, text: string) {
       await doc.saveFile(open.id);
       return;
     }
-    await writeTextFile(join(root, PLAN_FILE), text);
+    await writeTextWhole(join(root, PLAN_FILE), text);
     void backUpPlan(root, text);
     if (open === null) {
       // A new file in the open project: it joins its files (and the share).
