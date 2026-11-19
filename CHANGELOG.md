@@ -319,7 +319,8 @@ tag.
 - Saving is safer: your files, plans, vault notes, highlights and project
   settings are written whole, so a crash or a full disk never leaves one
   cut short. Files and folders deleted in the app, conflicted copies and
-  vault notes go to the Trash.
+  vault notes go to the Trash. Restoring a snapshot from History first
+  keeps the current state as a snapshot, so a restore can be undone.
 
 - Sync safety:
   - A file another program has open is never synced as emptied or

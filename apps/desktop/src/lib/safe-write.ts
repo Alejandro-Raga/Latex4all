@@ -7,7 +7,8 @@
 import { remove, rename, writeTextFile } from "@tauri-apps/plugin-fs";
 
 export async function writeTextSafely(path: string, text: string) {
-  const temporary = `${path}.saving`;
+  // A name of its own: two saves of one file at once never share a file.
+  const temporary = `${path}.${Math.random().toString(36).slice(2, 8)}.saving`;
   try {
     await writeTextFile(temporary, text);
     await rename(temporary, path);

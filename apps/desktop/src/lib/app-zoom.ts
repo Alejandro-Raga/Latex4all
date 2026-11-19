@@ -72,7 +72,11 @@ async function applyAppZoom(value: number): Promise<number> {
 
 export async function persistAppZoom(value: number): Promise<number> {
   const zoom = await applyAppZoom(value);
-  window.localStorage.setItem(APP_ZOOM_STORAGE_KEY, zoom.toString());
+  try {
+    window.localStorage.setItem(APP_ZOOM_STORAGE_KEY, zoom.toString());
+  } catch {
+    // Applied now; not remembered for next time.
+  }
   return zoom;
 }
 

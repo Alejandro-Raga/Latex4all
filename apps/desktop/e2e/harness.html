@@ -34,6 +34,11 @@
               disk.delete(args.path);
               return null;
             }
+            if (cmd === "trash_file") {
+              window.__disk?.delete(args.path);
+              disk.delete(args.path);
+              return null;
+            }
             if (cmd === "plugin:fs|read_text_file") {
               if (!disk.has(args.path)) throw new Error("not found");
               return Array.from(new TextEncoder().encode(disk.get(args.path)));
@@ -79,7 +84,7 @@
             // Where you left off: kept across reloads, as on disk.
             if (cmd === "plugin:path|resolve_directory") return "/appdata";
             if (cmd === "plugin:fs|mkdir") return null;
-            if (cmd === "plugin:fs|write_text_file" && /place\.json(\.saving)?$/.test(decodeURIComponent(options?.headers?.path ?? ""))) {
+            if (cmd === "plugin:fs|write_text_file" && /place\.json(\.[a-z0-9]+\.saving)?$/.test(decodeURIComponent(options?.headers?.path ?? ""))) {
               sessionStorage.setItem("place.json", new TextDecoder().decode(args));
               return null;
             }
@@ -147,6 +152,11 @@
                 disk.delete(path);
                 return null;
               }
+              if (cmd === "trash_file") {
+                window.__disk?.delete(args.path);
+                disk.delete(args.path);
+                return null;
+              }
               if (cmd === "plugin:fs|stat") {
                 if (!disk.has(path)) throw new Error("not found");
                 return { mtime: Date.now(), isFile: true, isDirectory: false, size: 1 };
@@ -168,6 +178,11 @@
               return null;
             }
             if (cmd === "plugin:fs|remove") {
+              disk.delete(args.path);
+              return null;
+            }
+            if (cmd === "trash_file") {
+              window.__disk?.delete(args.path);
               disk.delete(args.path);
               return null;
             }

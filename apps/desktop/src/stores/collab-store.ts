@@ -501,7 +501,7 @@ export function syncInBackground(
       const kept = await loadDoc(root).catch(() => null);
       const linkInfo = await parseLink(link);
       const saved = ownSaved(kept, linkInfo.projectId);
-      const known: Known = kept ? JSON.parse(kept.local || "{}") : {};
+      const known: Known = knownOf(kept);
       let sync: ProjectSync | null = null;
       let resolve = () => {};
       const caughtUp = new Promise<void>((res) => {
@@ -610,6 +610,18 @@ export function syncInBackground(
   backgroundQueue = run.catch(() => {});
   inBackground.set(root, run);
   return run;
+}
+
+/** What this device knew of a project's files when it last saved; a damaged
+ * record is no record (the files are then compared afresh). */
+function knownOf(saved: { local: string } | null): Known {
+  if (!saved) return {};
+  try {
+    const known = JSON.parse(saved.local || "{}");
+    return known && typeof known === "object" ? (known as Known) : {};
+  } catch {
+    return {};
+  }
 }
 
 /**
@@ -979,7 +991,7 @@ export const useCollabStore = create<CollabState>()(
         const kept = await loadDoc(root).catch(() => null);
         // Only this project's saved copy is used (see ownSaved).
         const saved = ownSaved(kept, info.projectId);
-        const known: Known = kept ? JSON.parse(kept.local || "{}") : {};
+        const known: Known = knownOf(kept);
         let buffered: SyncEvent[] | null = [];
         // The relay's copy, in full, the first time it's been sent.
         let caughtUp: (() => void) | null = null;

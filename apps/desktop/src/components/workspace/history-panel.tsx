@@ -158,6 +158,12 @@ export function HistoryPanel({ maxHeight }: { maxHeight?: string }) {
       if (!projectRoot) return;
       // Stop any active review
       useHistoryStore.getState().stopReview();
+      // What's there now is kept first (unsaved edits included), so a
+      // restore can itself be undone.
+      await useDocumentStore.getState().saveAllFiles();
+      await useHistoryStore
+        .getState()
+        .createSnapshot(projectRoot, "Before restoring");
       await restoreSnapshot(projectRoot, snapshotId);
       // Re-open project and reload snapshot list
       await openProject(projectRoot);
