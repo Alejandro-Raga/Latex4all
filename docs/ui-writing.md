@@ -37,6 +37,5 @@ Zotero word their settings.
 - Use "your" only where it's needed ("Favorites", not "Your favorites").
   Never "we".
 - Errors say what happened and what to do, without blame or "oops":
-  "Your server can't be reached. Changes are kept here and sent when it's
-  back."
+  "Your server can't be reached. Changes will be sent when it's back."
 - "Check"/"uncheck" for checkboxes, not "tick".
