@@ -47,3 +47,36 @@ export function deviceName(): string {
   if (/Mac/i.test(ua)) return "Mac";
   return "Linux computer";
 }
+
+const PEOPLE = "latex4all-shared-with-people";
+
+/** Projects shared with other people (the Share button, or joined from
+ * someone's link), as opposed to only synced between one's own devices. */
+export function sharedWithPeople(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(PEOPLE) ?? "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+export function markSharedWithPeople(root: string) {
+  const roots = sharedWithPeople();
+  if (roots.has(root)) return;
+  roots.add(root);
+  try {
+    localStorage.setItem(PEOPLE, JSON.stringify([...roots]));
+  } catch {
+    // Shown as synced only until next time.
+  }
+}
+
+export function unmarkSharedWithPeople(root: string) {
+  const roots = sharedWithPeople();
+  if (!roots.delete(root)) return;
+  try {
+    localStorage.setItem(PEOPLE, JSON.stringify([...roots]));
+  } catch {
+    // As it was.
+  }
+}

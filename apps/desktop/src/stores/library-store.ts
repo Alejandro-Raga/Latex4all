@@ -33,13 +33,23 @@ import {
   writeLink,
 } from "@/lib/tauri/collab";
 import { join } from "@/lib/tauri/fs";
-import { deviceId, deviceName, setLinkedDevices } from "@/lib/collab/device";
+import {
+  deviceId,
+  deviceName,
+  markSharedWithPeople,
+  setLinkedDevices,
+  sharedWithPeople,
+  unmarkSharedWithPeople,
+} from "@/lib/collab/device";
 import {
   defaultProjectFolder,
   fetchInBackground,
+  moveShareOwner,
   shareInBackground,
+  syncInBackground,
   useCollabStore,
 } from "@/stores/collab-store";
+import { exists, rename } from "@tauri-apps/plugin-fs";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
 import { createLogger } from "@/lib/debug/logger";
@@ -47,6 +57,14 @@ import { type AppKnown, syncAppData } from "@/lib/collab/app-data-sync";
 
 const log = createLogger("library");
 const CHANNEL = "library";
+
+export type ProjectSyncState = "syncing" | "synced" | "offline" | "error";
+
+function setState(root: string, state: ProjectSyncState) {
+  useLibraryStore.setState((st) => ({
+    states: { ...st.states, [root]: state },
+  }));
+}
 
 export interface LinkedDevice {
   id: string;
@@ -66,6 +84,10 @@ interface LibraryState {
   here: number;
   /** Working through the list (sharing, fetching). */
   busy: string | null;
+  /** Bumped when which projects are in the library changes. */
+  revision: number;
+  /** How each library project's last background sync went, by folder. */
+  states: Record<string, ProjectSyncState>;
   error: string | null;
 
   /** Connects, if this device is linked (on start). */
@@ -96,6 +118,8 @@ interface Entry {
   /** Taken off the other devices: kept (so it isn't added again), not
    * fetched; copies already on a device stay there. */
   removed?: boolean;
+  /** Shared with other people too, not only between one's devices. */
+  people?: boolean;
 }
 
 export interface LibraryProject {
@@ -108,6 +132,67 @@ let session: SharedSession | null = null;
 const cleanup: Array<() => void> = [];
 let reconciling: Promise<void> | null = null;
 let again = false;
+/** When each project last synced in the background, by folder. */
+const lastBackground = new Map<string, number>();
+
+/** Projects that are in the library (synced between one's own devices),
+ * as opposed to shared with other people. */
+const LIBRARY_ROOTS = "latex4all-library-roots";
+
+export function libraryRoots(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(LIBRARY_ROOTS) ?? "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function markLibrary(root: string) {
+  const roots = libraryRoots();
+  if (roots.has(root)) return;
+  roots.add(root);
+  try {
+    localStorage.setItem(LIBRARY_ROOTS, JSON.stringify([...roots]));
+  } catch {
+    // Shown as shared until next time.
+  }
+  useLibraryStore.setState((st) => ({ revision: st.revision + 1 }));
+}
+
+/**
+ * A project fetched before its name was known ("Shared project 2") gets
+ * its own name once the shared copy says it: the folder is renamed.
+ */
+async function nameFetched(root: string) {
+  const parts = root.split(/[\\/]/);
+  const base = parts.pop() ?? "";
+  if (!/^Shared project(?: \(\d+\))?$/.test(base)) return;
+  const saved = await loadDoc(root).catch(() => null);
+  if (!saved) return;
+  const doc = new Y.Doc();
+  try {
+    Y.applyUpdate(doc, saved.data);
+    const name = doc.getMap<string>("meta").get("name")?.trim();
+    if (!name || name === base || /[\\/:*?"<>|]/.test(name)) return;
+    const target = [...parts, name].join(root.includes("\\") ? "\\" : "/");
+    if (await exists(target).catch(() => true)) return;
+    await rename(root, target);
+    const projects = useProjectStore.getState();
+    projects.renameRecentProject(root, target);
+    moveShareOwner(root, target);
+    const info = await readLink(target).catch(() => null);
+    if (info) projects.rememberSharedProject(info.projectId, target);
+    const roots = libraryRoots();
+    roots.delete(root);
+    roots.add(target);
+    localStorage.setItem(LIBRARY_ROOTS, JSON.stringify([...roots]));
+  } catch (err) {
+    log.warn("Couldn't name a fetched project", { root, error: String(err) });
+  } finally {
+    doc.destroy();
+  }
+}
+
 /** App data as it was when last in step (see app-data-sync). */
 let appKnown: AppKnown = {};
 
@@ -179,6 +264,15 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     for (const project of recent) {
       if (session !== s) return;
       let info = await readLink(project.path).catch(() => null);
+      // Shared before it came into the library, from here: with people.
+      if (
+        info &&
+        !libraryRoots().has(project.path) &&
+        (!projects.has(info.projectId) ||
+          projects.get(info.projectId)?.by === me)
+      ) {
+        markSharedWithPeople(project.path);
+      }
       if (!info && useDocumentStore.getState().projectRoot === project.path) {
         // The open one: shared as from the Share button, to sync right away.
         set({ busy: `Sharing ${project.name}…` });
@@ -186,6 +280,8 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
           .getState()
           .share()
           .catch(() => {});
+        // For the library, not for people.
+        unmarkSharedWithPeople(project.path);
         info = await readLink(project.path).catch(() => null);
       }
       if (!info) {
@@ -199,12 +295,14 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
           return null;
         });
       }
+      if (info) markLibrary(project.path);
       if (info && !projects.has(info.projectId)) {
         projects.set(info.projectId, {
           link: info.link,
           name: project.name,
           by: me,
           at: Date.now(),
+          people: sharedWithPeople().has(project.path),
         });
       }
     }
@@ -238,6 +336,8 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       try {
         const path = await fetchInBackground(entry.link, parent);
         useProjectStore.getState().addRecentProject(path);
+        markLibrary(path);
+        if (entry.people) markSharedWithPeople(path);
       } catch (err) {
         log.warn("Couldn't fetch a linked project", {
           name: entry.name,
@@ -246,6 +346,36 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
         problems.push(`Couldn't get ${entry.name} (L02)`);
       }
     }
+    // Every project's files, brought up to date in the background (one at
+    // a time; each at most every ten minutes; the open one syncs live).
+    for (const [, entry] of projects) {
+      if (session !== s || entry.removed) continue;
+      const info = await parseLink(entry.link).catch(() => null);
+      const root =
+        info && useProjectStore.getState().sharedProjects[info.projectId];
+      if (!root) continue;
+      markLibrary(root);
+      const last = lastBackground.get(root) ?? 0;
+      if (Date.now() - last < 10 * 60 * 1000) continue;
+      lastBackground.set(root, Date.now());
+      set({ busy: `Syncing ${entry.name}…` });
+      setState(root, "syncing");
+      try {
+        await syncInBackground(root, entry.link);
+        setState(root, "synced");
+        await nameFetched(root);
+      } catch (err) {
+        lastBackground.set(root, 0);
+        setState(root, String(err).includes("offline") ? "offline" : "error");
+        log.warn("Background sync failed", {
+          name: entry.name,
+          error: String(err),
+        });
+        if (String(err).includes("offline")) break;
+        problems.push(`Couldn't sync ${entry.name} (L02)`);
+      }
+    }
+
     // The app's own data (Planner lists, highlights) too.
     if (session === s) {
       appKnown = await syncAppData(doc, appKnown);
@@ -354,6 +484,8 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     list: [],
     here: 0,
     busy: null,
+    revision: 0,
+    states: {},
     error: null,
 
     setOnDevices: (id, on) => {

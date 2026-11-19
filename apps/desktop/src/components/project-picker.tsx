@@ -31,7 +31,13 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { toast } from "sonner";
-import { leaveSharedProject } from "@/stores/collab-store";
+import { leaveSharedProject, useCollabStore } from "@/stores/collab-store";
+import {
+  libraryRoots,
+  type ProjectSyncState,
+  useLibraryStore,
+} from "@/stores/library-store";
+import { sharedWithPeople } from "@/lib/collab/device";
 import {
   CheckCircle2Icon,
   FolderPlusIcon,
@@ -54,6 +60,7 @@ import {
   ListIcon,
   ZoomInIcon,
   ZoomOutIcon,
+  LaptopIcon,
 } from "lucide-react";
 import * as Y from "yjs";
 import {
@@ -1777,6 +1784,71 @@ function SharedBadge({ conflicts }: { conflicts: number }) {
   );
 }
 
+/**
+ * How a project syncs: "Shared" when it's shared with people, and a
+ * "Synced" pill when it's in your linked devices' library, saying how its
+ * last sync went (the open one: live).
+ */
+function SyncBadges({ path, conflicts }: { path: string; conflicts: number }) {
+  useLibraryStore((s) => s.revision);
+  const background = useLibraryStore((s) => s.states[path]);
+  const live = useCollabStore((s) => s.status);
+  const open = useDocumentStore((s) => s.projectRoot === path);
+  const inLibrary = libraryRoots().has(path);
+  const people = sharedWithPeople().has(path) || !inLibrary;
+  const state =
+    open && live !== "none"
+      ? live === "synced"
+        ? "synced"
+        : live === "syncing"
+          ? "syncing"
+          : "offline"
+      : background;
+  return (
+    <>
+      {people && <SharedBadge conflicts={conflicts} />}
+      {inLibrary && <SyncedPill state={state} />}
+    </>
+  );
+}
+
+function SyncedPill({ state }: { state?: ProjectSyncState }) {
+  const text =
+    state === "syncing"
+      ? "Syncing…"
+      : state === "error"
+        ? "Not synced"
+        : state === "offline"
+          ? "Waiting"
+          : "Synced";
+  const title =
+    state === "error"
+      ? "Couldn't sync with your other devices (L02). Trying again soon."
+      : state === "offline"
+        ? "Offline: syncs with your other devices when you're back online."
+        : state === "syncing"
+          ? "Syncing with your other devices"
+          : "On your linked devices";
+  return (
+    <span
+      className={cn(
+        "inline-flex w-fit shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 font-medium text-[10px]",
+        state === "error"
+          ? "bg-destructive/15 text-destructive"
+          : "bg-primary/10 text-primary",
+      )}
+      title={title}
+    >
+      {state === "syncing" ? (
+        <Loader2Icon className="size-3 animate-spin" />
+      ) : (
+        <LaptopIcon className="size-3" />
+      )}
+      {text}
+    </span>
+  );
+}
+
 /** A project's preview, loaded once and kept for the session. */
 function useProjectPreview(project: RecentProject, enabled = true) {
   const [preview, setPreview] = useState<ProjectPreviewState>(() => {
@@ -2004,7 +2076,12 @@ function ProjectPreviewCard({
                   aria-label={`${PRIORITY_LABEL[priority as Priority]} priority`}
                 />
               )}
-              {isShared && <SharedBadge conflicts={facts?.conflicts ?? 0} />}
+              {isShared && (
+                <SyncBadges
+                  path={project.path}
+                  conflicts={facts?.conflicts ?? 0}
+                />
+              )}
             </div>
             <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground text-xs">
               <span className="truncate">

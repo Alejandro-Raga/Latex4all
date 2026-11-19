@@ -5,7 +5,8 @@ import { homeDir } from "@tauri-apps/api/path";
 import * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { layout, metaMap } from "@/lib/collab/project-doc";
-import { deviceId, myDevices } from "@/lib/collab/device";
+import { deviceId, markSharedWithPeople, myDevices } from "@/lib/collab/device";
+import { diskWorkspace } from "@/lib/collab/disk-workspace";
 import { type Known, ProjectSync } from "@/lib/collab/project-sync";
 import {
   type SessionStatus,
@@ -424,6 +425,110 @@ export async function fetchInBackground(
   }
 }
 
+/** Background syncs under way, by folder, so one runs at a time each. */
+const inBackground = new Map<string, Promise<void>>();
+
+/**
+ * Syncs a shared project that isn't open: its files go into the shared
+ * copy, and others' changes and files come onto disk, as opening it would,
+ * on a connection of its own. For linked devices (a project shared from
+ * here, or fetched here, with nothing opened). Does nothing for the
+ * project open now: that one syncs live.
+ */
+export function syncInBackground(root: string, link: string): Promise<void> {
+  if (active?.root === root) return Promise.resolve();
+  const running = inBackground.get(root);
+  if (running) return running;
+  const run = (async () => {
+    const channel = "bg";
+    const saved = await loadDoc(root).catch(() => null);
+    const known: Known = saved ? JSON.parse(saved.local || "{}") : {};
+    let sync: ProjectSync | null = null;
+    let resolve = () => {};
+    const caughtUp = new Promise<void>((res) => {
+      resolve = res;
+    });
+    const session = new SharedSession(
+      {
+        publish: (update) => {
+          publish(update, channel).catch(() => {});
+        },
+        awareness: () => {},
+        compact: (upTo, snapshot, blobs) => {
+          compact(upTo, snapshot, blobs, channel).catch(() => {});
+        },
+        peers: (ids) => {
+          p2pPeers(ids, channel).catch(() => {});
+        },
+        save: (seq, local, state) => saveDoc(root, seq, local, state),
+      },
+      {
+        local: () => sync?.knownFiles() ?? known,
+        onCaughtUp: () => resolve(),
+      },
+    );
+    if (saved) session.load(saved.seq, saved.data);
+    const unlisten = await listenForSyncEvents(
+      (e) => session.handle(e),
+      channel,
+    );
+    const workspace = diskWorkspace(root, link, session.doc);
+    try {
+      await connect(link, session.seq, root, channel);
+      session.connecting();
+      await Promise.race([
+        caughtUp,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("offline")), 60_000),
+        ),
+      ]);
+      if (active?.root === root) return;
+      const meta = metaMap(session.doc);
+      if (!meta.get("name")) {
+        meta.set("name", root.split(/[\\/]/).filter(Boolean).pop() ?? "");
+      }
+      if (firstOpens().includes(root)) {
+        setFirstOpens(firstOpens().filter((r) => r !== root));
+        meta.set("owner", deviceId());
+        await moveAnnotationsIntoShared(
+          session.doc,
+          root,
+          await takeLocalAnnotations(root),
+        ).catch(() => {});
+      }
+      await workspace.load();
+      sync = new ProjectSync(
+        session.doc,
+        workspace,
+        known,
+        {
+          onError: (message) => log.warn("Background sync", { root, message }),
+          me: () => ({
+            name: useCollabStore.getState().displayName.trim() || "Anonymous",
+            color:
+              useCollabStore.getState().color ||
+              peerColor(session.doc.clientID),
+          }),
+        },
+        useSettingsStore.getState().notSynced[root] ?? [],
+      );
+      await sync.start();
+      await sync.idle();
+      // A moment for the last changes to reach the relay (what doesn't is
+      // kept and sent next time).
+      await new Promise((r) => setTimeout(r, 3000));
+    } finally {
+      sync?.stop();
+      workspace.stop();
+      unlisten();
+      await session.destroy().catch(() => {});
+      await disconnect(channel).catch(() => {});
+    }
+  })().finally(() => inBackground.delete(root));
+  inBackground.set(root, run);
+  return run;
+}
+
 export function getSharedText(relativePath: string): Y.Text | null {
   return active?.sync?.textAt(relativePath)?.text ?? null;
 }
@@ -710,6 +815,8 @@ export const useCollabStore = create<CollabState>()(
       }
 
       async function open(root: string, info: LinkInfo) {
+        // A background sync of it finishes first: never two on one folder.
+        await inBackground.get(root)?.catch(() => {});
         const saved = await loadDoc(root).catch(() => null);
         const known: Known = saved ? JSON.parse(saved.local || "{}") : {};
         let buffered: SyncEvent[] | null = [];
@@ -1006,6 +1113,7 @@ export const useCollabStore = create<CollabState>()(
             const annotations = await takeLocalAnnotations(root);
             const info = await parseLink(await createSharedProject());
             await writeLink(root, info.link);
+            markSharedWithPeople(root);
             useProjectStore
               .getState()
               .rememberSharedProject(info.projectId, root);
@@ -1153,6 +1261,7 @@ export const useCollabStore = create<CollabState>()(
           } finally {
             set({ progress: null });
           }
+          markSharedWithPeople(path);
           // Opening it connects again and writes every file into the folder.
           await useDocumentStore.getState().openProject(path);
           projects.addRecentProject(path);

@@ -241,8 +241,8 @@ function LinkedDevices() {
       <div>
         <h3 className="font-medium text-sm">Link another device</h3>
         <p className="mt-1 text-muted-foreground text-xs">
-          Your computers get the same projects and keep them in sync. A project
-          from another device gets its files when you first open it.
+          Your computers get the same projects, Planner lists and highlights,
+          and keep them in sync.
         </p>
       </div>
       {!main ? (

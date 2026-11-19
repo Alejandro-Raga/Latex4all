@@ -143,10 +143,13 @@ the *library*: a shared document of its own, synced like a shared project
 on a connection kept beside the open project's, that lists every project by
 its share link and the devices linked.
 
-Each device shares its projects (without opening them: a link now, the files
-go in the first time it's opened) and adds them to the list, and fetches the
-ones it lacks into its projects folder (their files are written the first
-time they're opened). From then on each project syncs as a shared project.
+Each device shares its projects and adds them to the list, and fetches the
+ones it lacks into its projects folder. Projects that aren't open sync in the
+background (one at a time, each at most every ten minutes, on a connection
+of their own; the open one syncs live): files go up from the device that has
+them and come down on the others, so nothing needs opening first. Project
+cards say "Shared" for projects shared with people and "Synced" (with how
+the last sync went) for those in the library; a project can be both.
 A project's owner is any of the linked devices, so the one you shared from
 and your other computers count as you.
 

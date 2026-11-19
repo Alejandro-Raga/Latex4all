@@ -21,6 +21,10 @@ tag.
 
 ### Fixed
 
+- Linked devices: projects arrive with their files and tasks, and their own
+  names, without opening them first; projects stay in step in the
+  background. Project cards say "Shared" for projects shared with people
+  and "Synced" for those on your devices, with how the last sync went.
 - Sync settings: the "Sync storage" question no longer comes back after
   updates once answered, and a choice made elsewhere is no longer undone by
   Settings → Sync if it was open at the time.
