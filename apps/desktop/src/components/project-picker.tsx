@@ -92,6 +92,20 @@ import {
 } from "@/lib/preview-aspect-ratio";
 import { DeckSurface, isWide } from "@/components/deck-surface";
 import { getMupdfClient } from "@/lib/mupdf/mupdf-client";
+import {
+  compactImage,
+  keepPreview,
+  pdfFingerprint,
+  previewUrls,
+  readKeptPreview,
+  type StoredPreview,
+} from "@/lib/project-preview-store";
+import {
+  libraryPreview,
+  onPreviewsChanged,
+  sharePreview,
+} from "@/stores/library-store";
+import { deviceId } from "@/lib/collab/device";
 import { exists, join } from "@/lib/tauri/fs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1347,10 +1361,10 @@ async function builtPdf(projectPath: string): Promise<string | null> {
 }
 
 type RenderedThumbnail = {
-  url: string;
   aspectRatio: number;
   pages: number;
-  nextUrl?: string;
+  png: Uint8Array;
+  nextPng?: Uint8Array;
 };
 
 async function renderPdfThumbnailFromBytes(
@@ -1369,19 +1383,15 @@ async function renderPdfThumbnailFromBytes(
     const { width, height } = await client.getPageSize(docId, 0);
     const aspectRatio = pageAspectRatio(width, height);
     const pages = await client.countPages(docId).catch(() => 1);
-    const render = async (page: number) => {
-      const png = await client.renderThumbnail(docId as number, page, 420);
-      return URL.createObjectURL(
-        new Blob([new Uint8Array(png)], { type: "image/png" }),
-      );
-    };
-    const url = await render(0);
+    const render = async (page: number) =>
+      new Uint8Array(await client.renderThumbnail(docId as number, page, 420));
+    const png = await render(0);
     // A deck shows its first two slides, one above the other.
-    const nextUrl =
+    const nextPng =
       isWide(aspectRatio) && pages > 1
         ? await render(1).catch(() => undefined)
         : undefined;
-    return { url, aspectRatio, pages, nextUrl };
+    return { aspectRatio, pages, png, nextPng };
   } finally {
     if (docId !== null) {
       await client.closeDocument(docId).catch(() => {});
@@ -1511,22 +1521,71 @@ async function computeProjectPreview(
       (await builtPdf(project.path)) ??
       (await firstExistingPath(project.path, [["main.pdf"], ["document.pdf"]]));
 
-    if (pdfPath) {
+    // The preview kept here, or a newer one from a linked device.
+    const kept = await readKeptPreview(project.path);
+    const fromLibrary = libraryPreview(project.path);
+    let best =
+      fromLibrary && (!kept || fromLibrary.at > kept.at) ? fromLibrary : kept;
+    const fp = pdfPath ? await pdfFingerprint(pdfPath).catch(() => "") : "";
+
+    // This device's PDF changed since: a new preview, made once.
+    if (pdfPath && fp && kept?.seen !== fp) {
       try {
-        const data: ProjectPreviewData = {
-          kind: "pdf",
-          ...(await renderPdfThumbnail(pdfPath)),
-          createdAt,
+        const page = await renderPdfThumbnail(pdfPath);
+        const first = await compactImage(page.png);
+        const second = page.nextPng
+          ? await compactImage(page.nextPng)
+          : undefined;
+        const made: StoredPreview = {
+          fp,
+          at: Date.now(),
+          by: deviceId(),
+          aspectRatio: page.aspectRatio,
+          pages: page.pages,
+          type: first.type,
+          img: first.bytes,
+          next: second?.type === first.type ? second.bytes : undefined,
+          seen: fp,
         };
-        projectPreviewCache.set(cacheKey, data);
-        return data;
+        // An older PDF here doesn't replace a newer preview from elsewhere.
+        const pdfAt = Number(fp.split(":")[1]);
+        if (
+          !best ||
+          best.by === made.by ||
+          !Number.isFinite(pdfAt) ||
+          pdfAt > best.at
+        ) {
+          best = made;
+          await keepPreview(project.path, made).catch(() => {});
+          sharePreview(project.path, made);
+        } else {
+          await keepPreview(project.path, { ...best, seen: fp }).catch(
+            () => {},
+          );
+        }
       } catch (err) {
         log.warn(
           `Failed to render thumbnail for ${project.path}: ${pdfPath} — ${String(err)}`,
         );
       }
-    } else {
-      log.info(`No cached PDF found for ${project.path}`);
+    } else if (best && best !== kept) {
+      // From a linked device: kept here too, for next time.
+      await keepPreview(project.path, {
+        ...best,
+        seen: fp || kept?.seen,
+      }).catch(() => {});
+    }
+
+    if (best) {
+      const data: ProjectPreviewData = {
+        kind: "pdf",
+        aspectRatio: best.aspectRatio,
+        pages: best.pages,
+        ...previewUrls(best),
+        createdAt,
+      };
+      projectPreviewCache.set(cacheKey, data);
+      return data;
     }
 
     const texFile = await firstExistingProjectFile(project.path, [
@@ -1905,6 +1964,18 @@ function LibraryProgressBand() {
 
 /** A project's preview, loaded once and kept for the session. */
 function useProjectPreview(project: RecentProject, enabled = true) {
+  // A new preview from a linked device: drawn again.
+  const [arrived, setArrived] = useState(0);
+  useEffect(
+    () =>
+      onPreviewsChanged((paths) => {
+        const here = project.path.normalize("NFC");
+        if (!paths.some((p) => p.normalize("NFC") === here)) return;
+        projectPreviewCache.delete(projectPreviewCacheKey(project));
+        setArrived((n) => n + 1);
+      }),
+    [project],
+  );
   const [preview, setPreview] = useState<ProjectPreviewState>(() => {
     const cached = projectPreviewCache.get(projectPreviewCacheKey(project));
     return cached ? { status: "ready", data: cached } : { status: "loading" };
@@ -1929,7 +2000,7 @@ function useProjectPreview(project: RecentProject, enabled = true) {
     return () => {
       cancelled = true;
     };
-  }, [project, enabled]);
+  }, [project, enabled, arrived]);
   return preview;
 }
 

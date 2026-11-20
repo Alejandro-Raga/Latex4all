@@ -316,9 +316,11 @@ tag.
 
 ### Fixed
 
-- Much faster home screen: projects without a PDF are no longer compiled in
-  the background to draw their card (it slowed the whole app, most with big
-  projects); their card shows the source until you build them.
+- Much faster home screen: projects are no longer compiled in the background
+  to draw their card. Each card keeps an image of the project's first page,
+  made once from its PDF and updated when the PDF changes.
+- Card images go to your linked devices, so a project shows its pages there
+  even before it's built, or if it doesn't build on that computer.
 - Linked devices sync a project only when it changed (here, on another
   device, or for projects shared with people, hourly), instead of every
   project all the time.

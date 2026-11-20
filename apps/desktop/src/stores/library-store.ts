@@ -52,6 +52,7 @@ import {
 } from "@/stores/collab-store";
 import { exists, rename } from "@tauri-apps/plugin-fs";
 import { folderFingerprint } from "@/lib/tauri/fs";
+import type { StoredPreview } from "@/lib/project-preview-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
 import { getSyncSettings } from "@/lib/tauri/sync-settings";
@@ -311,6 +312,56 @@ function headsMap(doc: Y.Doc) {
 export function noteProjectChanged(projectId: string) {
   if (!session) return;
   headsMap(session.doc).set(projectId, { at: Date.now(), by: deviceId() });
+}
+
+/** Project card previews (see project-preview-store), by project: made on
+ * the device that built the PDF, shown on the others. */
+function previewsMap(doc: Y.Doc) {
+  return doc.getMap<StoredPreview>("previews");
+}
+
+/** The library's project for a folder on this device, if it's in it. */
+function libraryIdOf(projectPath: string): string | null {
+  if (!session) return null;
+  const projects = projectsMap(session.doc);
+  const want = projectPath.normalize("NFC");
+  for (const [id, root] of Object.entries(
+    useProjectStore.getState().sharedProjects,
+  )) {
+    if (root.normalize("NFC") !== want) continue;
+    const entry = projects.get(id);
+    if (entry && !entry.removed) return id;
+  }
+  return null;
+}
+
+/** The card preview another device (or this one) shared for a project. */
+export function libraryPreview(projectPath: string): StoredPreview | null {
+  const id = libraryIdOf(projectPath);
+  return (id && session && previewsMap(session.doc).get(id)) || null;
+}
+
+/** A preview made here goes to the linked devices (if it's new to them). */
+export function sharePreview(projectPath: string, preview: StoredPreview) {
+  const id = libraryIdOf(projectPath);
+  if (!id || !session) return;
+  const size = preview.img.byteLength + (preview.next?.byteLength ?? 0);
+  if (size > 400 * 1024) return;
+  const map = previewsMap(session.doc);
+  const there = map.get(id);
+  if (there && there.fp === preview.fp && there.by === preview.by) return;
+  if (there && there.at >= preview.at) return;
+  const { seen: _, ...shared } = preview;
+  map.set(id, shared);
+}
+
+const previewListeners = new Set<(paths: string[]) => void>();
+/** Told the folders whose preview came in from another device. */
+export function onPreviewsChanged(fn: (paths: string[]) => void) {
+  previewListeners.add(fn);
+  return () => {
+    previewListeners.delete(fn);
+  };
 }
 
 /** When each project last synced in the background, by folder. */
@@ -862,10 +913,21 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     };
     projectsMap(s.doc).observe(changed);
     devicesMap(s.doc).observe(changed);
+    // Previews from the other devices: their cards redrawn.
+    const previewsIn = (event: Y.YMapEvent<StoredPreview>) => {
+      if (event.transaction.local) return;
+      const roots = useProjectStore.getState().sharedProjects;
+      const paths = [...event.keysChanged]
+        .map((id) => roots[id])
+        .filter((p): p is string => Boolean(p));
+      if (paths.length) for (const fn of previewListeners) fn(paths);
+    };
+    previewsMap(s.doc).observe(previewsIn);
     cleanup.push(() => {
       if (timer) clearTimeout(timer);
       projectsMap(s.doc).unobserve(changed);
       devicesMap(s.doc).unobserve(changed);
+      previewsMap(s.doc).unobserve(previewsIn);
     });
     // Projects added on this device: listed too.
     // App data changed on this device: looked at now and then.
