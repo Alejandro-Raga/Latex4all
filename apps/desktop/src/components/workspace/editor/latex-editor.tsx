@@ -78,7 +78,7 @@ import {
   useCollabStore,
 } from "@/stores/collab-store";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
-import { mergeText, textChanges } from "@/lib/text-merge";
+import { DIFF_LIMITS, mergeText, textChanges } from "@/lib/text-merge";
 import {
   compileLatex,
   resolveCompileTarget,
@@ -1418,6 +1418,7 @@ export function LatexEditor() {
               highlightChanges: true,
               gutter: true,
               mergeControls: true,
+              diffConfig: DIFF_LIMITS,
             }),
           ),
           annotations: Transaction.addToHistory.of(false),
@@ -1460,6 +1461,7 @@ export function LatexEditor() {
               highlightChanges: true,
               gutter: true,
               mergeControls: true,
+              diffConfig: DIFF_LIMITS,
             }),
           ),
           annotations: Transaction.addToHistory.of(false),

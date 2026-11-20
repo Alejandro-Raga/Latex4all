@@ -1,5 +1,9 @@
 import { diff } from "@codemirror/merge";
 
+/** Very different long texts are compared roughly rather than exactly past
+ * this, so the comparison never hangs the app (exact, it took seconds). */
+export const DIFF_LIMITS = { scanLimit: 2000, timeout: 50 };
+
 /** A stretch that differs between two texts, as offsets into each. */
 export interface Hunk {
   fromA: number;
@@ -55,7 +59,7 @@ export function diffHunks(a: string, b: string): Hunk[] {
   const left = encode(a);
   const right = left && encode(b);
   if (!left || !right) {
-    return diff(a, b).map(({ fromA, toA, fromB, toB }) => ({
+    return diff(a, b, DIFF_LIMITS).map(({ fromA, toA, fromB, toB }) => ({
       fromA,
       toA,
       fromB,
@@ -70,7 +74,7 @@ export function diffHunks(a: string, b: string): Hunk[] {
   };
   const atA = offsets(left.tokens);
   const atB = offsets(right.tokens);
-  return diff(left.encoded, right.encoded).map((change) => ({
+  return diff(left.encoded, right.encoded, DIFF_LIMITS).map((change) => ({
     fromA: atA[change.fromA],
     toA: atA[change.toA],
     fromB: atB[change.fromB],
@@ -162,7 +166,7 @@ export function mergeText(
  */
 export function textChanges(from: string, to: string) {
   if (from === to) return [];
-  return diff(from, to).map((c) => ({
+  return diff(from, to, DIFF_LIMITS).map((c) => ({
     from: c.fromA,
     to: c.toA,
     insert: to.slice(c.fromB, c.toB),

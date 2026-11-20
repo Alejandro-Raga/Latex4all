@@ -316,6 +316,14 @@ tag.
 
 ### Fixed
 
+- Opening a project with long files no longer freezes the app: comparing two
+  very different versions of a file took seconds and now takes milliseconds.
+- A shared copy whose main.tex had become another project's document (from
+  an earlier sync problem) is set right from the computer that added the
+  project, keeping the other text as "main (conflicted copy).tex". Other
+  computers don't sync it until then, and never write it over their files.
+- Project cards count only conflicts you can find in the project.
+
 - Much faster home screen: projects are no longer compiled in the background
   to draw their card. Each card keeps an image of the project's first page,
   made once from its PDF and updated when the PDF changes.

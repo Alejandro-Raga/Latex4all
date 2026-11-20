@@ -336,6 +336,14 @@ function libraryIdOf(projectPath: string): string | null {
   return null;
 }
 
+/** Whether this device added the project to the library (null: not in
+ * it, or the library isn't open). */
+export function addedHere(projectId: string): boolean | null {
+  const entry = session && projectsMap(session.doc).get(projectId);
+  if (!entry || entry.removed) return null;
+  return entry.by === deviceId();
+}
+
 /** The card preview another device (or this one) shared for a project. */
 export function libraryPreview(projectPath: string): StoredPreview | null {
   const id = libraryIdOf(projectPath);

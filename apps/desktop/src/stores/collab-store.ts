@@ -5,7 +5,9 @@ import { homeDir } from "@tauri-apps/api/path";
 import * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import {
+  applyTextChange,
   layout,
+  LOCAL,
   isPlaceholderName,
   metaMap,
   nameFromFolder,
@@ -53,7 +55,12 @@ import {
   sendAwareness,
   writeLink,
 } from "@/lib/tauri/collab";
-import { join, scanProjectFolder } from "@/lib/tauri/fs";
+import {
+  join,
+  readTexFileContent,
+  scanProjectFolder,
+  writeTextWhole,
+} from "@/lib/tauri/fs";
 import { exists } from "@tauri-apps/plugin-fs";
 import {
   onProjectRelocated,
@@ -669,6 +676,38 @@ function documentClass(text: string | undefined): string | null {
   return text?.match(/\\documentclass(?:\[[^\]]*\])?\{([^}]+)\}/)?.[1] ?? null;
 }
 
+/**
+ * On the device that added the project to the library (it has the project
+ * as it was): the shared main.tex, another document, is set right from the
+ * folder's, and what it held is kept as "main (conflicted copy).tex". On
+ * any other device nothing is done (its own copy may be the wrong one).
+ */
+async function repairFromHere(
+  doc: Y.Doc,
+  root: string,
+  projectId: string,
+  mainHere: string,
+): Promise<boolean> {
+  const { addedHere } = await import("@/stores/library-store");
+  if (addedHere(projectId) !== true) return false;
+  const shared = [...layout(doc).values()].find((f) => f.path === "main.tex");
+  if (!shared || shared.kind !== "text") return false;
+  const theirs = shared.text.toString();
+  let copy = await join(root, "main (conflicted copy).tex");
+  for (let n = 2; await exists(copy).catch(() => true); n++) {
+    copy = await join(root, `main (conflicted copy ${n}).tex`);
+  }
+  await writeTextWhole(copy, theirs);
+  doc.transact(() => applyTextChange(shared.text, mainHere), LOCAL);
+  log.warn("Shared main.tex was another document; set right from here", {
+    root,
+  });
+  toast.warning(
+    "The shared copy of main.tex was a different document. This computer's version is back in it, and the other is in main (conflicted copy).tex.",
+  );
+  return true;
+}
+
 /** The shared copy's main.tex and the folder's are different documents. */
 function differentDocument(doc: Y.Doc, local: LocalFile[]): boolean {
   const here = local.find((f) => f.path === "main.tex")?.content;
@@ -1151,6 +1190,25 @@ export const useCollabStore = create<CollabState>()(
         if (!sameProject(session.doc, info.projectId)) {
           warnAboutCode("X01");
           return;
+        }
+        // The shared main.tex is another document (another project's, from
+        // a sync gone wrong): never written over this folder's.
+        const mainHere = await readTexFileContent(
+          await join(root, "main.tex"),
+        ).catch(() => undefined);
+        if (
+          differentDocument(session.doc, [
+            { path: "main.tex", kind: "text", content: mainHere },
+          ] as LocalFile[])
+        ) {
+          const repaired =
+            mainHere !== undefined &&
+            (await repairFromHere(session.doc, root, info.projectId, mainHere));
+          if (active !== target) return;
+          if (!repaired) {
+            warnAboutCode("X01");
+            return;
+          }
         }
         nameFromFolder(session.doc, root);
         noteWhoIsIn(session.doc, root);
