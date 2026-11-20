@@ -781,14 +781,19 @@ fn parse_synctex_data(
             continue;
         }
 
-        if !in_content {
-            if let Some(rest) = line.strip_prefix("Input:") {
-                if let Some(colon_pos) = rest.find(':') {
-                    if let Ok(tag) = rest[..colon_pos].parse::<u32>() {
-                        inputs.insert(tag, rest[colon_pos + 1..].to_string());
-                    }
+        // Anywhere: a file \input partway through is announced where it's
+        // opened, in the middle of the content (its text was then never
+        // found, and a double-click on it did nothing).
+        if let Some(rest) = line.strip_prefix("Input:") {
+            if let Some(colon_pos) = rest.find(':') {
+                if let Ok(tag) = rest[..colon_pos].parse::<u32>() {
+                    inputs.insert(tag, rest[colon_pos + 1..].to_string());
                 }
-            } else if let Some(rest) = line.strip_prefix("Magnification:") {
+            }
+            continue;
+        }
+        if !in_content {
+            if let Some(rest) = line.strip_prefix("Magnification:") {
                 magnification = rest.trim().parse().unwrap_or(1000.0);
             } else if let Some(rest) = line.strip_prefix("Unit:") {
                 unit = rest.trim().parse().unwrap_or(1.0);
@@ -835,6 +840,22 @@ fn parse_synctex_data(
         }
     }
 
+    // Only what came from a source file can be gone to: not a package's
+    // (Tectonic leaves those unnamed, and they typeset headers and the like
+    // all over each page), nor the table of contents or the bibliography.
+    let is_source = |tag: u32| {
+        inputs.get(&tag).is_some_and(|name| {
+            let lower = name.to_ascii_lowercase();
+            !name.is_empty()
+                && !lower.contains("/texmf")
+                && ![
+                    ".aux", ".toc", ".lof", ".lot", ".out", ".bbl", ".nav", ".snm",
+                ]
+                .iter()
+                .any(|ext| lower.ends_with(ext))
+        })
+    };
+    nodes.retain(|node| is_source(node.tag));
     if nodes.is_empty() {
         return None;
     }
@@ -1581,6 +1602,30 @@ Postamble:
         assert!(result.is_some());
         let (file, line, _) = result.unwrap();
         assert_eq!(file, "./chapter1.tex");
+        assert_eq!(line, 15);
+    }
+
+    #[test]
+    fn test_parse_synctex_data_input_opened_mid_document() {
+        // As Tectonic writes it: a chapter announced where it's \input, in
+        // the content, and a package (headers) left unnamed beside it.
+        let data = "SyncTeX Version:1
+Input:1:/build/main.tex
+Input:2:
+Unit:1
+Content:
+{1
+Input:3:/build/chapters/intro.tex
+(2,4:50,40:10,10,0
+(3,15:100,100:10,10,0
+}1
+Postamble:
+";
+        let factor = 1000.0 / (1000.0 * 65536.0) * 72.0 / 72.27;
+        let near_header = (50.0 * factor, 40.0 * factor);
+        let (file, line, _) = parse_synctex_data(data, 1, near_header.0, near_header.1)
+            .expect("the chapter's text is found");
+        assert_eq!(file, "/build/chapters/intro.tex");
         assert_eq!(line, 15);
     }
 

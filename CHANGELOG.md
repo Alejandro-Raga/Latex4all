@@ -334,6 +334,11 @@ tag.
   the computer that made them instead of reaching every other computer.
   Ones already shared are taken out of the shared copy; nobody's own copy
   is deleted.
+- Double-clicking the PDF goes to the source in projects split into
+  several .tex files (chapters with \input), not only in main.tex. Highlights
+  and notes on those pages show again too.
+- A PDF exported or saved while the Library shows its project now appears
+  in the list straight away.
 - Projects no longer show sync conflicts that can't be found: earlier
   versions marked differences in the project's plan as conflicts, and the
   plan can't be opened as a file to settle them. Those are cleared, and the

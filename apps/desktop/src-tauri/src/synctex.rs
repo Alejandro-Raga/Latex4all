@@ -63,16 +63,20 @@ pub fn forward_boxes(
         if line.is_empty() {
             continue;
         }
-        if !in_content {
-            if let Some(rest) = line.strip_prefix("Input:") {
-                if let Some((tag, path)) = rest.split_once(':') {
-                    if let Ok(tag) = tag.parse::<u32>() {
-                        if normalize_synctex_path(path, work_dir) == wanted {
-                            tags.insert(tag);
-                        }
+        // Anywhere: a file \input partway through is announced where it's
+        // opened, in the middle of the content.
+        if let Some(rest) = line.strip_prefix("Input:") {
+            if let Some((tag, path)) = rest.split_once(':') {
+                if let Ok(tag) = tag.parse::<u32>() {
+                    if normalize_synctex_path(path, work_dir) == wanted {
+                        tags.insert(tag);
                     }
                 }
-            } else if let Some(rest) = line.strip_prefix("Magnification:") {
+            }
+            continue;
+        }
+        if !in_content {
+            if let Some(rest) = line.strip_prefix("Magnification:") {
                 magnification = rest.trim().parse().unwrap_or(1000.0);
             } else if let Some(rest) = line.strip_prefix("Unit:") {
                 unit = rest.trim().parse().unwrap_or(1.0);
@@ -226,5 +230,22 @@ Postamble:
     fn ignores_vertical_boxes_and_other_lines() {
         let lines = HashSet::from([1, 99]);
         assert!(forward_boxes(DATA, "/tmp/build", "main.tex", &lines).is_empty());
+    }
+
+    #[test]
+    fn reads_inputs_announced_in_the_middle_of_the_content() {
+        let data = "SyncTeX Version:1
+Input:1:/b/main.tex
+Content:
+{1
+Input:2:./chapters/intro.tex
+(2,3:100,300:10,10,0
+}1
+";
+        let wanted: HashSet<u32> = [3].into_iter().collect();
+        assert_eq!(
+            forward_boxes(data, "/b", "chapters/intro.tex", &wanted).len(),
+            1
+        );
     }
 }
