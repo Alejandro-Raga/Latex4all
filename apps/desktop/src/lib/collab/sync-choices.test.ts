@@ -51,12 +51,22 @@ describe("never shared", () => {
       "desktop.ini",
       ".git/config",
       "sub/.git/HEAD",
+      "main (conflicted copy).tex",
+      "refs (conflicted copy 2).bib",
+      "main (SFConflict someone 2026-06-11-10-18-58).tex",
+      "attachments/table (SFConflict a b 2026-06-11-13-02-20).tex",
+      "main.tex.sla0wj.saving",
+      "_damaged-2026-11-19/main.tex",
     ]) {
       expect(neverShared(p), p).toBe(true);
     }
     for (const p of [
       "main.tex",
-      "main (conflicted copy).tex",
+      "paper (2).pdf",
+      "talk (1).pptx",
+      "conflicted copy.tex",
+      "notes.saving.tex",
+      "damaged/main.tex",
       ".gitignore",
       ".latexmkrc",
       "git.tex",

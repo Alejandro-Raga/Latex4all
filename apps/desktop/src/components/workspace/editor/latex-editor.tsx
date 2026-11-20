@@ -244,6 +244,11 @@ const QUICK_ACTIONS = [
 export function LatexEditor() {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  /** The project and file the view was made for. */
+  const viewForRef = useRef<{ root: string | null; file: string }>({
+    root: null,
+    file: "",
+  });
 
   const files = useDocumentStore((s) => s.files);
   const activeFileId = useDocumentStore((s) => s.activeFileId);
@@ -797,6 +802,16 @@ export function LatexEditor() {
   useEffect(() => {
     if (!containerRef.current || !isTextFile) return;
     const currentContent = getActiveFileContent();
+    // The project and file this editor was made for. Changes reaching it
+    // once another project or file is open (another computer's typing in a
+    // shared file, a moment after switching) belong to that one, and are
+    // never saved into whatever is open now.
+    const boundRoot = useDocumentStore.getState().projectRoot;
+    const boundFile = useDocumentStore.getState().activeFileId;
+    const stillHere = () => {
+      const now = useDocumentStore.getState();
+      return now.projectRoot === boundRoot && now.activeFileId === boundFile;
+    };
 
     const updateListener = EditorView.updateListener.of((update) => {
       // An annotation edit, made or undone or redone here: put the
@@ -839,6 +854,7 @@ export function LatexEditor() {
                 if (!v || !isMergeActiveRef.current) return;
                 // Guard: bail if already resolved by afterChunkAction or a new stacked edit arrived
                 if (pendingChangeRef.current !== change) return;
+                if (!stillHere()) return;
                 isMergeActiveRef.current = false;
                 setMergeChunkInfo({ total: 0, current: 0 });
                 const finalContent = v.state.doc.toString();
@@ -867,7 +883,9 @@ export function LatexEditor() {
         }
         return;
       }
-      if (update.docChanged) setContent(update.state.doc.toString());
+      if (update.docChanged && stillHere()) {
+        setContent(update.state.doc.toString());
+      }
       if (update.selectionSet) {
         const { from, to, head } = update.state.selection.main;
         setCursorPosition(head);
@@ -1275,6 +1293,7 @@ export function LatexEditor() {
 
     const view = new EditorView({ state, parent: containerRef.current });
     viewRef.current = view;
+    viewForRef.current = { root: boundRoot, file: boundFile };
 
     // Restore per-file cursor + scroll from cache
     const cached = editorStateCache.get(activeFileId);
@@ -1296,8 +1315,12 @@ export function LatexEditor() {
       view.destroy();
       viewRef.current = null;
     };
+    // projectRoot: every project opens on main.tex, so without it the view
+    // outlived a switch, still bound to the last project's shared main.tex,
+    // and the next project's text was typed into that one for everyone.
   }, [
     activeFileId,
+    projectRoot,
     isTextFile,
     setContent,
     setCursorPosition,
@@ -1371,6 +1394,15 @@ export function LatexEditor() {
   useEffect(() => {
     const view = viewRef.current;
     if (!view || !isTextFile || isMergeActiveRef.current) return;
+    // A view made for another project or file (a switch under way) never
+    // takes this one's text: it may be bound to that project's shared copy.
+    const now = useDocumentStore.getState();
+    if (
+      viewForRef.current.root !== now.projectRoot ||
+      viewForRef.current.file !== now.activeFileId
+    ) {
+      return;
+    }
     const content = activeFileContent ?? "";
     const currentContent = view.state.doc.toString();
     if (currentContent !== content) {

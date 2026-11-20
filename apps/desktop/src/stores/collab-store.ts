@@ -5,20 +5,15 @@ import { homeDir } from "@tauri-apps/api/path";
 import * as Y from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import {
-  applyTextChange,
+  filesMap,
   layout,
-  LOCAL,
   isPlaceholderName,
   metaMap,
   nameFromFolder,
 } from "@/lib/collab/project-doc";
 import { deviceId, markSharedWithPeople, myDevices } from "@/lib/collab/device";
 import { diskWorkspace } from "@/lib/collab/disk-workspace";
-import {
-  type Known,
-  type LocalFile,
-  ProjectSync,
-} from "@/lib/collab/project-sync";
+import { type Known, ProjectSync } from "@/lib/collab/project-sync";
 import {
   type SessionStatus,
   type PeerStatus,
@@ -55,14 +50,10 @@ import {
   sendAwareness,
   writeLink,
 } from "@/lib/tauri/collab";
-import {
-  join,
-  readTexFileContent,
-  scanProjectFolder,
-  writeTextWhole,
-} from "@/lib/tauri/fs";
+import { join, scanProjectFolder } from "@/lib/tauri/fs";
 import { exists } from "@tauri-apps/plugin-fs";
 import {
+  beforeProjectRelocates,
   onProjectRelocated,
   setSharedSaving,
   useDocumentStore,
@@ -176,6 +167,19 @@ interface Active {
 let active: Active | null = null;
 /** Opening and closing happen one at a time, in order. */
 let transition: Promise<void> = Promise.resolve();
+
+/**
+ * The shared project being synced, if it's the project open in the window.
+ * While the app switches projects, the one being left is still connected
+ * for a moment: its shared text was then handed to the next project's
+ * editor (both had a main.tex), which saved one project's main.tex into
+ * the other. Nothing reads from or writes to it once it isn't open.
+ */
+function current(): Active | null {
+  const root = useDocumentStore.getState().projectRoot;
+  if (!active?.sync || !root) return null;
+  return active.root.normalize("NFC") === root.normalize("NFC") ? active : null;
+}
 
 function inSequence(step: () => Promise<void>) {
   transition = transition.then(step, step);
@@ -305,9 +309,20 @@ export function followOpenProject() {
   const unsubscribe = useDocumentStore.subscribe((state, prev) => {
     if (state.projectRoot !== prev.projectRoot) void follow(state.projectRoot);
   });
-  // Renamed or moved: still the same project, in its new place.
+  // Renamed or moved: still the same project, in its new place. Its sync
+  // stops first, so its last state is saved where the folder still is, and
+  // goes with it (see relocateOpenProject).
+  const offMoving = beforeProjectRelocates(async (oldRoot) => {
+    if (active?.root !== oldRoot) return;
+    // Never held up for long (an opening still waiting to connect).
+    await Promise.race([
+      inSequence(closeShared),
+      new Promise((resolve) => setTimeout(resolve, 10_000)),
+    ]);
+  });
   const offMoved = onProjectRelocated(moveShareOwner);
   return () => {
+    offMoving();
     offMoved();
     unsubscribe();
     void inSequence(closeShared);
@@ -521,10 +536,25 @@ export function syncInBackground(
   const run = backgroundQueue
     .then(async () => {
       const channel = `bg${++backgroundRuns}`;
-      const kept = await loadDoc(root).catch(() => null);
       const linkInfo = await parseLink(link);
+      // The folder must still be this project, and the one that syncs it
+      // here: a folder now shared as another project, or a copy of this
+      // one, would get this project's files written into it.
+      const here = await readLink(root).catch(() => null);
+      if (here?.projectId !== linkInfo.projectId) {
+        log.warn("Background sync skipped: the folder isn't this project", {
+          root,
+        });
+        return;
+      }
+      if (await copyOfAnother(linkInfo.projectId, root)) {
+        log.warn("Background sync skipped: another folder syncs it", { root });
+        return;
+      }
+      const kept = await loadDoc(root).catch(() => null);
       const saved = ownSaved(kept, linkInfo.projectId);
-      const known: Known = knownOf(kept);
+      let known: Known = knownOf(kept);
+      const library = await import("@/stores/library-store");
       let sync: ProjectSync | null = null;
       let resolve = () => {};
       const caughtUp = new Promise<void>((res) => {
@@ -570,7 +600,10 @@ export function syncInBackground(
         if (!sameProject(session.doc, info.projectId)) {
           throw new Error("X01");
         }
-        nameFromFolder(session.doc, root);
+        if (!saved) known = knownFor(known, session.doc);
+        const owner = () =>
+          ownsProject(session.doc, info.projectId, library.addedHere);
+        nameFrom(session.doc, root, owner());
         noteWhoIsIn(session.doc, root);
         if (
           name &&
@@ -589,11 +622,8 @@ export function syncInBackground(
           ).catch(() => {});
         }
         await workspace.load();
-        // A brake: a main.tex of another kind of document (a book arriving in
-        // a report) is another project's, not an edit. Nothing is written.
-        if (differentDocument(session.doc, workspace.files())) {
-          throw new Error("X01");
-        }
+        // A file whose shared copy is a different document (another
+        // project's) is never written either way: ProjectSync checks each.
         sync = new ProjectSync(
           session.doc,
           workspace,
@@ -601,6 +631,7 @@ export function syncInBackground(
           {
             onError: (message) =>
               log.warn("Background sync", { root, message }),
+            owner,
             me: () => ({
               name: useCollabStore.getState().displayName.trim() || "Anonymous",
               color:
@@ -671,51 +702,71 @@ function ownSaved<T extends { data: Uint8Array }>(
   }
 }
 
-/** The document class of a project's main .tex, from its text. */
-function documentClass(text: string | undefined): string | null {
-  return text?.match(/\\documentclass(?:\[[^\]]*\])?\{([^}]+)\}/)?.[1] ?? null;
+/**
+ * What this device knew of a project's files, from a saved copy that isn't
+ * this project's (a folder that was another project at this path): only
+ * what matches this project's files counts. Another project's file ids
+ * would read as files deleted by everyone else, and the folder's files
+ * were deleted, then replaced with this project's.
+ */
+function knownFor(known: Known, doc: Y.Doc): Known {
+  const files = filesMap(doc);
+  return Object.fromEntries(
+    Object.entries(known).filter(([fileId]) => files.has(fileId)),
+  );
 }
 
 /**
- * On the device that added the project to the library (it has the project
- * as it was): the shared main.tex, another document, is set right from the
- * folder's, and what it held is kept as "main (conflicted copy).tex". On
- * any other device nothing is done (its own copy may be the wrong one).
+ * Whether this computer is the project's owner: the one that shared it,
+ * or, for projects shared before that was noted, the one that added it to
+ * the library. Exactly one computer, never all of one person's: two
+ * putting a file right at once would write it twice over.
  */
-async function repairFromHere(
+function ownsProject(
   doc: Y.Doc,
-  root: string,
   projectId: string,
-  mainHere: string,
-): Promise<boolean> {
-  const { addedHere } = await import("@/stores/library-store");
-  if (addedHere(projectId) !== true) return false;
-  const shared = [...layout(doc).values()].find((f) => f.path === "main.tex");
-  if (!shared || shared.kind !== "text") return false;
-  const theirs = shared.text.toString();
-  let copy = await join(root, "main (conflicted copy).tex");
-  for (let n = 2; await exists(copy).catch(() => true); n++) {
-    copy = await join(root, `main (conflicted copy ${n}).tex`);
-  }
-  await writeTextWhole(copy, theirs);
-  doc.transact(() => applyTextChange(shared.text, mainHere), LOCAL);
-  log.warn("Shared main.tex was another document; set right from here", {
-    root,
-  });
-  toast.warning(
-    "The shared copy of main.tex was a different document. This computer's version is back in it, and the other is in main (conflicted copy).tex.",
-  );
-  return true;
+  addedHere: (projectId: string) => boolean | null,
+): boolean {
+  const owner = metaMap(doc).get("owner");
+  if (owner) return owner === deviceId();
+  return addedHere(projectId) === true;
 }
 
-/** The shared copy's main.tex and the folder's are different documents. */
-function differentDocument(doc: Y.Doc, local: LocalFile[]): boolean {
-  const here = local.find((f) => f.path === "main.tex")?.content;
-  const shared = [...layout(doc).values()].find((f) => f.path === "main.tex");
-  if (!here || !shared || shared.kind !== "text") return false;
-  const a = documentClass(here);
-  const b = documentClass(shared.text?.toString());
-  return Boolean(a && b && a !== b);
+/**
+ * The project's name, from its folder: on the owner's computer the folder's
+ * name is the project's (a copy fetched elsewhere once named it "paper",
+ * and every computer showed that); elsewhere only a placeholder is named.
+ */
+function nameFrom(doc: Y.Doc, root: string, owner: boolean) {
+  nameFromFolder(doc, root);
+  if (!owner) return;
+  const folder = root.split(/[\\/]/).filter(Boolean).pop() ?? "";
+  const meta = metaMap(doc);
+  if (!isPlaceholderName(folder) && meta.get("name") !== folder) {
+    meta.set("name", folder);
+  }
+}
+
+/**
+ * Whether another folder on this computer already syncs this project (one
+ * is a copy of the other, link and all): only that one is synced.
+ */
+async function copyOfAnother(projectId: string, root: string) {
+  const same = (a: string, b: string) =>
+    a.normalize("NFC") === b.normalize("NFC");
+  const recorded = useProjectStore.getState().sharedProjects[projectId];
+  let owners: Record<string, string> = {};
+  try {
+    owners = JSON.parse(localStorage.getItem(OWNERS) ?? "{}");
+  } catch {
+    owners = {};
+  }
+  for (const other of new Set([recorded, owners[projectId]])) {
+    if (!other || same(other, root)) continue;
+    const there = await readLink(other).catch(() => null);
+    if (there?.projectId === projectId) return true;
+  }
+  return false;
 }
 
 /**
@@ -734,12 +785,13 @@ function sameProject(doc: Y.Doc, projectId: string): boolean {
 }
 
 export function getSharedText(relativePath: string): Y.Text | null {
-  return active?.sync?.textAt(relativePath)?.text ?? null;
+  return current()?.sync?.textAt(relativePath)?.text ?? null;
 }
 
 /** The shared document of the project at `root`, while it's open and synced. */
 export function getSharedDoc(root: string): Y.Doc | null {
-  return active?.sync && active.root === root ? active.session.doc : null;
+  const open = current();
+  return open && open.root === root ? open.session.doc : null;
 }
 
 /**
@@ -829,7 +881,8 @@ function introduce(picked = false) {
 export function colorOf(name: string, fallback: string) {
   const { displayName, color } = useCollabStore.getState();
   if (color && name === (displayName.trim() || "Me")) return color;
-  return (active?.sync && peopleMap(active.session.doc).get(name)) || fallback;
+  const open = current();
+  return (open && peopleMap(open.session.doc).get(name)) || fallback;
 }
 
 /** `colorOf`, redrawing whenever someone's color changes. */
@@ -841,19 +894,20 @@ export function useColorOf() {
 }
 
 export function getCollabAwareness(): Awareness | null {
-  return active?.sync ? active.session.awareness : null;
+  return current()?.session.awareness ?? null;
 }
 
 /** One per file for the session, so undo history survives switching files. */
 export function getSharedUndoManager(
   relativePath: string,
 ): Y.UndoManager | null {
-  const shared = active?.sync?.textAt(relativePath);
-  if (!active || !shared) return null;
-  let manager = active.undoManagers.get(shared.fileId);
+  const open = current();
+  const shared = open?.sync?.textAt(relativePath);
+  if (!open || !shared) return null;
+  let manager = open.undoManagers.get(shared.fileId);
   if (!manager) {
-    manager = fileUndoManager(active.session.doc, shared.text, shared.fileId);
-    active.undoManagers.set(shared.fileId, manager);
+    manager = fileUndoManager(open.session.doc, shared.text, shared.fileId);
+    open.undoManagers.set(shared.fileId, manager);
   }
   return manager;
 }
@@ -1046,7 +1100,7 @@ export const useCollabStore = create<CollabState>()(
         const kept = await loadDoc(root).catch(() => null);
         // Only this project's saved copy is used (see ownSaved).
         const saved = ownSaved(kept, info.projectId);
-        const known: Known = knownOf(kept);
+        let known: Known = knownOf(kept);
         let buffered: SyncEvent[] | null = [];
         // The relay's copy, in full, the first time it's been sent.
         let caughtUp: (() => void) | null = null;
@@ -1191,26 +1245,17 @@ export const useCollabStore = create<CollabState>()(
           warnAboutCode("X01");
           return;
         }
-        // The shared main.tex is another document (another project's, from
-        // a sync gone wrong): never written over this folder's.
-        const mainHere = await readTexFileContent(
-          await join(root, "main.tex"),
-        ).catch(() => undefined);
-        if (
-          differentDocument(session.doc, [
-            { path: "main.tex", kind: "text", content: mainHere },
-          ] as LocalFile[])
-        ) {
-          const repaired =
-            mainHere !== undefined &&
-            (await repairFromHere(session.doc, root, info.projectId, mainHere));
-          if (active !== target) return;
-          if (!repaired) {
-            warnAboutCode("X01");
-            return;
-          }
-        }
-        nameFromFolder(session.doc, root);
+        // A saved copy that wasn't this project's: only what this device
+        // knew of this project's files counts (see knownFor).
+        if (!saved) known = knownFor(known, session.doc);
+        const library = await import("@/stores/library-store");
+        if (active !== target) return;
+        const owner = () =>
+          ownsProject(session.doc, info.projectId, library.addedHere);
+        // A file whose shared copy is a different document (another
+        // project's) is never written either way: ProjectSync checks each,
+        // and the owner's copy is put back in the shared one.
+        nameFrom(session.doc, root, owner());
         noteWhoIsIn(session.doc, root);
         const notSynced = () =>
           useSettingsStore.getState().notSynced[root] ?? [];
@@ -1221,6 +1266,7 @@ export const useCollabStore = create<CollabState>()(
           {
             onLayoutChanged: bumpRevision,
             onError: warnAbout,
+            owner,
             me: () => ({
               name: get().displayName.trim() || "Anonymous",
               color: get().color || peerColor(session.doc.clientID),

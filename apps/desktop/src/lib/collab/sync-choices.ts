@@ -45,16 +45,28 @@ function original(name: string) {
     .trim();
 }
 
+/** A copy a sync made when two versions met: "x (conflicted copy).y",
+ * "x (SFConflict name 2026-06-11-10-18-58).y". */
+const CONFLICT_COPY =
+  / \((?:conflicted copy(?: \d+)?|SFConflict[^)]*)\)(?=\.[^.]*$|$)/;
+
 /**
  * Never shared, whoever's computer has them: a Git folder or the pointer
  * file to one (each computer's own, with its own paths), what macOS and
- * Windows leave in folders, and copies a sync made of any of these.
+ * Windows leave in folders, a save cut short, the folders a repair set
+ * damaged files aside in, and conflict copies. A conflict copy is the
+ * computer's own business, settled there: shared, every other computer got
+ * a copy of it, and then copies of those.
  */
 export function neverShared(path: string) {
   const parts = path.split("/");
-  const name = original(parts[parts.length - 1]);
+  const last = parts[parts.length - 1];
+  const name = original(last);
   return (
     parts.slice(0, -1).some((p) => p === ".git" || p === ".latex4all") ||
+    parts.some((p) => /^_damaged-\d{4}-\d{2}-\d{2}$/.test(p)) ||
+    CONFLICT_COPY.test(last) ||
+    /\.[a-z0-9]{6}\.saving$/i.test(last) ||
     [".git", ".DS_Store", "Thumbs.db", "desktop.ini"].some(
       (n) => name.toLowerCase() === n.toLowerCase(),
     )

@@ -323,10 +323,25 @@ tag.
 
 - Opening a project with long files no longer freezes the app: comparing two
   very different versions of a file took seconds and now takes milliseconds.
-- A shared copy whose main.tex had become another project's document (from
-  an earlier sync problem) is set right from the computer that added the
-  project, keeping the other text as "main (conflicted copy).tex". Other
-  computers don't sync it until then, and never write it over their files.
+- Switching from a shared project to another one no longer puts one
+  project's main.tex into the other, for everyone. This is what made
+  projects show another project's text.
+- A file that arrives as a different document (another project's, from a
+  sync problem on some computer) is never written over yours, and yours is
+  never sent over it. The computer that shared the project puts its own
+  version back for everyone.
+- Conflict copies ("(conflicted copy)", and Seafile's "SFConflict") stay on
+  the computer that made them instead of reaching every other computer.
+  Ones already shared are taken out of the shared copy; nobody's own copy
+  is deleted.
+- A file that couldn't be updated is no longer shared a second time under
+  the same name, which gave the other computers a "(conflicted copy)".
+- Renaming or moving a shared project keeps its sync history, so its files
+  are no longer compared afresh (and marked as conflicts) in the new place.
+- Files left behind by a save that was cut short ("main.tex.abc123.saving")
+  are cleaned up.
+- A shared project's name follows its folder on the computer that shared
+  it, so the SDG paper no longer shows as "paper" anywhere.
 - Project cards count only conflicts you can find in the project.
 
 - Much faster home screen: projects are no longer compiled in the background
@@ -340,8 +355,6 @@ tag.
   every project.
 - A project fetched from another device takes the project's name (no more
   "paper" for the SDG paper).
-- A copy on this computer damaged by an earlier sync problem is set aside
-  (kept, listed in Settings → Devices) and fetched again cleanly.
 - Accented file names stored differently on Mac and Windows are one file,
   not two; files whose names differ only in case don't overwrite each other.
 - Project cards: sharing and sync badges are small icons, so names fit;

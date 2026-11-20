@@ -127,6 +127,29 @@ export interface ScanResult {
   folders: string[]; // relative paths of all directories
 }
 
+/** "main.tex.sla0wj.saving": a save under way (see writeTextSafely). */
+const SAVE_UNDER_WAY = /\.[a-z0-9]{6}\.saving$/i;
+
+/**
+ * A save under way that was cut short (the app quit between writing and
+ * putting it in place) leaves its file behind, which a cloud app then
+ * carries to every computer. Once it's a few minutes old: gone if the file
+ * it was saving is there, and that file if it isn't (it's then the only
+ * copy).
+ */
+async function settleCutShortSave(path: string) {
+  try {
+    const info = await stat(path);
+    const at = info.mtime ? new Date(info.mtime).getTime() : 0;
+    if (!at || Date.now() - at < 5 * 60_000) return;
+    const target = path.replace(SAVE_UNDER_WAY, "");
+    if (await exists(target)) await remove(path);
+    else await rename(path, target);
+  } catch {
+    // Left for the next scan.
+  }
+}
+
 export async function scanProjectFolder(rootPath: string): Promise<ScanResult> {
   const files: FsProjectFile[] = [];
   const folders: string[] = [];
@@ -145,6 +168,10 @@ export async function scanProjectFolder(rootPath: string): Promise<ScanResult> {
         folders.push(relativePath);
         await walk(entryPath, relativePath);
       } else {
+        if (SAVE_UNDER_WAY.test(entry.name)) {
+          await settleCutShortSave(entryPath);
+          continue;
+        }
         const type = getProjectFileType(entry.name);
         if (type) {
           // Sized: images and others for the large-file threshold, PDFs so

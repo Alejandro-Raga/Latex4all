@@ -1,6 +1,7 @@
 import type * as Y from "yjs";
 import {
   LOCAL,
+  REMOTE,
   type SharedFile,
   addBlobFile,
   addTextFile,
@@ -11,7 +12,17 @@ import {
 } from "./project-doc";
 import type { Author } from "@/lib/annotations/types";
 import { noteDifferences } from "./concurrent-edits";
+import { identityOf, isDifferentDocument } from "./document-identity";
 import { isUnder, rejoined, neverShared } from "./sync-choices";
+
+/**
+ * Each LaTeX file's identity (class and title, see document-identity) as
+ * the project's owner last had it, by file id: what tells a damaged file
+ * from the right one on every computer.
+ */
+export function identitiesMap(doc: Y.Doc) {
+  return doc.getMap<string>("identities");
+}
 
 /**
  * Paths compared as one: an accented name can be stored two ways (macOS
@@ -103,6 +114,13 @@ interface Hooks {
   me?: () => Author;
   /** Where such differences were noted. */
   onDifferences?: (found: Array<{ path: string; from: number }>) => void;
+  /**
+   * Whether this computer is the project's owner: the one that shared it,
+   * or added it to the library. Exactly one computer is. When a file's
+   * shared copy and the one here are different documents, the owner's is
+   * put back in the shared copy; anywhere else, neither is written.
+   */
+  owner?: () => boolean;
 }
 
 function conflictPath(path: string, taken: (path: string) => boolean) {
@@ -163,6 +181,17 @@ export class ProjectSync {
    * kept, instead of being set aside as a conflicted copy.
    */
   private comingBack: string[] = [];
+  /**
+   * Each LaTeX file's text as last seen, by file id: what a change from
+   * another computer is compared with (the editor may already show it).
+   */
+  private lastText = new Map<string, string>();
+  /**
+   * Files whose shared copy is a different document, refused here: held at
+   * the version here until the right one comes back (the owner puts it
+   * back), so no later change to the other document reaches this file.
+   */
+  private held = new Set<string>();
 
   constructor(
     private readonly doc: Y.Doc,
@@ -203,7 +232,11 @@ export class ProjectSync {
     }
 
     const files = filesMap(this.doc);
-    const onDoc = (events: Array<Y.YEvent<Y.AbstractType<unknown>>>) => {
+    this.rememberTexts();
+    const onDoc = (
+      events: Array<Y.YEvent<Y.AbstractType<unknown>>>,
+      transaction: Y.Transaction,
+    ) => {
       let structural = false;
       const texts = new Set<string>();
       for (const event of events) {
@@ -213,7 +246,14 @@ export class ProjectSync {
           texts.add(fileId);
         } else structural = true;
       }
-      if (texts.size > 0) this.pullText(texts);
+      if (texts.size > 0) {
+        if (transaction.origin === REMOTE) {
+          this.pullText(this.checkArrived(texts));
+        } else {
+          this.rememberTexts(texts);
+          this.pullText(texts);
+        }
+      }
       if (structural) {
         this.checkLayout();
         this.schedule();
@@ -256,7 +296,9 @@ export class ProjectSync {
       const m = /^(.*) \((?:\d+|conflicted copy(?: \d+)?)\)(\.[^./]*)?$/.exec(
         file.path,
       );
-      if (!m || file.dirty || this.isNotSynced(file.path)) continue;
+      // (Copies are never shared, so only what's left out by choice is
+      // passed over.)
+      if (!m || file.dirty || isUnder(file.path, this.notSynced)) continue;
       const original = local.get(m[1] + (m[2] ?? ""));
       if (!original || original.kind !== file.kind) continue;
       const blobId = knownAt.get(file.path)?.blobId;
@@ -414,12 +456,92 @@ export class ProjectSync {
     }
   }
 
+  private isOwner() {
+    return this.hooks.owner?.() ?? false;
+  }
+
+  /** Whether writing `next` over `current` for this file replaces one
+   * document with another (see document-identity). */
+  private foreign(
+    fileId: string,
+    next: string,
+    current: string,
+    /** False for a file here that never came from the shared copy (met for
+     * the first time): it may be someone's only copy of their work, so the
+     * owner's identity doesn't vouch for writing over it. */
+    trustRecorded = true,
+  ) {
+    return isDifferentDocument(
+      next,
+      current,
+      trustRecorded ? (identitiesMap(this.doc).get(fileId) ?? null) : null,
+    );
+  }
+
+  /** The text of the shared LaTeX files (all, or these), as it is now. */
+  private rememberTexts(only?: Set<string>) {
+    for (const file of layout(this.doc).values()) {
+      if (file.kind !== "text" || (only && !only.has(file.fileId))) continue;
+      if (this.held.has(file.fileId)) continue;
+      const text = file.text.toString();
+      if (identityOf(text)) this.lastText.set(file.fileId, text);
+      else this.lastText.delete(file.fileId);
+    }
+  }
+
+  /**
+   * Changes from other computers, checked as they arrive: one that turns a
+   * LaTeX file into a different document (another project's, from a sync
+   * gone wrong elsewhere) is undone by the owner, and written nowhere.
+   * Returns the files whose change can go to disk.
+   */
+  private checkArrived(fileIds: Set<string>): Set<string> {
+    const kept = new Set<string>();
+    for (const file of layout(this.doc).values()) {
+      if (file.kind !== "text" || !fileIds.has(file.fileId)) continue;
+      const before = this.lastText.get(file.fileId);
+      const now = file.text.toString();
+      if (before === undefined || !this.foreign(file.fileId, now, before)) {
+        if (identityOf(now)) this.lastText.set(file.fileId, now);
+        this.held.delete(file.fileId);
+        kept.add(file.fileId);
+        continue;
+      }
+      if (this.isOwner()) {
+        // After this change is done with, so it isn't changed under itself.
+        const { text, path, fileId } = file;
+        queueMicrotask(() => {
+          if (this.stopped || text.toString() !== now) return;
+          this.putBack(text, fileId, before);
+          this.hooks.onError?.(
+            `${path} came back from another computer as a different document. This computer's version was put back (X03)`,
+          );
+        });
+      } else {
+        this.hold(file.fileId, before);
+        this.hooks.onError?.(
+          `Didn't sync ${file.path}: its shared copy is a different document. Your copy here is untouched (X02)`,
+        );
+      }
+    }
+    return kept;
+  }
+
+  /** Refuses a file's shared copy here, keeping `mine` as what it's
+   * compared with (see `held`). */
+  private hold(fileId: string, mine: string) {
+    this.held.add(fileId);
+    this.lastText.set(fileId, mine);
+  }
+
   /** Someone else's typing, into the open project. */
   private pullText(fileIds: Set<string>) {
+    // Another project is open now: nothing of this one goes into it.
+    if (this.stopped || !this.workspace.available()) return;
     const local = this.localFiles();
     for (const file of byPath(layout(this.doc)).values()) {
       if (file.kind !== "text" || !fileIds.has(file.fileId)) continue;
-      if (this.isNotSynced(file.path)) continue;
+      if (this.isNotSynced(file.path) || this.held.has(file.fileId)) continue;
       const mine = local.get(file.path);
       if (mine?.kind !== "text" || mine.content === undefined) continue;
       const text = file.text.toString();
@@ -429,6 +551,7 @@ export class ProjectSync {
 
   /** Changes to files' text made here — Claude, Zotero, reloads from disk. */
   private pushText() {
+    if (this.stopped || !this.workspace.available()) return;
     let placed: Map<string, SharedFile> | null = null;
     for (const file of this.workspace.files()) {
       if (this.seen.get(file.path) === file) continue;
@@ -437,9 +560,22 @@ export class ProjectSync {
       placed ??= byPath(layout(this.doc));
       const shared = placed.get(file.path);
       if (shared?.kind !== "text" || !this.known.has(shared.fileId)) continue;
-      if (shared.text.toString() === file.content) continue;
+      const current = shared.text.toString();
+      if (current === file.content) continue;
+      // A whole other document arriving in a file here isn't an edit: it
+      // isn't sent (only the owner's own copy is taken as it is).
+      if (
+        !this.isOwner() &&
+        this.foreign(shared.fileId, file.content, current)
+      ) {
+        this.hooks.onError?.(
+          `Didn't share ${file.path}: it's a different document from its shared copy (X02)`,
+        );
+        continue;
+      }
       const content = file.content;
       this.doc.transact(() => applyTextChange(shared.text, content), LOCAL);
+      if (identityOf(content)) this.lastText.set(shared.fileId, content);
     }
   }
 
@@ -563,6 +699,33 @@ export class ProjectSync {
         if (!kept) stillComingBack = true;
         continue;
       }
+      // A different document from the one here (another project's): never
+      // merged into it, never set beside it. The owner's copy goes back into
+      // the shared one; anywhere else both stay as they are.
+      if (
+        !identical &&
+        existing?.kind === "text" &&
+        existing.content !== undefined &&
+        shared.kind === "text" &&
+        this.foreign(shared.fileId, text, existing.content, false)
+      ) {
+        if (this.isOwner() && !existing.dirty) {
+          this.putBack(shared.text, shared.fileId, existing.content);
+          this.known.set(shared.fileId, {
+            path: shared.path,
+            hash: textHash(existing.content),
+          });
+          this.hooks.onError?.(
+            `${shared.path}'s shared copy was a different document. This computer's version was put back (X03)`,
+          );
+        } else {
+          this.hold(shared.fileId, existing.content);
+          this.hooks.onError?.(
+            `Didn't sync ${shared.path}: its shared copy is a different document. Your copy here is untouched (X02)`,
+          );
+        }
+        continue;
+      }
       // Text that differs: the shared version stays, and this one's
       // differences go on it as notes, rather than a whole copy beside it.
       const me = this.hooks.me;
@@ -627,9 +790,15 @@ export class ProjectSync {
     const knownPaths = new Set(
       [...this.known.values()].map((k) => same(k.path)),
     );
+    // A file the shared copy already has at that path isn't new here, even
+    // if it couldn't be settled this round (a failed write, a different
+    // document): it's settled next round. Added again, it made a second
+    // file of one name, which every other computer got as a "(conflicted
+    // copy)".
     const added = [...local.values()].filter(
       (f) =>
         !knownPaths.has(same(f.path)) &&
+        !placed.has(f.path) &&
         !later.has(same(f.path)) &&
         !this.isNotSynced(f.path),
     );
@@ -748,20 +917,108 @@ export class ProjectSync {
       }
       const text = shared.text.toString();
       if (opening && mine.content !== text) {
-        if (known.hash !== undefined && textHash(mine.content) === known.hash) {
+        const content = mine.content;
+        const diskUnchanged =
+          known.hash !== undefined && textHash(content) === known.hash;
+        // The shared copy became another document while this one was away,
+        // or this file did: neither is written over the other, except that
+        // the owner's copy goes back into the shared one.
+        const different = diskUnchanged
+          ? this.foreign(fileId, text, content)
+          : this.foreign(fileId, content, text);
+        if (different && !this.isOwner()) {
+          this.hold(fileId, content);
+          this.hooks.onError?.(
+            `Didn't sync ${known.path}: its shared copy is a different document. Your copy here is untouched (X02)`,
+          );
+          continue;
+        }
+        if (diskUnchanged && !different) {
           // The disk simply hadn't caught up with the document when the app
           // last closed; the document is newer.
           this.workspace.setText(mine.path, text);
-        } else {
+        } else if (!different) {
           // Edited outside the app while it was closed.
-          const content = mine.content;
           this.doc.transact(() => applyTextChange(shared.text, content), LOCAL);
+        } else {
+          // The owner's copy, back over a different document.
+          this.putBack(shared.text, fileId, content);
+          this.hooks.onError?.(
+            `${known.path}'s shared copy was a different document. This computer's version was put back (X03)`,
+          );
         }
       }
       if (!mine.dirty) known.hash = textHash(mine.content);
     }
 
+    this.dropNeverShared();
+    if (this.isOwner()) this.recordIdentities(local);
+    this.rememberTexts();
     this.lastFilesSignature = this.filesSignature();
     this.checkLayout();
+  }
+
+  /**
+   * Files no computer shares (Git pointers, system clutter, conflict copies,
+   * saves cut short), taken out of the shared copy if an earlier version
+   * put them there. Each computer's own copy stays where it is: a path
+   * never shared is never deleted for it (see step 1).
+   */
+  private dropNeverShared() {
+    const files = filesMap(this.doc);
+    const junk = [...files.entries()]
+      .filter(([, entry]) => {
+        const path = entry.get("path");
+        return typeof path === "string" && neverShared(path);
+      })
+      .map(([fileId]) => fileId);
+    if (junk.length === 0) return;
+    this.doc.transact(() => {
+      for (const fileId of junk) {
+        files.delete(fileId);
+        this.known.delete(fileId);
+      }
+    }, LOCAL);
+  }
+
+  /**
+   * Puts the owner's version of a file back over a different document in
+   * the shared copy, with its identity in the same change: the others then
+   * take it as the right document, never as another one arriving.
+   */
+  private putBack(shared: Y.Text, fileId: string, content: string) {
+    const identity = identityOf(content);
+    this.doc.transact(() => {
+      applyTextChange(shared, content);
+      if (identity) identitiesMap(this.doc).set(fileId, identity);
+    }, LOCAL);
+    if (identity) this.lastText.set(fileId, content);
+  }
+
+  /** On the owner: what each LaTeX file is, for the others to check by. */
+  private recordIdentities(local: Map<string, LocalFile>) {
+    const identities = identitiesMap(this.doc);
+    const updates: Array<[string, string]> = [];
+    for (const [fileId, known] of this.known) {
+      const mine = local.get(known.path);
+      if (mine?.kind !== "text" || mine.content === undefined || mine.dirty) {
+        continue;
+      }
+      const shared = this.entry(fileId)?.get("text") as Y.Text | undefined;
+      // Only once the shared copy has this version: never an identity for
+      // text the others don't have.
+      if (!shared || shared.toString() !== mine.content) continue;
+      const identity = identityOf(mine.content);
+      if (identity && identities.get(fileId) !== identity) {
+        updates.push([fileId, identity]);
+      }
+    }
+    const stale = [...identities.keys()].filter((id) => !this.entry(id));
+    if (updates.length === 0 && stale.length === 0) return;
+    this.doc.transact(() => {
+      for (const [fileId, identity] of updates)
+        identities.set(fileId, identity);
+      for (const fileId of stale) identities.delete(fileId);
+    }, LOCAL);
   }
 }

@@ -186,35 +186,6 @@ export function leftOnThisDevice(projectId: string) {
   });
 }
 
-/**
- * A copy of a project, fetched here, that can't be synced (it isn't the
- * shared one any more): renamed "(set aside)", taken off the home screen
- * and listed for the person to check and delete; the next round fetches
- * the project again. Returns where it went.
- */
-async function setAsideCopy(root: string): Promise<string | null> {
-  if (useDocumentStore.getState().projectRoot === root) return null;
-  let target = `${root} (set aside)`;
-  for (let n = 2; await exists(target).catch(() => true); n++) {
-    target = `${root} (set aside ${n})`;
-  }
-  await rename(root, target);
-  const projects = useProjectStore.getState();
-  const info = await readLink(target).catch(() => null);
-  if (info) projects.forgetSharedProject(info.projectId);
-  // No longer the project: opened later, it doesn't sync as it.
-  await removeLink(target).catch(() => {});
-  projects.removeRecentProject(root);
-  leftovers.add(target);
-  try {
-    localStorage.setItem(LEFTOVERS, JSON.stringify([...leftovers]));
-  } catch {
-    // Listed until the app closes.
-  }
-  useLibraryStore.setState({ leftovers: [...leftovers] });
-  return target;
-}
-
 /** Stores changed by another device: read again from what's saved. */
 async function reloadStores(keys: string[]) {
   const loaders: Record<string, () => Promise<unknown>> = {
@@ -443,6 +414,13 @@ async function nameFetched(
     const target = [...parts, name].join(root.includes("\\") ? "\\" : "/");
     if (await exists(target).catch(() => true)) return;
     await rename(root, target);
+    // This computer's sync record goes with the folder (it's kept by
+    // folder): without it, the next sync compared every file afresh.
+    if (saved) {
+      await saveDoc(target, saved.seq, saved.local, saved.data).catch((err) =>
+        log.warn("Couldn't carry the sync record", { error: String(err) }),
+      );
+    }
     const projects = useProjectStore.getState();
     projects.renameRecentProject(root, target);
     void usePlanStore.getState().load(projectKey(target));
@@ -702,6 +680,10 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       const root =
         info && useProjectStore.getState().sharedProjects[info.projectId];
       if (!root) continue;
+      // Still this project's folder (it may since have been shared as
+      // another, or be gone): otherwise not synced, never written into.
+      const linked = await readLink(root).catch(() => null);
+      if (linked?.projectId !== info.projectId) continue;
       markLibrary(root);
       // In a folder a cloud app syncs to every linked device (the same
       // place under the home folder on each): that app carries its files,
@@ -795,17 +777,10 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
           error: String(err),
         });
         if (String(err).includes("offline")) break;
-        // A copy fetched here that disagrees with the shared copy (damaged
-        // here): set aside, kept, and fetched again whole.
-        if (String(err).includes("X01") && entry.by !== me) {
-          const aside = await setAsideCopy(root).catch(() => null);
-          if (aside) {
-            problems.push(
-              `${entry.name}: this computer's copy didn't match and was set aside; a fresh copy is on its way`,
-            );
-            continue;
-          }
-        }
+        // (A copy that disagreed was once set aside and fetched again: that
+        // left "(set aside)" folders, and the fresh copy came from the same
+        // shared copy. Nothing is written when they disagree; the owner's
+        // computer puts the shared copy right.)
         problems.push(
           String(err).includes("X01")
             ? `Didn't sync ${entry.name}. Its shared copy holds another project's changes (X01)`

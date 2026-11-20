@@ -125,6 +125,18 @@ export function warningForError(message: string): SyncWarning | null {
       text: message.replace(/ \(R10\)$/, "."),
     };
   }
+  // A file whose shared copy is a different document: not synced (X02), or
+  // put right from the owner's copy (X03).
+  const document = message.match(/^(.*) \((X0[23])\)$/);
+  if (document) {
+    const [, text, code] = document;
+    return {
+      id: `${code}:${text}`,
+      code,
+      level: code === "X02" ? "error" : "warning",
+      text: `${text}.`,
+    };
+  }
   if (/another program has it open$/.test(message)) {
     return {
       id: `locked:${message}`,

@@ -23,6 +23,7 @@ import { clearScrollPositionCache } from "@/components/workspace/preview/pdf-vie
 import { clearZoomCache } from "@/components/workspace/preview/pdf-preview";
 import { clearEditorStateCache } from "@/components/workspace/editor/latex-editor";
 import { useProjectStore } from "@/stores/project-store";
+import { loadDoc, saveDoc } from "@/lib/tauri/collab";
 import { toast } from "sonner";
 import { createLogger } from "@/lib/debug/logger";
 import { onFlush } from "@/lib/flush";
@@ -421,6 +422,15 @@ export function projectRelocated(oldRoot: string, newRoot: string) {
   for (const listener of relocationListeners) listener(oldRoot, newRoot);
 }
 
+/** Told before the open project's folder moves, and waited for. */
+const beforeRelocationListeners = new Set<(oldRoot: string) => Promise<void>>();
+export function beforeProjectRelocates(
+  listener: (oldRoot: string) => Promise<void>,
+) {
+  beforeRelocationListeners.add(listener);
+  return () => beforeRelocationListeners.delete(listener);
+}
+
 async function relocateOpenProject(
   get: () => DocumentState,
   set: StoreSet,
@@ -469,7 +479,24 @@ async function relocateOpenProject(
   await clearDocCache();
   await sleep(150);
 
+  // This computer's record of the shared project (what it has of the
+  // shared copy, which files it has written) is kept by folder: it goes
+  // with the folder. Without it, every file was compared afresh in the new
+  // place, and any that differed became a conflict.
+  for (const listener of beforeRelocationListeners) {
+    await listener(oldRoot).catch(() => {});
+  }
+  const carried = await loadDoc(oldRoot).catch(() => null);
+
   await moveFolder(oldRoot, newRoot);
+  if (carried) {
+    await saveDoc(newRoot, carried.seq, carried.local, carried.data).catch(
+      (err) =>
+        log.warn("Couldn't carry the sync record to the new folder", {
+          error: String(err),
+        }),
+    );
+  }
   try {
     await invoke("migrate_project_sessions", {
       oldProjectPath: oldRoot,

@@ -5,7 +5,10 @@ import { EditorView } from "@codemirror/view";
 import { yCollab } from "y-codemirror.next";
 import { toBase64 } from "lib0/buffer";
 import {
+  LOCAL,
+  addTextFile,
   applyTextChange,
+  filesMap,
   layout,
   metaMap,
   numberedPath,
@@ -16,6 +19,7 @@ import {
   type LocalFile,
   ProjectSync,
   type Workspace,
+  identitiesMap,
 } from "@/lib/collab/project-sync";
 import {
   OFFLINE_AFTER_MS,
@@ -295,10 +299,13 @@ class Device {
     online = true,
     name,
     notSynced = [],
+    owner = false,
   }: {
     online?: boolean;
     name?: string;
     notSynced?: string[];
+    /** This computer is the project's owner (see ProjectSync's hook). */
+    owner?: boolean;
   } = {}) {
     const relay = this.relay;
     const session = new SharedSession(
@@ -350,6 +357,7 @@ class Device {
         onSynced: (path) => this.synced.push(path),
         me: () => ({ name: this.name, color: "#000" }),
         onDifferences: (found) => this.differences.push(...found),
+        owner: () => owner,
       },
       notSynced,
     );
@@ -507,7 +515,9 @@ describe("shared projects", () => {
       "notes (conflicted copy).tex": "theirs",
     };
     expect(a.workspace.snapshot()).toEqual(left);
-    expect(b.workspace.snapshot()).toEqual(left);
+    // A conflict copy is the computer's own: never sent to the others.
+    const { "notes (conflicted copy).tex": _, ...others } = left;
+    expect(b.workspace.snapshot()).toEqual(others);
   });
 
   it("doesn't send a PDF again when its size wasn't read", async () => {
@@ -1228,5 +1238,216 @@ describe("the shared document", () => {
     expect(view.state.doc.toString()).toBe("Oh, Hello world");
     expect(a.workspace.snapshot()).toEqual({ "main.tex": "Oh, Hello world" });
     view.destroy();
+  });
+});
+
+// ─── One project's file arriving in another's ───
+
+/** A paper: preamble, title and paragraphs of its own. */
+function paper(title: string, subject: string) {
+  return [
+    "\\documentclass[12pt]{article}",
+    "\\usepackage{graphicx}",
+    `\\title{${title}}`,
+    "\\begin{document}",
+    ...Array.from(
+      { length: 12 },
+      (_, i) => `Paragraph ${i + 1} of this paper is about ${subject}.`,
+    ),
+    "\\end{document}",
+    "",
+  ].join("\n");
+}
+
+const SDG = paper("Corporate Science and the Social SDGs", "the SDGs");
+const FIRMS = paper("Firms, Articles and Invention", "invention");
+
+/** What a sync gone wrong on some computer did: another project's main.tex
+ * typed into this one's shared copy. */
+function damage(device: Device, text: string) {
+  const doc = device.session!.doc;
+  const file = [...layout(doc).values()].find((f) => f.path === "main.tex");
+  if (file?.kind !== "text") throw new Error("no main.tex");
+  doc.transact(() => applyTextChange(file.text, text), LOCAL);
+}
+
+function sharedMain(device: Device) {
+  const file = [...layout(device.session!.doc).values()].find(
+    (f) => f.path === "main.tex",
+  );
+  return file?.kind === "text" ? file.text.toString() : undefined;
+}
+
+describe("another project's file in a shared copy", () => {
+  it("is undone by the owner as it arrives, and written nowhere", async () => {
+    const relay = new FakeRelay();
+    const owner = new Device(
+      relay,
+      new FakeWorkspace(relay, { "main.tex": SDG }),
+    );
+    await owner.open({ owner: true });
+    const other = new Device(relay, new FakeWorkspace(relay));
+    await other.open();
+    await settleAll(owner, other);
+    expect(other.workspace.snapshot()).toEqual({ "main.tex": SDG });
+
+    const broken = new Device(relay, new FakeWorkspace(relay));
+    await broken.open();
+    await settleAll(owner, other, broken);
+    damage(broken, FIRMS);
+    await settleAll(owner, other, broken);
+
+    expect(owner.workspace.snapshot()).toEqual({ "main.tex": SDG });
+    expect(other.workspace.snapshot()).toEqual({ "main.tex": SDG });
+    expect(sharedMain(other)).toBe(SDG);
+    expect(owner.errors.some((e) => e.endsWith("(X03)"))).toBe(true);
+  });
+
+  it("isn't written over the file here while the owner is away; the owner puts it right", async () => {
+    const relay = new FakeRelay();
+    const owner = new Device(
+      relay,
+      new FakeWorkspace(relay, { "main.tex": SDG }),
+    );
+    await owner.open({ owner: true });
+    const other = new Device(relay, new FakeWorkspace(relay));
+    await other.open();
+    await settleAll(owner, other);
+    await owner.close();
+    await other.close();
+
+    // Damaged while both were away.
+    const broken = new Device(relay, new FakeWorkspace(relay));
+    await broken.open();
+    damage(broken, FIRMS);
+    await settleAll(broken);
+    await broken.close();
+
+    await other.open();
+    await settleAll(other);
+    expect(other.workspace.snapshot()).toEqual({ "main.tex": SDG });
+    expect(other.errors.some((e) => e.endsWith("(X02)"))).toBe(true);
+
+    // More typing in the other document, meanwhile: still not written here.
+    await broken.open();
+    await settleAll(broken, other);
+    damage(broken, `${FIRMS}% one more line\n`);
+    await settleAll(broken, other);
+    expect(other.workspace.snapshot()).toEqual({ "main.tex": SDG });
+    await broken.close();
+
+    await owner.open({ owner: true });
+    await settleAll(owner, other);
+    expect(owner.workspace.snapshot()).toEqual({ "main.tex": SDG });
+    expect(sharedMain(owner)).toBe(SDG);
+    expect(identitiesMap(owner.session!.doc).size).toBe(1);
+  });
+
+  it("put right by the owner, reaches a computer whose copy was damaged", async () => {
+    const relay = new FakeRelay();
+    const owner = new Device(
+      relay,
+      new FakeWorkspace(relay, { "main.tex": SDG }),
+    );
+    await owner.open({ owner: true });
+    await settleAll(owner);
+    await owner.close();
+    const broken = new Device(relay, new FakeWorkspace(relay));
+    await broken.open();
+    damage(broken, FIRMS);
+    await settleAll(broken);
+    await broken.close();
+    // Joined after the damage: its copy is the damaged one.
+    const late = new Device(relay, new FakeWorkspace(relay));
+    await late.open();
+    await settleAll(late);
+    expect(late.workspace.snapshot()).toEqual({ "main.tex": FIRMS });
+    await late.close();
+
+    await owner.open({ owner: true });
+    await settleAll(owner);
+    await late.open();
+    await settleAll(owner, late);
+    expect(late.workspace.snapshot()).toEqual({ "main.tex": SDG });
+    expect(late.errors.filter((e) => /\(X0\d\)$/.test(e))).toEqual([]);
+  });
+
+  it("a file met for the first time that's another document is left as it is", async () => {
+    const relay = new FakeRelay();
+    const owner = new Device(
+      relay,
+      new FakeWorkspace(relay, { "main.tex": SDG }),
+    );
+    await owner.open({ owner: true });
+    await settleAll(owner);
+    // A folder that was another project, opened with this one's link.
+    const copy = new Device(
+      relay,
+      new FakeWorkspace(relay, { "main.tex": FIRMS }),
+    );
+    await copy.open();
+    await settleAll(owner, copy);
+    expect(copy.workspace.snapshot()).toEqual({ "main.tex": FIRMS });
+    expect(owner.workspace.snapshot()).toEqual({ "main.tex": SDG });
+    expect(sharedMain(owner)).toBe(SDG);
+    // Neither noted as differences nor set beside it, nor added again.
+    expect(copy.differences).toEqual([]);
+    const paths = [...filesMap(owner.session!.doc).values()].map((e) =>
+      e.get("path"),
+    );
+    expect(paths).toEqual(["main.tex"]);
+  });
+});
+
+describe("files the sync couldn't settle", () => {
+  it("aren't added to the shared copy a second time", async () => {
+    const relay = new FakeRelay();
+    const many = (word: string) =>
+      Array.from({ length: 40 }, (_, i) => `line ${i} ${word}`).join("\n\n");
+    const a = new Device(
+      relay,
+      new FakeWorkspace(relay, { "notes.tex": many("a") }),
+    );
+    await a.open();
+    await settleAll(a);
+    const workspace = new FakeWorkspace(relay, { "notes.tex": many("b") });
+    // Its copy can't be set aside (a sync app has it).
+    workspace.move = async () => {
+      throw new Error("locked");
+    };
+    const b = new Device(relay, workspace);
+    await b.open();
+    await settleAll(a, b);
+    const paths = [...filesMap(a.session!.doc).values()].map((e) =>
+      e.get("path"),
+    );
+    expect(paths).toEqual(["notes.tex"]);
+    expect(a.workspace.snapshot()).toEqual({ "notes.tex": many("a") });
+  });
+
+  it("junk an earlier version shared is taken out, and nobody's copy deleted", async () => {
+    const relay = new FakeRelay();
+    const a = new Device(relay, new FakeWorkspace(relay, { "main.tex": "x" }));
+    await a.open();
+    await settleAll(a);
+    // As versions before this one did.
+    a.session!.doc.transact(() => {
+      addTextFile(a.session!.doc, "main (conflicted copy).tex", "old");
+      addTextFile(a.session!.doc, ".git", "gitdir: /Users/me/x");
+    }, LOCAL);
+    const b = new Device(
+      relay,
+      new FakeWorkspace(relay, { "main (conflicted copy).tex": "mine" }),
+    );
+    await b.open();
+    await settleAll(a, b);
+    const paths = [...filesMap(a.session!.doc).values()].map((e) =>
+      e.get("path"),
+    );
+    expect(paths).toEqual(["main.tex"]);
+    expect(b.workspace.snapshot()).toEqual({
+      "main (conflicted copy).tex": "mine",
+      "main.tex": "x",
+    });
   });
 });

@@ -34,3 +34,20 @@ it("a shared project never takes another project's files for its own, mid-switch
   // Not heard as a change of the shared project (it used to be, and sent).
   expect(heard).toBe(0);
 });
+
+it("another computer's typing in the project being left never lands in the next one", () => {
+  useDocumentStore.setState({
+    projectRoot: "/p/Shared",
+    files: [file("main.tex", "the shared project's text")],
+  } as never);
+  const ws = documentStoreWorkspace("/p/Shared", "link");
+  useDocumentStore.setState({
+    projectRoot: "/p/Other",
+    files: [file("main.tex", "the other project's text")],
+  } as never);
+  // Its sync, still running a moment after the switch, sets main.tex.
+  ws.setText("main.tex", "the shared project's text, edited elsewhere");
+  expect(useDocumentStore.getState().files[0].content).toBe(
+    "the other project's text",
+  );
+});

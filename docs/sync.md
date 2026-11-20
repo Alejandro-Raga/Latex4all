@@ -258,6 +258,34 @@ co-author's copy of the folder by its marker file, `latex4all-project.json`.
 - Bug reports include the sync state: routes working, what each member has,
   last errors.
 
+### Keeping projects apart
+
+Rules that keep one project's files out of another's (each came from a
+real incident, November 2026):
+
+- Nothing of a shared project is read or written once another project is
+  open in the window: the editor is rebuilt for every project (all open on
+  main.tex), and the shared text, awareness and undo are only handed out
+  for the project open now (`current()` in collab-store).
+- A folder syncs only as the project its own link names, and only one
+  folder per project on a computer (a copy, link and all, doesn't sync).
+- This computer's record of a project (which files it wrote, what it has
+  of the shared copy) is used only if it's that project's; another
+  project's file ids read as files deleted by everyone, and emptied the
+  folder. It moves with the folder when the folder is renamed or moved.
+- A LaTeX file is never written over by a different document, either way
+  (document-identity.ts: class and title changed, and little text in
+  common). The owner, the one computer that shared the project or added it
+  to the library, puts its own version back, with the file's identity in
+  the same change, so the others take that version as the right one. A
+  file this computer never got from the shared copy is never written over
+  by a different document, whatever the owner recorded.
+- Conflict copies, Git pointers, system clutter, saves cut short and
+  `_damaged-*` folders are never shared; ones already in a shared copy are
+  taken out of it (each computer's own copy stays).
+- A file already in the shared copy at a path is never added again under
+  that path, even if this computer couldn't settle it this time.
+
 ## Error codes
 
 Every sync problem the app shows carries a code, also sent with bug reports.
@@ -287,6 +315,8 @@ Every sync problem the app shows carries a code, also sent with bug reports.
 | L02 | A project from another device couldn't be fetched | Retried every 30 s |
 | L03 | A project couldn't be added for the other devices (offline, or too big for the server) | Retried; check its size |
 | X01 | A shared copy holds another project's changes, so it isn't synced into this folder | Report it; the folder is untouched |
+| X02 | A file's shared copy is a different document from the one here (another project's), so neither is written over the other | The project's owner puts it right; the file here is untouched |
+| X03 | A file's shared copy was a different document; this computer, the project's owner, put its own version back | Nothing |
 | X00 | Anything else (its message is shown) | Report it |
 
 Linked devices show theirs (L01–L03) in Settings → Sync.

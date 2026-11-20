@@ -107,6 +107,8 @@ export function documentStoreWorkspace(
     },
 
     setText(path, content) {
+      // Another project open now: its file of the same name isn't this one.
+      if (useDocumentStore.getState().projectRoot !== projectRoot) return;
       useDocumentStore.getState().updateFileContent(path, content);
     },
 
