@@ -469,6 +469,22 @@ async function fetchNow(
   }
 }
 
+/** Edits in the open project, told to the linked devices (a few seconds
+ * after the last, not on every keystroke) so they sync it next round. */
+const changeNotes = new Map<string, ReturnType<typeof setTimeout>>();
+function noteChangedSoon(projectId: string) {
+  clearTimeout(changeNotes.get(projectId));
+  changeNotes.set(
+    projectId,
+    setTimeout(() => {
+      changeNotes.delete(projectId);
+      void import("@/stores/library-store").then((m) =>
+        m.noteProjectChanged(projectId),
+      );
+    }, 5000),
+  );
+}
+
 /** Background syncs under way, by folder, so one runs at a time each. */
 const inBackground = new Map<string, Promise<void>>();
 /** Every background sync and fetch, one after another. */
@@ -1011,6 +1027,7 @@ export const useCollabStore = create<CollabState>()(
           {
             publish: (update) => {
               publish(update).catch((err) => warnAbout(String(err)));
+              noteChangedSoon(info.projectId);
             },
             awareness: (data) => {
               sendAwareness(data).catch(() => {});

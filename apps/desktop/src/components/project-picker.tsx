@@ -84,7 +84,6 @@ import {
 } from "@/stores/project-store";
 import { projectRelocated, useDocumentStore } from "@/stores/document-store";
 import { useClaudeSetupStore } from "@/stores/claude-setup-store";
-import { useSettingsStore } from "@/stores/settings-store";
 import {
   PORTRAIT_ASPECT,
   pageAspectRatio,
@@ -92,7 +91,6 @@ import {
   texSourceAspectRatio,
 } from "@/lib/preview-aspect-ratio";
 import { DeckSurface, isWide } from "@/components/deck-surface";
-import { compileLatex } from "@/lib/latex-compiler";
 import { getMupdfClient } from "@/lib/mupdf/mupdf-client";
 import { exists, join } from "@/lib/tauri/fs";
 import { Button } from "@/components/ui/button";
@@ -205,7 +203,6 @@ type ProjectPreviewState =
 
 const projectPreviewCache = new Map<string, ProjectPreviewData>();
 const projectPreviewRequests = new Map<string, Promise<ProjectPreviewData>>();
-let projectPreviewCompileQueue: Promise<void> = Promise.resolve();
 
 export function ProjectPicker() {
   const [showModeDialog, setShowModeDialog] = useState(false);
@@ -1283,15 +1280,6 @@ function projectPreviewCacheKey(project: RecentProject) {
   return `${project.path}:${project.lastOpened}`;
 }
 
-function enqueueProjectPreviewCompile<T>(task: () => Promise<T>): Promise<T> {
-  const run = projectPreviewCompileQueue.then(task, task);
-  projectPreviewCompileQueue = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  return run;
-}
-
 async function firstExistingProjectFile(
   projectPath: string,
   candidates: string[][],
@@ -1547,25 +1535,9 @@ async function computeProjectPreview(
     ]);
 
     if (texFile) {
-      try {
-        const useTexlive =
-          useSettingsStore.getState().compilerBackend === "texlive";
-        const pdfBytes = await enqueueProjectPreviewCompile(() =>
-          compileLatex(project.path, texFile.relativePath, useTexlive, false),
-        );
-        const data: ProjectPreviewData = {
-          kind: "pdf",
-          ...(await renderPdfThumbnailFromBytes(pdfBytes)),
-          createdAt,
-        };
-        projectPreviewCache.set(cacheKey, data);
-        return data;
-      } catch (err) {
-        log.warn(
-          `Failed to compile preview for ${project.path}/${texFile.relativePath}: ${String(err)}`,
-        );
-      }
-
+      // No PDF yet: its source shown, not compiled here (a whole LaTeX run
+      // per project, on every start, slowed everything down). Opening and
+      // building the project gives the card its PDF.
       const fileName = texFile.absolutePath.split(/[\\/]/).pop() ?? "main.tex";
       const source = await readTextFile(texFile.absolutePath);
       const data: ProjectPreviewData = {
@@ -1784,11 +1756,13 @@ function SharedBadge({ conflicts }: { conflicts: number }) {
       title={
         conflicts > 0
           ? `${conflicts} ${conflicts === 1 ? "conflict" : "conflicts"} to resolve`
-          : "Shared"
+          : "Shared with other people"
       }
     >
       <UsersIcon className="size-3" />
-      {conflicts > 0 ? `${conflicts} to resolve` : "Shared"}
+      {conflicts === 0 && <span className="sr-only">Shared</span>}
+      {/* Words only when it needs attention: the name keeps its room. */}
+      {conflicts > 0 && `${conflicts} to resolve`}
     </span>
   );
 }
@@ -1881,7 +1855,12 @@ function SyncedPill({
       ) : (
         <LaptopIcon className="size-3" />
       )}
-      {text}
+      {/* Words only when it needs attention: the name keeps its room. */}
+      {state === "syncing" || state === "error" ? (
+        text
+      ) : (
+        <span className="sr-only">{text}</span>
+      )}
     </Tag>
   );
 }

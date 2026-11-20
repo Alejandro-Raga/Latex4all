@@ -439,3 +439,26 @@ export async function createDirectory(absolutePath: string): Promise<void> {
 }
 
 export { exists, join };
+
+/**
+ * A short summary of a project's files as they are now (each file's path,
+ * size and time of change): if it's the same as last time, nothing in the
+ * folder changed. Cheap: no file is read.
+ */
+export async function folderFingerprint(rootPath: string): Promise<string> {
+  const { files } = await scanProjectFolder(rootPath);
+  const parts: string[] = [];
+  for (const f of files.sort((a, b) =>
+    a.relativePath < b.relativePath ? -1 : 1,
+  )) {
+    const info = await stat(f.absolutePath).catch(() => null);
+    parts.push(
+      `${f.relativePath}:${info?.size ?? "?"}:${info?.mtime ? new Date(info.mtime).getTime() : "?"}`,
+    );
+  }
+  let h = 0;
+  const text = parts.join("\n");
+  for (let i = 0; i < text.length; i++)
+    h = (Math.imul(h, 31) + text.charCodeAt(i)) | 0;
+  return `${files.length}:${h >>> 0}`;
+}

@@ -51,6 +51,7 @@ import {
   useCollabStore,
 } from "@/stores/collab-store";
 import { exists, rename } from "@tauri-apps/plugin-fs";
+import { folderFingerprint } from "@/lib/tauri/fs";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
 import { getSyncSettings } from "@/lib/tauri/sync-settings";
@@ -183,6 +184,35 @@ export function leftOnThisDevice(projectId: string) {
   });
 }
 
+/**
+ * A copy of a project, fetched here, that can't be synced (it isn't the
+ * shared one any more): renamed "(set aside)", taken off the home screen
+ * and listed for the person to check and delete; the next round fetches
+ * the project again. Returns where it went.
+ */
+async function setAsideCopy(root: string): Promise<string | null> {
+  if (useDocumentStore.getState().projectRoot === root) return null;
+  let target = `${root} (set aside)`;
+  for (let n = 2; await exists(target).catch(() => true); n++) {
+    target = `${root} (set aside ${n})`;
+  }
+  await rename(root, target);
+  const projects = useProjectStore.getState();
+  const info = await readLink(target).catch(() => null);
+  if (info) projects.forgetSharedProject(info.projectId);
+  // No longer the project: opened later, it doesn't sync as it.
+  await removeLink(target).catch(() => {});
+  projects.removeRecentProject(root);
+  leftovers.add(target);
+  try {
+    localStorage.setItem(LEFTOVERS, JSON.stringify([...leftovers]));
+  } catch {
+    // Listed until the app closes.
+  }
+  useLibraryStore.setState({ leftovers: [...leftovers] });
+  return target;
+}
+
 /** Stores changed by another device: read again from what's saved. */
 async function reloadStores(keys: string[]) {
   const loaders: Record<string, () => Promise<unknown>> = {
@@ -249,6 +279,40 @@ const leftovers = new Set<string>(
   })(),
 );
 
+/** What each project's folder was like when it last synced here, and when
+ * (see `needsSync`). Kept across restarts. */
+const SYNCED = "latex4all-background-synced";
+type SyncedRecord = Record<string, { fp: string; at: number }>;
+function syncedRecords(): SyncedRecord {
+  try {
+    return JSON.parse(localStorage.getItem(SYNCED) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+function recordSynced(root: string, fp: string) {
+  const all = syncedRecords();
+  all[root] = { fp, at: Date.now() };
+  try {
+    localStorage.setItem(SYNCED, JSON.stringify(all));
+  } catch {
+    // Synced again next round.
+  }
+}
+
+/** When each project last changed, and where: devices note their changes
+ * here, so the others sync a project only when it changed. */
+function headsMap(doc: Y.Doc) {
+  return doc.getMap<{ at: number; by: string }>("heads");
+}
+
+/** A project changed on this device (edited while open, say): the others
+ * sync it next round. */
+export function noteProjectChanged(projectId: string) {
+  if (!session) return;
+  headsMap(session.doc).set(projectId, { at: Date.now(), by: deviceId() });
+}
+
 /** When each project last synced in the background, by folder. */
 const lastBackground = new Map<string, number>();
 
@@ -284,25 +348,34 @@ function markLibrary(root: string) {
  * A project fetched before its name was known ("Shared project 2") gets
  * its own name once the shared copy says it: the folder is renamed.
  */
-async function nameFetched(root: string, listed?: string) {
+async function nameFetched(
+  root: string,
+  listed?: string,
+  /** Fetched here by the library (another device added the project): its
+   * folder takes the project's name, whatever it was made as. */
+  fetchedHere = false,
+) {
   // Never the folder of the project open now.
   if (useDocumentStore.getState().projectRoot === root) return;
   const parts = root.split(/[\\/]/);
   const base = parts.pop() ?? "";
-  if (!isPlaceholderName(base)) return;
+  if (!isPlaceholderName(base) && !fetchedHere) return;
   const saved = await loadDoc(root).catch(() => null);
-  if (!saved) return;
+  if (!saved && !fetchedHere) return;
   const doc = new Y.Doc();
   try {
-    Y.applyUpdate(doc, saved.data);
+    if (saved) Y.applyUpdate(doc, saved.data);
     const shared = doc.getMap<string>("meta").get("name")?.trim();
-    // The shared copy's name, or else the library's (from the device that
-    // has the project), never a placeholder.
-    const name = !isPlaceholderName(shared)
-      ? shared
-      : !isPlaceholderName(listed)
+    // The library's name (from the device that has the project) for a
+    // fetched copy; otherwise the shared copy's, never a placeholder.
+    const name =
+      fetchedHere && !isPlaceholderName(listed)
         ? listed?.trim()
-        : undefined;
+        : !isPlaceholderName(shared)
+          ? shared
+          : !isPlaceholderName(listed)
+            ? listed?.trim()
+            : undefined;
     if (!name || name === base || /[\\/:*?"<>|]/.test(name)) return;
     const target = [...parts, name].join(root.includes("\\") ? "\\" : "/");
     if (await exists(target).catch(() => true)) return;
@@ -559,7 +632,7 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     }
     // Every project's files, brought up to date in the background (one at
     // a time; each at most every ten minutes; the open one syncs live).
-    const due: Array<{ root: string; entry: Entry }> = [];
+    const due: Array<{ root: string; entry: Entry; changedHere: boolean }> = [];
     for (const [id, entry] of projects) {
       if (session !== s || entry.removed) continue;
       const info = await parseLink(entry.link).catch(() => null);
@@ -590,11 +663,33 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
         setState(root, "synced");
         continue;
       }
+      // A copy fetched here takes the project's name (a cheap check).
+      const base = root.split(/[\\/]/).pop() ?? "";
+      if (entry.by !== me && entry.name && base !== entry.name) {
+        await nameFetched(root, entry.name, true).catch(() => {});
+        if (useProjectStore.getState().sharedProjects[id] !== root) continue;
+      }
       const last = lastBackground.get(root) ?? 0;
       if (Date.now() - last < 10 * 60 * 1000) continue;
-      due.push({ root, entry });
+      // Only if something changed: here (the folder), on another device
+      // (its note in the library), or, shared with people, an hour on.
+      const record = syncedRecords()[root];
+      const head = headsMap(doc).get(id);
+      const fp = await folderFingerprint(root).catch(() => "");
+      const changedHere = !record || !fp || record.fp !== fp;
+      const changedThere = Boolean(
+        head && head.by !== me && head.at > (record?.at ?? 0),
+      );
+      const peopleDue =
+        Boolean(entry.people) &&
+        Date.now() - (record?.at ?? 0) > 60 * 60 * 1000;
+      if (!changedHere && !changedThere && !peopleDue) {
+        setState(root, "synced");
+        continue;
+      }
+      due.push({ root, entry, changedHere });
     }
-    for (const [i, { root, entry }] of due.entries()) {
+    for (const [i, { root, entry, changedHere }] of due.entries()) {
       if (session !== s) break;
       lastBackground.set(root, Date.now());
       set({
@@ -605,7 +700,13 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       try {
         await syncInBackground(root, entry.link, entry.name);
         setState(root, "synced");
-        await nameFetched(root, entry.name);
+        await nameFetched(root, entry.name, entry.by !== me);
+        // Changes from here went out: the other devices are told.
+        const info = await parseLink(entry.link).catch(() => null);
+        if (changedHere && info && syncedRecords()[root]) {
+          headsMap(doc).set(info.projectId, { at: Date.now(), by: me });
+        }
+        recordSynced(root, await folderFingerprint(root).catch(() => ""));
       } catch (err) {
         lastBackground.set(root, 0);
         setState(root, String(err).includes("offline") ? "offline" : "error");
@@ -614,6 +715,17 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
           error: String(err),
         });
         if (String(err).includes("offline")) break;
+        // A copy fetched here that disagrees with the shared copy (damaged
+        // here): set aside, kept, and fetched again whole.
+        if (String(err).includes("X01") && entry.by !== me) {
+          const aside = await setAsideCopy(root).catch(() => null);
+          if (aside) {
+            problems.push(
+              `${entry.name}: this computer's copy didn't match and was set aside; a fresh copy is on its way`,
+            );
+            continue;
+          }
+        }
         problems.push(
           String(err).includes("X01")
             ? `Didn't sync ${entry.name}. Its shared copy holds another project's changes (X01)`

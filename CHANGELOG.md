@@ -316,6 +316,21 @@ tag.
 
 ### Fixed
 
+- Much faster home screen: projects without a PDF are no longer compiled in
+  the background to draw their card (it slowed the whole app, most with big
+  projects); their card shows the source until you build them.
+- Linked devices sync a project only when it changed (here, on another
+  device, or for projects shared with people, hourly), instead of every
+  project all the time.
+- A project fetched from another device takes the project's name (no more
+  "paper" for the SDG paper).
+- A copy on this computer damaged by an earlier sync problem is set aside
+  (kept, listed in Settings → Devices) and fetched again cleanly.
+- Accented file names stored differently on Mac and Windows are one file,
+  not two; files whose names differ only in case don't overwrite each other.
+- Project cards: sharing and sync badges are small icons, so names fit;
+  words show only when something needs attention.
+
 - Switching project while the AI memory window was open could show (and
   save) the previous project's memory; the vault beside a project could
   open the previous project's note.
