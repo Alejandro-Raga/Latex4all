@@ -334,6 +334,8 @@ tag.
   the computer that made them instead of reaching every other computer.
   Ones already shared are taken out of the shared copy; nobody's own copy
   is deleted.
+- Vault notes can be renamed: right-click a note, Rename…. Links to it
+  in other notes follow the new name.
 - Double-clicking the PDF goes to the source in projects split into
   several .tex files (chapters with \input), not only in main.tex. Highlights
   and notes on those pages show again too.

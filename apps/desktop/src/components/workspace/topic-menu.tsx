@@ -4,6 +4,7 @@ import {
   CheckIcon,
   LinkIcon,
   NotebookPenIcon,
+  PencilIcon,
   PlusIcon,
   ShapesIcon,
   Trash2Icon,
@@ -11,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { create } from "zustand";
 import { useQuickTask } from "@/components/planner/quick-task";
+import { useRenameNote } from "./rename-note";
 import { AddToReadingMenu } from "@/components/planner/reading-menu";
 import { Button } from "@/components/ui/button";
 import {
@@ -277,6 +279,10 @@ export function NoteMenuItems({ noteName }: { noteName: string }) {
         />
       )}
       <ContextMenuSeparator />
+      <ContextMenuItem onClick={() => useRenameNote.getState().show(note.name)}>
+        <PencilIcon className="size-3.5" />
+        Rename…
+      </ContextMenuItem>
       <DeleteNoteItem noteName={note.name} />
     </>
   );

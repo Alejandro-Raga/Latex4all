@@ -151,7 +151,7 @@ The vault is a folder of notes in Markdown, the same format Obsidian uses. It ca
 - To add a paper, right-click it in the Library and choose **Add to vault**. Its note holds the paper's details and your highlights.
 - In a paper's note, each highlight shows the passage, its color and page, and your comment. Right-click one to add it to another note or open it in the PDF.
 - Click **+** above the list for a new topic, idea or plain note.
-- Right-click a note to change its type, connect it to another note, add a task about it, or delete it.
+- Right-click a note to change its type, connect it to another note, add a task about it, rename it or delete it. Links to a renamed note follow it.
 - The pills under a note show what it is connected to, such as Papers 12 or Topics 3. Click a pill to list those notes.
 - The map shows how your notes link to each other.
 
