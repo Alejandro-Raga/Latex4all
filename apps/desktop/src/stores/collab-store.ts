@@ -12,6 +12,7 @@ import {
   nameFromFolder,
 } from "@/lib/collab/project-doc";
 import { deviceId, markSharedWithPeople, myDevices } from "@/lib/collab/device";
+import { cloudPlace } from "@/lib/collab/cloud-place";
 import { diskWorkspace } from "@/lib/collab/disk-workspace";
 import { type Known, ProjectSync } from "@/lib/collab/project-sync";
 import {
@@ -605,6 +606,13 @@ export function syncInBackground(
           ownsProject(session.doc, info.projectId, library.addedHere);
         nameFrom(session.doc, root, owner());
         noteWhoIsIn(session.doc, root);
+        notePlace(session.doc, root);
+        if (cloudCarries(session.doc, root)) {
+          // The cloud app brings its files; they're synced live when it's
+          // opened.
+          log.info("Background sync left to the cloud app", { root });
+          return;
+        }
         if (
           name &&
           !isPlaceholderName(name) &&
@@ -807,6 +815,47 @@ function peopleMap(doc: Y.Doc) {
  * Shared with other people, or only between one's own devices: anyone but
  * you among those who've worked in it says it's shared with people.
  */
+/**
+ * Where each computer has the project inside a cloud app's folder, by
+ * device (see cloud-place), so the computers can tell when the cloud app
+ * carries its files to all of them.
+ */
+function placesMap(doc: Y.Doc) {
+  return doc.getMap<{ key: string; at: number }>("places");
+}
+
+/** Records where this computer has the project (or that it's in no cloud). */
+function notePlace(doc: Y.Doc, root: string) {
+  const key = cloudPlace(root);
+  const places = placesMap(doc);
+  const me = deviceId();
+  const was = places.get(me);
+  if (!key) {
+    if (was) places.delete(me);
+    return;
+  }
+  if (was?.key !== key || Date.now() - was.at > 7 * 24 * 60 * 60 * 1000) {
+    places.set(me, { key, at: Date.now() });
+  }
+}
+
+/**
+ * Whether a cloud app carries this project's files to everyone on it: each
+ * computer that said where it has it has it at this same place in the
+ * cloud, and there are at least as many of those as people on the project
+ * (anyone who hasn't said, an older version, counts against it). Then the
+ * cloud app is the one route for its files while it's closed: syncing them
+ * in the background too wrote them twice, and the cloud app made conflicted
+ * copies of what differed.
+ */
+function cloudCarries(doc: Y.Doc, root: string) {
+  const key = cloudPlace(root);
+  if (!key) return false;
+  const places = [...placesMap(doc).values()];
+  if (places.length < 2 || !places.every((p) => p.key === key)) return false;
+  return places.length >= Math.max(1, peopleMap(doc).size);
+}
+
 function noteWhoIsIn(doc: Y.Doc, root: string) {
   const me = useCollabStore.getState().displayName.trim() || "Anonymous";
   const others = [...peopleMap(doc).keys()].some(
@@ -1257,6 +1306,7 @@ export const useCollabStore = create<CollabState>()(
         // and the owner's copy is put back in the shared one.
         nameFrom(session.doc, root, owner());
         noteWhoIsIn(session.doc, root);
+        notePlace(session.doc, root);
         const notSynced = () =>
           useSettingsStore.getState().notSynced[root] ?? [];
         target.sync = new ProjectSync(

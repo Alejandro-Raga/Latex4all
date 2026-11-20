@@ -1,32 +1,67 @@
 /**
- * Telling an edit from a different document. A sync gone wrong once wrote
- * one project's main.tex into another's; the sync now never writes a
- * LaTeX file over one that is a different document, either way.
+ * Telling an edit from a different file. A sync gone wrong once wrote one
+ * project's main.tex into another's; the sync now never writes a file over
+ * one that is a different file altogether, either way.
  *
- * A document's identity is its class and title. A file whose identity
- * changed and that shares little of its text with the version it replaces
- * is a different document. An edit, however large, keeps one or the
- * other: rewriting a paper keeps its title, and changing the class or the
- * title keeps the text.
+ * A file's identity is what it is: a LaTeX document's class and title, a
+ * chapter's first heading, a bibliography's entries, other text's first
+ * line (see identityOf). A file whose identity changed and that shares
+ * little with the version it replaces is a different file. An edit, however
+ * large, keeps one or the other: rewriting a paper keeps its title, and
+ * changing the title keeps the text.
  */
 
-/** "article|Corporate science and the social SDGs", or null if it isn't a
- * LaTeX document (no \documentclass): only those are checked. */
-export function identityOf(text: string): string | null {
-  const kind = text.match(/\\documentclass\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/);
-  if (!kind) return null;
-  const title =
-    text.match(/\\title\s*(?:\[[^\]]*\])?\s*\{([\s\S]{0,200}?)\}\s*$/m)?.[1] ??
-    text.match(/\\title\s*(?:\[[^\]]*\])?\s*\{([^\n]{0,120})/)?.[1] ??
-    "";
-  const plain = title
+/** A short fingerprint of a string. */
+function hashOf(text: string) {
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = (h * 33) ^ text.charCodeAt(i);
+  return (h >>> 0).toString(36);
+}
+
+/** A bibliography's entry keys ("@article{smith2020," → smith2020). */
+function entryKeys(text: string): Set<string> {
+  return new Set(
+    [...text.matchAll(/@\w+\s*\{\s*([^,\s{}]+)\s*,/g)].map((m) => m[1]),
+  );
+}
+
+/** Text without LaTeX markup, folded, for comparing names and headings. */
+function plain(text: string, length: number) {
+  return text
     .replace(/\\[a-zA-Z]+\*?/g, " ")
     .replace(/[{}\\&~$]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase()
-    .slice(0, 80);
-  return `${kind[1].trim()}|${plain}`;
+    .slice(0, length);
+}
+
+/**
+ * What a file is, to tell an edit from another file arriving in its place:
+ * "article|corporate science and the social sdgs" for a LaTeX document (its
+ * class and title); "part|introduction" for a chapter it \inputs (its first
+ * heading); "bib|…" for a bibliography (its entries); "text|…" for any
+ * other text of some length (its first line). Null for one too short to
+ * tell: those aren't checked.
+ */
+export function identityOf(text: string): string | null {
+  const kind = text.match(/\\documentclass\s*(?:\[[^\]]*\])?\s*\{([^}]+)\}/);
+  if (!kind) {
+    const keys = entryKeys(text);
+    if (keys.size > 0) return `bib|${hashOf([...keys].sort().join(","))}`;
+    const heading = text.match(
+      /\\(?:part|chapter|section|subsection)\*?\s*(?:\[[^\]]*\])?\s*\{([^\n]{1,120})/,
+    );
+    if (heading) return `part|${plain(heading[1], 80)}`;
+    const lines = [...contentLines(text)];
+    if (lines.length >= 5) return `text|${plain(lines[0], 80)}`;
+    return null;
+  }
+  const title =
+    text.match(/\\title\s*(?:\[[^\]]*\])?\s*\{([\s\S]{0,200}?)\}\s*$/m)?.[1] ??
+    text.match(/\\title\s*(?:\[[^\]]*\])?\s*\{([^\n]{0,120})/)?.[1] ??
+    "";
+  return `${kind[1].trim()}|${plain(title, 80)}`;
 }
 
 /** The lines that say what a document is about: not its preamble's
@@ -48,8 +83,13 @@ function contentLines(text: string): Set<string> {
 /** Share of the smaller one's content lines that the other has too (1
  * when either is too short to tell). */
 export function overlap(a: string, b: string): number {
-  const la = contentLines(a);
-  const lb = contentLines(b);
+  // Bibliographies by their entries (a fresh export from Zotero reorders
+  // and reformats them, and keeps most).
+  const ka = entryKeys(a);
+  const kb = entryKeys(b);
+  const bibs = ka.size > 0 && kb.size > 0;
+  const la = bibs ? ka : contentLines(a);
+  const lb = bibs ? kb : contentLines(b);
   if (la.size < 5 || lb.size < 5) return 1;
   const [small, large] = la.size <= lb.size ? [la, lb] : [lb, la];
   let common = 0;

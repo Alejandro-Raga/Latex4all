@@ -80,7 +80,11 @@ const OUTBOX_FILE: &str = "collab-outbox.bin";
 const CHAT_FILE: &str = "collab-chat.bin";
 
 /// The relay protocol this app speaks; see the top of apps/relay/relay.mjs.
-const PROTOCOL: u32 = 2;
+/// 3: apps that keep one project's files out of another's (November 2026).
+/// Older ones wrote one project's main.tex into another's shared copy on a
+/// project switch; once everyone has updated, the relay's MIN_PROTOCOL goes
+/// to 3 and turns them away ("update Latex4All").
+const PROTOCOL: u32 = 3;
 const PROTOCOL_HEADER: &str = "latex4all-protocol";
 
 // ─── Links and keys ───

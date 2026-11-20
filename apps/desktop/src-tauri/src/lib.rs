@@ -569,6 +569,11 @@ fn project_modified_ms(dir: &Path) -> u64 {
     ] {
         latest = latest.max(modified_ms(&dir.join(relative)));
     }
+    // Its history, now kept with the app: its last snapshot.
+    let history = history::history_path(&dir.to_string_lossy());
+    for branch in ["master", "main"] {
+        latest = latest.max(modified_ms(&history.join("refs").join("heads").join(branch)));
+    }
     let build = latex::persistent_build_dir(&dir.to_string_lossy());
     latest = latest.max(modified_ms(&build.join("main.pdf")));
 
@@ -906,6 +911,8 @@ pub fn run() {
             collab::collab_create_folder,
             collab::collab_default_name,
             history::history_init,
+            history::history_location,
+            history::history_relocate,
             history::history_snapshot,
             history::history_list,
             history::history_diff,

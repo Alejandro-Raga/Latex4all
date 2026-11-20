@@ -487,8 +487,22 @@ async function relocateOpenProject(
     await listener(oldRoot).catch(() => {});
   }
   const carried = await loadDoc(oldRoot).catch(() => null);
+  // Its history too (kept with the app, by folder).
+  const history = await invoke<string>("history_location", {
+    projectRoot: oldRoot,
+  }).catch(() => null);
 
   await moveFolder(oldRoot, newRoot);
+  if (history) {
+    await invoke("history_relocate", {
+      from: history,
+      projectRoot: newRoot,
+    }).catch((err) =>
+      log.warn("Couldn't carry the history to the new folder", {
+        error: String(err),
+      }),
+    );
+  }
   if (carried) {
     await saveDoc(newRoot, carried.seq, carried.local, carried.data).catch(
       (err) =>

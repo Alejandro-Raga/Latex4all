@@ -25,10 +25,119 @@ pub struct FileDiff {
 
 // ─── Helpers ───
 
-fn history_path(project_root: &str) -> PathBuf {
+/// Where a project's history was kept before: in the project itself. A
+/// project in a Seafile or Dropbox folder had it synced to every computer,
+/// where each wrote to it and set the other's aside as broken
+/// (`history.git.broken-…`), and the restore points were lost.
+fn legacy_history_path(project_root: &str) -> PathBuf {
     Path::new(project_root)
         .join(".latex4all")
         .join("history.git")
+}
+
+#[cfg(not(test))]
+fn history_base() -> Option<PathBuf> {
+    dirs::data_local_dir().map(|d| d.join("Latex4All").join("history"))
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Tests choose where history goes; none keeps it in the project.
+    static TEST_BASE: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn history_base() -> Option<PathBuf> {
+    TEST_BASE.with(|b| b.borrow().clone())
+}
+
+/// Where a project's history is kept: with the app, one per project folder
+/// on this computer (`…/Latex4All/history/<id>`), like its builds. Each
+/// computer keeps its own; a cloud app never carries it.
+pub(crate) fn history_path(project_root: &str) -> PathBuf {
+    let root = PathBuf::from(project_root.trim_end_matches(['/', '\\']));
+    let Some(base) = history_base() else {
+        return legacy_history_path(project_root);
+    };
+    let canonical = fs::canonicalize(&root).unwrap_or_else(|_| root.clone());
+    let digest = ring::digest::digest(
+        &ring::digest::SHA256,
+        canonical.to_string_lossy().as_bytes(),
+    );
+    let id: String = digest.as_ref()[..12]
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    base.join(id)
+}
+
+/// Copies every file under `from` into `to`.
+fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(to)?;
+    for entry in fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
+}
+
+/// The history kept in the project by earlier versions, copied to where
+/// history is kept now, if it's this project's and works. The copy in the
+/// project stays as it was (another computer may still use it).
+fn adopt_legacy(project_root: &str, git_dir: &Path) -> bool {
+    let legacy = legacy_history_path(project_root);
+    if legacy == git_dir || !legacy.exists() {
+        return false;
+    }
+    let Ok(old) = Repository::open(&legacy) else {
+        return false;
+    };
+    if !repo_points_here(&old, project_root) || old.head().is_err() {
+        return false;
+    }
+    let from = old.path().to_path_buf();
+    drop(old);
+    if copy_dir(&from, git_dir).is_err() {
+        let _ = fs::remove_dir_all(git_dir);
+        return false;
+    }
+    match Repository::open(git_dir) {
+        Ok(repo) => {
+            if let Ok(mut config) = repo.config() {
+                let _ = config.set_str("core.worktree", project_root);
+            }
+            true
+        }
+        Err(_) => {
+            let _ = fs::remove_dir_all(git_dir);
+            false
+        }
+    }
+}
+
+/// libgit2 leaves a `.git` file in the project pointing at the history;
+/// nothing needs it, and a cloud app carried it to computers where it points
+/// nowhere. Only ours goes: a `.git` of the person's own is never touched.
+fn drop_pointer(project_root: &str) {
+    let pointer = Path::new(project_root).join(".git");
+    if !pointer.is_file() {
+        return;
+    }
+    let Ok(text) = fs::read_to_string(&pointer) else {
+        return;
+    };
+    let Some(target) = text.trim().strip_prefix("gitdir:") else {
+        return;
+    };
+    let target = target.trim().replace('\\', "/");
+    if target.contains("/.latex4all/history.git") || target.contains("/Latex4All/history/") {
+        let _ = fs::remove_file(pointer);
+    }
 }
 
 /// Whether a history repo's working folder is this project (one made on
@@ -52,7 +161,11 @@ fn set_aside(git_dir: &Path) -> Result<(), String> {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let aside = git_dir.with_file_name(format!("history.git.broken-{}", stamp));
+    let name = git_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "history.git".into());
+    let aside = git_dir.with_file_name(format!("{name}.broken-{stamp}"));
     fs::rename(git_dir, &aside).map_err(|e| format!("Couldn't set the broken history aside: {}", e))
 }
 
@@ -146,6 +259,7 @@ pub fn history_init(project_root: String) -> Result<(), String> {
         match Repository::open(&git_dir) {
             Ok(repo) if repo_points_here(&repo, &project_root) => {
                 ensure_excludes(&project_root, &repo);
+                drop_pointer(&project_root);
                 return Ok(());
             }
             // Unusable: a sync service copied the folder without its
@@ -156,19 +270,52 @@ pub fn history_init(project_root: String) -> Result<(), String> {
         }
     }
 
-    // Create .latex4all/ dir
+    // The history an earlier version kept in the project, carried over.
+    if adopt_legacy(&project_root, &git_dir) {
+        if let Ok(repo) = Repository::open(&git_dir) {
+            ensure_excludes(&project_root, &repo);
+        }
+        drop_pointer(&project_root);
+        return Ok(());
+    }
+
+    // Create .latex4all/ dir (for the excludes file)
     let latex4all_dir = Path::new(&project_root).join(".latex4all");
     fs::create_dir_all(&latex4all_dir)
         .map_err(|e| format!("Failed to create .latex4all dir: {}", e))?;
+    if let Some(parent) = git_dir.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create the history folder: {}", e))?;
+    }
 
-    // Init a bare repo with workdir pointing to project root
-    let mut opts = RepositoryInitOptions::new();
-    opts.bare(false);
-    opts.workdir_path(Path::new(&project_root));
-    opts.no_reinit(true);
-
-    let repo = Repository::init_opts(&git_dir, &opts)
-        .map_err(|e| format!("Failed to init history repo: {}", e))?;
+    let repo = if git_dir != legacy_history_path(&project_root) {
+        // Kept apart from the project: made bare, then given the project as
+        // its working folder, so nothing is written into the project (a
+        // `.git` pointer would replace one of the person's own).
+        let mut opts = RepositoryInitOptions::new();
+        opts.bare(true);
+        opts.no_reinit(true);
+        let repo = Repository::init_opts(&git_dir, &opts)
+            .map_err(|e| format!("Failed to init history repo: {}", e))?;
+        let mut config = repo.config().map_err(|e| e.to_string())?;
+        config
+            .set_bool("core.bare", false)
+            .map_err(|e| e.to_string())?;
+        config
+            .set_str("core.worktree", &project_root)
+            .map_err(|e| e.to_string())?;
+        drop(config);
+        drop(repo);
+        Repository::open(&git_dir).map_err(|e| format!("Failed to open history repo: {}", e))?
+    } else {
+        // Init a repo in the project with workdir pointing to project root
+        let mut opts = RepositoryInitOptions::new();
+        opts.bare(false);
+        opts.workdir_path(Path::new(&project_root));
+        opts.no_reinit(true);
+        Repository::init_opts(&git_dir, &opts)
+            .map_err(|e| format!("Failed to init history repo: {}", e))?
+    };
 
     // Set up excludes file
     ensure_excludes(&project_root, &repo);
@@ -204,6 +351,38 @@ pub fn history_init(project_root: String) -> Result<(), String> {
     )
     .map_err(|e| format!("Failed to create initial commit: {}", e))?;
 
+    Ok(())
+}
+
+/// Where the project's history is, for carrying it when the folder moves
+/// (asked before the move: the key comes from the folder as it is).
+#[tauri::command]
+pub fn history_location(project_root: String) -> String {
+    history_path(&project_root).to_string_lossy().into_owned()
+}
+
+/// The project's folder moved or was renamed: its history, at `from` (see
+/// `history_location`), goes with it, pointed at the new folder.
+#[tauri::command]
+pub fn history_relocate(from: String, project_root: String) -> Result<(), String> {
+    let from = PathBuf::from(from);
+    let to = history_path(&project_root);
+    if from == to || !from.exists() {
+        return Ok(());
+    }
+    if to.exists() {
+        set_aside(&to)?;
+    }
+    if let Some(parent) = to.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::rename(&from, &to).map_err(|e| format!("Couldn't move the history: {}", e))?;
+    // Set in its config file directly: opened, the repo would look for the
+    // old folder and fail.
+    let mut config = git2::Config::open(&to.join("config")).map_err(|e| e.to_string())?;
+    config
+        .set_str("core.worktree", &project_root)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -1018,5 +1197,76 @@ mod tests {
         let list = history_list(r, 10, 0).unwrap();
         assert_eq!(list.len(), 3);
         assert!(list.iter().any(|s| s.message.contains("[restore]")));
+    }
+
+    // ─── Kept with the app ───
+
+    /// History kept in `base` for the rest of this test (as the app does).
+    fn keep_in(base: &TempDir) {
+        TEST_BASE.with(|b| *b.borrow_mut() = Some(base.path().to_path_buf()));
+    }
+
+    #[test]
+    fn test_history_kept_with_the_app_not_in_the_project() {
+        let base = TempDir::new().unwrap();
+        keep_in(&base);
+        let dir = setup_project(&[("main.tex", "hello")]);
+        history_init(root(&dir)).unwrap();
+        assert!(!dir.path().join(".latex4all").join("history.git").exists());
+        assert!(
+            !dir.path().join(".git").exists(),
+            "no pointer left in the project"
+        );
+        fs::write(dir.path().join("main.tex"), "hello again").unwrap();
+        assert!(history_snapshot(root(&dir), "edit".into())
+            .unwrap()
+            .is_some());
+        assert_eq!(history_list(root(&dir), 50, 0).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_history_in_the_project_is_carried_over() {
+        let dir = setup_project(&[("main.tex", "v1")]);
+        history_init(root(&dir)).unwrap(); // in the project, as before
+        fs::write(dir.path().join("main.tex"), "v2").unwrap();
+        history_snapshot(root(&dir), "earlier".into()).unwrap();
+
+        let base = TempDir::new().unwrap();
+        keep_in(&base);
+        history_init(root(&dir)).unwrap();
+        let list = history_list(root(&dir), 50, 0).unwrap();
+        assert_eq!(list.len(), 2, "both earlier snapshots are there");
+        assert!(dir.path().join(".latex4all").join("history.git").exists());
+    }
+
+    #[test]
+    fn test_history_follows_a_renamed_folder() {
+        let base = TempDir::new().unwrap();
+        keep_in(&base);
+        let parent = TempDir::new().unwrap();
+        let old = parent.path().join("Old");
+        fs::create_dir_all(&old).unwrap();
+        fs::write(old.join("main.tex"), "text").unwrap();
+        let old_root = old.to_string_lossy().to_string();
+        history_init(old_root.clone()).unwrap();
+        let from = history_location(old_root);
+        let new = parent.path().join("New");
+        fs::rename(&old, &new).unwrap();
+        let new_root = new.to_string_lossy().to_string();
+        history_relocate(from, new_root.clone()).unwrap();
+        history_init(new_root.clone()).unwrap();
+        assert_eq!(history_list(new_root, 50, 0).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_a_git_folder_of_ones_own_is_left_alone() {
+        let base = TempDir::new().unwrap();
+        keep_in(&base);
+        let dir = setup_project(&[
+            ("main.tex", "x"),
+            (".git", "gitdir: /work/repo/.git/worktrees/x"),
+        ]);
+        history_init(root(&dir)).unwrap();
+        assert!(dir.path().join(".git").exists());
     }
 }

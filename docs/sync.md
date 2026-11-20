@@ -285,6 +285,19 @@ real incident, November 2026):
   taken out of it (each computer's own copy stays).
 - A file already in the shared copy at a path is never added again under
   that path, even if this computer couldn't settle it this time.
+- The brake covers chapters (first heading), bibliographies (entry keys)
+  and other text of some length (first line), not only documents.
+- Apps from before these rules are kept out: relay protocol 3 (raise the
+  relay's MIN_PROTOCOL to 3 once everyone has updated, stable channel
+  included) and peer-to-peer ALPN `latex4all/sync/2` (the hub on the
+  server must run the same).
+- History is per computer (`<data>/Latex4All/history/<id>`), never in the
+  project, where a cloud app synced one repository between computers.
+- Linked devices compare change notes by value, never by clock.
+- When every computer on a project has it at the same place in the same
+  cloud app (each records `places` in the shared copy; anyone who hasn't
+  said counts against it), background syncs leave its files to the cloud
+  app; the open project syncs live as always.
 
 ## Error codes
 

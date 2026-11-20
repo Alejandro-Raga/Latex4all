@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 /**
  * Linked devices (Settings → Devices): one person's
  * computers with the same projects.
@@ -255,7 +256,16 @@ const leftovers = new Set<string>(
 /** What each project's folder was like when it last synced here, and when
  * (see `needsSync`). Kept across restarts. */
 const SYNCED = "latex4all-background-synced";
-type SyncedRecord = Record<string, { fp: string; at: number }>;
+type SyncedRecord = Record<
+  string,
+  {
+    fp: string;
+    at: number;
+    /** The other devices' note of their last change (see headsMap), as it
+     * was when this one synced: a different note means a change there. */
+    head?: string;
+  }
+>;
 function syncedRecords(): SyncedRecord {
   try {
     return JSON.parse(localStorage.getItem(SYNCED) ?? "{}");
@@ -263,9 +273,14 @@ function syncedRecords(): SyncedRecord {
     return {};
   }
 }
-function recordSynced(root: string, fp: string, at = Date.now()) {
+function recordSynced(
+  root: string,
+  fp: string,
+  at = Date.now(),
+  head?: string,
+) {
   const all = syncedRecords();
-  all[root] = { fp, at };
+  all[root] = head === undefined ? { fp, at } : { fp, at, head };
   try {
     localStorage.setItem(SYNCED, JSON.stringify(all));
   } catch {
@@ -277,6 +292,13 @@ function recordSynced(root: string, fp: string, at = Date.now()) {
  * here, so the others sync a project only when it changed. */
 function headsMap(doc: Y.Doc) {
   return doc.getMap<{ at: number; by: string }>("heads");
+}
+
+/** A change note as a value to compare: never by its time, since the
+ * computers' clocks needn't agree (one running behind had its changes
+ * taken for older than the last sync, and skipped). */
+function headKey(head: { at: number; by: string } | undefined) {
+  return head ? `${head.by}:${head.at}` : "";
 }
 
 /** A project changed on this device (edited while open, say): the others
@@ -413,7 +435,16 @@ async function nameFetched(
     if (!name || name === base || /[\\/:*?"<>|]/.test(name)) return;
     const target = [...parts, name].join(root.includes("\\") ? "\\" : "/");
     if (await exists(target).catch(() => true)) return;
+    const history = await invoke<string>("history_location", {
+      projectRoot: root,
+    }).catch(() => null);
     await rename(root, target);
+    if (history) {
+      await invoke("history_relocate", {
+        from: history,
+        projectRoot: target,
+      }).catch(() => {});
+    }
     // This computer's sync record goes with the folder (it's kept by
     // folder): without it, the next sync compared every file afresh.
     if (saved) {
@@ -733,7 +764,12 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       }
       const changedHere = forceAll || !record || !fp || record.fp !== fp;
       const changedThere = Boolean(
-        head && head.by !== me && head.at > (record?.at ?? 0),
+        head &&
+          head.by !== me &&
+          (record?.head !== undefined
+            ? headKey(head) !== record.head
+            : // Recorded by an earlier version: by time, this once.
+              head.at > (record?.at ?? 0)),
       );
       const peopleDue =
         Boolean(entry.people) &&
@@ -760,14 +796,21 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
         if (changedHere && info && syncedRecords()[root]) {
           headsMap(doc).set(info.projectId, { at: Date.now(), by: me });
         }
-        recordSynced(root, await folderFingerprint(root).catch(() => ""));
+        recordSynced(
+          root,
+          await folderFingerprint(root).catch(() => ""),
+          Date.now(),
+          headKey(info ? headsMap(doc).get(info.projectId) : undefined),
+        );
         // Renamed after its record, which follows it to the new name.
         await nameFetched(root, entry.name, entry.by !== me);
         const moved =
           info && useProjectStore.getState().sharedProjects[info.projectId];
         if (moved && moved !== root) {
           const all = syncedRecords();
-          if (all[root]) recordSynced(moved, all[root].fp, all[root].at);
+          if (all[root]) {
+            recordSynced(moved, all[root].fp, all[root].at, all[root].head);
+          }
         }
       } catch (err) {
         lastBackground.set(root, 0);

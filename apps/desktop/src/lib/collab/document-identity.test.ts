@@ -31,7 +31,8 @@ describe("document identity", () => {
     expect(
       identityOf("\\documentclass{beamer}\n\\title[Short]{A \\textbf{Talk}}"),
     ).toBe("beamer|a talk");
-    expect(identityOf("@article{key, title={x}}")).toBeNull();
+    expect(identityOf("@article{key, title={x}}")).toMatch(/^bib\|/);
+    expect(identityOf("Just one short line.")).toBeNull();
   });
 
   it("tells another project's paper from an edit", () => {
@@ -69,9 +70,56 @@ describe("document identity", () => {
     expect(isDifferentDocument(template, sdg)).toBe(false);
   });
 
-  it("only checks LaTeX documents", () => {
+  it("tells another project's chapter from an edit of this one's", () => {
+    const chapter = (title: string, subject: string) =>
+      [
+        `\\chapter{${title}}`,
+        ...Array.from(
+          { length: 10 },
+          (_, i) => `Line ${i} of the chapter about ${subject}.`,
+        ),
+      ].join("\n");
+    const intro = chapter("Introduction", "the question");
+    const other = chapter("Results", "the regressions");
+    expect(identityOf(intro)).toBe("part|introduction");
+    expect(isDifferentDocument(other, intro)).toBe(true);
     expect(
-      isDifferentDocument("@a{x}\n".repeat(20), "@b{y}\n".repeat(20)),
+      isDifferentDocument(intro.replace("Line 3", "Line three"), intro),
     ).toBe(false);
+  });
+
+  it("tells another project's bibliography from a fresh export of this one's", () => {
+    const bib = (keys: string[]) =>
+      keys.map((k) => `@article{${k},\n  title = {${k}},\n}`).join("\n\n");
+    const mine = bib(["a1", "a2", "a3", "a4", "a5", "a6"]);
+    const theirs = bib(["z1", "z2", "z3", "z4", "z5", "z6"]);
+    expect(isDifferentDocument(theirs, mine)).toBe(true);
+    // Re-exported, one entry more and reordered: the same bibliography.
+    const again = bib(["a6", "a5", "a4", "a3", "a2", "a1", "a7"]);
+    expect(isDifferentDocument(again, mine)).toBe(false);
+  });
+
+  it("tells another project's plan from this one's", () => {
+    const plan = (name: string, tasks: string[]) =>
+      [
+        `# ${name}`,
+        "",
+        ...tasks.map((t) => `- [ ] ${t} for the whole project`),
+      ].join("\n");
+    const sdg = plan("Corporate Science and the Social SDGs", [
+      "Revise the SDG paper",
+      "Answer the reviewers",
+      "Send it back to the editor",
+      "Meet with Oscar about it",
+      "Rerun the regressions",
+    ]);
+    const web = plan("Webpage Article", [
+      "Write the webpage article",
+      "Choose the pictures",
+      "Ask for feedback",
+      "Publish the article",
+      "Share it online",
+    ]);
+    expect(isDifferentDocument(web, sdg)).toBe(true);
   });
 });

@@ -42,8 +42,10 @@ use std::sync::{Arc, Mutex};
 use store::Store;
 use tokio::sync::broadcast;
 
-/// The protocol's name on the wire (iroh's ALPN).
-pub const ALPN: &[u8] = b"latex4all/sync/1";
+/// The protocol's name on the wire (iroh's ALPN). 2: copies that keep one
+/// project's files out of another's (November 2026); copies speaking 1 wrote
+/// one project's main.tex into another's, and are no longer synced with.
+pub const ALPN: &[u8] = b"latex4all/sync/2";
 
 /// Something new in a project: an entry, or a snapshot (which, if
 /// `lacked`, has changes this copy didn't have: the app merges it in).

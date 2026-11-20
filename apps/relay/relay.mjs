@@ -18,7 +18,12 @@
 //                                 (REPORTS_PASSWORD); see reports-page.mjs
 // WebSocket /p/<id>/sync          all need "Authorization: Bearer <token>", and
 //                                 "Latex4All-Protocol: <n>" (absent means 1):
-//                                 below `minProtocol` it's refused with 426
+//                                 below `minProtocol` it's refused with 426.
+//                                 2: reads compressed data. 3: keeps one
+//                                 project's files out of another's (apps
+//                                 before it wrote one project's main.tex
+//                                 into another's); MIN_PROTOCOL=3 once
+//                                 everyone has updated.
 //   text   → {"type":"hello","after":n,"chatAfter":m}
 //                                          send me everything after seq n, and
 //                                          chat after m (no chat if absent)

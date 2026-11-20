@@ -334,6 +334,21 @@ tag.
   the computer that made them instead of reaching every other computer.
   Ones already shared are taken out of the shared copy; nobody's own copy
   is deleted.
+- Computers on this version no longer sync peer to peer with older
+  ones, which could still put one project's text into another's. They go
+  on syncing through the Latex4All server until they update.
+- Each project's history (its restore points) is kept on each computer
+  instead of inside the project folder, so Seafile, Dropbox or OneDrive no
+  longer carry it between computers and break it ("history.git.broken").
+  Your history so far is kept, and follows a project when it's renamed or
+  moved.
+- Linked devices notice changes on the other computer even when the two
+  clocks don't agree.
+- Projects that a cloud app (Seafile, Dropbox, OneDrive…) already carries
+  to everyone on them, at the same place, are no longer also written in the
+  background by Latex4All, which made conflicted copies.
+- Another file arriving in place of one of yours (a chapter, a
+  bibliography, the plan) is refused the same way as a main.tex.
 - Vault notes can be renamed: right-click a note, Rename…. Links to it
   in other notes follow the new name.
 - Double-clicking the PDF goes to the source in projects split into
