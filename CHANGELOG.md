@@ -337,6 +337,9 @@ tag.
 - Computers on this version no longer sync peer to peer with older
   ones, which could still put one project's text into another's. They go
   on syncing through the Latex4All server until they update.
+- History work never holds up the window: a slow snapshot, or moving a
+  long history the first time a project opens, froze the app (on Windows
+  it couldn't even be closed).
 - Each project's history (its restore points) is kept on each computer
   instead of inside the project folder, so Seafile, Dropbox or OneDrive no
   longer carry it between computers and break it ("history.git.broken").

@@ -102,8 +102,12 @@ fn adopt_legacy(project_root: &str, git_dir: &Path) -> bool {
     }
     let from = old.path().to_path_buf();
     drop(old);
-    if copy_dir(&from, git_dir).is_err() {
-        let _ = fs::remove_dir_all(git_dir);
+    // Copied beside it first, then put in place: cut short (the app quit,
+    // a slow disk), it's never taken for the history.
+    let partial = git_dir.with_extension("copying");
+    let _ = fs::remove_dir_all(&partial);
+    if copy_dir(&from, &partial).is_err() || fs::rename(&partial, git_dir).is_err() {
+        let _ = fs::remove_dir_all(&partial);
         return false;
     }
     match Repository::open(git_dir) {
@@ -250,7 +254,6 @@ Thumbs.db
 
 // ─── Tauri Commands ───
 
-#[tauri::command]
 pub fn history_init(project_root: String) -> Result<(), String> {
     let git_dir = history_path(&project_root);
 
@@ -356,14 +359,12 @@ pub fn history_init(project_root: String) -> Result<(), String> {
 
 /// Where the project's history is, for carrying it when the folder moves
 /// (asked before the move: the key comes from the folder as it is).
-#[tauri::command]
 pub fn history_location(project_root: String) -> String {
     history_path(&project_root).to_string_lossy().into_owned()
 }
 
 /// The project's folder moved or was renamed: its history, at `from` (see
 /// `history_location`), goes with it, pointed at the new folder.
-#[tauri::command]
 pub fn history_relocate(from: String, project_root: String) -> Result<(), String> {
     let from = PathBuf::from(from);
     let to = history_path(&project_root);
@@ -386,7 +387,6 @@ pub fn history_relocate(from: String, project_root: String) -> Result<(), String
     Ok(())
 }
 
-#[tauri::command]
 pub fn history_snapshot(
     project_root: String,
     message: String,
@@ -472,7 +472,6 @@ pub fn history_snapshot(
     }))
 }
 
-#[tauri::command]
 pub fn history_list(
     project_root: String,
     limit: u32,
@@ -548,7 +547,6 @@ pub fn history_list(
     Ok(snapshots)
 }
 
-#[tauri::command]
 pub fn history_diff(
     project_root: String,
     from_id: String,
@@ -630,7 +628,6 @@ pub fn history_diff(
     Ok(results)
 }
 
-#[tauri::command]
 pub fn history_file_at(
     project_root: String,
     snapshot_id: String,
@@ -656,7 +653,6 @@ pub fn history_file_at(
     Ok(String::from_utf8_lossy(blob.content()).to_string())
 }
 
-#[tauri::command]
 pub fn history_restore(project_root: String, snapshot_id: String) -> Result<SnapshotInfo, String> {
     let repo = open_repo(&project_root)?;
     let oid = Oid::from_str(&snapshot_id).map_err(|e| format!("Invalid snapshot_id: {}", e))?;
@@ -705,7 +701,6 @@ pub fn history_restore(project_root: String, snapshot_id: String) -> Result<Snap
     })
 }
 
-#[tauri::command]
 pub fn history_add_label(
     project_root: String,
     snapshot_id: String,
@@ -723,7 +718,6 @@ pub fn history_add_label(
     Ok(())
 }
 
-#[tauri::command]
 pub fn history_remove_label(project_root: String, label: String) -> Result<(), String> {
     let repo = open_repo(&project_root)?;
     let tag_ref = format!("refs/tags/{}", label);
@@ -732,6 +726,80 @@ pub fn history_remove_label(project_root: String, label: String) -> Result<(), S
         .delete()
         .map_err(|e| format!("Failed to delete label: {}", e))?;
     Ok(())
+}
+
+
+/// The commands, each run on a worker thread: run on the main thread (as
+/// plain commands are), a slow one (the first copy of a long history on
+/// Windows, a snapshot of a large project) froze the whole window, which
+/// then couldn't even be closed.
+pub mod commands {
+    use super::*;
+
+    /// One at a time, as on the main thread: a snapshot never runs while
+    /// the history is still being made or copied.
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    async fn off_main<T: Send + 'static>(
+        work: impl FnOnce() -> Result<T, String> + Send + 'static,
+    ) -> Result<T, String> {
+        tauri::async_runtime::spawn_blocking(move || {
+            let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+            work()
+        })
+        .await
+        .map_err(|e| format!("History task failed: {e}"))?
+    }
+
+    #[tauri::command]
+    pub async fn history_init(project_root: String) -> Result<(), String> {
+        off_main(move || super::history_init(project_root)).await
+    }
+
+    #[tauri::command]
+    pub async fn history_location(project_root: String) -> Result<String, String> {
+        off_main(move || Ok(super::history_location(project_root))).await
+    }
+
+    #[tauri::command]
+    pub async fn history_relocate(from: String, project_root: String) -> Result<(), String> {
+        off_main(move || super::history_relocate(from, project_root)).await
+    }
+
+    #[tauri::command]
+    pub async fn history_snapshot(project_root: String, message: String) -> Result<Option<SnapshotInfo>, String> {
+        off_main(move || super::history_snapshot(project_root, message)).await
+    }
+
+    #[tauri::command]
+    pub async fn history_list(project_root: String, limit: u32, offset: u32) -> Result<Vec<SnapshotInfo>, String> {
+        off_main(move || super::history_list(project_root, limit, offset)).await
+    }
+
+    #[tauri::command]
+    pub async fn history_diff(project_root: String, from_id: String, to_id: String) -> Result<Vec<FileDiff>, String> {
+        off_main(move || super::history_diff(project_root, from_id, to_id)).await
+    }
+
+    #[tauri::command]
+    pub async fn history_file_at(project_root: String, snapshot_id: String, file_path: String) -> Result<String, String> {
+        off_main(move || super::history_file_at(project_root, snapshot_id, file_path)).await
+    }
+
+    #[tauri::command]
+    pub async fn history_restore(project_root: String, snapshot_id: String) -> Result<SnapshotInfo, String> {
+        off_main(move || super::history_restore(project_root, snapshot_id)).await
+    }
+
+    #[tauri::command]
+    pub async fn history_add_label(project_root: String, snapshot_id: String, label: String) -> Result<(), String> {
+        off_main(move || super::history_add_label(project_root, snapshot_id, label)).await
+    }
+
+    #[tauri::command]
+    pub async fn history_remove_label(project_root: String, label: String) -> Result<(), String> {
+        off_main(move || super::history_remove_label(project_root, label)).await
+    }
 }
 
 #[cfg(test)]
