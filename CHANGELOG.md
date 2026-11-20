@@ -337,6 +337,10 @@ tag.
 - Computers on this version no longer sync peer to peer with older
   ones, which could still put one project's text into another's. They go
   on syncing through the Latex4All server until they update.
+- On Windows, the app could stop responding a moment after it started
+  (projects wouldn't open, the window wouldn't close, updates and bug
+  reports hung) while loading a vault from a server. It now asks the
+  server a few things at a time.
 - History work never holds up the window: a slow snapshot, or moving a
   long history the first time a project opens, froze the app (on Windows
   it couldn't even be closed).

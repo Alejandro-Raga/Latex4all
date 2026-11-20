@@ -32,18 +32,44 @@ export const webdavConnect = (
 
 export const webdavDisconnect = () => invoke<void>("vault_webdav_disconnect");
 
+/**
+ * At most this many requests to the vault server at once. Loading a vault
+ * sent one per folder all together; on Windows, a burst of their answers
+ * arriving within a few milliseconds of each other was followed by the app
+ * no longer answering anything (no project opened, the window wouldn't
+ * close). A few at a time loads about as fast.
+ */
+const AT_ONCE = 3;
+let inFlight = 0;
+const waiting: Array<() => void> = [];
+
+async function turn<T>(work: () => Promise<T>): Promise<T> {
+  if (inFlight >= AT_ONCE) {
+    await new Promise<void>((resolve) => waiting.push(resolve));
+  }
+  inFlight++;
+  try {
+    return await work();
+  } finally {
+    inFlight--;
+    waiting.shift()?.();
+  }
+}
+
 function request(
   method: "PROPFIND" | "GET" | "PUT" | "MKCOL" | "DELETE",
   path: string,
   options: { depth?: string; body?: string; ifMatch?: string | null } = {},
 ) {
-  return invoke<RawResponse>("vault_webdav_request", {
-    method,
-    path,
-    depth: options.depth ?? null,
-    body: options.body ?? null,
-    ifMatch: options.ifMatch ?? null,
-  });
+  return turn(() =>
+    invoke<RawResponse>("vault_webdav_request", {
+      method,
+      path,
+      depth: options.depth ?? null,
+      body: options.body ?? null,
+      ifMatch: options.ifMatch ?? null,
+    }),
+  );
 }
 
 function decodeBytes(base64: string): Uint8Array {
