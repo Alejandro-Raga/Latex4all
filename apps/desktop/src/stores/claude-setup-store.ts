@@ -76,6 +76,11 @@ interface ClaudeSetupState {
   checkStatus: () => Promise<void>;
   install: () => Promise<void>;
   login: () => Promise<void>;
+  /** The sign-in page, once the CLI gives it. */
+  loginUrl: string | null;
+  /** The code the sign-in page shows, passed to the CLI. */
+  submitLoginCode: (code: string) => Promise<void>;
+  cancelLogin: () => Promise<void>;
   saveApiKey: (
     apiKey: string,
     baseUrl?: string,
@@ -217,6 +222,7 @@ export const useClaudeSetupStore = create<ClaudeSetupState>((set, get) => ({
   installLogsVisible: false,
 
   loginSteps: [],
+  loginUrl: null,
 
   checkStatus: async () => {
     set({ status: "checking", error: null });
@@ -343,6 +349,7 @@ export const useClaudeSetupStore = create<ClaudeSetupState>((set, get) => ({
       isLoggingIn: true,
       error: null,
       loginSteps: initialSteps,
+      loginUrl: null,
     });
 
     try {
@@ -354,6 +361,21 @@ export const useClaudeSetupStore = create<ClaudeSetupState>((set, get) => ({
         error: err?.message || String(err),
       });
     }
+  },
+
+  submitLoginCode: async (code: string) => {
+    if (!code.trim()) return;
+    try {
+      await invoke("submit_login_code", { code });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+    }
+  },
+
+  cancelLogin: async () => {
+    set({ isLoggingIn: false, loginUrl: null, loginSteps: [] });
+    await invoke("cancel_login_claude").catch(() => {});
+    get().checkStatus();
   },
 
   saveApiKey: async (
@@ -601,6 +623,8 @@ export const useClaudeSetupStore = create<ClaudeSetupState>((set, get) => ({
   },
 
   _finishLogin: (success: boolean) => {
+    // Cancelled: nothing to report.
+    if (!get().isLoggingIn) return;
     if (success) {
       const store = get();
       store._advanceLoginStep("complete");
@@ -618,7 +642,7 @@ export const useClaudeSetupStore = create<ClaudeSetupState>((set, get) => ({
     } else {
       const store = get();
       store._failCurrentLoginStep(
-        "Authentication failed. If the browser didn't open, please run 'claude auth login' in your terminal instead.",
+        "Sign-in didn't finish. Try again, or run 'claude auth login' in a terminal.",
       );
       set({ isLoggingIn: false, status: "error" });
     }

@@ -316,6 +316,11 @@ tag.
 
 ### Fixed
 
+- Signing in to Claude with the browser works again, on Windows too. The app
+  opens the sign-in page itself, shows its link in case the browser doesn't
+  open, and has a box for the code the page shows. Signing in can also be
+  cancelled.
+
 - Opening a project with long files no longer freezes the app: comparing two
   very different versions of a file took seconds and now takes milliseconds.
 - A shared copy whose main.tex had become another project's document (from

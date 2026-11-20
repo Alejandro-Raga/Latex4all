@@ -2399,6 +2399,7 @@ pub async fn install_claude_cli(window: WebviewWindow) -> Result<bool, String> {
         .spawn()
         .map_err(|e| format!("Failed to run installer: {}", e))?;
 
+    *LOGIN_STDIN.lock().await = child.stdin.take();
     let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
     let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
 
@@ -2452,6 +2453,37 @@ pub async fn install_claude_cli(window: WebviewWindow) -> Result<bool, String> {
     Ok(success)
 }
 
+/// The sign-in under way: its input (the CLI asks for the code the sign-in
+/// page shows) and the process, to stop it.
+static LOGIN_STDIN: std::sync::LazyLock<Mutex<Option<tokio::process::ChildStdin>>> =
+    std::sync::LazyLock::new(|| Mutex::new(None));
+static LOGIN_CHILD: std::sync::LazyLock<Mutex<Option<Arc<Mutex<tokio::process::Child>>>>> =
+    std::sync::LazyLock::new(|| Mutex::new(None));
+
+/// The code the sign-in page showed, passed to the CLI waiting for it.
+#[tauri::command]
+pub async fn submit_login_code(code: String) -> Result<(), String> {
+    use tokio::io::AsyncWriteExt;
+    let mut guard = LOGIN_STDIN.lock().await;
+    let stdin = guard.as_mut().ok_or("No sign-in is waiting for a code")?;
+    stdin
+        .write_all(format!("{}\n", code.trim()).as_bytes())
+        .await
+        .map_err(|e| format!("Couldn't pass the code on: {}", e))?;
+    stdin.flush().await.map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Stops the sign-in under way.
+#[tauri::command]
+pub async fn cancel_login_claude() -> Result<(), String> {
+    if let Some(child) = LOGIN_CHILD.lock().await.take() {
+        let _ = child.lock().await.kill().await;
+    }
+    LOGIN_STDIN.lock().await.take();
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn login_claude(window: WebviewWindow) -> Result<(), String> {
     let binary_path = find_claude_binary().map_err(|e| format!("Claude CLI not found: {}", e))?;
@@ -2482,7 +2514,8 @@ pub async fn login_claude(window: WebviewWindow) -> Result<(), String> {
     };
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
-    cmd.stdin(std::process::Stdio::null());
+    // Piped: the CLI asks for the code shown after signing in.
+    cmd.stdin(std::process::Stdio::piped());
 
     // On Linux AppImage, restore original environment so xdg-open works
     #[cfg(target_os = "linux")]
@@ -2511,6 +2544,15 @@ pub async fn login_claude(window: WebviewWindow) -> Result<(), String> {
         let mut lines = stdout_reader.lines();
         while let Ok(Some(line)) = lines.next_line().await {
             let clean = strip_ansi(&line);
+            // The sign-in page: the app opens it (the CLI can't always, as
+            // on Windows) and shows it.
+            if let Some(at) = clean.find("https://") {
+                let url: String = clean[at..]
+                    .chars()
+                    .take_while(|c| !c.is_whitespace())
+                    .collect();
+                let _ = win_stdout.emit("login-url", url);
+            }
             let _ = win_stdout.emit("login-output", clean.as_ref());
         }
     });
@@ -2531,8 +2573,10 @@ pub async fn login_claude(window: WebviewWindow) -> Result<(), String> {
     let win_complete = window;
     let child = Arc::new(Mutex::new(child));
     let child_for_timeout = child.clone();
+    *LOGIN_CHILD.lock().await = Some(child.clone());
     tokio::spawn(async move {
-        let timeout_duration = tokio::time::Duration::from_secs(120);
+        // Long enough to sign in and copy the code across.
+        let timeout_duration = tokio::time::Duration::from_secs(600);
         let wait_result = tokio::time::timeout(timeout_duration, async {
             let _ = stdout_task.await;
             let _ = stderr_task.await;
@@ -2550,6 +2594,8 @@ pub async fn login_claude(window: WebviewWindow) -> Result<(), String> {
             }
         };
 
+        LOGIN_STDIN.lock().await.take();
+        LOGIN_CHILD.lock().await.take();
         let _ = win_complete.emit("login-complete", success);
     });
 

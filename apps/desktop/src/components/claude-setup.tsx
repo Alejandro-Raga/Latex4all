@@ -376,6 +376,15 @@ function useLoginEvents() {
         // ignore stderr for login
       });
 
+      // The sign-in page: opened here, since the CLI can't always open a
+      // browser itself (on Windows it doesn't), and shown in case.
+      const unlistenUrl = await listen<string>("login-url", (event) => {
+        if (cancelled || useClaudeSetupStore.getState().loginUrl) return;
+        useClaudeSetupStore.setState({ loginUrl: event.payload });
+        shellOpen(event.payload).catch(() => {});
+        useClaudeSetupStore.getState()._advanceLoginStep("waiting-auth");
+      });
+
       const unlistenComplete = await listen<boolean>(
         "login-complete",
         (event) => {
@@ -388,11 +397,17 @@ function useLoginEvents() {
       if (cancelled) {
         unlistenOutput();
         unlistenError();
+        unlistenUrl();
         unlistenComplete();
         return;
       }
 
-      unlisteners.push(unlistenOutput, unlistenError, unlistenComplete);
+      unlisteners.push(
+        unlistenOutput,
+        unlistenError,
+        unlistenUrl,
+        unlistenComplete,
+      );
     })();
 
     return () => {
@@ -404,6 +419,67 @@ function useLoginEvents() {
 }
 
 // ─── Sub-components ───
+
+/** While signing in: the page's link, in case the browser didn't open,
+ * and where the code it shows goes. */
+function LoginCodeForm() {
+  const loginUrl = useClaudeSetupStore((s) => s.loginUrl);
+  const submitLoginCode = useClaudeSetupStore((s) => s.submitLoginCode);
+  const cancelLogin = useClaudeSetupStore((s) => s.cancelLogin);
+  const error = useClaudeSetupStore((s) => s.error);
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(false);
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] text-muted-foreground leading-relaxed">
+        Sign in in your browser. If it didn't open,{" "}
+        {loginUrl ? (
+          <button
+            type="button"
+            className="underline underline-offset-2 hover:text-foreground"
+            onClick={() => shellOpen(loginUrl).catch(() => {})}
+          >
+            open the sign-in page
+          </button>
+        ) : (
+          "wait a moment for the link"
+        )}
+        . If the page shows a code, paste it here.
+      </p>
+      <form
+        className="flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!code.trim()) return;
+          setSent(true);
+          void submitLoginCode(code);
+        }}
+      >
+        <Input
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="Code"
+          className="h-8 flex-1 font-mono text-xs"
+          aria-label="Code from the sign-in page"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <Button type="submit" size="sm" disabled={!code.trim() || sent}>
+          {sent ? <LoaderIcon className="size-3.5 animate-spin" /> : "Continue"}
+        </Button>
+      </form>
+      {error && <p className="text-destructive text-xs">{error}</p>}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="w-full"
+        onClick={() => void cancelLogin()}
+      >
+        Cancel
+      </Button>
+    </div>
+  );
+}
 
 function StepRow({ step }: { step: StepInfo }) {
   return (
@@ -1372,9 +1448,7 @@ export function ClaudeSetup({
           ))}
         </div>
 
-        <p className="text-center text-[11px] text-muted-foreground">
-          Finish signing in in your browser.
-        </p>
+        <LoginCodeForm />
       </div>
     );
   }
