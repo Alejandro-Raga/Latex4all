@@ -146,6 +146,7 @@ import { FilterToggle } from "./vault-filter";
 import { createLogger } from "@/lib/debug/logger";
 import { DockHeaderBar, DockWideButton } from "./dock/dock-section";
 import { canOpenPdf } from "@/lib/zotero-source";
+import { onPdfWritten } from "@/lib/pdf-written";
 
 const log = createLogger("quick-reference");
 
@@ -1521,9 +1522,26 @@ function ProjectPdfs({
 }) {
   const [pdfs, setPdfs] = useState(() => pdfCache.get(root) ?? null);
   const [failed, setFailed] = useState(false);
-  // Read again each time it's opened (a PDF just exported shows), the last
-  // list shown meanwhile.
+  // Read when it's opened, the last list shown meanwhile, and again while
+  // it's open: when the app writes a PDF (an export), when the window comes
+  // back (one saved by another app), and every 15 s. Read only once, a PDF
+  // exported with the project open never showed.
+  const [round, setRound] = useState(0);
   useEffect(() => {
+    const again = () => setRound((n) => n + 1);
+    const offWritten = onPdfWritten(again);
+    window.addEventListener("focus", again);
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") again();
+    }, 15_000);
+    return () => {
+      offWritten();
+      window.removeEventListener("focus", again);
+      clearInterval(timer);
+    };
+  }, []);
+  useEffect(() => {
+    void round;
     let live = true;
     scanProjectFolder(root)
       .then(({ files }) => {
@@ -1545,7 +1563,7 @@ function ProjectPdfs({
     return () => {
       live = false;
     };
-  }, [root]);
+  }, [root, round]);
   const showAll = (
     <button
       type="button"

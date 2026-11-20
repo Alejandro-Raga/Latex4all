@@ -13,7 +13,13 @@ import {
 import type { Author } from "@/lib/annotations/types";
 import { noteDifferences } from "./concurrent-edits";
 import { identityOf, isDifferentDocument } from "./document-identity";
-import { isUnder, rejoined, neverShared } from "./sync-choices";
+import { annotationsMap } from "@/lib/annotations/shared-annotations";
+import {
+  isUnder,
+  rejoined,
+  neverShared,
+  writtenByTheApp,
+} from "./sync-choices";
 
 /**
  * Each LaTeX file's identity (class and title, see document-identity) as
@@ -726,6 +732,25 @@ export class ProjectSync {
         }
         continue;
       }
+      // The plan (the Planner's file): the shared one is taken as it is.
+      // This computer's earlier plan is kept in the Planner's backups.
+      if (
+        !identical &&
+        existing?.kind === "text" &&
+        shared.kind === "text" &&
+        writtenByTheApp(shared.path)
+      ) {
+        const written = await guard(`Couldn't get ${shared.path}`, () =>
+          this.workspace.writeText(here(shared.path), text),
+        );
+        if (!written) continue;
+        this.known.set(shared.fileId, {
+          path: shared.path,
+          hash: textHash(text),
+        });
+        this.hooks.onSynced?.(shared.path);
+        continue;
+      }
       // Text that differs: the shared version stays, and this one's
       // differences go on it as notes, rather than a whole copy beside it.
       const me = this.hooks.me;
@@ -952,6 +977,7 @@ export class ProjectSync {
     }
 
     this.dropNeverShared();
+    this.dropUnsettleableConflicts();
     if (this.isOwner()) this.recordIdentities(local);
     this.rememberTexts();
     this.lastFilesSignature = this.filesSignature();
@@ -978,6 +1004,33 @@ export class ProjectSync {
         files.delete(fileId);
         this.known.delete(fileId);
       }
+    }, LOCAL);
+  }
+
+  /**
+   * Conflict notes on files nobody opens as text (the plan), which earlier
+   * versions made: no one could settle them, so the project showed them
+   * as sync problems for good. The file's text as it is now stays.
+   */
+  private dropUnsettleableConflicts() {
+    const ids = new Set(
+      [...layout(this.doc).values()]
+        .filter((f) => writtenByTheApp(f.path))
+        .map((f) => f.fileId),
+    );
+    if (ids.size === 0) return;
+    const notes = annotationsMap(this.doc);
+    const stale = [...notes.entries()]
+      .filter(([, note]) => {
+        const suggestion = note.get("suggestion") as
+          | { conflict?: boolean }
+          | undefined;
+        return suggestion?.conflict && ids.has(String(note.get("fileId")));
+      })
+      .map(([id]) => id);
+    if (stale.length === 0) return;
+    this.doc.transact(() => {
+      for (const id of stale) notes.delete(id);
     }, LOCAL);
   }
 

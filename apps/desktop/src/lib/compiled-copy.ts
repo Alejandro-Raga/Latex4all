@@ -6,6 +6,7 @@
 import { exists, mkdir, writeFile } from "@tauri-apps/plugin-fs";
 import { toast } from "sonner";
 import { readProjectMeta, updateProjectMeta } from "@/lib/project-meta";
+import { notePdfWritten } from "@/lib/pdf-written";
 
 export interface CompiledCopy {
   /** The main .tex file it's the PDF of, relative to the project. */
@@ -75,6 +76,7 @@ export async function saveCompiledCopy(
       await mkdir(folder, { recursive: true });
     }
     await writeFile(path, pdf);
+    notePdfWritten(path);
   } catch (err) {
     toast.error(`Couldn't save the PDF as ${path.split("/").pop()}`, {
       description: err instanceof Error ? err.message : String(err),

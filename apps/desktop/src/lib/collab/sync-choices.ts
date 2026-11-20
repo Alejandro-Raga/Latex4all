@@ -72,3 +72,13 @@ export function neverShared(path: string) {
     )
   );
 }
+
+/**
+ * Files the app writes for you, never opened as text: the project's plan
+ * (Plan.md, hidden from the file list, edited in the Planner). Differences
+ * in them are never marked as conflict notes: nobody could open the file
+ * to settle them, and the project showed them as sync problems for good.
+ */
+export function writtenByTheApp(path: string) {
+  return path === "Plan.md";
+}

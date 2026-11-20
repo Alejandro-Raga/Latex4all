@@ -1451,3 +1451,38 @@ describe("files the sync couldn't settle", () => {
     });
   });
 });
+
+describe("the plan", () => {
+  it("gets no conflict notes, and old ones go", async () => {
+    const relay = new FakeRelay();
+    const tasks = (n: number) =>
+      `# Plan\n\n${Array.from({ length: 6 }, (_, i) => `- [${i < n ? "x" : " "}] Task ${i}`).join("\n")}\n`;
+    const a = new Device(
+      relay,
+      new FakeWorkspace(relay, { "Plan.md": tasks(3) }),
+    );
+    await a.open();
+    await settleAll(a);
+    // A note an earlier version left on it.
+    const doc = a.session!.doc;
+    const plan = [...layout(doc).values()].find((f) => f.path === "Plan.md");
+    if (plan?.kind !== "text") throw new Error("no plan");
+    annotationsMap(doc).set(
+      "old",
+      new Y.Map<unknown>([
+        ["fileId", plan.fileId],
+        ["suggestion", { text: "x", conflict: true }],
+      ]),
+    );
+    // A folder with its own older plan, compared for the first time.
+    const b = new Device(
+      relay,
+      new FakeWorkspace(relay, { "Plan.md": tasks(1) }),
+    );
+    await b.open();
+    await settleAll(a, b);
+    expect(b.differences).toEqual([]);
+    expect(b.workspace.snapshot()).toEqual({ "Plan.md": tasks(3) });
+    expect(annotationsMap(a.session!.doc).size).toBe(0);
+  });
+});

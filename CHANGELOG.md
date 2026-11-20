@@ -334,6 +334,10 @@ tag.
   the computer that made them instead of reaching every other computer.
   Ones already shared are taken out of the shared copy; nobody's own copy
   is deleted.
+- Projects no longer show sync conflicts that can't be found: earlier
+  versions marked differences in the project's plan as conflicts, and the
+  plan can't be opened as a file to settle them. Those are cleared, and the
+  plan's differences are no longer marked.
 - A file that couldn't be updated is no longer shared a second time under
   the same name, which gave the other computers a "(conflicted copy)".
 - Renaming or moving a shared project keeps its sync history, so its files

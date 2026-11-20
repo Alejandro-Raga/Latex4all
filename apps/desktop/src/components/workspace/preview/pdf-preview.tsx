@@ -87,6 +87,7 @@ import { createLogger } from "@/lib/debug/logger";
 import { addOwnPassageToNote } from "@/lib/vault/own-passage";
 import { filedToast, NotePicker } from "./group-picker";
 import { fullPath, readCompiledCopy } from "@/lib/compiled-copy";
+import { notePdfWritten } from "@/lib/pdf-written";
 import { CompiledCopyButton } from "./compiled-copy-button";
 import { FullWindowButton } from "./full-window-button";
 
@@ -708,6 +709,7 @@ export function PdfPreview() {
       }
     }
     await writeFile(filePath, bytes);
+    notePdfWritten(filePath);
   };
 
   const handleCurrentPageChange = useCallback(

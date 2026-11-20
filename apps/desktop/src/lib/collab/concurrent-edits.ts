@@ -3,6 +3,7 @@ import { addSuggestion } from "@/lib/annotations/shared-annotations";
 import type { Author } from "@/lib/annotations/types";
 import { diffHunks, mergeText } from "@/lib/text-merge";
 import { LOCAL, applyTextChange, filesMap, layout } from "./project-doc";
+import { writtenByTheApp } from "./sync-choices";
 
 function textOf(doc: Y.Doc, fileId: string) {
   const text = filesMap(doc).get(fileId)?.get("text");
@@ -36,6 +37,9 @@ export function settleConcurrentEdits(
       const { text, conflicts } = mergeText(before, ours, others);
       if (conflicts.length === 0) continue;
       applyTextChange(file.text, text);
+      // The plan is never opened as text, so a note on it could never be
+      // settled: merged as it is (theirs where both changed a line).
+      if (writtenByTheApp(file.path)) continue;
       for (const conflict of conflicts) {
         addSuggestion(doc, file.fileId, file.text, conflict.from, conflict.to, {
           text: conflict.other,
