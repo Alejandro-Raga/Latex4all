@@ -1530,6 +1530,15 @@ pub fn collab_load_doc(project_root: String) -> Option<SavedDoc> {
     })
 }
 
+/// When this computer last saved its synced copy of a project (ms since
+/// 1970), to tell whether the folder changed since without reading it.
+#[tauri::command]
+pub fn collab_saved_at(project_root: String) -> Option<u64> {
+    let meta = std::fs::metadata(device_state_dir(Path::new(&project_root)).join(DOC_FILE)).ok()?;
+    let at = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?;
+    Some(at.as_millis() as u64)
+}
+
 /// Saves the document, the last relay seq it includes, and the webview's
 /// local state, in one write.
 #[tauri::command]

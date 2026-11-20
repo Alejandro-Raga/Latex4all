@@ -53,6 +53,13 @@ export async function loadDoc(projectRoot: string) {
   return saved && { ...saved, data: fromBase64(saved.data) };
 }
 
+/** When this computer last saved its synced copy of a project, if ever. */
+export async function savedAt(projectRoot: string): Promise<number | null> {
+  return invoke<number | null>("collab_saved_at", { projectRoot }).catch(
+    () => null,
+  );
+}
+
 export function saveDoc(
   projectRoot: string,
   seq: number,

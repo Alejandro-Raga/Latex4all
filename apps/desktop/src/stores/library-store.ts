@@ -22,6 +22,7 @@ import {
   disconnect,
   listenForSyncEvents,
   loadDoc,
+  savedAt,
   p2pPeers,
   parseLink,
   publish,
@@ -51,7 +52,7 @@ import {
   useCollabStore,
 } from "@/stores/collab-store";
 import { exists, rename } from "@tauri-apps/plugin-fs";
-import { folderFingerprint } from "@/lib/tauri/fs";
+import { folderFingerprint, folderState } from "@/lib/tauri/fs";
 import type { StoredPreview } from "@/lib/project-preview-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { useProjectStore } from "@/stores/project-store";
@@ -291,9 +292,9 @@ function syncedRecords(): SyncedRecord {
     return {};
   }
 }
-function recordSynced(root: string, fp: string) {
+function recordSynced(root: string, fp: string, at = Date.now()) {
   const all = syncedRecords();
-  all[root] = { fp, at: Date.now() };
+  all[root] = { fp, at };
   try {
     localStorage.setItem(SYNCED, JSON.stringify(all));
   } catch {
@@ -363,6 +364,9 @@ export function onPreviewsChanged(fn: (paths: string[]) => void) {
     previewListeners.delete(fn);
   };
 }
+
+/** Sync now pressed: this round syncs every project. */
+let forceAll = false;
 
 /** When each project last synced in the background, by folder. */
 const lastBackground = new Map<string, number>();
@@ -724,10 +728,20 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       if (Date.now() - last < 10 * 60 * 1000) continue;
       // Only if something changed: here (the folder), on another device
       // (its note in the library), or, shared with people, an hour on.
-      const record = syncedRecords()[root];
+      let record = syncedRecords()[root];
       const head = headsMap(doc).get(id);
-      const fp = await folderFingerprint(root).catch(() => "");
-      const changedHere = !record || !fp || record.fp !== fp;
+      const now = await folderState(root).catch(() => null);
+      const fp = now?.fp ?? "";
+      // Never recorded (first start of a version that records): unchanged
+      // if no file is newer than this computer's last synced copy.
+      if (!record && now && !forceAll) {
+        const saved = await savedAt(root);
+        if (saved && now.newest > 0 && now.newest <= saved) {
+          record = { fp, at: saved };
+          recordSynced(root, fp, saved);
+        }
+      }
+      const changedHere = forceAll || !record || !fp || record.fp !== fp;
       const changedThere = Boolean(
         head && head.by !== me && head.at > (record?.at ?? 0),
       );
@@ -751,13 +765,20 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
       try {
         await syncInBackground(root, entry.link, entry.name);
         setState(root, "synced");
-        await nameFetched(root, entry.name, entry.by !== me);
         // Changes from here went out: the other devices are told.
         const info = await parseLink(entry.link).catch(() => null);
         if (changedHere && info && syncedRecords()[root]) {
           headsMap(doc).set(info.projectId, { at: Date.now(), by: me });
         }
         recordSynced(root, await folderFingerprint(root).catch(() => ""));
+        // Renamed after its record, which follows it to the new name.
+        await nameFetched(root, entry.name, entry.by !== me);
+        const moved =
+          info && useProjectStore.getState().sharedProjects[info.projectId];
+        if (moved && moved !== root) {
+          const all = syncedRecords();
+          if (all[root]) recordSynced(moved, all[root].fp, all[root].at);
+        }
       } catch (err) {
         lastBackground.set(root, 0);
         setState(root, String(err).includes("offline") ? "offline" : "error");
@@ -971,8 +992,14 @@ export const useLibraryStore = create<LibraryState>()((set, get) => {
     error: null,
 
     syncNow: async () => {
+      // Pressed: every project, changed or not.
       lastBackground.clear();
-      await reconcile();
+      forceAll = true;
+      try {
+        await reconcile();
+      } finally {
+        forceAll = false;
+      }
     },
 
     syncProject: async (root) => {

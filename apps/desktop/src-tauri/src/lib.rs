@@ -885,6 +885,7 @@ pub fn run() {
             collab::collab_write_link,
             collab::collab_remove_link,
             collab::collab_load_doc,
+            collab::collab_saved_at,
             collab::collab_save_doc,
             collab::collab_connect,
             collab::collab_health,

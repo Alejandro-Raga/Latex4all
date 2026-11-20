@@ -323,7 +323,8 @@ tag.
   even before it's built, or if it doesn't build on that computer.
 - Linked devices sync a project only when it changed (here, on another
   device, or for projects shared with people, hourly), instead of every
-  project all the time.
+  project all the time, including when the app opens. Sync now still syncs
+  every project.
 - A project fetched from another device takes the project's name (no more
   "paper" for the SDG paper).
 - A copy on this computer damaged by an earlier sync problem is set aside
